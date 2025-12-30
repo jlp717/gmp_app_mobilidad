@@ -1,0 +1,211 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch: # Permite ejecutar manualmente
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+
+jobs:
+  # ==========================================================================
+  # ANÁLISIS Y TESTS
+  # ==========================================================================
+  analyze-and-test:
+    name: Análisis y Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Instalar dependencias
+        run: flutter pub get
+
+      - name: 🔍 Verificar formato
+        run: dart format --set-exit-if-changed lib test
+
+      - name: 📊 Análisis estático
+        run: flutter analyze
+
+      - name: 🧪 Ejecutar tests unitarios
+        run: flutter test --coverage
+
+      - name: 📈 Subir cobertura a Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+
+      - name: 📝 Generar reporte de tests
+        if: always()
+        run: |
+          flutter test --reporter expanded > test_report.txt || true
+
+      - name: 📤 Subir reporte de tests
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-report
+          path: test_report.txt
+
+  # ==========================================================================
+  # BUILD ANDROID
+  # ==========================================================================
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+    needs: analyze-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    timeout-minutes: 45
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: 📦 Instalar dependencias
+        run: flutter pub get
+
+      - name: 🔨 Generar código
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: 🏗️ Build APK (Debug)
+        if: github.ref == 'refs/heads/develop'
+        run: flutter build apk --debug
+
+      - name: 🏗️ Build APK & AAB (Release)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          flutter build apk --release --split-per-abi
+          flutter build appbundle --release
+
+      - name: 📤 Subir APKs
+        uses: actions/upload-artifact@v3
+        with:
+          name: android-builds
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/bundle/release/*.aab
+
+      - name: 📊 Análisis de tamaño de APK
+        run: |
+          echo "## 📦 Tamaños de APK" >> $GITHUB_STEP_SUMMARY
+          ls -lh build/app/outputs/flutter-apk/*.apk | awk '{print "- " $9 ": " $5}' >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================================================
+  # BUILD iOS
+  # ==========================================================================
+  build-ios:
+    name: Build iOS
+    runs-on: macos-latest
+    needs: analyze-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 60
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Instalar dependencias
+        run: flutter pub get
+
+      - name: 🔨 Generar código
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: 🏗️ Build iOS (sin firmar)
+        run: flutter build ios --release --no-codesign
+
+      - name: 📤 Subir build iOS
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-build
+          path: build/ios/iphoneos/*.app
+
+  # ==========================================================================
+  # SECURITY SCAN
+  # ==========================================================================
+  security-scan:
+    name: Análisis de Seguridad
+    runs-on: ubuntu-latest
+    needs: analyze-and-test
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+
+      - name: 📦 Instalar dependencias
+        run: flutter pub get
+
+      - name: 🔒 Verificar dependencias vulnerables
+        run: |
+          dart pub outdated --mode=null-safety || true
+          flutter pub outdated || true
+
+      - name: 📝 Generar SBOM (Software Bill of Materials)
+        run: |
+          flutter pub deps --json > sbom.json
+
+      - name: 📤 Subir SBOM
+        uses: actions/upload-artifact@v3
+        with:
+          name: sbom
+          path: sbom.json
+
+  # ==========================================================================
+  # NOTIFICACIONES
+  # ==========================================================================
+  notify:
+    name: Notificar Resultado
+    runs-on: ubuntu-latest
+    needs: [build-android, build-ios]
+    if: always()
+
+    steps:
+      - name: 📢 Build exitoso
+        if: ${{ needs.build-android.result == 'success' && needs.build-ios.result == 'success' }}
+        run: |
+          echo "✅ Todos los builds completados exitosamente"
+
+      - name: 📢 Build falló
+        if: ${{ needs.build-android.result == 'failure' || needs.build-ios.result == 'failure' }}
+        run: |
+          echo "❌ Algunos builds fallaron"
+          exit 1

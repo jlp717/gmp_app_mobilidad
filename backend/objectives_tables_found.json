@@ -1,0 +1,25 @@
+{
+  "timestamp": "2025-12-22T08:12:40.487Z",
+  "foundTables": [
+    "QSYS2.OBJECT_LOCK_INFO",
+    "QSYS2.OBJECT_PRIVILEGES",
+    "QSYS2.OBJECT_TYPES",
+    "DSEMOVIL.TARIFAS",
+    "DSTMOVIL.TARIFAS",
+    "TESTMO_BK2.TARIFAS",
+    "TESTMOVIL.TARIFAS",
+    "DSTF.PVE",
+    "DSTF.PVEL1",
+    "DSTF.PVEL2",
+    "DSTMXX.PVE",
+    "DSTMXX.PVEL1",
+    "DSTMXX.PVEL2",
+    "DSTM02.PVE",
+    "DSTM02.PVEL1",
+    "DSTM02.PVEL2",
+    "DSTM09.PVE",
+    "DSTM09.PVEL1",
+    "DSTM09.PVEL2"
+  ],
+  "vendedorData": null
+}

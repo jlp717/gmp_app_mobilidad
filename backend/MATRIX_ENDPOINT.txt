@@ -1,0 +1,164 @@
+// INSERT AFTER LINE 276 in server.js
+
+// =============================================================================
+// MATRIX DATA - Power BI Style Pivoted Data
+// =============================================================================
+app.get('/dashboard/matrix-data', async (req, res) => {
+  try {
+    const { vendedorCodes, startDate, endDate, productCode, productName, clientName, groupBy = 'vendor' } = req.query;
+    
+    const vendedorFilter = buildVendedorFilter(vendedorCodes);
+    
+    // Date range filter
+    let dateFilter = '';
+    if (startDate && endDate) {
+      // Parse dates YYYY-MM-DD
+      const [startY, startM, startD] = startDate.split('-').map(Number);
+      const [endY, endM, endD] = endDate.split('-').map(Number);
+      dateFilter = `AND ((ANOEMISION > ${startY} OR (ANOEMISION = ${startY} AND MESEMISION > ${startM}) OR (ANOEMISION = ${startY} AND MESEMISION = ${startM} AND DIAEMISION >= ${startD}))
+        AND (ANOEMISION < ${endY} OR (ANOEMISION = ${endY} AND MESEMISION < ${endM}) OR (ANOEMISION = ${endY} AND MESEMISION = ${endM} AND DIAEMISION <= ${endD})))`;
+    }
+    
+    // Product/Client filters for LINDTO
+    let productFilter = '';
+    if (productCode) {
+      productFilter += ` AND L.CODIGOARTICULO LIKE '%${productCode}%'`;
+    }
+    if (productName) {
+      productFilter += ` AND (A.DESCRIPCIONARTICULO LIKE '%${productName}%' OR L.DESCRIPCIONARTICULO LIKE '%${productName}%')`;
+    }
+    
+    let clientFilter = '';
+    if (clientName) {
+      clientFilter += ` AND C.NOMBRECLIENTE LIKE '%${clientName}%'`;
+    }
+
+    let rawData;
+    
+    if (groupBy === 'vendor') {
+      // Group by vendor - use CVC
+      rawData = await query(`
+        SELECT 
+          V.CODIGOVENDEDOR as code,
+          COALESCE(TRIM(X.NOMBREVENDEDOR), 'Sin nombre') as name,
+          CV.ANOEMISION as year,
+          CV.MESEMISION as month,
+          CASE 
+            WHEN CV.MESEMISION BETWEEN 1 AND 3 THEN 1
+            WHEN CV.MESEMISION BETWEEN 4 AND 6 THEN 2
+            WHEN CV.MESEMISION BETWEEN 7 AND 9 THEN 3
+            ELSE 4
+          END as quarter,
+          SUM(CV.IMPORTEVENCIMIENTO) as sales,
+          COUNT(DISTINCT CV.NUMERODOCUMENTO) as orders,
+          COUNT(DISTINCT CV.CODIGOCLIENTEALBARAN) as clients
+        FROM DSEDAC.CVC CV
+        JOIN DSEDAC.VDC V ON TRIM(V.CODIGOVENDEDOR) = TRIM(CV.CODIGOVENDEDOR)
+        LEFT JOIN DSEDAC.VDDX X ON V.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+        WHERE CV.ANOEMISION >= 2023
+          AND V.SUBEMPRESA = 'GMP'
+          ${dateFilter}
+          ${vendedorFilter}
+        GROUP BY V.CODIGOVENDEDOR, X.NOMBREVENDEDOR, CV.ANOEMISION, CV.MESEMISION, quarter
+        ORDER BY SUM(CV.IMPORTEVENCIMIENTO) DESC
+        FETCH FIRST 50 ROWS ONLY
+      `);
+      
+    } else if (groupBy === 'product') {
+      // Group by product - use LINDTO
+      rawData = await query(`
+        SELECT 
+          L.CODIGOARTICULO as code,
+          COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCIONARTICULO)) as name,
+          L.ANODOCUMENTO as year,
+          L.MESDOCUMENTO as month,
+          CASE 
+            WHEN L.MESDOCUMENTO BETWEEN 1 AND 3 THEN 1
+            WHEN L.MESDOCUMENTO BETWEEN 4 AND 6 THEN 2
+            WHEN L.MESDOCUMENTO BETWEEN 7 AND 9 THEN 3
+            ELSE 4
+          END as quarter,
+          SUM(L.IMPORTEVENTA) as sales,
+          SUM(L.CANTIDADENVASES) as boxes
+        FROM DSEDAC.LINDTO L
+        LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+        WHERE L.ANODOCUMENTO >= 2023
+          ${vendedorFilter}
+          ${productFilter}
+        GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCIONARTICULO, L.ANODOCUMENTO, L.MESDOCUMENTO, quarter
+        ORDER BY SUM(L.IMPORTEVENTA) DESC
+        FETCH FIRST 50 ROWS ONLY
+      `);
+      
+    } else if (groupBy === 'client') {
+      // Group by client - use CVC + CLI
+      rawData = await query(`
+        SELECT 
+          CV.CODIGOCLIENTEALBARAN as code,
+          C.NOMBRECLIENTE as name,
+          CV.ANOEMISION as year,
+          CV.MESEMISION as month,
+          CASE 
+            WHEN CV.MESEMISION BETWEEN 1 AND 3 THEN 1
+            WHEN CV.MESEMISION BETWEEN 4 AND 6 THEN 2
+            WHEN CV.MESEMISION BETWEEN 7 AND 9 THEN 3
+            ELSE 4
+          END as quarter,
+          SUM(CV.IMPORTEVENCIMIENTO) as sales,
+          COUNT(DISTINCT CV.NUMERODOCUMENTO) as orders
+        FROM DSEDAC.CVC CV
+        LEFT JOIN DSEDAC.CLI C ON CV.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
+        WHERE CV.ANOEMISION >= 2023
+          ${dateFilter}
+          ${vendedorFilter}
+          ${clientFilter}
+        GROUP BY CV.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, CV.ANOEMISION, CV.MESEMISION, quarter
+        ORDER BY SUM(CV.IMPORTEVENCIMIENTO) DESC
+        FETCH FIRST 50 ROWS ONLY
+      `);
+    }
+    
+    // Pivot the data
+    const pivoted = {};
+    const periods = new Set();
+    
+    rawData.forEach(row => {
+      const id = row.CODE;
+      const label = groupBy === 'vendor' ? `${row.CODE} - ${row.NAME}` : row.NAME || `${groupBy} ${row.CODE}`;
+      
+      if (!pivoted[id]) {
+        pivoted[id] = {
+          id,
+          label,
+          type: groupBy,
+          data: {},
+          total: 0
+        };
+      }
+      
+      const period = `${row.YEAR}-T${row.QUARTER}`;
+      periods.add(period);
+      
+      const sales = parseFloat(row.SALES) || 0;
+      pivoted[id].data[period] = (pivoted[id].data[period] || 0) + sales;
+      pivoted[id].total += sales;
+    });
+    
+    // Convert to array and sort by total descending
+    const rows = Object.values(pivoted).sort((a, b) => b.total - a.total);
+    
+    // Get sorted period list
+    const periodList = Array.from(periods).sort();
+    
+    res.json({
+      rows,
+      periods: periodList,
+      groupBy
+    });
+    
+  } catch (error) {
+    logger.error(`Matrix data error: ${error.message}`);
+    res.status(500).json({ error: 'Error obteniendo datos matriciales', details: error.message });
+  }
+});
+
