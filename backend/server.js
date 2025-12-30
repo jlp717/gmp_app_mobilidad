@@ -291,7 +291,8 @@ async function query(sql, logQuery = true) {
 
 /**
  * Execute a parameterized query to prevent SQL injection
- * Uses ODBC prepared statements with ? placeholders
+ * Uses ODBC parameterized queries with ? placeholders
+ * The node-odbc library supports parameterized queries via conn.query(sql, params)
  * @param {string} sql - SQL query with ? placeholders
  * @param {Array} params - Array of parameter values in order
  * @param {boolean} logQuery - Whether to log the query (false for sensitive queries)
@@ -301,11 +302,8 @@ async function queryWithParams(sql, params = [], logQuery = true) {
   const start = Date.now();
   const conn = await dbPool.connect();
   try {
-    // Use prepared statement for parameterized query
-    const stmt = await conn.createStatement();
-    await stmt.prepare(sql);
-    const result = await stmt.execute(params);
-    await stmt.close();
+    // node-odbc supports parameterized queries directly via query(sql, params)
+    const result = await conn.query(sql, params);
 
     const duration = Date.now() - start;
     if (logQuery) {
