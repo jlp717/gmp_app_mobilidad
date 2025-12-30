@@ -10,6 +10,10 @@ class ApiClient {
   static int _maxRetries = 3;
   static Duration _retryDelay = const Duration(seconds: 1);
 
+  /// Pending requests map for request deduplication
+  /// Prevents duplicate API calls when multiple widgets request the same data
+  static final Map<String, Future<dynamic>> _pendingRequests = {};
+
   /// Initialize or get Dio instance
   static Dio get dio {
     _dio ??= _createDio();
@@ -46,6 +50,7 @@ class ApiClient {
   /// Reinitialize Dio (useful when base URL changes)
   static void reinitialize() {
     _dio = null;
+    _pendingRequests.clear(); // Clear pending requests on reinit
   }
 
   /// Set authentication token
@@ -224,6 +229,43 @@ class ApiClient {
     }
     return 'Error de red';
   }
+
+  /// Deduplicated GET request - prevents duplicate concurrent API calls
+  /// Use this when multiple widgets might request the same data simultaneously
+  static Future<Map<String, dynamic>> getDeduped(
+    String endpoint, {
+    Map<String, dynamic>? queryParameters,
+    String? cacheKey,
+    Duration? cacheTTL,
+    bool forceRefresh = false,
+  }) async {
+    final requestKey = '$endpoint${queryParameters?.toString() ?? ''}';
+
+    // Return existing pending request if one is in progress
+    if (_pendingRequests.containsKey(requestKey) && !forceRefresh) {
+      debugPrint('[ApiClient] Deduping request: $endpoint');
+      return await _pendingRequests[requestKey] as Map<String, dynamic>;
+    }
+
+    // Create new request
+    final future = get(
+      endpoint,
+      queryParameters: queryParameters,
+      cacheKey: cacheKey,
+      cacheTTL: cacheTTL,
+      forceRefresh: forceRefresh,
+    );
+    _pendingRequests[requestKey] = future;
+
+    try {
+      return await future;
+    } finally {
+      _pendingRequests.remove(requestKey);
+    }
+  }
+
+  /// Get count of pending requests (for debugging)
+  static int get pendingRequestCount => _pendingRequests.length;
 }
 
 /// Retry interceptor for handling transient failures

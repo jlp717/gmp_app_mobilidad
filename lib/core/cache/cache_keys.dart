@@ -1,5 +1,11 @@
 /// Centralized cache keys for the application
 /// Using structured keys makes invalidation and debugging easier
+/// 
+/// TTL Recommendations (from CacheService):
+/// - Static data (catalogs, roles): CacheService.longTTL (24 hours)
+/// - Semi-static (client lists, rutero): 1 hour
+/// - Volatile (dashboard, recent sales): CacheService.shortTTL (5 minutes)
+/// - Real-time (objectives progress): CacheService.realtimeTTL (1 minute)
 class CacheKeys {
   // Prevent instantiation
   CacheKeys._();

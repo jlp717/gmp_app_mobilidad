@@ -7,6 +7,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const odbc = require('odbc');
 const winston = require('winston');
 const rateLimit = require('express-rate-limit');
@@ -50,6 +51,14 @@ const LAC_SERIEALBARAN_FILTER = `SERIEALBARAN NOT IN ('K', 'N', 'O', 'G')`;
 // =============================================================================
 app.use(cors());
 app.use(helmet());
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  },
+  level: 6, // Balanced compression level
+  threshold: 1024 // Only compress responses > 1KB
+}));
 app.use(express.json({ limit: '10kb' })); // Limit body size for security
 
 // General rate limiting

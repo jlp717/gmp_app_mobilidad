@@ -3,12 +3,24 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 /// Cache service using Hive for persistent local storage
 /// Implements TTL-based caching for API responses
+/// Enhanced with in-memory layer for hot data access
 class CacheService {
   static const String _cacheBoxName = 'app_cache';
   static const String _metadataBoxName = 'cache_metadata';
   
   static Box<dynamic>? _cacheBox;
   static Box<dynamic>? _metadataBox;
+  
+  // ============================================================
+  // In-Memory Cache Layer (for hot data)
+  // ============================================================
+  static final Map<String, _MemoryCacheEntry> _memoryCache = {};
+  static const int _memoryCacheMaxSize = 50;
+  static const Duration _memoryCacheTTL = Duration(minutes: 5);
+  
+  // ============================================================
+  // TTL Constants
+  // ============================================================
   
   /// Default cache duration (30 minutes)
   static const Duration defaultTTL = Duration(minutes: 30);
@@ -18,6 +30,9 @@ class CacheService {
   
   /// Long-lived cache for static data (24 hours)
   static const Duration longTTL = Duration(hours: 24);
+  
+  /// Real-time cache for volatile data (1 minute)
+  static const Duration realtimeTTL = Duration(minutes: 1);
 
   /// Initialize Hive and open cache boxes
   /// Call this before runApp()
@@ -113,4 +128,76 @@ class CacheService {
   static bool hasValidCache(String key) {
     return get<dynamic>(key) != null;
   }
+
+  // ============================================================
+  // In-Memory Cache Methods (for hot data)
+  // ============================================================
+
+  /// Get from memory cache first, then fall back to Hive
+  /// Use this for frequently accessed data within a session
+  static T? getWithMemory<T>(String key) {
+    // Check in-memory cache first
+    final memEntry = _memoryCache[key];
+    if (memEntry != null && DateTime.now().isBefore(memEntry.expiry)) {
+      debugPrint('[CacheService] Memory cache HIT for key: $key');
+      return memEntry.value as T?;
+    }
+
+    // Fall back to Hive cache
+    final value = get<T>(key);
+    if (value != null) {
+      // Promote to memory cache
+      _setMemoryCache(key, value);
+    }
+    return value;
+  }
+
+  /// Set value in both memory and Hive cache
+  static Future<void> setWithMemory<T>(
+    String key,
+    T value, {
+    Duration? ttl,
+  }) async {
+    _setMemoryCache(key, value);
+    await set(key, value, ttl: ttl);
+  }
+
+  /// Internal: Set value in memory cache with LRU eviction
+  static void _setMemoryCache(String key, dynamic value) {
+    // Evict oldest entry if at capacity
+    if (_memoryCache.length >= _memoryCacheMaxSize) {
+      final oldestKey = _memoryCache.entries
+          .reduce((a, b) => a.value.expiry.isBefore(b.value.expiry) ? a : b)
+          .key;
+      _memoryCache.remove(oldestKey);
+      debugPrint('[CacheService] Memory cache evicted: $oldestKey');
+    }
+
+    _memoryCache[key] = _MemoryCacheEntry(
+      value: value,
+      expiry: DateTime.now().add(_memoryCacheTTL),
+    );
+  }
+
+  /// Clear memory cache (useful on logout or memory pressure)
+  static void clearMemoryCache() {
+    _memoryCache.clear();
+    debugPrint('[CacheService] Memory cache cleared');
+  }
+
+  /// Get memory cache statistics
+  static Map<String, dynamic> getMemoryStats() {
+    return {
+      'memoryEntries': _memoryCache.length,
+      'maxSize': _memoryCacheMaxSize,
+    };
+  }
+}
+
+/// Helper class for in-memory cache entries with expiry
+class _MemoryCacheEntry {
+  _MemoryCacheEntry({required this.value, required this.expiry});
+  
+  final dynamic value;
+  final DateTime expiry;
 }
