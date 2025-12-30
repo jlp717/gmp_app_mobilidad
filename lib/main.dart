@@ -6,6 +6,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/providers/auth_provider.dart';
+import 'core/cache/cache_service.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/main_shell.dart';
 import 'features/sales_history/providers/sales_history_provider.dart';
@@ -13,6 +14,9 @@ import 'features/sales_history/presentation/pages/product_history_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Hive cache before anything else
+  await CacheService.init();
 
   // Initialize date formatting for Spanish
   await initializeDateFormatting('es', null);
