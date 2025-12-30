@@ -289,6 +289,38 @@ async function query(sql, logQuery = true) {
   }
 }
 
+/**
+ * Execute a parameterized query to prevent SQL injection
+ * Uses ODBC prepared statements with ? placeholders
+ * @param {string} sql - SQL query with ? placeholders
+ * @param {Array} params - Array of parameter values in order
+ * @param {boolean} logQuery - Whether to log the query (false for sensitive queries)
+ * @returns {Promise<Array>} Query results
+ */
+async function queryWithParams(sql, params = [], logQuery = true) {
+  const start = Date.now();
+  const conn = await dbPool.connect();
+  try {
+    // Use prepared statement for parameterized query
+    const stmt = await conn.createStatement();
+    await stmt.prepare(sql);
+    const result = await stmt.execute(params);
+    await stmt.close();
+
+    const duration = Date.now() - start;
+    if (logQuery) {
+      const preview = sql.replace(/\s+/g, ' ').substring(0, 80);
+      logger.info(`📊 Parameterized Query (${duration}ms): ${preview}... → ${result.length} rows`);
+    }
+    return result;
+  } catch (error) {
+    logger.error(`❌ Parameterized Query Error: ${error.message}`);
+    throw error;
+  } finally {
+    await conn.close();
+  }
+}
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -353,18 +385,19 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
       }
     }
 
-    // Escape password for SQL (basic - in production use parameterized queries)
-    const safePwd = password.replace(/'/g, "''").trim();
+    // Use parameterized query to prevent SQL injection
+    const trimmedPwd = password.trim();
 
-    // Query database for user - don't reveal if user exists vs wrong password
-    const users = await query(`
+    // Query database for user using parameterized query
+    // Uses ? placeholders to prevent SQL injection
+    const users = await queryWithParams(`
       SELECT ID, CODIGOUSUARIO, NOMBREUSUARIO, PASSWORD, SUBEMPRESA, DELEGACION, GRUPO
       FROM DSEDAC.APPUSUARIOS
-      WHERE UPPER(TRIM(CODIGOUSUARIO)) = '${safeUser}'
-        AND TRIM(PASSWORD) = '${safePwd}'
+      WHERE UPPER(TRIM(CODIGOUSUARIO)) = ?
+        AND TRIM(PASSWORD) = ?
         AND SUBEMPRESA = 'GMP'
       FETCH FIRST 1 ROWS ONLY
-    `, false); // Don't log query with password
+    `, [safeUser, trimmedPwd], false); // Don't log query with password
 
     if (users.length === 0) {
       // Track failed attempt
@@ -1210,26 +1243,26 @@ app.get('/api/clients/:code', async (req, res) => {
     const { code } = req.params;
     const { vendedorCodes } = req.query;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
-    const safeCode = code.replace(/'/g, "''").trim();
+    const clientCode = code.trim();
 
-    // Basic client info
-    const clientInfo = await query(`
+    // Basic client info - using parameterized query
+    const clientInfo = await queryWithParams(`
       SELECT C.CODIGOCLIENTE as code, C.NOMBRECLIENTE as name, C.NIF as nif,
   C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
   C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
   C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
   C.OBSERVACIONES1 as notes, C.ANOALTA as yearCreated
       FROM DSEDAC.CLI C
-      WHERE C.CODIGOCLIENTE = '${safeCode}'
+      WHERE C.CODIGOCLIENTE = ?
       FETCH FIRST 1 ROWS ONLY
-  `);
+  `, [clientCode]);
 
     if (clientInfo.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
-    // Sales summary
-    const salesSummary = await query(`
+    // Sales summary - parameterized query
+    const salesSummary = await queryWithParams(`
       SELECT 
         SUM(IMPORTEVENTA) as totalSales,
         SUM(IMPORTEMARGENREAL) as totalMargin,
@@ -1237,32 +1270,30 @@ app.get('/api/clients/:code', async (req, res) => {
         COUNT(*) as totalLines,
         COUNT(DISTINCT ANODOCUMENTO || '-' || MESDOCUMENTO || '-' || DIADOCUMENTO) as numOrders
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeCode}' 
+      WHERE CODIGOCLIENTEALBARAN = ? 
         AND ANODOCUMENTO >= ${MIN_YEAR} 
-        -- Matrix consistency filters
         AND TIPOVENTA <> 'SC'
         AND SERIEALBARAN NOT IN ('K', 'N', 'O', 'G')
         ${vendedorFilter}
-    `);
+    `, [clientCode]);
 
-    // Monthly sales trend (last 12 months)
-    const monthlyTrend = await query(`
+    // Monthly sales trend (last 12 months) - parameterized
+    const monthlyTrend = await queryWithParams(`
       SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
         SUM(IMPORTEVENTA) as sales, SUM(IMPORTEMARGENREAL) as margin
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeCode}' 
+      WHERE CODIGOCLIENTEALBARAN = ? 
         AND ANODOCUMENTO >= ${MIN_YEAR} 
-        -- Matrix consistency filters
         AND TIPOVENTA <> 'SC'
         AND SERIEALBARAN NOT IN ('K', 'N', 'O', 'G')
         ${vendedorFilter}
       GROUP BY ANODOCUMENTO, MESDOCUMENTO
       ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
       FETCH FIRST 12 ROWS ONLY
-  `);
+  `, [clientCode]);
 
-    // Top products for this client
-    const topProducts = await query(`
+    // Top products for this client - parameterized
+    const topProducts = await queryWithParams(`
       SELECT L.CODIGOARTICULO as code,
   COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION)) as name,
   SUM(L.IMPORTEVENTA) as totalSales,
@@ -1270,11 +1301,11 @@ app.get('/api/clients/:code', async (req, res) => {
   COUNT(*) as timesOrdered
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.ART A ON TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
-      WHERE L.CODIGOCLIENTEALBARAN = '${safeCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
+      WHERE L.CODIGOCLIENTEALBARAN = ? AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
       ORDER BY totalSales DESC
       FETCH FIRST 10 ROWS ONLY
-  `);
+  `, [clientCode]);
 
     // Payment status from CVC
     const paymentStatus = await query(`
@@ -1347,9 +1378,10 @@ app.get('/api/clients/:code/sales-history', async (req, res) => {
     const { code } = req.params;
     const { vendedorCodes, limit = 50, offset = 0 } = req.query;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
-    const safeCode = code.replace(/'/g, "''").trim();
+    const clientCode = code.trim();
 
-    const sales = await query(`
+    // Parameterized query for safety
+    const sales = await queryWithParams(`
       SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
   CODIGOARTICULO as productCode,
   COALESCE(DESCRIPCION, 'Sin descripción') as productName,
@@ -1357,15 +1389,14 @@ app.get('/api/clients/:code/sales-history', async (req, res) => {
   IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
   CODIGOVENDEDOR as vendedor
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeCode}' AND ANODOCUMENTO >= ${MIN_YEAR} 
-        -- Matrix consistency filters
+      WHERE CODIGOCLIENTEALBARAN = ? AND ANODOCUMENTO >= ${MIN_YEAR} 
         AND TIPOVENTA <> 'SC'
         AND SERIEALBARAN NOT IN ('K', 'N', 'O', 'G')
         ${vendedorFilter}
       ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
       OFFSET ${parseInt(offset)} ROWS
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `);
+    `, [clientCode]);
 
     res.json({
       history: sales.map(s => ({
