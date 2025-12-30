@@ -1711,28 +1711,28 @@ app.get('/api/rutero/day_OLD/:dia', async (req, res) => {
 app.get('/api/rutero/client/:code/status', async (req, res) => {
   try {
     const { code } = req.params;
-    const safeCode = code.replace(/'/g, "''").trim();
+    const clientCode = code.trim();
     const now = getCurrentDate();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
-    // Ventas por mes del año actual (usando LAC)
-    const currentYearData = await query(`
+    // Ventas por mes del año actual (usando LAC) - parameterized
+    const currentYearData = await queryWithParams(`
       SELECT MESDOCUMENTO as month, SUM(IMPORTEVENTA) as sales, SUM(IMPORTEVENTA - IMPORTECOSTO) as margin
       FROM DSEDAC.LAC
-      WHERE CODIGOCLIENTEALBARAN = '${safeCode}' AND ANODOCUMENTO = ${currentYear}
+      WHERE CODIGOCLIENTEALBARAN = ? AND ANODOCUMENTO = ${currentYear}
       GROUP BY MESDOCUMENTO
       ORDER BY MESDOCUMENTO
-    `);
+    `, [clientCode]);
 
-    // Ventas por mes del año anterior (usando LAC)
-    const lastYearData = await query(`
+    // Ventas por mes del año anterior (usando LAC) - parameterized
+    const lastYearData = await queryWithParams(`
       SELECT MESDOCUMENTO as month, SUM(IMPORTEVENTA) as sales, SUM(IMPORTEVENTA - IMPORTECOSTO) as margin
       FROM DSEDAC.LAC
-      WHERE CODIGOCLIENTEALBARAN = '${safeCode}' AND ANODOCUMENTO = ${currentYear - 1}
+      WHERE CODIGOCLIENTEALBARAN = ? AND ANODOCUMENTO = ${currentYear - 1}
       GROUP BY MESDOCUMENTO
       ORDER BY MESDOCUMENTO
-    `);
+    `, [clientCode]);
 
     // Crear mapa de comparación
     const comparison = [];
