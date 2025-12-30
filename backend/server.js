@@ -1785,12 +1785,12 @@ app.get('/api/rutero/client/:code/detail', async (req, res) => {
   try {
     const { code } = req.params;
     const { year, filterMonth } = req.query;
-    const safeCode = code.replace(/'/g, "''").trim();
+    const clientCode = code.trim();
     const now = getCurrentDate();
     const targetYear = parseInt(year) || now.getFullYear();
 
-    // 1. Client Info with Razón Social
-    const clientInfo = await query(`
+    // 1. Client Info with Razón Social - parameterized
+    const clientInfo = await queryWithParams(`
       SELECT 
         CODIGOCLIENTE as code,
         COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as razonSocial,
@@ -1798,18 +1798,18 @@ app.get('/api/rutero/client/:code/detail', async (req, res) => {
         NIF, DIRECCION, POBLACION, PROVINCIA, CODIGOPOSTAL,
         TELEFONO1, TELEFONO2, PERSONACONTACTO, CODIGORUTA
       FROM DSEDAC.CLI
-      WHERE CODIGOCLIENTE = '${safeCode}'
+      WHERE CODIGOCLIENTE = ?
       FETCH FIRST 1 ROWS ONLY
-    `);
+    `, [clientCode]);
 
     if (clientInfo.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
-    // 2. Monthly Sales Breakdown (Current + Last Year)
+    // 2. Monthly Sales Breakdown (Current + Last Year) - parameterized
     let salesByMonth = [];
     try {
-      salesByMonth = await query(`
+      salesByMonth = await queryWithParams(`
         SELECT 
           L.ANODOCUMENTO as year,
           L.MESDOCUMENTO as month,
@@ -1823,19 +1823,18 @@ app.get('/api/rutero/client/:code/detail', async (req, res) => {
           AND C.CCSRAB = L.LCSRAB 
           AND C.CCTRAB = L.LCTRAB 
           AND C.CCNRAB = L.LCNRAB
-        WHERE L.CODIGOCLIENTEALBARAN = '${safeCode}'
+        WHERE L.CODIGOCLIENTEALBARAN = ?
           AND L.ANODOCUMENTO IN (${targetYear}, ${targetYear - 1})
-          -- Matrix cleanup filters
           AND L.LCTPVT <> 'SC'
           AND L.LCSRAB NOT IN ('K', 'N', 'O', 'G')
           AND COALESCE(C.CCSNSD, '') <> 'E'
         GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO
         ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC
-      `);
+      `, [clientCode]);
     } catch (e) {
       logger.warn(`Sales by month query failed, trying simpler version: ${e.message}`);
-      // Fallback without margin
-      salesByMonth = await query(`
+      // Fallback without margin - parameterized
+      salesByMonth = await queryWithParams(`
         SELECT 
           ANODOCUMENTO as year,
           MESDOCUMENTO as month,
@@ -1844,11 +1843,11 @@ app.get('/api/rutero/client/:code/detail', async (req, res) => {
           COUNT(DISTINCT NUMERODOCUMENTO) as invoices,
           COUNT(DISTINCT CODIGOARTICULO) as products
         FROM DSEDAC.LAC
-        WHERE CODIGOCLIENTEALBARAN = '${safeCode}'
+        WHERE CODIGOCLIENTEALBARAN = ?
           AND ANODOCUMENTO IN (${targetYear}, ${targetYear - 1})
         GROUP BY ANODOCUMENTO, MESDOCUMENTO
         ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
-      `);
+      `, [clientCode]);
     }
 
     // 3. Product Purchases with Dates (filterable by month)
