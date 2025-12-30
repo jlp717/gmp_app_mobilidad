@@ -97,9 +97,16 @@ app.use((req, res, next) => {
 });
 
 // =============================================================================
-// DATABASE CONNECTION
+// DATABASE CONNECTION (Credentials from environment variables for security)
 // =============================================================================
-const DB_CONFIG = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;';
+const dotenv = require('dotenv');
+dotenv.config();
+
+// Build connection string from environment variables (fallback to defaults for development)
+const DB_UID = process.env.ODBC_UID || 'JAVIER';
+const DB_PWD = process.env.ODBC_PWD || 'JAVIER';
+const DB_DSN = process.env.ODBC_DSN || 'GMP';
+const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;`;
 let dbPool = null;
 
 // LACLAE Cache for fast visit/delivery day lookups
