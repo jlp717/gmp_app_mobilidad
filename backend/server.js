@@ -32,10 +32,12 @@ const app = express();
 const PORT = process.env.PORT || 3333;
 
 // =============================================================================
-// DATE CONSTANTS (2023-01-01 to today)
+// DATE CONSTANTS (Dynamic: Current year - 2 years for 3-year window)
+// Example: In 2025 → shows 2023-2025, In 2026 → shows 2024-2026
 // =============================================================================
-const MIN_YEAR = 2023;
 const getCurrentDate = () => new Date();
+const getCurrentYear = () => getCurrentDate().getFullYear();
+const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 
 // =============================================================================
 // SALES FILTER CONSTANTS (Applied to all LAC queries for correct sales totals)
