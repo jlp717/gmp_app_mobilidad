@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/providers/dashboard_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/currency_formatter.dart';
@@ -78,12 +80,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       ]);
 
       setState(() {
-        _evolutionData = List<Map<String, dynamic>>.from(results[0]['evolution'] ?? []);
+        final rawEvolution = results[0]['evolution'] ?? [];
+        _evolutionData = (rawEvolution as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         _yoyData = results[1];
-        _topClients = List<Map<String, dynamic>>.from(results[2]['clients'] ?? []);
-        _topProducts = List<Map<String, dynamic>>.from(results[3]['products'] ?? []);
+        final rawClients = results[2]['clients'] ?? [];
+        _topClients = (rawClients as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        final rawProducts = results[3]['products'] ?? [];
+        _topProducts = (rawProducts as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         _trendsData = results[4];
-        _marginsData = List<Map<String, dynamic>>.from(results[5]['margins'] ?? []);
+        final rawMargins = results[5]['margins'] ?? [];
+        _marginsData = (rawMargins as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         _kpiData = results[6];
         _isLoading = false;
       });
@@ -98,7 +104,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: ModernLoading(message: 'Analizando datos...'))
           : RefreshIndicator(
               onRefresh: _fetchAllData,
               child: SingleChildScrollView(
@@ -167,7 +173,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
-            children: [2023, 2024, 2025].map((year) {
+            children: ApiConfig.availableYears.map((year) {
               final isSelected = _selectedYears.contains(year);
               return FilterChip(
                 label: Text(year.toString()),

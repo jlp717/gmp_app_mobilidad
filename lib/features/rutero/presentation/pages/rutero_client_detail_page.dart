@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
+import '../../../../core/utils/currency_formatter.dart';
 
 /// Comprehensive Client Detail Page for Rutero
 /// Shows exhaustive breakdown with charts, statistics, purchase history
@@ -35,8 +37,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
 
   late TabController _tabController;
 
-  final _currencyFormat =
-      NumberFormat.currency(symbol: '€', decimalDigits: 0, locale: 'es_ES');
+  // final _currencyFormat =
+  //    NumberFormat.currency(symbol: '€', decimalDigits: 0, locale: 'es_ES');
 
   static const List<String> _monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -117,7 +119,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               setState(() => _selectedYear = year);
               _loadData();
             },
-            itemBuilder: (context) => [2023, 2024, 2025]
+            itemBuilder: (context) => ApiConfig.availableYears
                 .map((y) => PopupMenuItem(
                       value: y,
                       child: Text(y.toString(),
@@ -359,7 +361,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                     ? month['currentYear']
                     : month['lastYear'];
                 return BarTooltipItem(
-                  '${rodIndex == 0 ? _selectedYear : _selectedYear - 1}\n${_currencyFormat.format(value)} €',
+                  '${rodIndex == 0 ? _selectedYear : _selectedYear - 1}\n${CurrencyFormatter.formatWhole(value)}',
                   const TextStyle(color: Colors.white, fontSize: 11),
                 );
               },

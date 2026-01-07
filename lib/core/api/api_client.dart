@@ -14,6 +14,9 @@ class ApiClient {
   /// Prevents duplicate API calls when multiple widgets request the same data
   static final Map<String, Future<dynamic>> _pendingRequests = {};
 
+  /// Callback for 401 Unauthorized events (Global Logout)
+  static VoidCallback? onUnauthorized;
+
   /// Initialize or get Dio instance
   static Dio get dio {
     _dio ??= _createDio();
@@ -76,11 +79,17 @@ class ApiClient {
     bool forceRefresh = false,
   }) async {
     // Try cache first if cacheKey provided and not forcing refresh
+    // Try cache first if cacheKey provided and not forcing refresh
     if (cacheKey != null && !forceRefresh) {
-      final cached = CacheService.get<Map<String, dynamic>>(cacheKey);
-      if (cached != null) {
-        debugPrint('[ApiClient] Returning cached response for: $cacheKey');
-        return cached;
+      try {
+        final cached = CacheService.get(cacheKey);
+        if (cached != null && cached is Map) {
+          debugPrint('[ApiClient] Returning cached response for: $cacheKey');
+          return Map<String, dynamic>.from(cached);
+        }
+      } catch (e) {
+        debugPrint('[ApiClient] Cache incompatible, ignoring: $e');
+        // Continue to network request
       }
     }
 
@@ -89,7 +98,13 @@ class ApiClient {
         endpoint,
         queryParameters: queryParameters,
       );
-      final data = response.data as Map<String, dynamic>;
+      final rawData = response.data;
+      if (rawData is! Map) {
+         // If it is a List, throw descriptive error so we know to use getList
+         if (rawData is List) throw Exception('Response is a List, use getList() instead');
+         throw Exception('Expected Map response but got ${rawData.runtimeType}');
+      }
+      final data = Map<String, dynamic>.from(rawData);
 
       // Cache the response if cacheKey provided
       if (cacheKey != null) {
@@ -100,11 +115,13 @@ class ApiClient {
     } on DioException catch (e) {
       // On network error, try to return cached data if available
       if (cacheKey != null && _isNetworkError(e)) {
-        final cached = CacheService.get<Map<String, dynamic>>(cacheKey);
-        if (cached != null) {
-          debugPrint('[ApiClient] Network error, returning stale cache for: $cacheKey');
-          return cached;
-        }
+        try {
+          final cached = CacheService.get(cacheKey);
+          if (cached != null && cached is Map) {
+             debugPrint('[ApiClient] Network error, returning stale cache for: $cacheKey');
+             return Map<String, dynamic>.from(cached);
+          }
+        } catch (_) {}
       }
       throw _handleError(e);
     }
@@ -119,11 +136,16 @@ class ApiClient {
     bool forceRefresh = false,
   }) async {
     // Try cache first if cacheKey provided and not forcing refresh
+    // Try cache first if cacheKey provided and not forcing refresh
     if (cacheKey != null && !forceRefresh) {
-      final cached = CacheService.get<List<dynamic>>(cacheKey);
-      if (cached != null) {
-        debugPrint('[ApiClient] Returning cached list for: $cacheKey');
-        return cached;
+      try {
+        final cached = CacheService.get(cacheKey);
+        if (cached != null && cached is List) {
+           debugPrint('[ApiClient] Returning cached list for: $cacheKey');
+           return cached;
+        }
+      } catch (e) {
+         debugPrint('[ApiClient] Cache incompatible, ignoring: $e');
       }
     }
 
@@ -211,6 +233,11 @@ class ApiClient {
       if (statusCode == 400) {
         return serverMessage ?? 'Solicitud incorrecta';
       } else if (statusCode == 401) {
+        // Trigger global logout on 401, unless it's the login endpoint
+        final isLoginRequest = e.requestOptions.path.contains('/auth/login');
+        if (!isLoginRequest) {
+          onUnauthorized?.call();
+        }
         return serverMessage ?? 'Credenciales inválidas';
       } else if (statusCode == 403) {
         return serverMessage ?? 'Acceso denegado';

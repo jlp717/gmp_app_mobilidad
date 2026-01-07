@@ -11,6 +11,7 @@ import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/main_shell.dart';
 import 'features/sales_history/providers/sales_history_provider.dart';
 import 'features/sales_history/presentation/pages/product_history_page.dart';
+import 'core/providers/filter_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +40,7 @@ class GMPSalesAnalyticsApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => SalesHistoryProvider()),
+        ChangeNotifierProvider(create: (_) => FilterProvider()),
       ],
       child: Consumer<AuthProvider>(
         builder: (context, authProvider, _) {

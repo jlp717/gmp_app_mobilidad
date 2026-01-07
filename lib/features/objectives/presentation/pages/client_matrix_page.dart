@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/api/api_client.dart';
@@ -152,7 +153,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                 context: context,
                 builder: (ctx) => SimpleDialog(
                   title: const Text('Seleccionar Año'),
-                  children: [2023, 2024, 2025].map((y) => SimpleDialogOption(
+                  children: ApiConfig.availableYears.map((y) => SimpleDialogOption(
                     onPressed: () => Navigator.pop(ctx, y),
                     child: Text(y.toString()),
                   )).toList(),

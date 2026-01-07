@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../providers/sales_history_provider.dart';
 import '../../../../core/providers/auth_provider.dart';
 import 'package:intl/intl.dart';
+import '../widgets/sales_summary_header.dart';
 
 class ProductHistoryPage extends StatefulWidget {
   final String? initialClientCode;
@@ -111,7 +112,8 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.sync, color: AppColors.primary),
+            tooltip: 'Sincronizar',
             onPressed: () => history.loadHistory(reset: true),
           ),
         ],
@@ -177,6 +179,10 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
             ),
           ),
           
+          // Summary Header (Comparison)
+          if (!history.isLoading && history.summary != null)
+             _buildSummaryHeader(context, history.summary!),
+
           // Results
           Expanded(
             child: history.isLoading
@@ -229,4 +235,10 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
       ),
     );
   }
+
+
+  Widget _buildSummaryHeader(BuildContext context, Map<String, dynamic> summary) {
+      return SalesSummaryHeader(summary: summary);
+  }
 }
+

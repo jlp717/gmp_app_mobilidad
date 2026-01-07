@@ -4,8 +4,10 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
+import '../../sales_history/presentation/widgets/sales_summary_header.dart';
 
 /// Client Detail Page - Shows comprehensive client information from DB2
 class ClientDetailPage extends StatefulWidget {
@@ -24,6 +26,7 @@ class ClientDetailPage extends StatefulWidget {
 
 class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerProviderStateMixin {
   Map<String, dynamic>? _clientData;
+  Map<String, dynamic>? _salesSummary;
   bool _isLoading = true;
   String? _error;
   late TabController _tabController;
@@ -32,7 +35,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadClientDetail();
+    _loadSalesSummary();
   }
 
   @override
@@ -83,7 +88,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: ModernLoading(message: 'Cargando cliente...'));
     }
 
     if (_error != null) {
@@ -112,8 +117,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final client = _clientData!['client'] as Map<String, dynamic>? ?? {};
     final summary = _clientData!['summary'] as Map<String, dynamic>? ?? {};
     final payments = _clientData!['payments'] as Map<String, dynamic>? ?? {};
-    final monthlyTrend = List<Map<String, dynamic>>.from(_clientData!['monthlyTrend'] ?? []);
-    final topProducts = List<Map<String, dynamic>>.from(_clientData!['topProducts'] ?? []);
+    final rawMonthlyTrend = _clientData!['monthlyTrend'] ?? [];
+    final monthlyTrend = (rawMonthlyTrend as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    final rawTopProducts = _clientData!['topProducts'] ?? [];
+    final topProducts = (rawTopProducts as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
 
     return Column(
       children: [
@@ -423,6 +430,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   Widget _buildHistoryTab() {
     return Column(
       children: [
+      children: [
+        if (_salesSummary != null)
+           SalesSummaryHeader(summary: _salesSummary!),
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: ElevatedButton.icon(
@@ -443,7 +453,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             future: _loadSalesHistory(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+                return const Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: Center(child: ModernLoading(message: 'Cargando historial...')),
+                );
               }
 
               final history = snapshot.data ?? [];
@@ -497,11 +510,32 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
         '${ApiConfig.clientDetail}/${widget.clientCode}/sales-history',
         queryParameters: {'vendedorCodes': widget.vendedorCodes, 'limit': '50'},
       );
-      return List<Map<String, dynamic>>.from(response['history'] ?? []);
+      final rawList = response['history'] ?? [];
+      return (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
     } catch (e) {
       debugPrint('Error loading history: $e');
       return [];
     }
+  }
+
+  Future<void> _loadSalesSummary() async {
+      try {
+        // Defaults to This Year if no dates provided, matching the History Page logic
+        final response = await ApiClient.get(
+          '/sales-history/summary',
+          queryParameters: {
+            'clientCode': widget.clientCode,
+            'vendedorCodes': widget.vendedorCodes
+          },
+        );
+        if (mounted) {
+           setState(() {
+             _salesSummary = response;
+           });
+        }
+      } catch (e) {
+         debugPrint('Error loading sales summary: $e');
+      }
   }
 
   void _launchPhone(String phone) async {

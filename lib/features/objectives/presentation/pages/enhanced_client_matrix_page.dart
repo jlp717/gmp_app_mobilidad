@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
+import '../../../../core/utils/currency_formatter.dart';
+import '../../../../features/sales_history/presentation/widgets/sales_summary_header.dart';
 
 /// Enhanced Client Matrix Page v6 - Professional design, no overflow
 class EnhancedClientMatrixPage extends StatefulWidget {
@@ -28,6 +32,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   
   List<Map<String, dynamic>> _families = [];
   Map<String, dynamic> _grandTotal = {};
+  Map<String, dynamic> _summary = {};
   Map<String, dynamic> _monthlyTotals = {};
   Map<String, dynamic> _availableFilters = {};
   
@@ -48,10 +53,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   final Set<String> _expandedFamilies = {};
   final Set<String> _expandedSubfamilies = {};
   
-  final _cf = NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 2);
+  // final _cf = NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 2);
   
   static const _mNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-  static const _years = [2023, 2024, 2025];
+  static List<int> get _years => ApiConfig.availableYears;
 
   @override
   void initState() {
@@ -83,8 +88,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       );
 
       setState(() {
-        _families = List<Map<String, dynamic>>.from(response['families'] ?? []);
+        final rawFamilies = response['families'] ?? [];
+        _families = (rawFamilies as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         _grandTotal = response['grandTotal'] ?? {};
+        _summary = response['summary'] ?? {};
         _monthlyTotals = response['monthlyTotals'] ?? {};
         _availableFilters = response['availableFilters'] ?? {};
         _isLoading = false;
@@ -97,7 +104,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
   String _formatCurrency(double value) {
     // Always show full number with proper formatting (2.900 € not 2.9K)
-    return _cf.format(value);
+    // Always show full number with proper formatting (2.900 € not 2.9K)
+    return CurrencyFormatter.format(value);
   }
 
   @override
@@ -125,7 +133,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         ],
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
+        ? const Center(child: ModernLoading(message: 'Cargando matriz...'))
         : _error != null 
           ? _buildError()
           : SafeArea(
@@ -146,8 +154,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   Widget _buildFilters() {
-    final fams = List<Map<String, dynamic>>.from(_availableFilters['families'] ?? []);
-    final subs = List<Map<String, dynamic>>.from(_availableFilters['subfamilies'] ?? []);
+    final rawFams = _availableFilters['families'] ?? [];
+    final fams = (rawFams as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    final rawSubs = _availableFilters['subfamilies'] ?? [];
+    final subs = (rawSubs as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
     
     return Container(
       constraints: const BoxConstraints(maxHeight: 180),
@@ -330,38 +340,20 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   Widget _buildSummaryRow() {
-    final sales = (_grandTotal['sales'] as num?)?.toDouble() ?? 0;
-    final margin = (_grandTotal['margin'] as num?)?.toDouble() ?? 0;
-    final marginPercent = sales > 0 ? (margin / sales) * 100 : 0;
-    final prods = (_grandTotal['products'] as num?)?.toInt() ?? 0;
-    final units = (_grandTotal['units'] as num?)?.toDouble() ?? 0;
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.neonBlue.withOpacity(0.15), AppTheme.neonPurple.withOpacity(0.1)],
-        ),
-        border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.3), width: 2)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('TOTAL ACUMULADO', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                const SizedBox(height: 2),
-                Text(_formatCurrency(sales), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
-              ],
-            ),
-          ),
-          if (widget.isJefeVentas) _summaryItem('${marginPercent.toStringAsFixed(1)}%', 'Margen', marginPercent >= 0 ? AppTheme.success : AppTheme.error),
-          _summaryItem('${units.toStringAsFixed(0)}', 'Cant.', AppTheme.neonPurple),
-          _summaryItem('$prods', 'Prod', Colors.orange),
-        ],
-      ),
+    if (_summary.isEmpty) {
+       // Fallback to old manually calculated headers if summary missing (compatibility)
+       // But backend should now send it.
+    }
+    // Inject breakdown if multiple years selected
+    final years = _selectedYears.toList()..sort();
+    if (years.length > 1) {
+       // Map yearly totals from _monthlyTotals? No, backend doesn't send explicit yearly breakdown in summary yet?
+       // Actually I left breakdown: [] in backend.
+       // But SalesSummaryHeader handles empty breakdown gracefully (just doesn't show it).
+    }
+    return SalesSummaryHeader(
+      summary: _summary,
+      showMargin: widget.isJefeVentas,
     );
   }
 
@@ -473,7 +465,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final code = f['familyCode'] as String? ?? '';
     final name = f['familyName'] as String? ?? code;
     final expanded = _expandedFamilies.contains(code);
-    final subs = List<Map<String, dynamic>>.from(f['subfamilies'] ?? []);
+    final rawSubs = f['subfamilies'] ?? [];
+    final subs = (rawSubs as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
     final sales = (f['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (f['totalUnits'] as num?)?.toDouble() ?? 0;
     final margin = (f['totalMarginPercent'] as num?)?.toDouble() ?? 0;
@@ -515,7 +508,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   Widget _buildSubfamily(Map<String, dynamic> s, String famCode) {
     final code = s['subfamilyCode'] as String? ?? '';
     final name = s['subfamilyName'] as String? ?? code;
-    final prods = List<Map<String, dynamic>>.from(s['products'] ?? []);
+    final rawProds = s['products'] ?? [];
+    final prods = (rawProds as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
     final sales = (s['totalSales'] as num?)?.toDouble() ?? 0;
     final margin = (s['totalMarginPercent'] as num?)?.toDouble() ?? 0;
     final units = (s['totalUnits'] as num?)?.toDouble() ?? 0;
@@ -708,7 +702,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 // Total with prev year inline: "2025 (2024)"
                 Column(
                   children: [
-                    Text('Total 2025', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                    Text('Total ${_selectedYears.length == 1 ? _selectedYears.first : "Periodo"}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -753,17 +747,29 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 if (!_selectedMonths.contains(m)) return const SizedBox.shrink();
                 final d = monthly[m.toString()];
                 final s = (d?['sales'] as num?)?.toDouble() ?? 0;
+                final prevS = (d?['prevSales'] as num?)?.toDouble() ?? 0; 
                 final trend = d?['yoyTrend'] as String?;
-                // Use yoyVariation from backend (null if no prev data)
                 final yoyVar = (d?['yoyVariation'] as num?)?.toDouble();
                 
+                // Determine State
+                bool isNew = prevS < 0.01 && s > 0;
+                bool isLost = s == 0 && prevS > 0;
+                bool isNeutral = trend == 'neutral' || trend == null;
+                
+                // Background & Border Colors
                 Color bc = Colors.grey.shade800;
                 Color bgColor = Colors.transparent;
                 double bWidth = 0.5;
                 if (s > 0) bc = Colors.grey.shade600;
                 
-                if (trend == 'up') { bc = AppTheme.success; bgColor = AppTheme.success.withOpacity(0.15); bWidth = 1.5; }
-                if (trend == 'down') { bc = AppTheme.error; bgColor = AppTheme.error.withOpacity(0.15); bWidth = 1.5; }
+                if (isNew) {
+                   bc = AppTheme.neonBlue; 
+                   bgColor = AppTheme.neonBlue.withOpacity(0.1); 
+                   bWidth = 1.0;
+                } else if (!isNeutral) {
+                   if (trend == 'up') { bc = AppTheme.success; bgColor = AppTheme.success.withOpacity(0.15); bWidth = 1.5; }
+                   if (trend == 'down') { bc = AppTheme.error; bgColor = AppTheme.error.withOpacity(0.15); bWidth = 1.5; }
+                }
 
                 return Container(
                   width: 60,
@@ -781,14 +787,22 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                            Text(_mNames[m-1], style: TextStyle(fontSize: 8, color: Colors.grey)),
+                           
+                           // SALES DISPLAY
                            if (s > 0) 
                              Text(_formatCurrency(s), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold))
-                           else const Text('-', style: TextStyle(fontSize: 8, color: Colors.grey)),
-                           // Show YoY % only when backend provides it (prevSales > 0)
-                           if (yoyVar != null && trend != 'neutral')
-                             Text('${yoyVar >= 0 ? "+" : ""}${yoyVar.toStringAsFixed(0)}%', 
-                               style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, 
-                                 color: trend == 'up' ? AppTheme.success : AppTheme.error)),
+                           else if (isLost)
+                             Text('(${_formatCurrency(prevS)})', style: TextStyle(fontSize: 8, color: Colors.white38)) 
+                           else
+                             const Text('-', style: TextStyle(fontSize: 8, color: Colors.grey)),
+
+                           // VARIATION DISPLAY (Strict Logic)
+                           if (isNew)
+                             const Text('NUEVO', style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: AppTheme.neonBlue))
+                           else if (isLost)
+                             const Text('-100%', style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: AppTheme.error))
+                           else if (prevS > 0 && yoyVar != null)
+                             _buildStrictPercentage(yoyVar, trend ?? 'neutral')
                         ],
                       ),
                     ),
@@ -800,5 +814,18 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildStrictPercentage(double variation, String trend) {
+     if (variation.abs() < 1.0) { // Strict check for negligible variation
+         return const Text('0%', style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: Colors.grey));
+     }
+     
+     final isPositive = variation > 0;
+     final color = trend == 'neutral' ? Colors.grey : (isPositive ? AppTheme.success : AppTheme.error);
+     final prefix = isPositive ? "+" : ""; // No prefix if 0, but logic above handles < 1.0
+     
+     return Text('$prefix${variation.toStringAsFixed(0)}%', 
+         style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: color));
   }
 }

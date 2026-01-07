@@ -5,8 +5,12 @@ const { query } = require('../config/db');
 const {
     getCurrentDate,
     buildVendedorFilter,
-    MIN_YEAR
+    buildVendedorFilterLACLAE,
+    MIN_YEAR,
+    LAC_SALES_FILTER,
+    LACLAE_SALES_FILTER
 } = require('../utils/common');
+
 
 // Mapeo mes número -> campo de cuota en COFC
 const MONTH_QUOTA_MAP = {
@@ -75,7 +79,7 @@ router.get('/', async (req, res) => {
                         // Si hay porcentaje objetivo, calcular basado en año anterior (usando LAC)
                         const lastYearSales = await query(`
               SELECT COALESCE(SUM(IMPORTEVENTA), 0) as sales
-              FROM DSEDAC.LAC
+              FROM DSEDAC.LAC L
               WHERE ANODOCUMENTO = ${targetYear - 1} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
             `, false);
                         const lastSales = parseFloat(lastYearSales[0]?.SALES) || 0;
@@ -95,7 +99,7 @@ router.get('/', async (req, res) => {
         COALESCE(SUM(IMPORTEVENTA), 0) as sales,
         COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
         COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
-      FROM DSEDAC.LAC
+      FROM DSEDAC.LAC L
       WHERE ANODOCUMENTO = ${targetYear} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
     `);
 
@@ -181,40 +185,56 @@ router.get('/evolution', async (req, res) => {
     try {
         const { vendedorCodes, years } = req.query;
         const now = getCurrentDate();
+        const { calculateWorkingDays, calculateDaysPassed } = require('../utils/common');
+        const { getVendorActiveDaysFromCache } = require('../services/laclae');
 
-        // Parse years - default to current year
-        const yearsArray = years ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR) : [now.getFullYear()];
+        // Parse years - default to current year and previous 2 (3 years total)
+        const yearsArray = years
+            ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR)
+            : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
 
         // Include previous years for dynamic objective calculation
         const allYears = [...yearsArray, ...yearsArray.map(y => y - 1)];
         const uniqueYears = [...new Set(allYears)];
         const yearsFilter = uniqueYears.join(',');
 
-        const vendedorFilter = buildVendedorFilter(vendedorCodes);
+        // Use LACLAE-specific vendor filter (uses LCCDVD column)
+        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+
+        // Get Active Days for calculating pace 
+        // Logic: if multiple vendors selected, we might average or select first? 
+        // User is usually viewing ONE vendor or ALL. 
+        // If ALL, standard days. If specific, specific days.
+        let activeWeekDays = [];
+        if (vendedorCodes && vendedorCodes !== 'ALL') {
+            const firstCode = vendedorCodes.split(',')[0].trim();
+            const rawDays = getVendorActiveDaysFromCache(firstCode);
+            if (rawDays) {
+                const dayMap = {
+                    'lunes': 'VIS_L', 'martes': 'VIS_M', 'miercoles': 'VIS_X',
+                    'jueves': 'VIS_J', 'viernes': 'VIS_V', 'sabado': 'VIS_S', 'domingo': 'VIS_D'
+                };
+                activeWeekDays = rawDays.map(d => dayMap[d]).filter(d => d);
+            }
+        }
 
         // Single optimized query - get monthly totals per year
+        // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
         const rows = await query(`
-      SELECT 
-        L.ANODOCUMENTO as YEAR,
-        L.MESDOCUMENTO as MONTH,
-        SUM(L.IMPORTEVENTA) as SALES,
-        SUM(L.IMPORTECOSTO) as COST,
-        COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) as CLIENTS
-      FROM DSEDAC.LAC L
-      LEFT JOIN DSEDAC.CAC C ON C.CCSBAB = L.LCSBAB 
-        AND C.CCYEAB = L.LCYEAB 
-        AND C.CCSRAB = L.LCSRAB 
-        AND C.CCTRAB = L.LCTRAB 
-        AND C.CCNRAB = L.LCNRAB
-      WHERE L.ANODOCUMENTO IN (${yearsFilter})
-        -- Matrix consistency filters
-        AND L.LCTPVT <> 'SC'
-        AND L.LCSRAB NOT IN ('K', 'N', 'O', 'G')
-        AND COALESCE(C.CCSNSD, '') <> 'E'
-        ${vendedorFilter.replace(/CODIGOVENDEDOR/g, 'L.CODIGOVENDEDOR')}
-      GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO
-      ORDER BY L.ANODOCUMENTO, L.MESDOCUMENTO
-    `);
+          SELECT 
+            L.LCAADC as YEAR,
+            L.LCMMDC as MONTH,
+            SUM(L.LCIMVT) as SALES,
+            SUM(L.LCIMCT) as COST,
+            COUNT(DISTINCT L.LCCDCL) as CLIENTS
+          FROM DSED.LACLAE L
+          WHERE L.LCAADC IN (${yearsFilter})
+            AND ${LACLAE_SALES_FILTER}
+            ${vendedorFilter}
+          GROUP BY L.LCAADC, L.LCMMDC
+          ORDER BY L.LCAADC, L.LCMMDC
+        `);
+
 
         // Organize by year
         const yearlyData = {};
@@ -240,9 +260,29 @@ router.get('/evolution', async (req, res) => {
 
             for (let m = 1; m <= 12; m++) {
                 const row = rows.find(r => r.YEAR == year && r.MONTH == m);
+                const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
+
                 const sales = row ? parseFloat(row.SALES) || 0 : 0;
                 const cost = row ? parseFloat(row.COST) || 0 : 0;
                 const clients = row ? parseInt(row.CLIENTS) || 0 : 0;
+
+                // SEASONAL OBJECTIVE:
+                // If we have history (prevYearTotal > 0), we follow it STRICTLY, even if it's 0 for some months.
+                // This preserves seasonality (high summer, low winter).
+                // Only if we have NO history at all do we fall back to linear distribution.
+                let seasonalObjective = 0;
+
+                if (prevYearTotal > 0) {
+                    const prevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
+                    seasonalObjective = prevSales * 1.10;
+                } else if (annualObjective > 0) {
+                    // No history for the entire previous year. Fallback to linear.
+                    seasonalObjective = annualObjective / 12;
+                }
+
+                // --- WORKING DAYS & PACING ---
+                const totalWorkingDays = calculateWorkingDays(year, m, activeWeekDays);
+                const daysPassed = calculateDaysPassed(year, m, activeWeekDays);
 
                 yearlyData[year].push({
                     month: m,
@@ -250,7 +290,9 @@ router.get('/evolution', async (req, res) => {
                     cost: cost,
                     margin: sales - cost,
                     clients: clients,
-                    objective: monthlyObjective // Flat monthly value
+                    objective: seasonalObjective,
+                    workingDays: totalWorkingDays,
+                    daysPassed: daysPassed
                 });
             }
 
@@ -348,9 +390,7 @@ router.get('/matrix', async (req, res) => {
         AND L.ANODOCUMENTO IN(${yearsFilter})
         AND L.MESDOCUMENTO BETWEEN ${monthStart} AND ${monthEnd}
         -- FILTERS to match LACLAE logic
-        AND L.LCTPVT <> 'SC'                                -- Exclude Sin Cargo (SC)
-        AND L.LCSRAB NOT IN ('K', 'N', 'O', 'G')            -- Exclude internal Series
-        AND COALESCE(C.CCSNSD, '') <> 'E'                   -- Exclude LAE documents
+        AND ${LAC_SALES_FILTER}
         ${filterConditions}
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.ANODOCUMENTO, L.MESDOCUMENTO
       ORDER BY SALES DESC
@@ -377,6 +417,7 @@ router.get('/matrix', async (req, res) => {
         // Build hierarchy: Family -> Subfamily -> Product
         const familyMap = new Map();
         let grandTotalSales = 0, grandTotalCost = 0, grandTotalUnits = 0;
+        let grandTotalPrevSales = 0, grandTotalPrevCost = 0, grandTotalPrevUnits = 0;
         const productSet = new Set();
 
         // Monthly YoY Calculation
@@ -435,6 +476,10 @@ router.get('/matrix', async (req, res) => {
                 grandTotalCost += cost;
                 grandTotalUnits += units;
                 productSet.add(prodCode);
+            } else if (isPrevYear(year)) {
+                grandTotalPrevSales += sales;
+                grandTotalPrevCost += cost;
+                grandTotalPrevUnits += units;
             }
 
             // Add to hierarchy
@@ -539,6 +584,8 @@ router.get('/matrix', async (req, res) => {
             if (val.prevSales > 0) {
                 if (val.currentSales > val.prevSales) yoyTrend = 'up';
                 else if (val.currentSales < val.prevSales) yoyTrend = 'down';
+            } else if (val.currentSales > 0) {
+                yoyTrend = 'up'; // Mark as positive trend if it's NEW sales
             }
 
             flatMonthlyTotals[month] = {
@@ -599,6 +646,7 @@ router.get('/matrix', async (req, res) => {
 
                         monthlyOutput[mStr] = {
                             sales: d.selectedSales,
+                            prevSales: d.prevSales, // Added for frontend context
                             yoyTrend: mTrend,
                             yoyVariation: mVar
                         };
@@ -652,12 +700,43 @@ router.get('/matrix', async (req, res) => {
             };
         }).sort((a, b) => b.totalSales - a.totalSales);
 
+        // Calculate Aggregated Summary
+        const grandTotalMargin = grandTotalSales - grandTotalCost;
+        const grandTotalPrevMargin = grandTotalPrevSales - grandTotalPrevCost;
+
+        const salesGrowth = grandTotalPrevSales > 0 ? ((grandTotalSales - grandTotalPrevSales) / grandTotalPrevSales) * 100 : 0;
+        const marginGrowth = grandTotalPrevMargin > 0 ? ((grandTotalMargin - grandTotalPrevMargin) / grandTotalPrevMargin) * 100 : 0;
+        const unitsGrowth = grandTotalPrevUnits > 0 ? ((grandTotalUnits - grandTotalPrevUnits) / grandTotalPrevUnits) * 100 : 0;
+
+        const summary = {
+            current: {
+                label: yearsArray.join(', '),
+                sales: grandTotalSales,
+                margin: grandTotalMargin,
+                units: grandTotalUnits,
+                products: productSet.size
+            },
+            previous: {
+                label: yearsArray.map(y => y - 1).join(', '),
+                sales: grandTotalPrevSales,
+                margin: grandTotalPrevMargin,
+                units: grandTotalPrevUnits
+            },
+            growth: {
+                sales: salesGrowth,
+                margin: marginGrowth,
+                units: unitsGrowth
+            },
+            breakdown: []
+        };
+
         res.json({
             clientCode,
+            summary,
             grandTotal: {
                 sales: grandTotalSales,
                 cost: grandTotalCost,
-                margin: grandTotalSales - grandTotalCost,
+                margin: grandTotalMargin,
                 units: grandTotalUnits,
                 products: productSet.size
             },
@@ -678,26 +757,69 @@ router.get('/matrix', async (req, res) => {
 });
 
 // =============================================================================
+// POPULATIONS (For dropdown filters)
+// =============================================================================
+router.get('/populations', async (req, res) => {
+    try {
+        const rows = await query(`
+            SELECT DISTINCT TRIM(POBLACION) as CITY 
+            FROM DSEDAC.CLI 
+            WHERE ANOBAJA = 0 
+            AND TRIM(POBLACION) <> ''
+            ORDER BY 1
+        `);
+        res.json(rows.map(r => r.CITY));
+    } catch (error) {
+        logger.error(`Error getting populations: ${error.message}`);
+        res.status(500).json([]);
+    }
+});
+
+// =============================================================================
 // OBJECTIVES BY CLIENT
 // =============================================================================
 router.get('/by-client', async (req, res) => {
     try {
-        const { vendedorCodes, years, months } = req.query;
+        const { vendedorCodes, years, months, city, code, nif, name, limit } = req.query;
         const now = getCurrentDate();
 
         // Parse years and months - default to full year
         const yearsArray = years ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR) : [now.getFullYear()];
         const monthsArray = months ? months.split(',').map(m => parseInt(m.trim())).filter(m => m >= 1 && m <= 12) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        const rowsLimit = limit ? parseInt(limit) : 1000; // Default limit 1000 if not specified to prevent overload
 
         const yearsFilter = yearsArray.join(',');
         const monthsFilter = monthsArray.join(',');
         const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
 
+        let extraFilters = '';
+        if (city && city.trim()) extraFilters += ` AND UPPER(C.POBLACION) = '${city.trim().toUpperCase()}'`;
+        if (code && code.trim()) extraFilters += ` AND C.CODIGOCLIENTE LIKE '%${code.trim()}%'`;
+        if (nif && nif.trim()) extraFilters += ` AND C.NIF LIKE '%${nif.trim()}%'`;
+        if (name && name.trim()) {
+            const safeName = name.trim().toUpperCase().replace(/'/g, "''");
+            extraFilters += ` AND (UPPER(C.NOMBRECLIENTE) LIKE '%${safeName}%' OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeName}%')`;
+        }
+
         // Main year for objective calculation
         const mainYear = Math.max(...yearsArray);
         const prevYear = mainYear - 1;
 
-        // Query 1: Get current period client data (no limit - show all clients)
+        // Query 0: Get TOTAL COUNT (ignoring limit)
+        const countResult = await query(`
+            SELECT COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) as TOTAL
+            FROM DSEDAC.LAC L
+            LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
+            WHERE L.ANODOCUMENTO IN(${yearsFilter})
+                AND L.MESDOCUMENTO IN(${monthsFilter})
+                AND ${LAC_SALES_FILTER}
+                ${vendedorFilter}
+                ${extraFilters}
+        `, false); // false = simple query mode if needed, or stick to default
+
+        const totalClientsCount = countResult[0] ? parseInt(countResult[0].TOTAL) : 0;
+
+        // Query 1: Get current period client data (WITH LIMIT)
         const currentRows = await query(`
       SELECT 
         L.CODIGOCLIENTEALBARAN as CODE,
@@ -717,40 +839,79 @@ router.get('/by-client', async (req, res) => {
       WHERE L.ANODOCUMENTO IN(${yearsFilter})
         AND L.MESDOCUMENTO IN(${monthsFilter})
         -- Matrix cleanup filters
-        AND L.LCTPVT <> 'SC'
-        AND L.LCSRAB NOT IN ('K', 'N', 'O', 'G')
+        -- Golden Filters
+        AND L.LCTPVT IN ('CC', 'VC')
+        AND L.LCCLLN IN ('AB', 'VT')
+        AND L.LCSRAB NOT IN ('N', 'Z')
         AND COALESCE(CA.CCSNSD, '') <> 'E'
         ${vendedorFilter}
+        ${extraFilters}
       GROUP BY L.CODIGOCLIENTEALBARAN
       ORDER BY SALES DESC
+      FETCH FIRST ${rowsLimit} ROWS ONLY
     `);
 
         // Query 2: Get previous year data for same period (for objective calculation)
-        const prevRows = await query(`
-      SELECT 
-        L.CODIGOCLIENTEALBARAN as CODE,
-        SUM(L.IMPORTEVENTA) as PREV_SALES
-      FROM DSEDAC.LAC L
-      LEFT JOIN DSEDAC.CAC CA ON CA.CCSBAB = L.LCSBAB 
-        AND CA.CCYEAB = L.LCYEAB 
-        AND CA.CCSRAB = L.LCSRAB 
-        AND CA.CCTRAB = L.LCTRAB 
-        AND CA.CCNRAB = L.LCNRAB
-      WHERE L.ANODOCUMENTO = ${prevYear}
-        AND L.MESDOCUMENTO IN(${monthsFilter})
-        -- Matrix cleanup filters
-        AND L.LCTPVT <> 'SC'
-        AND L.LCSRAB NOT IN ('K', 'N', 'O', 'G')
-        AND COALESCE(CA.CCSNSD, '') <> 'E'
-        ${vendedorFilter}
-      GROUP BY L.CODIGOCLIENTEALBARAN
-    `);
+        // Optimization: Only fetch previous data for the clients we actually retrieved in currentRows
+        // to avoid huge joins if only showing top 100
+        const retrievedCodes = currentRows.map(r => `'${r.CODE}'`).join(',');
 
-        // Create map of previous year sales by client
-        const prevSalesMap = new Map();
-        prevRows.forEach(r => {
-            prevSalesMap.set(r.CODE?.trim() || '', parseFloat(r.PREV_SALES) || 0);
-        });
+        let prevSalesMap = new Map();
+
+        if (retrievedCodes.length > 0) {
+            const prevRows = await query(`
+              SELECT 
+                L.CODIGOCLIENTEALBARAN as CODE,
+                SUM(L.IMPORTEVENTA) as PREV_SALES
+              FROM DSEDAC.LAC L
+              LEFT JOIN DSEDAC.CAC CA ON CA.CCSBAB = L.LCSBAB 
+                AND CA.CCYEAB = L.LCYEAB 
+                AND CA.CCSRAB = L.LCSRAB 
+                AND CA.CCTRAB = L.LCTRAB 
+                AND CA.CCNRAB = L.LCNRAB
+              WHERE L.ANODOCUMENTO = ${prevYear}
+                AND L.MESDOCUMENTO IN(${monthsFilter})
+                AND L.LCTPVT IN ('CC', 'VC')
+                AND L.LCCLLN IN ('AB', 'VT')
+                AND L.LCSRAB NOT IN ('N', 'Z')
+                AND COALESCE(CA.CCSNSD, '') <> 'E'
+                AND L.CODIGOCLIENTEALBARAN IN (${retrievedCodes})
+              GROUP BY L.CODIGOCLIENTEALBARAN
+            `);
+
+            prevRows.forEach(r => {
+                prevSalesMap.set(r.CODE?.trim() || '', parseFloat(r.PREV_SALES) || 0);
+            });
+        }
+
+        // Fetch Objective Configuration from JAVIER.OBJ_CONFIG
+        // Get config for retrieved clients AND the default ('*')
+        let objectiveConfigMap = new Map();
+        let defaultObjectiveData = { percentage: 10 }; // Fallback hardcoded if DB empty
+
+        if (retrievedCodes.length > 0) {
+            const objConfQuery = `
+                SELECT CODIGOCLIENTE, TARGET_PERCENTAGE 
+                FROM JAVIER.OBJ_CONFIG 
+                WHERE CODIGOCLIENTE IN (${retrievedCodes}, '*') 
+                   OR CODIGOCLIENTE = '*'
+             `;
+
+            try {
+                const confRows = await query(objConfQuery);
+                confRows.forEach(r => {
+                    const code = r.CODIGOCLIENTE?.trim();
+                    const pct = parseFloat(r.TARGET_PERCENTAGE) || 0;
+                    if (code === '*') {
+                        defaultObjectiveData.percentage = pct;
+                    } else {
+                        objectiveConfigMap.set(code, pct);
+                    }
+                });
+            } catch (err) {
+                logger.warn(`Could not load objective config: ${err.message}`);
+            }
+        }
 
         const clients = currentRows.map(r => {
             const code = r.CODE?.trim() || '';
@@ -759,8 +920,19 @@ router.get('/by-client', async (req, res) => {
             const margin = sales - cost;
             const prevSales = prevSalesMap.get(code) || 0;
 
-            // Objective: Previous year sales + 10%, or current sales if no history
-            const objective = prevSales > 0 ? prevSales * 1.10 : sales;
+            // Objective Logic: 
+            // 1. Look for specific client rule
+            // 2. If not found, use Default from DB ('*')
+            // 3. Fallback to 10%
+            let targetPct = objectiveConfigMap.has(code)
+                ? objectiveConfigMap.get(code)
+                : defaultObjectiveData.percentage;
+
+            // Percentage stored as 10 for 10%. Multiplier = 1 + (10/100) = 1.10
+            const multiplier = 1 + (targetPct / 100.0);
+
+            // Objective: Previous year sales * multiplier
+            const objective = prevSales > 0 ? prevSales * multiplier : sales;
             const progress = objective > 0 ? (sales / objective) * 100 : (sales > 0 ? 100 : 0);
 
             // Status based on progress
@@ -784,7 +956,7 @@ router.get('/by-client', async (req, res) => {
             };
         });
 
-        // Summary counts
+        // Summary counts (percentages based on RETURNED list, but count is TOTAL)
         const achieved = clients.filter(c => c.status === 'achieved').length;
         const ontrack = clients.filter(c => c.status === 'ontrack').length;
         const atrisk = clients.filter(c => c.status === 'atrisk').length;
@@ -792,7 +964,9 @@ router.get('/by-client', async (req, res) => {
 
         res.json({
             clients,
-            count: clients.length,
+            count: totalClientsCount, // Return TRUE total
+            start: 0,
+            limit: rowsLimit,
             periodObjective: clients.reduce((sum, c) => sum + c.objective, 0),
             totalSales: clients.reduce((sum, c) => sum + c.current, 0),
             years: yearsArray,

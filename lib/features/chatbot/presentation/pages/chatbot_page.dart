@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/providers/auth_provider.dart';
 import '../../providers/chatbot_provider.dart';
 import '../widgets/chat_message_bubble.dart';
 
@@ -72,6 +73,115 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    // Check role for custom message
+    // We assume AuthProvider is available as it's a core provider
+    // If not, we fall back to generic message
+    bool isJefe = false;
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      isJefe = auth.isDirector || widget.vendedorCodes.length > 1;
+    } catch (_) {}
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF0A0E21),
+            const Color(0xFF0D1320),
+            const Color(0xFF0A0E21),
+          ],
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Glowing Icon
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.neonPurple.withOpacity(0.1),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.neonPurple.withOpacity(0.2),
+                  blurRadius: 30,
+                  spreadRadius: 10,
+                ),
+              ],
+              border: Border.all(color: AppTheme.neonPurple.withOpacity(0.5), width: 2),
+            ),
+            child: Icon(Icons.auto_awesome, size: 60, color: AppTheme.neonPurple),
+          ),
+          const SizedBox(height: 40),
+          
+          ShaderMask(
+            shaderCallback: (bounds) => LinearGradient(
+              colors: [AppTheme.neonBlue, AppTheme.neonPurple],
+            ).createShader(bounds),
+            child: const Text(
+              'Próximamente:\nTu Asistente IA',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                height: 1.2,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  isJefe ? 'PANEL DE SUPERVISIÓN INTELIGENTE' : 'TU COPILOTO COMERCIAL',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                    color: AppTheme.neonBlue,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  isJefe 
+                    ? 'Podrás supervisarlo todo desde aquí: ventas globales, rendimiento del equipo en tiempo real, alertas estratégicas y detección de oportunidades de mercado.'
+                    : 'Podrás consultar al instante todo lo referente a tus ventas, precios actualizados, estado de clientes, objetivos y recibir recomendaciones para vender más.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    height: 1.5,
+                    color: Colors.grey.shade300,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 40),
+          Text(
+            'Estamos entrenando a tu asistente...',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // OLD CHATBOT UI - PRESERVED FOR FUTURE USE
+  Widget _buildChatbotInterface(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: _provider,
       child: Container(

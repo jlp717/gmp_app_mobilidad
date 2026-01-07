@@ -47,4 +47,20 @@ class DateFormatter {
     }
     return periodStr;
   }
+
+  /// Format standard date: "30/12/2025"
+  static String formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  /// Parse and format string date: "2025-12-30" -> "30/12/2025"
+  static String formatString(String dateStr) {
+    if (dateStr.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      return formatDate(date);
+    } catch (_) {
+      return dateStr;
+    }
+  }
 }

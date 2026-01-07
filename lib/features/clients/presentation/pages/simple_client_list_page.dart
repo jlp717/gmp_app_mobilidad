@@ -4,7 +4,14 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
+import '../../../../core/utils/currency_formatter.dart';
 import '../../../objectives/presentation/pages/enhanced_client_matrix_page.dart';
+
+import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
+import '../../../../core/widgets/modern_loading.dart';
+import 'package:provider/provider.dart';
+import '../../../../core/providers/filter_provider.dart';
+import '../../../../core/widgets/global_vendor_selector.dart';
 
 /// Simple Clients List Page with debounced search
 class SimpleClientListPage extends StatefulWidget {
@@ -22,15 +29,21 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   bool _isLoading = true;
   String? _error;
   String _searchQuery = '';
-  final _currencyFormat = NumberFormat.currency(symbol: '€', decimalDigits: 0);
+  DateTime? _lastFetchTime; // Track last sync
+  // final _currencyFormat = NumberFormat.currency(symbol: '€', decimalDigits: 0);
   Timer? _debounceTimer;
   final TextEditingController _searchController = TextEditingController();
+
+  List<Map<String, dynamic>> _availableVendors = [];
+  String? _selectedVendorCode = ''; // Default to empty string (All) for Manager view, so it matches dropdown item
 
   @override
   void initState() {
     super.initState();
     _loadClients();
   }
+
+  // ... (dispose and _onSearchChanged remain same)
 
   @override
   void dispose() {
@@ -56,10 +69,25 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
     });
 
     try {
-      final params = {
-        'vendedorCodes': widget.employeeCode,
-        'limit': '100',
+      // Logic: If Manager + Selected Vendor -> Filter by that.
+      // If Manager + No selection -> Show All (pass no code).
+      // If Rep -> Show only theirs (pass employeeCode).
+      
+      String? codesToPass;
+      if (widget.isJefeVentas) {
+         // Use FilterProvider
+         codesToPass = context.read<FilterProvider>().selectedVendor; 
+      } else {
+         codesToPass = widget.employeeCode;
+      }
+
+      final params = <String, dynamic>{
+        'limit': '1000',
       };
+      if (codesToPass != null && codesToPass.isNotEmpty) {
+         params['vendedorCodes'] = codesToPass;
+      }
+      
       if (query != null && query.isNotEmpty) {
         params['search'] = query;
       }
@@ -67,11 +95,15 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
       final response = await ApiClient.get(
         ApiConfig.clientsList,
         queryParameters: params,
+        cacheKey: 'clients_list_${codesToPass ?? "ALL"}_${query ?? ''}',
+        cacheTTL: const Duration(minutes: 5), // Short cache for list
       );
 
       setState(() {
-        _clients = List<Map<String, dynamic>>.from(response['clients'] ?? []);
+        final rawList = response['clients'] ?? [];
+        _clients = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         _isLoading = false;
+        _lastFetchTime = DateTime.now();
       });
     } catch (e) {
       setState(() {
@@ -80,6 +112,8 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
       });
     }
   }
+
+  // ... (_navigateToClientMatrix)
 
   void _navigateToClientMatrix(Map<String, dynamic> client) {
     final code = client['code'] as String? ?? '';
@@ -102,21 +136,43 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Header
+        // Smart Sync Header
+        SmartSyncHeader(
+          lastSync: _lastFetchTime,
+          isLoading: _isLoading && _clients.isNotEmpty,
+          onSync: () => _loadClients(query: _searchQuery),
+          error: _error,
+        ),
+
+        // Header & Filters
         Container(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
             children: [
-              const Icon(Icons.people, color: AppTheme.neonGreen, size: 28),
-              const SizedBox(width: 12),
-              Text('Clientes', style: Theme.of(context).textTheme.headlineMedium),
-              const Spacer(),
-              Text(
-                '${_clients.length} clientes',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
+              Row(
+                children: [
+                  const Icon(Icons.people, color: AppTheme.neonGreen, size: 28),
+                  const SizedBox(width: 12),
+                  Text('Clientes', style: Theme.of(context).textTheme.headlineMedium),
+                  const Spacer(),
+                  Text(
+                    '${_clients.length} clientes',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
               ),
+              if (widget.isJefeVentas) ...[
+                 const SizedBox(height: 12),
+                 GlobalVendorSelector(
+                   isJefeVentas: true,
+                   onChanged: () {
+                     // The provider updates automatically, we just need to reload clients
+                     _loadClients();
+                   },
+                 ),
+              ],
             ],
           ),
         ),
@@ -126,7 +182,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: TextField(
             decoration: InputDecoration(
-              hintText: 'Buscar cliente, NIF...',
+              hintText: 'Buscar cliente, NIF, Ciudad, Código...',
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: AppTheme.surfaceColor,
@@ -152,7 +208,10 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
 
   Widget _buildContent() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return Padding(
+        padding: const EdgeInsets.all(40.0),
+        child: ModernLoading(message: 'Cargando cartera de clientes...'),
+      );
     }
 
     if (_error != null) {
@@ -200,7 +259,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
           final client = _clients[index];
           return _ClientCard(
             client: client,
-            currencyFormat: _currencyFormat,
+            isJefeVentas: widget.isJefeVentas,
             onTap: () => _navigateToClientMatrix(client),
           );
         },
@@ -211,10 +270,10 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
 
 class _ClientCard extends StatelessWidget {
   final Map<String, dynamic> client;
-  final NumberFormat currencyFormat;
+  final bool isJefeVentas;
   final VoidCallback? onTap;
 
-  const _ClientCard({required this.client, required this.currencyFormat, this.onTap});
+  const _ClientCard({required this.client, this.isJefeVentas = false, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -285,7 +344,7 @@ class _ClientCard extends StatelessWidget {
                     if (phone.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Row(
-                        children: [
+                      children: [
                           Icon(Icons.phone, size: 14, color: AppTheme.textSecondary),
                           const SizedBox(width: 4),
                           Text(
@@ -294,6 +353,26 @@ class _ClientCard extends StatelessWidget {
                               color: AppTheme.textSecondary,
                             ),
                           ),
+                        ],
+                      ),
+                    ],
+                    if (isJefeVentas && client['vendorName'] != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                           const Icon(Icons.person_outline, size: 14, color: AppTheme.neonPurple),
+                           const SizedBox(width: 4),
+                           Expanded(
+                             child: Text(
+                               'Rep: ${client['vendorName']}',
+                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                 color: AppTheme.neonPurple,
+                                 fontWeight: FontWeight.bold,
+                               ),
+                               maxLines: 1,
+                               overflow: TextOverflow.ellipsis,
+                             ),
+                           ),
                         ],
                       ),
                     ],
@@ -306,7 +385,7 @@ class _ClientCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    currencyFormat.format(totalPurchases),
+                    CurrencyFormatter.formatWhole(totalPurchases),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: AppTheme.success,

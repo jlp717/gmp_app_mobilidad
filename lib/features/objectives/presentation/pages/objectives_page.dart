@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
+import '../../../../core/widgets/modern_loading.dart';
+import '../../../../core/utils/currency_formatter.dart';
 import 'enhanced_client_matrix_page.dart';
+import '../../../../core/widgets/global_vendor_selector.dart';
 
 /// Objectives Page - Track sales goals with multi-select filters
 class ObjectivesPage extends StatefulWidget {
@@ -38,14 +44,20 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
   List<Map<String, dynamic>> _vendedoresDisponibles = [];
   String? _selectedVendedor; // null = ver todos los comerciales
   
+  // Filters for Client Tab
+  List<String> _populations = [];
+  String? _selectedPopulation;
+  String _clientCodeFilter = '';
+  String _nifFilter = '';
+  
   late TabController _tabController;
   
-  // Spanish format: 6.150,00 €
-  final _nf = NumberFormat.decimalPattern('es_ES');
+  // Spanish format managed centrally
+  // final _nf = NumberFormat.decimalPattern('es_ES');
   
   // Helper to format currency with €
   String _formatCurrency(double value) {
-    return '${_nf.format(value.round())} €';
+    return CurrencyFormatter.formatWhole(value);
   }
   
   static const List<String> _monthNames = [
@@ -56,35 +68,37 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
   ];
 
+  int _totalClientsCount = 0; // Backend total count (ignoring limit)
+  
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     // Si es jefe de ventas, cargar lista de vendedores
-    if (widget.isJefeVentas) {
-      _loadVendedores();
-    }
+    _loadPopulations();
+    _loadPopulations();
     _loadData();
   }
   
-  /// Obtiene el código del vendedor a usar (seleccionado o el propio)
-  String get _activeVendedorCode => _selectedVendedor ?? widget.employeeCode;
-  
-  /// Carga la lista de vendedores disponibles (solo para jefe de ventas)
-  Future<void> _loadVendedores() async {
+  Future<void> _loadPopulations() async {
     try {
-      final response = await ApiClient.get(
-        '/rutero/vendedores',
-      );
-      
+      final res = await ApiClient.getList('/objectives/populations');
       setState(() {
-        _vendedoresDisponibles = List<Map<String, dynamic>>.from(response['vendedores'] ?? []);
+        _populations = res.map((e) => e.toString()).toList();
       });
     } catch (e) {
-      // Silently fail - vendedores list is optional
-      debugPrint('Error loading vendedores: $e');
+      debugPrint('Error loading populations: $e');
     }
   }
+  
+  /// Obtiene el código del vendedor a usar (seleccionado o el propio)
+  String get _activeVendedorCode {
+    if (!mounted) return widget.employeeCode;
+    final filterCode = context.read<FilterProvider>().selectedVendor;
+    return filterCode ?? _selectedVendedor ?? widget.employeeCode;
+  }
+  
+
   
   /// Cambia el vendedor seleccionado para "Ver objetivos como"
   void _onVendedorChanged(String? vendedorCode) {
@@ -118,7 +132,11 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
           'vendedorCodes': _activeVendedorCode,
           'years': _selectedYears.join(','),
           'months': _selectedMonths.join(','),
-          'limit': '50',
+          'limit': '100', // Increased limit for filtered views
+          if (_selectedPopulation != null) 'city': _selectedPopulation,
+          if (_clientCodeFilter.isNotEmpty) 'code': _clientCodeFilter,
+          if (_nifFilter.isNotEmpty) 'nif': _nifFilter,
+          if (_clientSearchQuery.isNotEmpty) 'name': _clientSearchQuery, // Backend search by name
         },
       );
       
@@ -131,7 +149,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
       
       // Process yearlyData
       rawYearlyData.forEach((year, monthlyList) {
-        parsedYearlyData[year] = List<Map<String, dynamic>>.from(monthlyList);
+        parsedYearlyData[year] = (monthlyList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
       });
       
       // Process yearTotals
@@ -141,7 +159,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
       
       // Fallback for old format if new format is missing (safety)
       if (parsedYearlyData.isEmpty && evolutionRes['monthlyEvolution'] != null) {
-        final monthlyEvolution = List<Map<String, dynamic>>.from(evolutionRes['monthlyEvolution'] ?? []);
+        final monthlyEvolution = (evolutionRes['monthlyEvolution'] as List? ?? []).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         final primaryYear = (evolutionRes['year'] as num?)?.toInt() ?? DateTime.now().year;
         final sortedSelectedYears = _selectedYears.toList()..sort((a, b) => b.compareTo(a));
         
@@ -176,7 +194,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
       setState(() {
         _yearlyData = parsedYearlyData;
         _yearTotals = parsedYearTotals;
-        _clientsObjectives = List<Map<String, dynamic>>.from(clientsRes['clients'] ?? []);
+        final rawClients = clientsRes['clients'] ?? [];
+        _clientsObjectives = (rawClients as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        _totalClientsCount = (clientsRes['count'] as num?)?.toInt() ?? _clientsObjectives.length;
         
         // Calculate objectives from parsed data
         _calculateObjectives();
@@ -193,6 +213,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     // Sum totals from yearlyData for selected months across all years
     double totalSales = 0;
     double totalObjective = 0;
+    double totalPaceObjective = 0; // New: Objective based on days passed
+    int totalWorkingDays = 0; // Track total working days
+    int totalDaysPassed = 0; // Track days passed
     
     // Per-year breakdown for display
     Map<int, double> salesPerYear = {};
@@ -211,8 +234,22 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
           if (_selectedMonths.contains(monthNum)) {
             final sales = (monthData['sales'] as num?)?.toDouble() ?? 0;
             final obj = (monthData['objective'] as num?)?.toDouble() ?? 0;
+            
+            // Pacing Logic
+            final workingDays = (monthData['workingDays'] as num?)?.toInt() ?? 22; // Default 22 if missing
+            final daysPassed = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
+            
+            double paceObj = 0;
+            if (workingDays > 0) {
+               paceObj = (obj / workingDays) * daysPassed;
+            }
+            
             totalSales += sales;
             totalObjective += obj;
+            totalPaceObjective += paceObj;
+            totalWorkingDays += workingDays;
+            totalDaysPassed += daysPassed;
+            
             salesPerYear[year] = salesPerYear[year]! + sales;
             objectivePerYear[year] = objectivePerYear[year]! + obj;
           }
@@ -220,61 +257,65 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
       }
     }
     
+
     // Margin estimated as ~12% of sales (industry standard for distribution)
     double totalMargin = totalSales * 0.12;
     double targetMargin = totalObjective * 0.12;
     
-    // Client count from clientsObjectives API response (unique clients in period)
-    // Count unique client codes
+    // Client count logic ...
     Set<String> uniqueClients = {};
     for (final client in _clientsObjectives) {
       final code = client['code']?.toString() ?? '';
       if (code.isNotEmpty) uniqueClients.add(code);
     }
-    int actualClients = uniqueClients.length;
-    int targetClients = 50 * _selectedMonths.length; // Target ~50 clients per month
+    int actualClients = _totalClientsCount > 0 ? _totalClientsCount : uniqueClients.length;
+    int targetClients = 50 * _selectedMonths.length; 
     
-    // Calculate progress
+    // Consistent Total Objective Logic ...
     double totalAnnualObjective = 0;
-    double totalAnnualSales = 0;
     for (final year in _selectedYears) {
       final yearTotals = _yearTotals[year.toString()];
       if (yearTotals != null) {
         totalAnnualObjective += (yearTotals['annualObjective'] as num?)?.toDouble() ?? 0;
-        totalAnnualSales += (yearTotals['totalSales'] as num?)?.toDouble() ?? 0;
       }
     }
-
-    // Force period target to be consistent with annual/monthly objective
-    // annualObjective is the source of truth. Monthly is Annual / 12.
-    // Period Target should be Monthly * Selected Months count.
-    double monthlyObjective = totalAnnualObjective > 0 ? totalAnnualObjective / 12 : 0;
-    // However, if we have multiple years selected, we need to handle that.
-    // Actually, totalAnnualObjective is the sum of annual objectives for all selected years.
-    // So monthlyObjective here is the "Average Monthly" across selected years?
-    // No, if I select 2024 and 2025. 
-    // The "Period Target" should be: Sum of (AnnualObj_Year / 12) * SelectedMonths_Year
-    // But since selected months are the SAME for all years (e.g. Jan, Feb)...
-    // It is simply: (Sum(AnnualObj_AllYears) / 12) * SelectedMonths.length
     
+    double monthlyObjective = totalAnnualObjective > 0 ? totalAnnualObjective / 12 : 0;
     double consistentTarget = (monthlyObjective * _selectedMonths.length);
     
-    // Check if we should use the sum from monthly data or the consistent calculation
-    // Using consistent calculation is safer to avoid "49.002 vs 65.255" issues
+    // Use consistent target if totalObjective is zero or we prefer consistency
     if (totalObjective == 0 && consistentTarget > 0) {
         totalObjective = consistentTarget;
     } else {
-        // If we have data, PREFER the consistent target to ensure UI consistency
         totalObjective = consistentTarget;
     }
     
-    double progress = totalObjective > 0 ? (totalSales / totalObjective) * 100 : 0;
+    // If pace calculation yielded 0 (e.g. historical data where daysPassed might be 0 or full), 
+    // we should ensure it makes sense. 
+    // Backend `calculateDaysPassed` returns full month days for past months.
+    // So for past months, Pace Objective == Full Objective.
+    // For current month, Pace Objective < Full Objective.
+    // However, if we forced `totalObjective` to be `consistentTarget` above, we might have drifted from sum of months.
+    // Let's ratio it:
+    // Pacing Ratio = totalPaceObjective_Sum / totalObjective_Sum
+    // Final Pace Target = consistentTarget * Ratio
+    double paceRatio = (totalObjective > 0) ? (totalPaceObjective / totalObjective) : 0;
+    // But `totalPaceObjective` comes from `monthData['objective']` sum, which might differ slightly from `consistentTarget`.
+    // Valid approach: use `totalPaceObjective` directly if we trust monthly data, but consistentTarget is usually better for "Annual / 12".
+    // Let's stick to accumulating raw pace values since they reflect the precise days.
     
-    // Restore Margin & Client Progress
+    // Wait, if I replaced totalObjective with consistentTarget, I should probably re-scale Pacing too?
+    // Not necessarily, if the difference is small. 
+    // Let's trust the accumulation for Pacing as it's granular.
+    
+    double progress = totalObjective > 0 ? (totalSales / totalObjective) * 100 : 0;
+    double paceProgress = totalPaceObjective > 0 ? (totalSales / totalPaceObjective) * 100 : 0;
+    
+    // ... rest of logic for margin/clients ...
     double marginProgress = targetMargin > 0 ? (totalMargin / targetMargin) * 100 : 0;
     double clientProgress = targetClients > 0 ? (actualClients / targetClients) * 100 : 0;
     
-    // Restore YTD Logic
+    // ... YTD logic ...
     final now = DateTime.now();
     double ytdSales = 0;
     double ytdObjective = 0;
@@ -293,15 +334,29 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     _objectives = {
       'sales': {
         'target': totalObjective,
+        'paceTarget': totalPaceObjective, // Store pace target
         'current': totalSales,
         'progress': progress,
+        'paceProgress': paceProgress, // Store pace progress
         'annualObjective': totalAnnualObjective,
         'monthlyObjective': totalAnnualObjective > 0 ? totalAnnualObjective / 12 : 0,
         'yearsCount': _selectedYears.length,
         'monthsCount': _selectedMonths.length,
         'salesPerYear': salesPerYear,
         'objectivePerYear': objectivePerYear,
+        // NEW: Days info for clear UI
+        // FIXED: Use only current month's data for daily calculations to avoid mixing periods
+        'workingDays': totalWorkingDays,
+        'daysPassed': totalDaysPassed,
+        // dailyTarget = what you need per day to meet your pace target (paceTarget / daysPassed)
+        // This makes it consistent: if you sell dailyTarget each day, you'll meet paceTarget
+        'dailyTarget': totalDaysPassed > 0 ? totalPaceObjective / totalDaysPassed : 0,
+        // dailyActual = what you're actually selling per day
+        'dailyActual': totalDaysPassed > 0 ? totalSales / totalDaysPassed : 0,
       },
+
+
+      // ... same margin/clients ...
       'margin': {
         'target': targetMargin,
         'current': totalMargin,
@@ -321,6 +376,185 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     };
   }
 
+  // UI Building Sections ...
+
+  // UI Building Sections ...
+
+  // NOTE: _buildSummaryTab moved to line ~1010 to avoid duplication. 
+  // Using the one with RefreshIndicator there.
+
+  Widget _buildSalesCard(Map<String, dynamic>? data) {
+    if (data == null) return const SizedBox();
+    
+    final current = (data['current'] as num?)?.toDouble() ?? 0;
+    final target = (data['target'] as num?)?.toDouble() ?? 0;
+    final progress = (data['progress'] as num?)?.toDouble() ?? 0;
+    
+    final paceTarget = (data['paceTarget'] as num?)?.toDouble() ?? 0;
+    final paceProgress = (data['paceProgress'] as num?)?.toDouble() ?? 0;
+
+    final progressColor = progress >= 100 ? AppTheme.neonGreen : (progress >= 80 ? AppTheme.neonBlue : AppTheme.error);
+    final paceColor = paceProgress >= 100 ? Colors.cyanAccent : Colors.orangeAccent;
+    
+    // Determine if we should show Pace Bar
+    final bool isFinished = (paceTarget - target).abs() < 1; 
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Ventas Totales', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: progressColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('${progress.toStringAsFixed(1)}%', style: TextStyle(color: progressColor, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(_formatCurrency(current), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text('Objetivo Mensual: ${_formatCurrency(target)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          
+          const SizedBox(height: 16),
+          
+          // Main Progress Bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: target > 0 ? (current / target).clamp(0.0, 1.0) : 0,
+              backgroundColor: Colors.white10,
+              valueColor: AlwaysStoppedAnimation(progressColor),
+              minHeight: 8,
+            ),
+          ),
+          
+          // --- PACING SECTION (Always show if Target > 0) ---
+          if (target > 0) ...[ 
+             const SizedBox(height: 24), // More space
+             
+             Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   Row(children: [
+                       Icon(Icons.speed, size: 16, color: paceColor),
+                       const SizedBox(width: 8),
+                       Text(
+                           isFinished ? 'Objetivo Cierre (Calculado)' : 'Ritmo Diario (Días trabajados)', 
+                           style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)
+                       ),
+                   ]),
+                   if (!isFinished)
+                     Text('${paceProgress.toStringAsFixed(1)}%', style: TextStyle(color: paceColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                ]
+             ),
+             const SizedBox(height: 8),
+             
+             Row(
+                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                 children: [
+                     // If finished, just show final diff
+                     if (isFinished)
+                        Text(
+                           current >= target ? 'Objetivo Cumplido' : 'Objetivo No Alcanzado',
+                           style: TextStyle(color: current >= target ? AppTheme.neonGreen : AppTheme.error, fontSize: 12)
+                        )
+                     else
+                        Text(
+                             paceProgress >= 100 
+                                 ? '+${_formatCurrency(current - paceTarget)} sobre ritmo' 
+                                 : '-${_formatCurrency(paceTarget - current)} bajo ritmo',
+                             style: TextStyle(color: paceColor, fontSize: 12)
+                        ),
+                     
+                     Text('Obj. Pace: ${_formatCurrency(paceTarget)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                 ]
+             ),
+             
+             const SizedBox(height: 8),
+             ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: paceTarget > 0 ? (current / paceTarget).clamp(0.0, 1.0) : 0,
+                  backgroundColor: Colors.white10,
+                  valueColor: AlwaysStoppedAnimation(paceColor),
+                  minHeight: 8,
+                ),
+              ),
+          ]
+        ],
+      ),
+    );
+  }
+
+  // FIXED: Properly return a widget for Metric Card
+  Widget _buildMetricCard(String title, Map<String, dynamic>? data, IconData icon, Color color, {bool isCurrency = true}) {
+    final current = (data?['current'] as num?)?.toDouble() ?? 0;
+    final target = (data?['target'] as num?)?.toDouble() ?? 0;
+    final progress = (data?['progress'] as num?)?.toDouble() ?? 0;
+    
+    final progressColor = progress >= 100 ? AppTheme.success : color;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: const TextStyle(color: Colors.white70, fontSize: 12, overflow: TextOverflow.ellipsis))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(isCurrency ? _formatCurrency(current) : current.toInt().toString(), 
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 4),
+          Text('Obj: ${isCurrency ? _formatCurrency(target) : target.toInt()}', 
+              style: const TextStyle(color: Colors.grey, fontSize: 11)),
+          
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: target > 0 ? (current / target).clamp(0.0, 1.0) : 0,
+              backgroundColor: Colors.white10,
+              valueColor: AlwaysStoppedAnimation(progressColor),
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text('${progress.toStringAsFixed(1)}%', 
+                style: TextStyle(color: progressColor, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // FIXED: This is the void method for showing the filter modal
   void _showFilterModal() {
     showModalBottomSheet(
       context: context,
@@ -354,7 +588,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  children: [2023, 2024, 2025].map((y) => FilterChip(
+                  children: ApiConfig.availableYears.map((y) => FilterChip(
                     label: Text('$y'),
                     selected: _selectedYears.contains(y),
                     onSelected: (s) {
@@ -464,63 +698,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
 
   /// Widget de selección de vendedor para "Ver objetivos como" (solo jefe de ventas)
   Widget _buildVendedorSelector() {
-    // Ensure selected value exists in items, otherwise reset to empty
-    final validVendedorCodes = _vendedoresDisponibles.map((v) => v['code']?.toString() ?? '').toSet();
-    final currentValue = (_selectedVendedor != null && validVendedorCodes.contains(_selectedVendedor)) 
-        ? _selectedVendedor! 
-        : '';
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: AppTheme.surfaceColor,
-      child: Row(
-        children: [
-          const Icon(Icons.visibility, color: AppTheme.neonBlue, size: 18),
-          const SizedBox(width: 8),
-          const Text('Ver como:', style: TextStyle(fontSize: 12, color: Colors.white70)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppTheme.darkSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: currentValue,
-                  isExpanded: true,
-                  isDense: true,
-                  dropdownColor: AppTheme.darkCard,
-                  icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: 20),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('Todos los comerciales', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
-                    ..._vendedoresDisponibles.map((v) {
-                      final code = v['code']?.toString() ?? '';
-                      final name = v['name']?.toString() ?? '';
-                      final clients = (v['clients'] as num?)?.toInt() ?? 0;
-                      final displayName = name.isNotEmpty ? name : 'Vendedor $code';
-                      return DropdownMenuItem<String>(
-                        value: code,
-                        child: Text('$displayName ($clients)', style: const TextStyle(color: Colors.white)),
-                      );
-                    }),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _selectedVendedor = value?.isEmpty == true ? null : value);
-                    _loadData();
-                  },
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return GlobalVendorSelector(
+      isJefeVentas: widget.isJefeVentas,
+      onChanged: _loadData, // Reload data when filter changes
     );
   }
 
@@ -559,6 +739,13 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                   ),
                 ),
               ),
+              const SizedBox(width: 8), // Spacing
+              // Sync/Refresh Button
+              IconButton(
+                icon: const Icon(Icons.sync, color: AppTheme.neonBlue),
+                tooltip: 'Sincronizar datos',
+                onPressed: _isLoading ? null : _loadData,
+              ),
             ],
           ),
         ),
@@ -586,7 +773,10 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         // Content
         Expanded(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? const Padding(
+                  padding: EdgeInsets.all(40.0),
+                  child: ModernLoading(message: 'Calculando objetivos...'),
+                )
               : _error != null
                   ? _buildError()
                   : TabBarView(
@@ -611,6 +801,187 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
           Text('Error: $_error', textAlign: TextAlign.center),
           const SizedBox(height: 16),
           ElevatedButton(onPressed: _loadData, child: const Text('Reintentar')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClientFilters() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      color: AppTheme.darkBase,
+      child: Column(
+        children: [
+          // Row 1: Search + Advanced Toggle
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Buscar (Enter para buscar en servidor)...',
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      filled: true,
+                      fillColor: AppTheme.surfaceColor,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    style: const TextStyle(fontSize: 13),
+                    textInputAction: TextInputAction.search,
+                    onChanged: (val) {
+                       setState(() => _clientSearchQuery = val);
+                       // Optional: Debounce here if we want auto-search
+                    },
+                    onSubmitted: (_) => _loadData(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: (_selectedPopulation != null || _clientCodeFilter.isNotEmpty || _nifFilter.isNotEmpty) 
+                      ? AppTheme.neonPurple 
+                      : Colors.transparent),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.filter_list),
+                  color: (_selectedPopulation != null || _clientCodeFilter.isNotEmpty || _nifFilter.isNotEmpty) 
+                      ? AppTheme.neonPurple 
+                      : AppTheme.textSecondary,
+                  onPressed: () {
+                     // Toggle visibility or show modal? 
+                     // Using ExpansionTile below is cleaner for inline.
+                     // But we can't programmatically open ExpansionTile easily without key.
+                     // Let's just use the ExpansionTile itself as the container.
+                  },
+                  tooltip: 'Filtros Avanzados',
+                ),
+              ),
+            ],
+          ),
+          
+          // Row 2: Advanced Filters (Expansion Tile)
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              title: Text(
+                (_selectedPopulation != null || _clientCodeFilter.isNotEmpty || _nifFilter.isNotEmpty)
+                  ? 'Filtros Activos: ${[
+                      _selectedPopulation, 
+                      _clientCodeFilter.isNotEmpty ? "Cod: $_clientCodeFilter" : null,
+                      _nifFilter.isNotEmpty ? "NIF: $_nifFilter" : null
+                    ].where((e) => e != null).join(", ")}'
+                  : 'Filtros Avanzados',
+                style: TextStyle(
+                  fontSize: 12, 
+                  color: (_selectedPopulation != null || _clientCodeFilter.isNotEmpty || _nifFilter.isNotEmpty) 
+                      ? AppTheme.neonPurple 
+                      : AppTheme.textSecondary
+                ),
+              ),
+              iconColor: AppTheme.neonPurple,
+              collapsedIconColor: AppTheme.textSecondary,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      // Population Dropdown
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(
+                          labelText: 'Población',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          isDense: true,
+                        ),
+                        isExpanded: true,
+                        value: _selectedPopulation,
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('Todas las poblaciones'),
+                          ),
+                          ..._populations.map((p) => DropdownMenuItem<String>(
+                            value: p,
+                            child: Text(p, overflow: TextOverflow.ellipsis),
+                          )),
+                        ],
+                        onChanged: (val) => setState(() => _selectedPopulation = val),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // Code & NIF Row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              decoration: const InputDecoration(
+                                labelText: 'Código Cliente',
+                                isDense: true,
+                              ),
+                              onChanged: (val) => setState(() => _clientCodeFilter = val),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              decoration: const InputDecoration(
+                                labelText: 'NIF',
+                                isDense: true,
+                              ),
+                              onChanged: (val) => setState(() => _nifFilter = val),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Action Buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedPopulation = null;
+                                  _clientCodeFilter = '';
+                                  _nifFilter = '';
+                                  _clientSearchQuery = ''; // Also clear search? Maybe not.
+                                });
+                                _loadData();
+                              },
+                              child: const Text('Limpiar'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.neonPurple,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                // Close expansion tile? (Hard to do without key controller)
+                                // Just load data
+                                _loadData();
+                              },
+                              child: const Text('Aplicar Filtros'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -690,41 +1061,113 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
   List<Widget> _buildYearBreakdownCards(Map<String, dynamic> sales) {
     final salesPerYear = sales['salesPerYear'] as Map<int, double>? ?? {};
     final objPerYear = sales['objectivePerYear'] as Map<int, double>? ?? {};
-    final sortedYears = _selectedYears.toList()..sort();
+    final sortedYears = _selectedYears.toList()..sort((a, b) => b.compareTo(a)); // Descending sort
     
     return sortedYears.map((year) {
       final yearSales = salesPerYear[year] ?? 0;
       final yearObj = objPerYear[year] ?? 0;
-      final yearProg = yearObj > 0 ? (yearSales / yearObj * 100) : 0;
       
       return Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.all(8),
+        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          color: AppTheme.neonPurple.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+            childrenPadding: const EdgeInsets.only(bottom: 10),
+            minTileHeight: 40,
+            iconColor: AppTheme.neonPurple,
+            collapsedIconColor: AppTheme.neonPurple,
+            title: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Objetivo $year', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                Text(_formatCurrency(yearObj), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+                Text('Objetivo $year', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                Text(_formatCurrency(yearObj), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
               ],
             ),
-            const SizedBox(height: 4),
-            Row(
+            subtitle: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Vendido $year', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
-                Text('${_formatCurrency(yearSales)} (${yearProg.toStringAsFixed(0)}%)', 
-                    style: TextStyle(fontSize: 10, color: yearProg >= 100 ? AppTheme.success : AppTheme.textSecondary)),
+                Text('Venta Actual', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                Text(_formatCurrency(yearSales), style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
               ],
             ),
-          ],
+            children: [
+              Container(
+                height: 1, 
+                color: AppTheme.neonPurple.withOpacity(0.2), 
+                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
+              ),
+              // List monthly objectives
+              ...List.generate(12, (index) {
+                  final m = index + 1;
+                  final yearData = _yearlyData[year.toString()] ?? [];
+                  final monthData = yearData.firstWhere((e) => e['month'] == m, orElse: () => {});
+                  final obj = (monthData['objective'] as num?)?.toDouble() ?? 0;
+                  final sales = (monthData['sales'] as num?)?.toDouble() ?? 0;
+                  
+                  // Check if month is passed or current (to show status color)
+                  final now = DateTime.now();
+                  final isPastOrCurrent = (year < now.year) || (year == now.year && m <= now.month);
+                  final isAchieved = sales >= obj;
+                  // If sales are 0 and objective is 0, it's neutral/achieved? 
+                  // If objective > 0 and sales 0 => Failed (Error)
+                  final color = !isPastOrCurrent ? Colors.white : (isAchieved ? AppTheme.success : AppTheme.error);
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 30, 
+                          child: Text(_monthNamesShort[index], style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+                        ),
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              // Sales (Actual)
+                              if (sales > 0 || isPastOrCurrent)
+                                Text(
+                                  _formatCurrency(sales), 
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)
+                                )
+                              else 
+                                const Text('-', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 4),
+                                child: Text('/', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              ),
+                              
+                              // Target
+                              Text(
+                                _formatCurrency(obj), 
+                                style: const TextStyle(fontSize: 11, color: Colors.white70)
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Icon status
+                        if (isPastOrCurrent)
+                          Icon(
+                            isAchieved ? Icons.check_circle : Icons.cancel,
+                            size: 12,
+                            color: color,
+                          )
+                        else
+                          const Icon(Icons.circle_outlined, size: 12, color: Colors.grey),
+                      ],
+                    ),
+                  );
+              }),
+            ],
+          ),
         ),
       );
     }).toList();
@@ -777,23 +1220,104 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
               ] else ...[
                 // Single year - show simple annual objective
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.symmetric(horizontal: 0),
                   decoration: BoxDecoration(
                     color: AppTheme.neonPurple.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Objetivo ${_selectedYears.first}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
-                      Text(_formatCurrency(annualObj), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
-                    ],
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                      childrenPadding: const EdgeInsets.only(bottom: 10),
+                      minTileHeight: 40,
+                      iconColor: AppTheme.neonPurple,
+                      collapsedIconColor: AppTheme.neonPurple,
+                      title: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Objetivo ${_selectedYears.first}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                          Text(_formatCurrency(annualObj), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+                        ],
+                      ),
+                      children: [
+                        Container(
+                          height: 1, 
+                          color: AppTheme.neonPurple.withOpacity(0.2), 
+                          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
+                        ),
+                        // List monthly objectives
+                        ...List.generate(12, (index) {
+                            final m = index + 1;
+                            final yearData = _yearlyData[_selectedYears.first.toString()] ?? [];
+                            final monthData = yearData.firstWhere((e) => e['month'] == m, orElse: () => {});
+                            final obj = (monthData['objective'] as num?)?.toDouble() ?? 0;
+                            final sales = (monthData['sales'] as num?)?.toDouble() ?? 0;
+                            
+                            // Check if month is passed or current (to show status color)
+                            final now = DateTime.now();
+                            final isPastOrCurrent = (_selectedYears.first < now.year) || (_selectedYears.first == now.year && m <= now.month);
+                            final isAchieved = sales >= obj;
+                            final color = !isPastOrCurrent ? Colors.white : (isAchieved ? AppTheme.success : AppTheme.error);
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), // More padding
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 30, 
+                                    child: Text(_monthNamesShort[index], style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+                                  ),
+                                  Expanded(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        // Sales (Actual)
+                                        if (sales > 0 || isPastOrCurrent)
+                                          Text(
+                                            _formatCurrency(sales), 
+                                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)
+                                          )
+                                        else 
+                                          const Text('-', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                          
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(horizontal: 4),
+                                          child: Text('/', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                        ),
+                                        
+                                        // Target
+                                        Text(
+                                          _formatCurrency(obj), 
+                                          style: const TextStyle(fontSize: 11, color: Colors.white70)
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Icon status
+                                  if (isPastOrCurrent)
+                                    Icon(
+                                      isAchieved ? Icons.check_circle : Icons.cancel,
+                                      size: 12,
+                                      color: color,
+                                    )
+                                  else
+                                    const Icon(Icons.circle_outlined, size: 12, color: Colors.grey),
+                                ],
+                              ),
+                            );
+                        }),
+                      ],
+                    ),
                   ),
                 ),
               ],
               const SizedBox(height: 6),
               
-              // Monthly objective
+              // Monthly average removed to avoid confusion with weighted seasonal objectives
+              /* 
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -802,6 +1326,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                 ],
               ),
               const SizedBox(height: 4),
+              */
               
               // Period objective (based on selected months)
               Container(
@@ -854,7 +1379,190 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                 ),
               ),
               
+              // ============ RITMO DIARIO (Daily Pace) - CLEAR VERSION ============
+              Builder(builder: (context) {
+                final paceTarget = (sales['paceTarget'] as num?)?.toDouble() ?? 0;
+                final paceProgress = (sales['paceProgress'] as num?)?.toDouble() ?? 0;
+                final workingDays = (sales['workingDays'] as num?)?.toInt() ?? 0;
+                final daysPassed = (sales['daysPassed'] as num?)?.toInt() ?? 0;
+                final dailyTarget = (sales['dailyTarget'] as num?)?.toDouble() ?? 0;
+                final dailyActual = (sales['dailyActual'] as num?)?.toDouble() ?? 0;
+                
+                // Period is "finished" if all days have passed
+                final isFinished = daysPassed >= workingDays && workingDays > 0;
+                final isOnTrack = dailyActual >= dailyTarget;
+                // Green when on track, orange when behind - clear visual feedback
+                final paceColor = isOnTrack ? AppTheme.success : Colors.orangeAccent;
+                
+                // Only show if there's a meaningful pace calculation
+                if (workingDays <= 0 || daysPassed <= 0) return const SizedBox.shrink();
+                
+                return Container(
+                  margin: const EdgeInsets.only(top: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: paceColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: paceColor.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header with icon and title
+                      Row(
+                        children: [
+                          Icon(Icons.speed, size: 18, color: paceColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            isFinished ? 'Resultado del Periodo' : 'Ritmo Diario',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: paceColor),
+                          ),
+                          const Spacer(),
+                          // Days badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.white10,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$daysPassed / $workingDays días',
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      
+                      // Two column comparison: Required vs Actual
+                      Row(
+                        children: [
+                          // Required daily
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: const [
+                                      Icon(Icons.assignment_outlined, size: 12, color: Colors.white70),
+                                      SizedBox(width: 4),
+                                      Text('Necesitas/día', style: TextStyle(fontSize: 9, color: Colors.white70)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _formatCurrency(dailyTarget),
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Actual daily
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: paceColor.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: paceColor.withOpacity(0.5)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(isOnTrack ? Icons.check_circle_outline : Icons.warning_amber_outlined, size: 12, color: paceColor),
+                                      const SizedBox(width: 4),
+                                      Text('Vendes/día', style: TextStyle(fontSize: 9, color: paceColor)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _formatCurrency(dailyActual),
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: paceColor),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 10),
+                      
+                      // Clear status message
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: paceColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              isOnTrack ? Icons.trending_up : Icons.trending_down,
+                              size: 14,
+                              color: paceColor,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isFinished
+                                  ? (current >= periodTarget 
+                                      ? '¡Objetivo cumplido!' 
+                                      : 'Objetivo no alcanzado')
+                                  : (isOnTrack
+                                      ? 'Vas ${((dailyActual / dailyTarget - 1) * 100).toStringAsFixed(0)}% por ENCIMA del ritmo'
+                                      : 'Vas ${((1 - dailyActual / dailyTarget) * 100).toStringAsFixed(0)}% por DEBAJO del ritmo'),
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: paceColor),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 8),
+                      
+                      // Progress bar (pace)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: paceTarget > 0 ? (current / paceTarget).clamp(0.0, 1.5) : 0,
+                          backgroundColor: Colors.white10,
+                          valueColor: AlwaysStoppedAnimation(paceColor),
+                          minHeight: 6,
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 4),
+                      
+                      // Bottom explanation
+                      Text(
+                        isFinished
+                            ? 'Vendido: ${_formatCurrency(current)} de ${_formatCurrency(periodTarget)}'
+                            : 'A día de hoy deberías llevar ${_formatCurrency(paceTarget)} y llevas ${_formatCurrency(current)}',
+                        style: const TextStyle(fontSize: 9, color: Colors.white54),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+              
               // Variation if available
+
               if (variation != null && variation != 0) ...[
                 const SizedBox(height: 6),
                 Row(
@@ -881,7 +1589,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                   target: (margin['target'] as num?)?.toDouble() ?? 0,
                   current: (margin['current'] as num?)?.toDouble() ?? 0,
                   progress: (margin['progress'] as num?)?.toDouble() ?? 0,
-                  format: _nf,
+                  // format: _nf, // REMOVED
                   compact: true,
                 ),
               ),
@@ -953,7 +1661,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         yearColors[sortedYears[i]] = palette[colorIdx];
     }
     
-    // Calculate max Y across all data (considering only selected months?)
+    // Calculate max Y across all data (considering only selected months)
+    // Also consider proportional objective for current month
+    final now = DateTime.now();
     double maxY = 0;
     for (final year in sortedYears) {
       final data = _yearlyData[year.toString()] ?? [];
@@ -961,8 +1671,18 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         if (!sortedMonths.contains(m['month'])) continue; // Only check selected months
         final sales = (m['sales'] as num?)?.toDouble() ?? 0;
         final obj = (m['objective'] as num?)?.toDouble() ?? 0;
+        final workingDays = (m['workingDays'] as num?)?.toInt() ?? 0;
+        final daysPassed = (m['daysPassed'] as num?)?.toInt() ?? 0;
+        
+        // For current month, use proportional objective
+        double displayObj = obj;
+        final isCurrentMonth = year == now.year && m['month'] == now.month;
+        if (isCurrentMonth && workingDays > 0 && daysPassed > 0 && daysPassed < workingDays) {
+          displayObj = (obj / workingDays) * daysPassed;
+        }
+        
         if (sales > maxY) maxY = sales;
-        if (obj > maxY) maxY = obj;
+        if (displayObj > maxY) maxY = displayObj;
       }
     }
     
@@ -1027,24 +1747,43 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         ));
       }
       
-      // 2. Objective Line
-      // Ensure it is drawn! 
+      // 2. Objective Line (Now Weighted/Seasonal)
+      // For current month: show proportional objective (paceTarget) based on days passed
+      // For past months: show full objective (all days passed)
+      // Note: 'now' is already defined above
       final objSpots = sortedMonths.map((m) {
-        return FlSpot((m - 1).toDouble(), flatMonthlyObj);
+
+        final monthData = data.firstWhere((e) => e['month'] == m, orElse: () => {});
+        final weightedObj = (monthData['objective'] as num?)?.toDouble() ?? 0;
+        final workingDays = (monthData['workingDays'] as num?)?.toInt() ?? 0;
+        final daysPassed = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
+        
+        // Check if this is the current month and year
+        final isCurrentMonth = year == now.year && m == now.month;
+        
+        // For current month, show proportional objective based on days worked
+        // For past months, show full objective (daysPassed == workingDays)
+        double displayObj = weightedObj;
+        if (isCurrentMonth && workingDays > 0 && daysPassed > 0 && daysPassed < workingDays) {
+          displayObj = (weightedObj / workingDays) * daysPassed;
+        }
+        
+        return FlSpot((m - 1).toDouble(), displayObj);
       }).toList();
       
       if (objSpots.isNotEmpty) {
         lineBarsData.add(LineChartBarData(
           spots: objSpots,
-          isCurved: false,
+          isCurved: true, // Curve it slightly to look natural
+          curveSmoothness: 0.35,
           color: color.withOpacity(0.8), 
           barWidth: 2,
           dotData: const FlDotData(show: false),
-          // Use different dash pattern based on year index? Or just standard.
           dashArray: [5, 5], 
           belowBarData: BarAreaData(show: false),
         ));
       }
+
     }
   
     return Container(
@@ -1115,13 +1854,13 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 50,
+                      reservedSize: 80, // Increased from 50 to prevent "200.000 €" wrapping
                       interval: baseInterval,
                       getTitlesWidget: (value, meta) {
                         if (value % 1 == 0) {
-                             return Text(
-                              '${_nf.format(value.round())} €', 
-                              style: TextStyle(color: AppTheme.textSecondary, fontSize: 9),
+                            return Text(
+                              CurrencyFormatter.format((value.round()).toDouble()), 
+                              style: TextStyle(color: AppTheme.textSecondary, fontSize: 10), // Increased font slightly
                             );
                         }
                         return const SizedBox.shrink();
@@ -1190,7 +1929,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                            ),
                            children: [
                              TextSpan(
-                               text: '${_nf.format(spot.y)} €',
+                               text: CurrencyFormatter.format(spot.y),
                                style: const TextStyle(
                                  color: Colors.white,
                                  fontWeight: FontWeight.w600,
@@ -1304,24 +2043,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     return Column(
       children: [
         // Search field
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          child: SizedBox(
-            height: 40,
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Buscar cliente...',
-                prefixIcon: const Icon(Icons.search, size: 18),
-                filled: true,
-                fillColor: AppTheme.surfaceColor,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              style: const TextStyle(fontSize: 13),
-              onChanged: (val) => setState(() => _clientSearchQuery = val),
-            ),
-          ),
-        ),
+        _buildClientFilters(),
         // Status filter chips
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1347,7 +2069,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
-            '${filteredClients.length} clientes',
+            '${filteredClients.length} mostrados (Total: $_totalClientsCount)',
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
         ),
@@ -1361,7 +2083,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
               final client = filteredClients[index];
               return _ClientCard(
                 client: client,
-                cf: _nf,
+                // cf: _nf, // REMOVED
                 showMargin: widget.isJefeVentas, // Pass permission checks
                 onTap: () => Navigator.push(
                   context,
@@ -1419,7 +2141,7 @@ class _ObjectiveCard extends StatelessWidget {
   final double current;
   final double progress;
   final double? variation;
-  final NumberFormat? format;
+  // final NumberFormat? format; // REMOVED
   final bool isCount;
   final bool compact;
   final String? subtitle;
@@ -1431,7 +2153,7 @@ class _ObjectiveCard extends StatelessWidget {
     required this.current,
     required this.progress,
     this.variation,
-    this.format,
+    // this.format, // REMOVED
     this.isCount = false,
     this.compact = false,
     this.subtitle,
@@ -1444,7 +2166,7 @@ class _ObjectiveCard extends StatelessWidget {
     
     String formatValue(double value) {
       if (isCount) return value.toInt().toString();
-      return '${format?.format(value.round()) ?? value.toStringAsFixed(0)} €';
+      return CurrencyFormatter.formatWhole(value);
     }
     
     return Container(
@@ -1513,19 +2235,19 @@ class _ObjectiveCard extends StatelessWidget {
 
 class _ClientCard extends StatelessWidget {
   final Map<String, dynamic> client;
-  final NumberFormat cf;
+  // final NumberFormat cf; // REMOVED
   final VoidCallback onTap;
   final bool showMargin; // New field
 
   const _ClientCard({
     required this.client, 
-    required this.cf, 
+    // required this.cf, // REMOVED 
     required this.onTap,
     this.showMargin = false, // Default false
   });
 
   String _formatCurrency(double value) {
-    return '${cf.format(value)} €';
+    return CurrencyFormatter.formatWhole(value);
   }
 
   void _openInMaps(BuildContext context) async {

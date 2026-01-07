@@ -55,11 +55,24 @@ backend/db_probe_results.json
 *.log
 nul
 ~$*.docx
+server.log
+debug_output.txt
+flutter_*.log
 
 # Environment files (keep .env.example)
 .env
 !.env.example
 
+# Security - Keystores and signing (NEVER commit these!)
+*.keystore
+*.jks
+key.properties
+android/key.properties
+upload-keystore.jks
+
 # IDE
 .claude/
 .idea/
+
+# Deprecated/test files that shouldn't be tracked
+backend/deprecated/

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/modern_loading.dart';
 
 /// [ChatMessageBubble] - Professional styled message bubble
 /// 
@@ -228,15 +229,28 @@ class ChatMessageBubble extends StatelessWidget {
   }
 
   Widget _buildTypingIndicator() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _TypingDot(delay: 0),
-        const SizedBox(width: 5),
-        _TypingDot(delay: 150),
-        const SizedBox(width: 5),
-        _TypingDot(delay: 300),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: ModernLoading(size: 30),
+          ),
+          SizedBox(width: 12),
+          Text(
+            'Procesando...',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.neonBlue,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -244,62 +258,5 @@ class ChatMessageBubble extends StatelessWidget {
     final hour = time.hour.toString().padLeft(2, '0');
     final minute = time.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
-  }
-}
-
-/// Animated typing dot
-class _TypingDot extends StatefulWidget {
-  const _TypingDot({required this.delay});
-  
-  final int delay;
-
-  @override
-  State<_TypingDot> createState() => _TypingDotState();
-}
-
-class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    
-    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-
-    Future.delayed(Duration(milliseconds: widget.delay), () {
-      if (mounted) {
-        _controller.repeat(reverse: true);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: AppTheme.neonBlue.withOpacity(_animation.value),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
-    );
   }
 }

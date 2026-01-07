@@ -22,8 +22,10 @@ const plannerRoutes = require('./routes/planner');
 const objectivesRoutes = require('./routes/objectives');
 const exportRoutes = require('./routes/export');
 const chatbotRoutes = require('./routes/chatbot');
+const commissionsRoutes = require('./routes/commissions');
 
 const app = express();
+app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
 const PORT = process.env.PORT || 3334;
 
 // Middleware
@@ -93,7 +95,8 @@ app.get('/api/health', async (req, res) => {
         '/api/export/client-report',
         '/api/chatbot/message',
         '/api/products',
-        '/api/vendedores'
+        '/api/vendedores',
+        '/api/commissions/summary'
       ]
     });
   } catch (error) {
@@ -115,6 +118,7 @@ app.use('/api', plannerRoutes); // mounts /router/* and /rutero/*
 app.use('/api/objectives', objectivesRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/commissions', commissionsRoutes);
 
 // Start server
 async function startServer() {

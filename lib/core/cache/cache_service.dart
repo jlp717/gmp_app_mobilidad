@@ -34,6 +34,17 @@ class CacheService {
   /// Real-time cache for volatile data (1 minute)
   static const Duration realtimeTTL = Duration(minutes: 1);
 
+  static const int _maxKeyLength = 200;
+
+  /// Sanitizes the key to ensure it fits Hive's limits
+  static String _sanitizeKey(String key) {
+    if (key.length <= _maxKeyLength) return key;
+    // Create a deterministic short key for long strings
+    final hash = key.hashCode;
+    final prefix = key.substring(0, 50);
+    return 'hashed_${prefix}_$hash';
+  }
+
   /// Initialize Hive and open cache boxes
   /// Call this before runApp()
   static Future<void> init() async {
@@ -47,22 +58,24 @@ class CacheService {
   /// Returns null if not found or expired
   static T? get<T>(String key) {
     if (_cacheBox == null) return null;
+
+    final safeKey = _sanitizeKey(key);
     
-    final expiryKey = '${key}_expiry';
+    final expiryKey = '${safeKey}_expiry';
     final expiryTimestamp = _metadataBox?.get(expiryKey) as int?;
     
     if (expiryTimestamp != null) {
       final expiryDate = DateTime.fromMillisecondsSinceEpoch(expiryTimestamp);
       if (DateTime.now().isAfter(expiryDate)) {
         // Cache expired, clean up
-        _cacheBox?.delete(key);
+        _cacheBox?.delete(safeKey);
         _metadataBox?.delete(expiryKey);
         debugPrint('[CacheService] Cache expired for key: $key');
         return null;
       }
     }
     
-    final value = _cacheBox?.get(key);
+    final value = _cacheBox?.get(safeKey);
     if (value != null) {
       debugPrint('[CacheService] Cache HIT for key: $key');
     }
@@ -77,28 +90,38 @@ class CacheService {
   }) async {
     if (_cacheBox == null) return;
     
+    final safeKey = _sanitizeKey(key);
     final effectiveTTL = ttl ?? defaultTTL;
     final expiryTimestamp = DateTime.now().add(effectiveTTL).millisecondsSinceEpoch;
     
-    await _cacheBox?.put(key, value);
-    await _metadataBox?.put('${key}_expiry', expiryTimestamp);
-    
-    debugPrint('[CacheService] Cache SET for key: $key (TTL: ${effectiveTTL.inMinutes}min)');
+    try {
+      await _cacheBox?.put(safeKey, value);
+      await _metadataBox?.put('${safeKey}_expiry', expiryTimestamp);
+      debugPrint('[CacheService] Cache SET for key: $key (TTL: ${effectiveTTL.inMinutes}min)');
+    } catch (e) {
+      debugPrint('[CacheService] Error setting cache: $e');
+    }
   }
 
   /// Invalidate specific cache entry
   static Future<void> invalidate(String key) async {
-    await _cacheBox?.delete(key);
-    await _metadataBox?.delete('${key}_expiry');
+    final safeKey = _sanitizeKey(key);
+    await _cacheBox?.delete(safeKey);
+    await _metadataBox?.delete('${safeKey}_expiry');
     debugPrint('[CacheService] Cache INVALIDATED for key: $key');
   }
 
   /// Invalidate all cache entries matching a prefix
+  /// Note: This performs a scan, so it might be slow for massive caches
   static Future<void> invalidateByPrefix(String prefix) async {
     if (_cacheBox == null) return;
     
+    // We can only reliably match unhashed keys or keys that are short enough
+    // For hashed keys, we can't easily reverse logic unless we store original keys.
+    // For now, this best-effort implementation scans all keys.
+    
     final keysToDelete = _cacheBox!.keys
-        .where((key) => key.toString().startsWith(prefix))
+        .where((k) => k.toString().startsWith(prefix) || k.toString().startsWith('hashed_$prefix')) 
         .toList();
     
     for (final key in keysToDelete) {

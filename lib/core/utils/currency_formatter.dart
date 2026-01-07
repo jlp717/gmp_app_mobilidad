@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 class CurrencyFormatter {
   static final NumberFormat _formatterFull = NumberFormat.currency(
     locale: 'es_ES',
+    customPattern: '#,##0.00 €',
     symbol: '€',
     decimalDigits: 2,
   );
@@ -18,10 +19,11 @@ class CurrencyFormatter {
   }
 
   /// Formats with NO decimals for whole amounts: "1.234 €"
-  static String formatWhole(double value) {
+  static String formatWhole(double value, {bool showSymbol = true}) {
     final formatter = NumberFormat.currency(
       locale: 'es_ES',
-      symbol: '€',
+      customPattern: '#,##0${showSymbol ? " €" : ""}',
+      symbol: showSymbol ? '€' : '',
       decimalDigits: 0,
     );
     return formatter.format(value);

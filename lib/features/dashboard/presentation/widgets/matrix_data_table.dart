@@ -2,170 +2,186 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/currency_formatter.dart';
 
-/// Power BI Style Matrix Data Table
-/// Shows years/quarters as columns, rows as vendors/products/clients
-class MatrixDataTable extends StatelessWidget {
-  final List<Map<String, dynamic>> rows;
+/// Node for Hierarchical Data
+class MatrixNode {
+  final String id;
+  final String name;
+  final String type; // 'vendor', 'client', 'product', 'family'
+  final double sales;
+  final double margin;
+  final double growth;
+  final List<MatrixNode> children;
+  bool isExpanded;
+
+  MatrixNode({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.sales,
+    required this.margin,
+    required this.growth,
+    this.children = const [],
+    this.isExpanded = false,
+  });
+  
+  // Calculate accumulated margin (self + all children recursively)
+  double get accumulatedMargin {
+    double acc = margin;
+    for (var child in children) {
+      acc += child.accumulatedMargin;
+    }
+    return acc;
+  }
+  
+  double get accumulatedSales {
+    double acc = sales;
+    for (var child in children) {
+      acc += child.accumulatedSales;
+    }
+    return acc;
+  }
+}
+
+/// Tree-style expandable data table
+/// Children expand WITHIN the same table, indented
+class MatrixDataTable extends StatefulWidget {
+  final List<MatrixNode> data;
   final List<String> periods;
-  final String groupBy;
+  final Function(String, String) onRowTap;
+  final Function(MatrixNode)? onNodeTap;
+  final String? selectedId;
 
   const MatrixDataTable({
     super.key,
-    required this.rows,
+    required this.data,
     required this.periods,
-    required this.groupBy,
+    required this.onRowTap,
+    this.onNodeTap,
+    this.selectedId,
   });
 
-  /// Safe extraction of numeric values
-  double _safeDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0.0;
-    if (value is Map) {
-      // Handle nested structures like {value: 123.45}
-      final v = value['value'] ?? value['sales'] ?? value['total'];
-      if (v != null) return _safeDouble(v);
-    }
-    return 0.0;
-  }
+  @override
+  State<MatrixDataTable> createState() => _MatrixDataTableState();
+}
 
+class _MatrixDataTableState extends State<MatrixDataTable> {
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceColor,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Center(
-          child: Text(
-            'No hay datos para mostrar',
-            style: TextStyle(color: Colors.white54),
-          ),
-        ),
-      );
+    if (widget.data.isEmpty) {
+      return const Center(child: Padding(
+        padding: EdgeInsets.all(32.0),
+        child: Text('No hay datos para esta selección', style: TextStyle(color: Colors.white30)),
+      ));
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+    return Card(
+      elevation: 8,
+      shadowColor: Colors.black45,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.white.withOpacity(0.05)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      color: AppTheme.surfaceColor,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.surfaceColor,
+              AppTheme.darkBase.withOpacity(0.95),
+            ],
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header with new "M.ACUM" column
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2))),
+                color: Colors.white.withOpacity(0.02),
+              ),
+              child: Row(
+                children: const [
+                  Expanded(flex: 5, child: Text('ITEM', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
+                  Expanded(flex: 3, child: Text('VENTA', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
+                  Expanded(flex: 2, child: Text('MARG', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
+                  Expanded(flex: 2, child: Text('M.ACUM', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
+                ],
+              ),
+            ),
+            
+            // Tree List - builds all nodes recursively
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(), 
+              itemCount: widget.data.length,
+              itemBuilder: (context, index) {
+                return _buildNodeWithChildren(widget.data[index], 0);
+              },
+            ),
+            
+            // TOTAL ROW (ORANGE)
+            _buildTotalRow(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTotalRow() {
+    double totalSales = 0;
+    double totalMargin = 0;
+    for (var node in widget.data) {
+      totalSales += node.sales;
+      totalMargin += node.margin;
+    }
+    final marginPct = totalSales > 0 ? (totalMargin / totalSales) * 100 : 0.0;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.neonBlue.withOpacity(0.15),
+        border: Border(top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5), width: 2)),
+      ),
+      child: Row(
         children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(12),
+          Expanded(
+            flex: 5,
             child: Row(
-              children: [
-                Icon(_getGroupIcon(), color: AppTheme.neonBlue, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Matriz por ${_getRowLabel()}',
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                Text(
-                  '${rows.length} registros',
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
-                ),
+              children: const [
+                Icon(Icons.summarize, color: AppTheme.neonBlue, size: 16),
+                SizedBox(width: 6),
+                Text('TOTAL', style: TextStyle(color: AppTheme.neonBlue, fontSize: 13, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
-          const Divider(height: 1, color: Colors.white10),
-          // Table
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(AppTheme.darkBase),
-              dataRowColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.hovered)) {
-                  return AppTheme.neonBlue.withOpacity(0.1);
-                }
-                return null;
-              }),
-              columnSpacing: 16,
-              horizontalMargin: 12,
-              dataRowMinHeight: 36,
-              dataRowMaxHeight: 44,
-              columns: [
-                DataColumn(
-                  label: Text(
-                    _getRowLabel(),
-                    style: const TextStyle(
-                      color: AppTheme.neonBlue,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                ...periods.map((period) => DataColumn(
-                  label: Text(
-                    _formatPeriod(period),
-                    style: const TextStyle(
-                      color: AppTheme.neonGreen,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  numeric: true,
-                )),
-                const DataColumn(
-                  label: Text(
-                    'TOTAL',
-                    style: TextStyle(
-                      color: AppTheme.neonPurple,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                  numeric: true,
-                ),
-              ],
-              rows: rows.take(50).map((row) {
-                final total = _safeDouble(row['total']);
-                return DataRow(
-                  cells: [
-                    DataCell(
-                      SizedBox(
-                        width: 180,
-                        child: Text(
-                          _getDisplayName(row),
-                          style: const TextStyle(color: Colors.white, fontSize: 11),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                    ),
-                    ...periods.map((period) {
-                      final value = _safeDouble(row['data']?[period]);
-                      return DataCell(
-                        Text(
-                          CurrencyFormatter.formatWhole(value),
-                          style: TextStyle(
-                            color: value > 0 ? Colors.white : Colors.white30,
-                            fontSize: 10,
-                          ),
-                        ),
-                      );
-                    }),
-                    DataCell(
-                      Text(
-                        CurrencyFormatter.formatWhole(total),
-                        style: const TextStyle(
-                          color: AppTheme.neonPurple,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
+          Expanded(
+            flex: 3,
+            child: Text(
+              CurrencyFormatter.format(totalSales),
+              textAlign: TextAlign.right,
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              CurrencyFormatter.format(totalMargin),
+              textAlign: TextAlign.right,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
+          // M.ACUM column - orange text, no background
+          Expanded(
+            flex: 2,
+            child: Text(
+              '${marginPct.toStringAsFixed(1)}%',
+              textAlign: TextAlign.right,
+              style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -173,49 +189,159 @@ class MatrixDataTable extends StatelessWidget {
     );
   }
 
-  String _getDisplayName(Map<String, dynamic> row) {
-    // Try to get a meaningful name
-    final name = row['name']?.toString() ?? row['label']?.toString();
-    final code = row['code']?.toString() ?? '';
+
+  /// Build a node AND its children if expanded (recursive tree)
+  Widget _buildNodeWithChildren(MatrixNode node, int level) {
+    final widgets = <Widget>[_buildNodeRow(node, level)];
     
-    if (name != null && name.isNotEmpty && name != code) {
-      return '$name ($code)';
-    }
-    return name ?? code;
-  }
-
-  IconData _getGroupIcon() {
-    switch (groupBy) {
-      case 'vendor': return Icons.badge;
-      case 'product': return Icons.inventory;
-      case 'client': return Icons.person;
-      default: return Icons.table_chart;
-    }
-  }
-
-  String _getRowLabel() {
-    switch (groupBy) {
-      case 'vendor': return 'Vendedor';
-      case 'product': return 'Producto';
-      case 'client': return 'Cliente';
-      default: return 'Item';
-    }
-  }
-
-  String _formatPeriod(String period) {
-    // Format: "2024-T1" -> "24 T1", "2024-01" -> "24/01"
-    if (period.contains('-T')) {
-      final parts = period.split('-T');
-      if (parts.length == 2) {
-        return "'${parts[0].substring(2)} T${parts[1]}";
+    // If expanded, add children recursively
+    if (node.isExpanded && node.children.isNotEmpty) {
+      for (var child in node.children) {
+        widgets.add(_buildNodeWithChildren(child, level + 1));
       }
     }
-    if (period.contains('-')) {
-      final parts = period.split('-');
-      if (parts.length == 2) {
-        return "'${parts[0].substring(2)}/${parts[1]}";
-      }
-    }
-    return period;
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: widgets,
+    );
+  }
+
+  Widget _buildNodeRow(MatrixNode node, int level) {
+    final double marginPercent = node.sales > 0 ? (node.margin / node.sales) * 100 : 0.0;
+    final Color marginColor = marginPercent > 20 ? AppTheme.neonGreen : (marginPercent > 10 ? Colors.amber : AppTheme.error);
+    
+    // Level colors for visual hierarchy
+    final levelColors = [AppTheme.neonBlue, AppTheme.neonPurple, AppTheme.neonGreen, Colors.teal, Colors.pink];
+    final levelColor = levelColors[level % levelColors.length];
+    
+    // Calculate accumulated margin for THIS node (self + children)
+    final accMargin = node.accumulatedMargin;
+    final accSales = node.accumulatedSales;
+    final accMarginPct = accSales > 0 ? (accMargin / accSales) * 100 : 0.0;
+    
+    final bool hasChildren = node.children.isNotEmpty;
+    final bool isSelected = widget.selectedId == node.id;
+
+    return InkWell(
+      onTap: () {
+        if (hasChildren) {
+          // Toggle expansion within this table
+          setState(() {
+            node.isExpanded = !node.isExpanded;
+          });
+        }
+        // Also notify parent if needed
+        if (widget.onNodeTap != null) {
+          widget.onNodeTap!(node);
+        }
+      },
+      child: Container(
+        padding: EdgeInsets.only(
+          left: 12 + (level * 20.0), // Indentation per level
+          right: 12,
+          top: 10,
+          bottom: 10,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected 
+             ? levelColor.withOpacity(0.15) 
+             : (level > 0 ? Colors.white.withOpacity(0.02 * level) : Colors.transparent),
+          border: Border(
+            bottom: BorderSide(color: Colors.white.withOpacity(0.05)),
+            left: level > 0 ? BorderSide(color: levelColor.withOpacity(0.3), width: 2) : BorderSide.none,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Expand icon or dot
+            if (hasChildren)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    node.isExpanded = !node.isExpanded;
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Icon(
+                    node.isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                    size: 18,
+                    color: node.isExpanded ? levelColor : Colors.white38,
+                  ),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(Icons.circle, size: 6, color: levelColor.withOpacity(0.5)),
+              ),
+            
+            // Name
+            Expanded(
+              flex: 5,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    node.name,
+                    style: TextStyle(
+                      color: level == 0 ? Colors.white : Colors.white70,
+                      fontWeight: level == 0 ? FontWeight.bold : FontWeight.normal,
+                      fontSize: level == 0 ? 14 : 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (hasChildren && level == 0)
+                    Text(
+                      '${node.children.length} items',
+                      style: TextStyle(color: levelColor.withOpacity(0.6), fontSize: 10),
+                    ),
+                ],
+              ),
+            ),
+            
+            // Sales
+            Expanded(
+              flex: 3,
+              child: Text(
+                CurrencyFormatter.format(node.sales),
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: level == 0 ? 13 : 12,
+                  fontWeight: level == 0 ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
+            
+            // Margin
+            Expanded(
+              flex: 2,
+              child: Text(
+                '${marginPercent.toStringAsFixed(1)}%',
+                textAlign: TextAlign.right,
+                style: TextStyle(color: marginColor, fontSize: 11),
+              ),
+            ),
+            
+            // ACCUMULATED MARGIN - orange text, no background container
+            Expanded(
+              flex: 2,
+              child: Text(
+                hasChildren ? '${accMarginPct.toStringAsFixed(1)}%' : '-',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: hasChildren ? Colors.orange : Colors.white24,
+                  fontSize: 12,
+                  fontWeight: hasChildren ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

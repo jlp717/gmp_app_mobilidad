@@ -19,6 +19,14 @@ class AuthProvider with ChangeNotifier {
   bool get isDirector => _currentUser?.isDirector ?? false;
   List<String> get vendedorCodes => _vendedorCodes;
 
+  AuthProvider() {
+    // Bind global 401 unauthorized event to logout
+    ApiClient.onUnauthorized = () {
+      debugPrint('[AuthProvider] 401 Detected - Logging out...');
+      logout();
+    };
+  }
+
   /// Login with username and password
   Future<bool> login(String username, String password) async {
     debugPrint('[AuthProvider] login() called with user: $username');

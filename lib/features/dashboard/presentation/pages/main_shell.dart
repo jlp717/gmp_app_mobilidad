@@ -8,6 +8,7 @@ import '../../../clients/presentation/pages/simple_client_list_page.dart';
 import '../../../rutero/presentation/pages/rutero_page.dart';
 import '../../../objectives/presentation/pages/objectives_page.dart';
 import '../../../chatbot/presentation/pages/chatbot_page.dart';
+import '../../../commissions/presentation/pages/commissions_page.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -68,7 +69,7 @@ class _MainShellState extends State<MainShell> {
   }
 
   // Get navigation destinations based on user role
-  List<_NavItem> _getNavItems(bool isJefeVentas) {
+  List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
     final items = <_NavItem>[];
     
     // Panel de Control - ONLY for Jefe de Ventas
@@ -105,6 +106,22 @@ class _MainShellState extends State<MainShell> {
       color: Colors.orange,
     ));
     
+    // Comisiones - visible for all EXCEPT specific commercials (80, 13, 3)
+    // Filter logic: if user has ONLY one of these codes and is NOT jefe, hide it.
+    // Or if ANY of their codes match? Usually 1 user = 1 code.
+    // The user said "Los comerciales 80,13 y 3".
+    final restrictedCodes = ['80', '13', '3'];
+    final shouldHideCommissions = !isJefeVentas && vendorCodes.any((c) => restrictedCodes.contains(c.trim()));
+    
+    if (!shouldHideCommissions) {
+      items.add(_NavItem(
+        icon: Icons.euro_outlined,
+        selectedIcon: Icons.euro,
+        label: 'Comisiones',
+        color: AppTheme.neonGreen,
+      ));
+    }
+    
     // Chat IA - visible for all
     items.add(_NavItem(
       icon: Icons.smart_toy_outlined,
@@ -128,7 +145,7 @@ class _MainShellState extends State<MainShell> {
     }
 
     final isJefeVentas = user.isJefeVentas;
-    final navItems = _getNavItems(isJefeVentas);
+    final navItems = _getNavItems(isJefeVentas, authProvider.vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
 
     return Scaffold(
@@ -367,6 +384,8 @@ class _MainShellState extends State<MainShell> {
         case 3:
           return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
         case 4:
+          return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
+        case 5:
           return ChatbotPage(vendedorCodes: vendedorCodes);
         default:
           return const Center(child: Text('Página no encontrada'));
@@ -381,6 +400,8 @@ class _MainShellState extends State<MainShell> {
         case 2:
           return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
         case 3:
+          return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+        case 4:
           return ChatbotPage(vendedorCodes: vendedorCodes);
         default:
           return const Center(child: Text('Página no encontrada'));

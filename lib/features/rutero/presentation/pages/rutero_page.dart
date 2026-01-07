@@ -6,6 +6,11 @@ import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../objectives/presentation/pages/enhanced_client_matrix_page.dart';
 import '../widgets/rutero_reorder_modal.dart';
+import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
+import '../../../../core/widgets/modern_loading.dart';
+import 'package:provider/provider.dart';
+import '../../../../core/providers/filter_provider.dart';
+import '../../../../core/widgets/global_vendor_selector.dart';
 
 /// Rutero Page - Premium Design with Visit/Delivery Toggle
 /// Shows clients to visit/deliver each day with YoY comparison
@@ -28,6 +33,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   bool _isLoadingClients = false;
   String? _error;
   String _searchQuery = '';
+  DateTime? _lastFetchTime; // Track last sync
   final TextEditingController _searchController = TextEditingController();
   
   // Selection state
@@ -72,12 +78,19 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     _tabController = TabController(length: 2, vsync: this);
     _initToday();
     // Si es jefe de ventas, cargar lista de vendedores
-    if (widget.isJefeVentas) {
-      _loadVendedores();
+    _refreshData();
+  }
+
+  Future<void> _refreshData() async {
+    await _loadWeekData();
+    // _loadWeekData calls _loadDayClients internally, so we assume completion updates
+    if (mounted) {
+      setState(() => _lastFetchTime = DateTime.now());
     }
-    _loadWeekData();
   }
   
+  // ... (dispose, initToday, formatters etc. same)
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -150,23 +163,13 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   }
   
   /// Obtiene el código del vendedor a usar (seleccionado o el propio)
-  String get _activeVendedorCode => _selectedVendedor ?? widget.employeeCode;
-  
-  /// Carga la lista de vendedores disponibles (solo para jefe de ventas)
-  Future<void> _loadVendedores() async {
-    try {
-      final response = await ApiClient.get(
-        '/rutero/vendedores',
-      );
-      
-      setState(() {
-        _vendedoresDisponibles = List<Map<String, dynamic>>.from(response['vendedores'] ?? []);
-      });
-    } catch (e) {
-      // Silently fail - vendedores list is optional for jefe
-      debugPrint('Error loading vendedores: $e');
-    }
+  String get _activeVendedorCode {
+    if (!mounted) return widget.employeeCode;
+    final filterCode = context.read<FilterProvider>().selectedVendor;
+    return filterCode ?? widget.employeeCode;
   }
+  
+
   
   /// Cambia el vendedor seleccionado para "Ver rutero como"
   void _onVendedorChanged(String? vendedorCode) {
@@ -201,7 +204,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
         _isLoadingWeek = false;
       });
       
-      _loadDayClients();
+      await _loadDayClients();
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -228,7 +231,8 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       );
 
       setState(() {
-        _dayClients = List<Map<String, dynamic>>.from(response['clients'] ?? []);
+        final rawList = response['clients'] ?? [];
+        _dayClients = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         _isLoadingClients = false;
       });
     } catch (e) {
@@ -290,14 +294,21 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(isSmallScreen: isSmallScreen),
-            // Selector de vendedor para jefe de ventas
-            if (widget.isJefeVentas) _buildVendedorSelector(isSmallScreen: isSmallScreen),
-            _buildRoleToggle(isSmallScreen: isSmallScreen),
-            _buildMonthSelector(isSmallScreen: isSmallScreen),
-            _buildWeekdayChips(isSmallScreen: isSmallScreen, isVerySmallScreen: isVerySmallScreen),
-            _buildDayHeader(isSmallScreen: isSmallScreen),
+            // Smart Sync Header
+            SmartSyncHeader(
+              lastSync: _lastFetchTime,
+              isLoading: _isLoadingWeek || _isLoadingClients,
+              onSync: _refreshData,
+              error: _error,
+            ),
+            
+            // Unified Compact Header Region
+            _buildUnifiedHeader(isSmallScreen),
+            
+            // Search Bar (dense)
             _buildSearchBar(isSmallScreen: isSmallScreen),
+            
+            // List Area
             Expanded(child: _buildClientList()),
           ],
         ),
@@ -305,521 +316,247 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildHeader({bool isSmallScreen = false}) {
+  // Main layout wrapper to organize header elements effectively
+  Widget _buildUnifiedHeader(bool isSmallScreen) {
     return Container(
-      padding: EdgeInsets.fromLTRB(8, isSmallScreen ? 6 : 12, 16, isSmallScreen ? 4 : 8),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-          ),
-          IconButton(
-            onPressed: _openReorderModal,
-            icon: const Icon(Icons.sort, color: Colors.white, size: 24),
-            tooltip: 'Ordenar Rutero',
-          ),
-          const SizedBox(width: 4),
-          // Pink gradient title
-          ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(
-              colors: [AppTheme.neonPink, AppTheme.neonPurple],
-            ).createShader(bounds),
-            child:            Text(
-              'RUTERO',
-              style: TextStyle(
-                fontSize: isSmallScreen ? 18 : 24,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          const Spacer(),
-          // Total clients badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.neonPink.withOpacity(0.3), AppTheme.neonPurple.withOpacity(0.3)],
-              ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.people, color: AppTheme.neonPink, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  '$_totalUniqueClients',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Widget de selección de vendedor para "Ver rutero como" (solo jefe de ventas)
-  Widget _buildVendedorSelector({bool isSmallScreen = false}) {
-    // Ensure selected value exists in items, otherwise reset to empty
-    final validVendedorCodes = _vendedoresDisponibles.map((v) => v['code']?.toString() ?? '').toSet();
-    final currentValue = (_selectedVendedor != null && validVendedorCodes.contains(_selectedVendedor)) 
-        ? _selectedVendedor! 
-        : '';
-    
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: isSmallScreen ? 4 : 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.neonBlue.withOpacity(0.15), AppTheme.neonPurple.withOpacity(0.15)],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.4)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.visibility, color: AppTheme.neonBlue, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            'Ver rutero como:',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: isSmallScreen ? 11 : 12,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.darkSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: currentValue,
-                  isExpanded: true,
-                  dropdownColor: AppTheme.darkCard,
-                  icon: Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue),
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: '',
-                      child: Text(
-                        'Todos los comerciales',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    ..._vendedoresDisponibles.map((v) {
-                      final code = v['code']?.toString() ?? '';
-                      final name = v['name']?.toString() ?? '';
-                      final clients = (v['clients'] as num?)?.toInt() ?? 0;
-                      final displayName = name.isNotEmpty ? name : 'Vendedor $code';
-                      return DropdownMenuItem<String>(
-                        value: code,
-                        child: Text(
-                          '$displayName ($clients clientes)',
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      );
-                    }),
-                  ],
-                  onChanged: (value) {
-                    final newValue = value?.isEmpty == true ? null : value;
-                    setState(() => _selectedVendedor = newValue);
-                    _loadWeekData();
-                  },
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRoleToggle({bool isSmallScreen = false}) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: isSmallScreen ? 2 : 4),
-      padding: EdgeInsets.all(isSmallScreen ? 2 : 4),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonPink.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _RoleButton(
-              label: 'Día de Visita',
-              icon: Icons.shopping_bag_outlined,
-              isSelected: _selectedRole == 'comercial',
-              color: AppTheme.neonPink,
-              onTap: () => _onRoleChanged('comercial'),
-            ),
-          ),
-          Expanded(
-            child: _RoleButton(
-              label: 'Día de Reparto',
-              icon: Icons.local_shipping_outlined,
-              isSelected: _selectedRole == 'repartidor',
-              color: AppTheme.neonBlue,
-              onTap: () => _onRoleChanged('repartidor'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMonthSelector({bool isSmallScreen = false}) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmallScreen ? 4 : 8),
+      color: AppTheme.darkBase,
       child: Column(
+        mainAxisSize: MainAxisSize.min, // Shrink to fit children
         children: [
-          // Month selector row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                onPressed: () => _changeMonth(-1),
-                icon: Icon(Icons.chevron_left, color: AppTheme.neonPink),
-                splashRadius: 20,
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppTheme.neonPink.withOpacity(0.15), AppTheme.neonPurple.withOpacity(0.15)],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonPink.withOpacity(0.4)),
-                ),
-                child: Text(
-                  '${_monthNames[_selectedMonth - 1]} $_selectedYear',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                ),
-              ),
-              IconButton(
-                onPressed: () => _changeMonth(1),
-                icon: Icon(Icons.chevron_right, color: AppTheme.neonPink),
-                splashRadius: 20,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Week selector row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                onPressed: () => _changeWeek(-1),
-                icon: Icon(Icons.keyboard_arrow_left, color: AppTheme.neonBlue, size: 20),
-                splashRadius: 16,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
-                ),
-                child: Text(
-                  'Semana $_selectedWeek de $_weeksInMonth',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppTheme.neonBlue),
-                ),
-              ),
-              IconButton(
-                onPressed: () => _changeWeek(1),
-                icon: Icon(Icons.keyboard_arrow_right, color: AppTheme.neonBlue, size: 20),
-                splashRadius: 16,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-            ],
-          ),
+             // 1. Top Bar: Back, Title, Role Toggle, Sort
+             Padding(
+               padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+               child: Row(
+                 children: [
+                   IconButton(
+                     onPressed: () => Navigator.pop(context),
+                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                     padding: EdgeInsets.zero,
+                     constraints: const BoxConstraints(),
+                   ),
+                   const SizedBox(width: 8),
+                   // Title + Role Switcher in one row
+                   Expanded(
+                     child: InkWell(
+                        onTap: () {
+                           // Toggle role on title tap
+                           _onRoleChanged(_selectedRole == 'comercial' ? 'repartidor' : 'comercial');
+                        },
+                        child: Row(
+                          children: [
+                             ShaderMask(
+                                shaderCallback: (bounds) => LinearGradient(
+                                  colors: [AppTheme.neonPink, AppTheme.neonPurple],
+                                ).createShader(bounds),
+                                child: Text(
+                                  'RUTERO',
+                                  style: TextStyle(
+                                    fontSize: isSmallScreen ? 18 : 20,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                             ),
+                             const SizedBox(width: 8),
+                             // Current Role Badge (Compact)
+                             Container(
+                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                               decoration: BoxDecoration(
+                                 color: (_selectedRole == 'comercial' ? AppTheme.neonPink : AppTheme.neonBlue).withOpacity(0.2),
+                                 borderRadius: BorderRadius.circular(8),
+                                 border: Border.all(color: (_selectedRole == 'comercial' ? AppTheme.neonPink : AppTheme.neonBlue).withOpacity(0.5), width: 1),
+                               ),
+                               child: Row(
+                                 mainAxisSize: MainAxisSize.min,
+                                 children: [
+                                   Icon(
+                                      _selectedRole == 'comercial' ? Icons.shopping_bag_outlined : Icons.local_shipping_outlined,
+                                      size: 12,
+                                      color: _selectedRole == 'comercial' ? AppTheme.neonPink : AppTheme.neonBlue,
+                                   ),
+                                   const SizedBox(width: 4),
+                                   Text(
+                                     _selectedRole == 'comercial' ? 'VISITA' : 'REPARTO',
+                                     style: TextStyle(
+                                       fontSize: 10, 
+                                       fontWeight: FontWeight.bold,
+                                       color: _selectedRole == 'comercial' ? AppTheme.neonPink : AppTheme.neonBlue
+                                      ),
+                                   ),
+                                 ],
+                               ),
+                             ),
+                          ],
+                        ),
+                     ),
+                   ),
+                   // Sort Action
+                   IconButton(
+                     onPressed: _openReorderModal,
+                     icon: const Icon(Icons.sort, color: Colors.white, size: 22),
+                     tooltip: 'Ordenar',
+                     padding: EdgeInsets.zero,
+                     constraints: const BoxConstraints(),
+                   ),
+                 ],
+               ),
+             ),
+             
+             // 2. Vendor Selector for Manager
+             if (widget.isJefeVentas)
+               GlobalVendorSelector(
+                 isJefeVentas: true,
+                 onChanged: _refreshData,
+               ),
+
+             // 3. Compact Week/Month Navigator
+             _buildCompactWeekSelector(),
+             
+             // 4. Horizontal Day Strip (Very compact)
+             SizedBox(
+               height: 50, // Fixed small height
+               child: ListView.separated(
+                 scrollDirection: Axis.horizontal,
+                 padding: const EdgeInsets.symmetric(horizontal: 12),
+                 itemCount: _weekdays.length,
+                 separatorBuilder: (_, __) => const SizedBox(width: 8),
+                 itemBuilder: (context, index) {
+                   final day = _weekdays[index];
+                   final isSelected = day == _selectedDay;
+                   final count = _weekData[day] ?? 0;
+                   return _buildCompactDayChip(day, count, isSelected);
+                 },
+               ),
+             ),
+             const SizedBox(height: 4),
         ],
       ),
     );
   }
 
+  // Replacement for _buildHeader - removed to avoid duplication error if I kept the name
+  // keeping empty to satisfy potential calls I missed replacing if any, but I replaced the call site.
+  // Actually, I'll just rely on the new _buildUnifiedHeader.
 
-  Widget _buildWeekdayChips({bool isSmallScreen = false, bool isVerySmallScreen = false}) {
-    // Responsive chip sizes
-    final chipWidth = isVerySmallScreen ? 48.0 : (isSmallScreen ? 55.0 : 65.0);
-    final selectedChipWidth = isVerySmallScreen ? 58.0 : (isSmallScreen ? 65.0 : 80.0);
-    final chipHeight = isVerySmallScreen ? 45.0 : (isSmallScreen ? 50.0 : 60.0);
-    final selectedChipHeight = isVerySmallScreen ? 52.0 : (isSmallScreen ? 58.0 : 70.0);
-    final labelFontSize = isVerySmallScreen ? 9.0 : (isSmallScreen ? 10.0 : 12.0);
-    final selectedLabelFontSize = isVerySmallScreen ? 10.0 : (isSmallScreen ? 12.0 : 14.0);
-    final countFontSize = isVerySmallScreen ? 10.0 : (isSmallScreen ? 11.0 : 13.0);
-    
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: isSmallScreen ? 4 : 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppTheme.darkSurface.withOpacity(0.8),
-            AppTheme.darkBase,
+
+
+  Widget _buildCompactWeekSelector() {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+             // Month/Week info
+             Row(
+               children: [
+                 IconButton(
+                    onPressed: () => _changeWeek(-1),
+                    icon: const Icon(Icons.chevron_left, size: 20, color: Colors.white),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                 ),
+                 const SizedBox(width: 8),
+                 Text(
+                   'Semana $_selectedWeek (${_monthNames[_selectedMonth-1]})', 
+                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
+                 ),
+                 const SizedBox(width: 8),
+                 IconButton(
+                    onPressed: () => _changeWeek(1),
+                    icon: const Icon(Icons.chevron_right, size: 20, color: Colors.white),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                 ),
+               ],
+             ),
+             // Total clients badge
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+               decoration: BoxDecoration(
+                 color: AppTheme.neonPink.withOpacity(0.2),
+                 borderRadius: BorderRadius.circular(12),
+               ),
+               child: Text('Total: $_totalUniqueClients', style: TextStyle(color: AppTheme.neonPink, fontSize: 11, fontWeight: FontWeight.bold)),
+             ),
           ],
         ),
-      ),
-      child: Column(
-        children: [
-          // Title
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                _selectedRole == 'comercial' ? Icons.shopping_bag : Icons.local_shipping,
-                color: AppTheme.neonPink,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _selectedRole == 'comercial' ? 'DÍAS DE VISITA' : 'DÍAS DE REPARTO',
-                style: const TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Day chips grid - centered wrap
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            children: _weekdays.map((day) {
-              final isSelected = day == _selectedDay;
-              final isToday = day == _todayName;
-              final count = _weekData[day] ?? 0;
-              
-              return GestureDetector(
-                onTap: () => _onDaySelected(day),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: isSelected ? selectedChipWidth : chipWidth,
-                  height: isSelected ? selectedChipHeight * 0.8 : chipHeight * 0.8,
-                  decoration: BoxDecoration(
-                    gradient: isSelected ? const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFFF6B9D), Color(0xFFBB86FC)],
-                    ) : null,
-                    color: isSelected ? null : (isToday ? AppTheme.darkCard : AppTheme.darkSurface),
-                    borderRadius: BorderRadius.circular(isSmallScreen ? 12 : 16),
-                    border: Border.all(
-                      color: isSelected 
-                          ? Colors.transparent 
-                          : (isToday ? AppTheme.neonPink : AppTheme.borderColor),
-                      width: isToday ? 2 : 1,
-                    ),
-                    boxShadow: isSelected ? [
-                      BoxShadow(
-                        color: AppTheme.neonPink.withOpacity(0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ] : null,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Day label
-                      Text(
-                        _weekdayLabels[day] ?? day.substring(0, 3).toUpperCase(),
-                        style: TextStyle(
-                          fontSize: isSelected ? selectedLabelFontSize : labelFontSize,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected ? Colors.white : AppTheme.textSecondary,
-                          letterSpacing: isSmallScreen ? 0.5 : 1,
-                        ),
-                      ),
-                      SizedBox(height: isSmallScreen ? 2 : 4),
-                      // Client count badge
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 6 : 10, vertical: isSmallScreen ? 2 : 4),
-                        decoration: BoxDecoration(
-                          color: isSelected 
-                              ? Colors.white.withOpacity(0.25) 
-                              : AppTheme.neonPink.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '$count',
-                          style: TextStyle(
-                            fontSize: isSelected ? (countFontSize + 2) : countFontSize,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.white : AppTheme.neonPink,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
+      );
   }
 
-  Widget _buildDayHeader({bool isSmallScreen = false}) {
-    final count = _weekData[_selectedDay] ?? 0;
-    final dayLabel = _weekdayFullLabels[_selectedDay] ?? _selectedDay;
-    
-    // Count positive/negative clients
-    int positive = 0, negative = 0;
-    for (final c in _dayClients) {
-      final status = c['status'] as Map<String, dynamic>?;
-      if (status?['isPositive'] == true) {
-        positive++;
-      } else {
-        negative++;
-      }
-    }
-    
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: isSmallScreen ? 4 : 8),
-      padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 12 : 16, vertical: isSmallScreen ? 8 : 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.neonPink.withOpacity(0.1), AppTheme.neonPurple.withOpacity(0.1)],
+  Widget _buildCompactDayChip(String day, int count, bool isSelected) {
+      final label = _weekdayLabels[day] ?? day.substring(0,3).toUpperCase();
+      return GestureDetector(
+        onTap: () => _onDaySelected(day),
+        child: Container(
+           width: 50,
+           decoration: BoxDecoration(
+             color: isSelected ? AppTheme.neonPink : AppTheme.surfaceColor,
+             borderRadius: BorderRadius.circular(8),
+             border: isSelected ? null : Border.all(color: AppTheme.borderColor),
+           ),
+           child: Column(
+             mainAxisAlignment: MainAxisAlignment.center,
+             children: [
+               Text(label, style: TextStyle(
+                 fontSize: 10, 
+                 color: isSelected ? Colors.white : AppTheme.textSecondary,
+                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+               )),
+               const SizedBox(height: 2),
+               Text('$count', style: TextStyle(
+                 fontSize: 12,
+                 color: isSelected ? Colors.white : AppTheme.textPrimary,
+                 fontWeight: FontWeight.bold
+               )),
+             ],
+           ),
         ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonPink.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            _selectedRole == 'comercial' ? Icons.shopping_bag : Icons.local_shipping,
-            color: AppTheme.neonPink,
-            size: 20,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  dayLabel,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '$count clientes para ${_selectedRole == 'comercial' ? 'visitar' : 'repartir'}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                ),
-              ],
-            ),
-          ),
-          // Status badges
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.success.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.arrow_upward, color: AppTheme.success, size: 12),
-                const SizedBox(width: 2),
-                Text('$positive', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.success)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.error.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.arrow_downward, color: AppTheme.error, size: 12),
-                const SizedBox(width: 2),
-                Text('$negative', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.error)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+      );
   }
+
+
+  // Removed obsolete methods (_buildVendedorSelector, _buildRoleToggle, _buildMonthSelector, _buildDayHeader)
+  // Replaced by _buildUnifiedHeader and compact components.
+
+
 
   Widget _buildSearchBar({bool isSmallScreen = false}) {
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: isSmallScreen ? 4 : 8),
+      height: 36, // Force compact height
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: TextField(
         controller: _searchController,
+        style: const TextStyle(fontSize: 13),
+        textAlignVertical: TextAlignVertical.center,
         onChanged: (value) {
           setState(() {
             _searchQuery = value.toLowerCase();
           });
         },
         decoration: InputDecoration(
-          hintText: 'Buscar por código o nombre...',
-          hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-          prefixIcon: Icon(Icons.search, color: AppTheme.neonPink, size: 20),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: Icon(Icons.clear, color: Colors.grey.shade400, size: 18),
-                  onPressed: () {
-                    setState(() {
-                      _searchController.clear();
-                      _searchQuery = '';
-                    });
-                  },
-                )
-              : null,
+          hintText: 'Buscar...',
+          hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.7), fontSize: 13),
+          prefixIcon: const Icon(Icons.search, size: 16, color: AppTheme.textSecondary),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+          isDense: true,
           filled: true,
           fillColor: AppTheme.surfaceColor,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide.none,
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppTheme.neonPink.withOpacity(0.2)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppTheme.neonPink, width: 1.5),
-          ),
         ),
-        style: const TextStyle(fontSize: 14, color: Colors.white),
       ),
     );
   }
 
+
   Widget _buildClientList() {
     if (_isLoadingWeek || _isLoadingClients) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: AppTheme.neonPink),
-            const SizedBox(height: 16),
-            Text('Cargando...', style: TextStyle(color: Colors.grey.shade400)),
-          ],
-        ),
+      return const Padding(
+        padding: EdgeInsets.all(40.0),
+        child: ModernLoading(message: 'Cargando rutas...'),
       );
     }
 
@@ -912,6 +649,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             onMapTap: () => _openMaps(client),
             onCallTap: () => _makeCall(client),
             showMargin: widget.isJefeVentas,
+            selectedYear: _selectedYear,
           );
         },
       ),
@@ -1059,6 +797,7 @@ class _ClientCard extends StatelessWidget {
   final VoidCallback onMapTap;
   final VoidCallback onCallTap;
   final bool showMargin;
+  final int selectedYear;
 
   const _ClientCard({
     required this.client,
@@ -1068,6 +807,7 @@ class _ClientCard extends StatelessWidget {
     required this.onMapTap,
     required this.onCallTap,
     this.showMargin = false,
+    required this.selectedYear,
   });
 
   @override
@@ -1141,7 +881,7 @@ class _ClientCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'vs 2024',
+                      'vs ${selectedYear - 1}',
                       style: TextStyle(
                         fontSize: 9,
                         color: accentColor.withOpacity(0.8),
@@ -1227,6 +967,19 @@ class _ClientCard extends StatelessWidget {
                             formatCurrency(ytdPrevYear),
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                           ),
+                        ] else if (selectedYear == DateTime.now().year && DateTime.now().day <= 7 && DateTime.now().month == 1) ...[
+                           // Week 1 Logic Explanation Tooltip
+                           const SizedBox(width: 4),
+                           Tooltip(
+                             triggerMode: TooltipTriggerMode.tap,
+                             showDuration: const Duration(seconds: 4),
+                             margin: const EdgeInsets.symmetric(horizontal: 20),
+                             padding: const EdgeInsets.all(12),
+                             decoration: BoxDecoration(color: AppTheme.darkBase, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade700)),
+                             textStyle: const TextStyle(color: Colors.white, fontSize: 13),
+                             message: 'El acumulado del año anterior aparecerá a partir de la 2ª semana, comparando semanas cerradas.',
+                             child: Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
+                           ),
                         ],
                       ],
                     ),

@@ -46,16 +46,27 @@ async function loadLaclaeCache() {
 
                 if (!laclaeCache[vendedor]) laclaeCache[vendedor] = {};
 
-                // Parse visit days
-                const visitDays = [];
-                const deliveryDays = [];
-
-                for (let i = 0; i < 7; i++) {
-                    if (row[visitCols[i]] === 'S') visitDays.push(dayNames[i]);
-                    if (row[deliveryCols[i]] === 'S') deliveryDays.push(dayNames[i]);
+                if (!laclaeCache[vendedor][cliente]) {
+                    laclaeCache[vendedor][cliente] = {
+                        visitDays: new Set(),
+                        deliveryDays: new Set()
+                    };
                 }
 
-                laclaeCache[vendedor][cliente] = { visitDays, deliveryDays };
+                const entry = laclaeCache[vendedor][cliente];
+
+                for (let i = 0; i < 7; i++) {
+                    if (row[visitCols[i]] === 'S') entry.visitDays.add(dayNames[i]);
+                    if (row[deliveryCols[i]] === 'S') entry.deliveryDays.add(dayNames[i]);
+                }
+            });
+
+            // Convert Sets to Arrays for compatibility
+            Object.values(laclaeCache).forEach(vendorClients => {
+                Object.values(vendorClients).forEach(clientData => {
+                    clientData.visitDays = Array.from(clientData.visitDays);
+                    clientData.deliveryDays = Array.from(clientData.deliveryDays);
+                });
             });
 
             const vendorCount = Object.keys(laclaeCache).length;
@@ -158,10 +169,63 @@ function getVendedoresFromCache() {
     })).sort((a, b) => b.clients - a.clients);
 }
 
+// Get aggregated active VISIT days for a vendor (if they have ANY client with visit on that day)
+function getVendorActiveDaysFromCache(vendedorCode) {
+    if (!laclaeCacheReady || !vendedorCode) {
+        console.log(`⚠️ getVendorActiveDaysFromCache: cache not ready or no vendedorCode`);
+        return [];
+    }
+
+    const trimmedCode = vendedorCode.trim();
+    const vendorClients = laclaeCache[trimmedCode];
+
+    if (!vendorClients) {
+        console.log(`⚠️ Vendor ${trimmedCode} not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
+        return [];
+    }
+
+    const daysSet = new Set();
+    Object.values(vendorClients).forEach(clientData => {
+        if (clientData.visitDays) {
+            clientData.visitDays.forEach(d => daysSet.add(d));
+        }
+    });
+
+    const result = Array.from(daysSet);
+    console.log(`📅 Vendor ${trimmedCode} visit days: ${result.join(', ')} (${Object.keys(vendorClients).length} clients)`);
+    return result; // Returns ['lunes', 'martes'...]
+}
+
+// Get aggregated active DELIVERY days for a vendor (for repartidores in rutero)
+function getVendorDeliveryDaysFromCache(vendedorCode) {
+    if (!laclaeCacheReady || !vendedorCode) return [];
+
+    const trimmedCode = vendedorCode.trim();
+    const vendorClients = laclaeCache[trimmedCode] || {};
+
+    const daysSet = new Set();
+    Object.values(vendorClients).forEach(clientData => {
+        if (clientData.deliveryDays) {
+            clientData.deliveryDays.forEach(d => daysSet.add(d));
+        }
+    });
+
+    return Array.from(daysSet);
+}
+
+// Debug: Get list of vendor codes in cache
+function getCachedVendorCodes() {
+    if (!laclaeCacheReady) return [];
+    return Object.keys(laclaeCache);
+}
+
 module.exports = {
     loadLaclaeCache,
     getClientsForDay,
     getWeekCountsFromCache,
     getTotalClientsFromCache,
-    getVendedoresFromCache
+    getVendedoresFromCache,
+    getVendorActiveDaysFromCache,
+    getVendorDeliveryDaysFromCache,
+    getCachedVendorCodes
 };

@@ -23,7 +23,7 @@ async function initDb() {
     }
 }
 
-async function query(sql, logQuery = true) {
+async function query(sql, logQuery = true, logError = true) {
     if (!dbPool) throw new Error('Database pool not initialized');
 
     const start = Date.now();
@@ -37,7 +37,9 @@ async function query(sql, logQuery = true) {
         }
         return result;
     } catch (error) {
-        logger.error(`❌ Query Error: ${error.message}`);
+        if (logError) {
+            logger.error(`❌ Query Error: ${error.message} \nSQL: ${sql ? sql.substring(0, 50) : 'N/A'}`);
+        }
         throw error;
     } finally {
         await conn.close();
@@ -51,9 +53,10 @@ async function query(sql, logQuery = true) {
  * @param {string} sql - SQL query with ? placeholders
  * @param {Array} params - Array of parameter values in order
  * @param {boolean} logQuery - Whether to log the query (false for sensitive queries)
+ * @param {boolean} logError - Whether to log errors (default true)
  * @returns {Promise<Array>} Query results
  */
-async function queryWithParams(sql, params = [], logQuery = true) {
+async function queryWithParams(sql, params = [], logQuery = true, logError = true) {
     if (!dbPool) throw new Error('Database pool not initialized');
 
     const start = Date.now();
@@ -69,7 +72,9 @@ async function queryWithParams(sql, params = [], logQuery = true) {
         }
         return result;
     } catch (error) {
-        logger.error(`❌ Parameterized Query Error: ${error.message}`);
+        if (logError) {
+            logger.error(`❌ Parameterized Query Error: ${error.message}`);
+        }
         throw error;
     } finally {
         await conn.close();

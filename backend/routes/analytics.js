@@ -5,34 +5,38 @@ const { query } = require('../config/db');
 const {
     getCurrentDate,
     buildVendedorFilter,
+    buildVendedorFilterLACLAE,
     formatCurrency,
     MIN_YEAR,
-    LAC_SALES_FILTER
+    LAC_SALES_FILTER,
+    LACLAE_SALES_FILTER
 } = require('../utils/common');
 
+
 // =============================================================================
-// YOY COMPARISON (Using LAC)
+// YOY COMPARISON (Using LACLAE with LCIMVT for sales without VAT)
 // =============================================================================
 router.get('/yoy-comparison', async (req, res) => {
     try {
         const { vendedorCodes, year, month } = req.query;
         const currentYear = parseInt(year) || getCurrentDate().getFullYear();
-        const vendedorFilter = buildVendedorFilter(vendedorCodes);
+        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         // Optional month filter
-        const monthFilter = month ? `AND MESDOCUMENTO = ${month}` : '';
+        const monthFilter = month ? `AND L.LCMMDC = ${month}` : '';
 
         const getData = async (yr) => {
             const result = await query(`
           SELECT 
-            SUM(IMPORTEVENTA) as sales, 
-            SUM(IMPORTEVENTA - IMPORTECOSTO) as margin,
-            COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
-          FROM DSEDAC.LAC 
-          WHERE ANODOCUMENTO = ${yr} AND ${LAC_SALES_FILTER} ${monthFilter} ${vendedorFilter}
+            SUM(L.LCIMVT) as sales, 
+            SUM(L.LCIMVT - L.LCIMCT) as margin,
+            COUNT(DISTINCT L.LCCDCL) as clients
+          FROM DSED.LACLAE L 
+          WHERE L.LCAADC = ${yr} AND ${LACLAE_SALES_FILTER} ${monthFilter} ${vendedorFilter}
         `);
             return result[0] || {};
         };
+
 
         const curr = await getData(currentYear);
         const lastYr = currentYear - 1;
@@ -74,25 +78,25 @@ router.get('/yoy-comparison', async (req, res) => {
 });
 
 // =============================================================================
-// TOP CLIENTS
+// TOP CLIENTS (Using LACLAE with LCIMVT)
 // =============================================================================
 router.get('/top-clients', async (req, res) => {
     try {
         const { vendedorCodes, year, month, limit = 10 } = req.query;
-        const vendedorFilter = buildVendedorFilter(vendedorCodes);
+        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         let dateFilter = '';
-        if (year) dateFilter += ` AND ANODOCUMENTO = ${year}`;
-        if (month) dateFilter += ` AND MESDOCUMENTO = ${month}`;
+        if (year) dateFilter += ` AND L.LCAADC = ${year}`;
+        if (month) dateFilter += ` AND L.LCMMDC = ${month}`;
 
         const topClients = await query(`
       SELECT 
-        CODIGOCLIENTEALBARAN as code,
-        SUM(IMPORTEVENTA) as totalSales,
+        L.LCCDCL as code,
+        SUM(L.LCIMVT) as totalSales,
         COUNT(*) as transactions
-      FROM DSEDAC.LAC
-      WHERE 1=1 ${dateFilter} ${vendedorFilter}
-      GROUP BY CODIGOCLIENTEALBARAN
+      FROM DSED.LACLAE L
+      WHERE ${LACLAE_SALES_FILTER} ${dateFilter} ${vendedorFilter}
+      GROUP BY L.LCCDCL
       ORDER BY totalSales DESC
       FETCH FIRST ${limit} ROWS ONLY
     `);
@@ -111,6 +115,7 @@ router.get('/top-clients', async (req, res) => {
 
         res.json({ clients: enhancedClients });
 
+
     } catch (error) {
         logger.error(`Top clients error: ${error.message}`);
         res.status(500).json({ error: 'Error top clients', details: error.message });
@@ -118,22 +123,23 @@ router.get('/top-clients', async (req, res) => {
 });
 
 // =============================================================================
-// TRENDS (Updated to use DSEDAC.LAC for proper history)
+// TRENDS (Using LACLAE with LCIMVT)
 // =============================================================================
 router.get('/trends', async (req, res) => {
     try {
         const { vendedorCodes } = req.query;
-        const vendedorFilter = buildVendedorFilter(vendedorCodes);
+        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
-        // Get last 6 months from LAC
+        // Get last 6 months from LACLAE
         const history = await query(`
-      SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, SUM(IMPORTEVENTA) as sales
-      FROM DSEDAC.LAC
-      WHERE ANODOCUMENTO >= 2024 ${vendedorFilter}
-      GROUP BY ANODOCUMENTO, MESDOCUMENTO
-      ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
+      SELECT L.LCAADC as year, L.LCMMDC as month, SUM(L.LCIMVT) as sales
+      FROM DSED.LACLAE L
+      WHERE L.LCAADC >= ${MIN_YEAR} AND ${LACLAE_SALES_FILTER} ${vendedorFilter}
+      GROUP BY L.LCAADC, L.LCMMDC
+      ORDER BY L.LCAADC DESC, L.LCMMDC DESC
       FETCH FIRST 6 ROWS ONLY
     `);
+
 
         // Simple prediction logic
         let trend = 'stable';
@@ -370,6 +376,136 @@ router.get('/sales-history', async (req, res) => {
     } catch (error) {
         logger.error(`Sales history error: ${error.message}`);
         res.status(500).json({ error: 'Error obteniendo histórico de ventas', details: error.message });
+    }
+});
+
+
+// =============================================================================
+// SALES HISTORY SUMMARY (Comparison Header)
+// =============================================================================
+router.get('/sales-history/summary', async (req, res) => {
+    try {
+        const { vendedorCodes, clientCode, productSearch, startDate, endDate } = req.query;
+        const vendedorFilter = buildVendedorFilter(vendedorCodes);
+        const searchFilter = productSearch ? `AND (UPPER(ART.DESCRIPCIONARTICULO) LIKE UPPER('%${productSearch}%') OR ART.CODIGOARTICULO LIKE '%${productSearch}%')` : '';
+        const clientFilter = clientCode ? `AND L.CODIGOCLIENTEALBARAN = '${clientCode}'` : '';
+
+        // Helper to query logic
+        const getStats = async (start, end) => {
+            // Convert 'YYYY-MM-DD' to integer YYYYMMDD for comparision
+            const sDate = parseInt(start.replace(/-/g, ''));
+            const eDate = parseInt(end.replace(/-/g, ''));
+
+            // Ensure we are selecting from LAC and joining ARTICULOS if needed for search
+            const joinArt = productSearch ? 'LEFT JOIN DSEDAC.ARTICULOS ART ON L.CODIGOARTICULO = ART.CODIGOARTICULO' : '';
+
+            // Construct Date Filter using FECHADOCUMENTO (YYYYMMDD decimal)
+            // LAC often stores dates as YYYYMMDD in FECHADOCUMENTO
+            const dateQuery = `AND L.FECHADOCUMENTO BETWEEN ${sDate} AND ${eDate}`;
+
+            const queryStr = `
+                SELECT 
+                    SUM(L.IMPORTEVENTA) as sales,
+                    SUM(L.IMPORTEVENTA - L.IMPORTECOSTO) as margin,
+                    SUM(L.UNIDADES) as units, -- Or CAJAS if available, usually UNIDADES serves
+                    SUM(CASE WHEN L.UNIDADES >= 0 THEN L.UNIDADES ELSE 0 END) as positive_units
+                FROM DSEDAC.LAC L
+                ${joinArt}
+                WHERE 1=1 
+                ${dateQuery} 
+                ${vendedorFilter}
+                ${clientFilter} 
+                ${searchFilter}
+            `;
+            const result = await query(queryStr);
+            return result[0] || {};
+        };
+
+        // Helper for Year Breakdown
+        const getYearBreakdown = async (start, end) => {
+            const sDate = parseInt(start.replace(/-/g, ''));
+            const eDate = parseInt(end.replace(/-/g, ''));
+            const joinArt = productSearch ? 'LEFT JOIN DSEDAC.ARTICULOS ART ON L.CODIGOARTICULO = ART.CODIGOARTICULO' : '';
+            const dateQuery = `AND L.FECHADOCUMENTO BETWEEN ${sDate} AND ${eDate}`;
+
+            const queryStr = `
+                SELECT 
+                    L.ANODOCUMENTO as year,
+                    SUM(L.IMPORTEVENTA) as sales,
+                    SUM(L.IMPORTEVENTA - L.IMPORTECOSTO) as margin,
+                    SUM(L.UNIDADES) as units
+                FROM DSEDAC.LAC L
+                ${joinArt}
+                WHERE 1=1 
+                ${dateQuery} 
+                ${vendedorFilter}
+                ${clientFilter} 
+                ${searchFilter}
+                GROUP BY L.ANODOCUMENTO
+                ORDER BY L.ANODOCUMENTO DESC
+            `;
+            const results = await query(queryStr);
+            return results;
+        };
+
+        // --- 1. Current Period ---
+        // If dates not provided, default to Current Year
+        const now = new Date();
+        const sDate = startDate || `${now.getFullYear()}0101`;
+        const eDate = endDate || `${now.getFullYear()}1231`;
+
+        // --- 2. Previous Period ---
+        // Calculate same dates but -1 Year
+        const sYear = parseInt(sDate.substring(0, 4));
+        const eYear = parseInt(eDate.substring(0, 4));
+        const sPrevOriginal = (sYear - 1) + sDate.substring(4); // e.g. 2024-01-01 -> 2023-01-01
+        const ePrevOriginal = (eYear - 1) + eDate.substring(4);
+
+        // Execute parallel queries
+        const [curr, prev, breakdown] = await Promise.all([
+            getStats(sDate, eDate),
+            getStats(sPrevOriginal, ePrevOriginal),
+            getYearBreakdown(sDate, eDate)
+        ]);
+
+        const currSales = parseFloat(curr.SALES || 0);
+        const prevSales = parseFloat(prev.SALES || 0);
+        const currMargin = parseFloat(curr.MARGIN || 0);
+        const prevMargin = parseFloat(prev.MARGIN || 0);
+        const currUnits = parseFloat(curr.UNITS || 0);
+        const prevUnits = parseFloat(prev.UNITS || 0);
+
+        const calcGrowth = (c, p) => (p && p !== 0) ? ((c - p) / p) * 100 : (c > 0 ? 100 : 0);
+
+        res.json({
+            current: {
+                sales: currSales,
+                margin: currMargin,
+                units: currUnits,
+                label: `${sYear}`
+            },
+            previous: {
+                sales: prevSales,
+                margin: prevMargin,
+                units: prevUnits,
+                label: `${sYear - 1}`
+            },
+            growth: {
+                sales: calcGrowth(currSales, prevSales),
+                margin: calcGrowth(currMargin, prevMargin),
+                units: calcGrowth(currUnits, prevUnits)
+            },
+            breakdown: breakdown.map(b => ({
+                year: b.YEAR,
+                sales: parseFloat(b.SALES || 0),
+                margin: parseFloat(b.MARGIN || 0),
+                units: parseFloat(b.UNITS || 0)
+            }))
+        });
+
+    } catch (error) {
+        logger.error(`Error in sales-history/summary: ${error.message}`);
+        res.status(500).json({ error: 'Error calculating summary', details: error.message });
     }
 });
 

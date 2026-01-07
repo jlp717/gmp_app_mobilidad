@@ -19,7 +19,7 @@ class ApiConfig {
   // -----------------------------------------------------------------------------
   // 2. PRODUCCION (4G / Internet / Ngrok)
   // URL pública accesible desde cualquier lugar
-  static String _productionUrl = 'https://ca2b7659e253.ngrok-free.app'; 
+  static String _productionUrl = 'https://4b834588165b.ngrok-free.app'; 
 
   // =============================================================================
 
@@ -105,8 +105,10 @@ class ApiConfig {
   static const Duration connectTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);
 
-  // Date range for data filtering
-  static const int minYear = 2023;
+  // Date range for data filtering (Dynamic: Current and prev 2 years)
+  static int get currentYear => DateTime.now().year;
+  static int get minYear => currentYear - 2;
+  static List<int> get availableYears => [currentYear, currentYear - 1, currentYear - 2];
 
   // Pagination defaults
   static const int defaultPageSize = 50;

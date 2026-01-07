@@ -6,6 +6,7 @@ class SalesHistoryProvider with ChangeNotifier {
   final SalesHistoryService _service = SalesHistoryService();
   
   List<ProductHistoryItem> _items = [];
+  Map<String, dynamic>? _summary;
   bool _isLoading = false;
   String? _error;
   int _totalCount = 0;
@@ -19,6 +20,7 @@ class SalesHistoryProvider with ChangeNotifier {
 
   // Getters
   List<ProductHistoryItem> get items => _items;
+  Map<String, dynamic>? get summary => _summary;
   bool get isLoading => _isLoading;
   String? get error => _error;
   int get totalCount => _totalCount;
@@ -60,18 +62,30 @@ class SalesHistoryProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _service.getSalesHistory(
-        vendedorCodes: _vendedorCodes,
-        clientCode: _clientCode,
-        productSearch: _productSearch,
-        startDate: _startDate,
-        endDate: _endDate,
-        limit: 100, // Fixed limit for now
-        offset: 0,
-      );
+      final results = await Future.wait([
+        _service.getSalesHistory(
+          vendedorCodes: _vendedorCodes,
+          clientCode: _clientCode,
+          productSearch: _productSearch,
+          startDate: _startDate,
+          endDate: _endDate,
+          limit: 100,
+          offset: 0,
+        ),
+        _service.getSalesHistorySummary(
+          vendedorCodes: _vendedorCodes,
+          clientCode: _clientCode,
+          productSearch: _productSearch,
+          startDate: _startDate,
+          endDate: _endDate,
+        ),
+      ]);
 
-      _items = result['items'];
-      _totalCount = result['count'];
+      final historyResult = results[0] as Map<String, dynamic>;
+      _summary = results[1] as Map<String, dynamic>;
+
+      _items = historyResult['items'];
+      _totalCount = historyResult['count'];
       _isLoading = false;
       notifyListeners();
     } catch (e) {

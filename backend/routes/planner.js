@@ -5,9 +5,12 @@ const { query, queryWithParams, getPool } = require('../config/db');
 const {
     getCurrentDate,
     buildVendedorFilter,
+    buildVendedorFilterLACLAE,
     formatCurrency,
-    LAC_SALES_FILTER
+    LAC_SALES_FILTER,
+    LACLAE_SALES_FILTER
 } = require('../utils/common');
+
 const {
     getWeekCountsFromCache,
     getTotalClientsFromCache,
@@ -40,7 +43,11 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
   COUNT(DISTINCT L.CODIGOARTICULO) as numProducts
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      WHERE L.ANODOCUMENTO = ${year} AND L.MESDOCUMENTO = ${month} ${vendedorFilter}
+      WHERE L.ANODOCUMENTO = ${year} AND L.MESDOCUMENTO = ${month} 
+        AND L.TIPOVENTA IN ('CC', 'VC')
+        AND L.TIPOLINEA IN ('AB', 'VT')
+        AND L.SERIEALBARAN NOT IN ('N', 'Z')
+        ${vendedorFilter}
       GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO,
   L.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, C.DIRECCION, C.POBLACION,
   C.TELEFONO1, L.CODIGOVENDEDOR
@@ -136,58 +143,39 @@ router.get('/rutero/week', async (req, res) => {
 // =============================================================================
 router.get('/rutero/vendedores', async (req, res) => {
     try {
-        // Try cache first for codes and client counts
-        const cachedVendedores = getVendedoresFromCache();
+        // MOVED TO LACLAE SOURCE but OPTIMIZED
+        // Scan only recent years (2025, 2026) to avoid full table scan
+        const currentYear = new Date().getFullYear();
+        const prevYear = currentYear - 1;
 
-        if (cachedVendedores && cachedVendedores.length > 0) {
-            // Get vendor names from VEN table
-            const codes = cachedVendedores.map(v => `'${v.code}'`).join(',');
-
-            try {
-                const namesResult = await query(`
-          SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME 
-          FROM DSEDAC.VEN 
-          WHERE CODIGOVENDEDOR IN (${codes})
+        const vendedores = await query(`
+            WITH ActiveVendors AS (
+                SELECT DISTINCT TRIM(R1_T8CDVD) as CODE
+                FROM DSED.LACLAE
+                WHERE LCAADC IN (${currentYear}, ${prevYear}) 
+                  AND R1_T8CDVD IS NOT NULL 
+                  AND TRIM(R1_T8CDVD) <> ''
+            )
+            SELECT
+                AV.CODE as code,
+                D.NOMBREVENDEDOR as name
+            FROM ActiveVendors AV
+            LEFT JOIN DSEDAC.VDD D ON AV.CODE = TRIM(D.CODIGOVENDEDOR)
+            ORDER BY AV.CODE
         `);
 
-                // Create a map of code -> name
-                const nameMap = {};
-                namesResult.forEach(row => {
-                    nameMap[row.CODE?.trim()] = row.NAME?.trim() || '';
-                });
+        // Cache 1 hour
+        res.set('Cache-Control', 'public, max-age=3600');
 
-                // Merge names with cached data
-                const vendedoresConNombres = cachedVendedores.map(v => ({
-                    code: v.code,
-                    name: nameMap[v.code] || `Vendedor ${v.code}`,
-                    clients: v.clients
-                }));
-
-                logger.info(`[RUTERO VENDEDORES] From cache with names: ${vendedoresConNombres.length} salespeople`);
-                return res.json({
-                    vendedores: vendedoresConNombres,
-                    count: vendedoresConNombres.length
-                });
-            } catch (queryError) {
-                // If name query fails, return cache data without names
-                logger.warn(`[RUTERO VENDEDORES] Name query failed, returning codes only: ${queryError.message}`);
-                return res.json({
-                    vendedores: cachedVendedores,
-                    count: cachedVendedores.length
-                });
-            }
-        }
-
-        // Fallback: Cache not ready
-        logger.warn(`[RUTERO VENDEDORES] Cache not ready`);
         res.json({
-            vendedores: [],
-            count: 0,
-            cacheStatus: 'loading'
+            vendedores: vendedores.map(v => ({
+                code: v.CODE?.trim(),
+                name: v.NAME?.trim() || `Vendedor ${v.CODE}`
+            }))
         });
     } catch (error) {
-        logger.error(`Rutero vendedores error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo vendedores', details: error.message });
+        logger.error(`Error fetching vendedores: ${error.message}`);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -271,13 +259,40 @@ router.get('/rutero/day/:day', async (req, res) => {
         const previousYear = currentYear - 1;
         const isVisit = role !== 'repartidor';
 
-        // End date for current year: yesterday or Dec 31
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const endMonthCurrent = yesterday.getMonth() + 1;
-        const endDayCurrent = yesterday.getDate();
-        const endMonthPrevious = endMonthCurrent;
-        const endDayPrevious = endDayCurrent;
+        // End date for current year: Today (include real-time sales)
+        const endMonthCurrent = now.getMonth() + 1;
+        const endDayCurrent = now.getDate();
+
+        // End date for PREVIOUS year: "Closed Week" logic (Week - 1)
+        // We need to calculate the date of the LAST SUNDAY.
+        // If current week is Week 1, this date might be in the previous year (resulting in 0 sales for this year), which is desired.
+        const today = new Date(now);
+        const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
+        // Calculate days to subtract to get to previous Sunday.
+        // If Sun(0) -> 7 days ago. If Mon(1) -> 1 day ago.
+        const diffToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;
+
+        const lastSundayDate = new Date(today);
+        lastSundayDate.setDate(today.getDate() - diffToLastSunday);
+
+        // Now map this date to the Previous Year. 
+        // We want the same RELATIVE date (e.g., if last Sunday was Jan 5th, we want Jan 5th of Prev Year)
+        // OR better: The user wants "Accumulated until Week - 1".
+        // If we are in Week 2, we want Week 1 of Prev Year.
+        // Week 1 of Prev Year ends approx same date.
+        // Let's use the Date of Last Sunday.
+        // If Last Sunday was Dec 28 (Prev Year Context), then we query until Dec 28.
+
+        let endMonthPrevious, endDayPrevious;
+
+        if (lastSundayDate.getFullYear() < currentYear) {
+            // We are in Week 1, so "Week - 1" is in previous year -> 0 sales for this year context
+            endMonthPrevious = 0;
+            endDayPrevious = 0;
+        } else {
+            endMonthPrevious = lastSundayDate.getMonth() + 1;
+            endDayPrevious = lastSundayDate.getDate();
+        }
 
         // Validate day
         if (DAY_NAMES.indexOf(day.toLowerCase()) === -1) {
@@ -318,46 +333,78 @@ router.get('/rutero/day/:day', async (req, res) => {
         const batchSize = 200;
         const clientBatch = dayClientCodes.slice(0, batchSize);
         const safeClientFilter = clientBatch.map(c => `'${c.replace(/'/g, "''")}'`).join(',');
-        const clientFilter = `L.CODIGOCLIENTEALBARAN IN (${safeClientFilter})`;
+        // 1. Get Client Details (Names, Addresses) - Guaranteed for all planned clients
+        const clientDetailsRows = await query(`
+            SELECT 
+                CODIGOCLIENTE as CODE,
+                COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
+                DIRECCION as ADDRESS,
+                POBLACION as CITY,
+                TELEFONO1 as PHONE
+            FROM DSEDAC.CLI
+            WHERE CODIGOCLIENTE IN (${safeClientFilter})
+        `);
 
-        // Get YTD cumulative sales for CURRENT YEAR
-        const currentYearRows = await query(`
-      SELECT 
-        L.CODIGOCLIENTEALBARAN as CODE,
-        COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
-        MIN(C.DIRECCION) as ADDRESS,
-        MIN(C.POBLACION) as CITY,
-        MIN(C.TELEFONO1) as PHONE,
-        SUM(L.IMPORTEVENTA) as SALES,
-        SUM(L.IMPORTECOSTO) as COST
-      FROM DSEDAC.LAC L
-      LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      WHERE ${clientFilter}
-        AND L.ANODOCUMENTO = ${currentYear}
-        AND ${LAC_SALES_FILTER}
-        AND (L.MESDOCUMENTO < ${endMonthCurrent} OR (L.MESDOCUMENTO = ${endMonthCurrent} AND L.DIADOCUMENTO <= ${endDayCurrent}))
-      GROUP BY L.CODIGOCLIENTEALBARAN
-    `);
+        // 2. Get Sales Data (Current Year) - Using LACLAE with LCIMVT for sales without VAT
+        const currentSalesRows = await query(`
+            SELECT 
+                L.LCCDCL as CODE,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST
+            FROM DSED.LACLAE L
+            WHERE L.LCCDCL IN (${safeClientFilter})
+              AND L.LCAADC = ${currentYear}
+              AND ${LACLAE_SALES_FILTER}
+              AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
+            GROUP BY L.LCCDCL
+        `);
 
-        // Get YTD for previous year same period
-        const prevYearMap = new Map();
-        const prevYearRows = await query(`
-      SELECT 
-        L.CODIGOCLIENTEALBARAN as CODE,
-        SUM(L.IMPORTEVENTA) as SALES,
-        SUM(L.IMPORTECOSTO) as COST
-      FROM DSEDAC.LAC L
-      WHERE ${clientFilter}
-        AND L.ANODOCUMENTO = ${previousYear}
-        AND ${LAC_SALES_FILTER}
-        AND (L.MESDOCUMENTO < ${endMonthPrevious} OR (L.MESDOCUMENTO = ${endMonthPrevious} AND L.DIADOCUMENTO <= ${endDayPrevious}))
-      GROUP BY L.CODIGOCLIENTEALBARAN
-    `);
-        prevYearRows.forEach(r => {
-            prevYearMap.set(r.CODE?.trim() || '', {
+
+        // Map Sales Data
+        const currentSalesMap = new Map();
+        currentSalesRows.forEach(r => {
+            currentSalesMap.set(r.CODE.trim(), {
                 sales: parseFloat(r.SALES) || 0,
                 cost: parseFloat(r.COST) || 0
             });
+        });
+
+        // 3. Get Sales Data (Previous Year) - Using LACLAE with LCIMVT
+        // If endMonthPrevious is 0, it means we are in Week 1, so no previous year sales to compare yet against closed weeks.
+        let prevYearRows = [];
+        if (endMonthPrevious > 0) {
+            prevYearRows = await query(`
+                SELECT 
+                    L.LCCDCL as CODE,
+                    SUM(L.LCIMVT) as SALES,
+                    SUM(L.LCIMCT) as COST
+                FROM DSED.LACLAE L
+                WHERE L.LCCDCL IN (${safeClientFilter})
+                  AND L.LCAADC = ${previousYear}
+                  AND ${LACLAE_SALES_FILTER}
+                  AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
+                GROUP BY L.LCCDCL
+            `);
+        }
+
+
+        const prevYearMap = new Map();
+        prevYearRows.forEach(r => {
+            prevYearMap.set(r.CODE.trim(), {
+                sales: parseFloat(r.SALES) || 0,
+                cost: parseFloat(r.COST) || 0
+            });
+        });
+
+        // 4. Merge Data
+        const currentYearRows = clientDetailsRows.map(r => {
+            const code = r.CODE.trim();
+            const salesData = currentSalesMap.get(code) || { sales: 0, cost: 0 };
+            return {
+                ...r,
+                SALES: salesData.sales,
+                COST: salesData.cost
+            };
         });
 
         // Get GPS coordinates
@@ -446,23 +493,26 @@ router.get('/rutero/client/:code/status', async (req, res) => {
         const now = getCurrentDate();
         const currentYear = now.getFullYear();
 
-        // Ventas por mes del año actual (usando LAC) - parameterized
+        // Ventas por mes del año actual - usando LACLAE con LCIMVT (sin IVA)
         const currentYearData = await queryWithParams(`
-      SELECT MESDOCUMENTO as month, SUM(IMPORTEVENTA) as sales, SUM(IMPORTEVENTA - IMPORTECOSTO) as margin
-      FROM DSEDAC.LAC
-      WHERE CODIGOCLIENTEALBARAN = ? AND ANODOCUMENTO = ${currentYear}
-      GROUP BY MESDOCUMENTO
-      ORDER BY MESDOCUMENTO
+      SELECT LCMMDC as month, SUM(LCIMVT) as sales, SUM(LCIMVT - LCIMCT) as margin
+      FROM DSED.LACLAE L
+      WHERE LCCDCL = ? AND LCAADC = ${currentYear}
+        AND TPDC = 'LAC' AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT') AND LCSRAB NOT IN ('N', 'Z')
+      GROUP BY LCMMDC
+      ORDER BY LCMMDC
     `, [clientCode]);
 
-        // Ventas por mes del año anterior (usando LAC) - parameterized
+        // Ventas por mes del año anterior - usando LACLAE con LCIMVT
         const lastYearData = await queryWithParams(`
-      SELECT MESDOCUMENTO as month, SUM(IMPORTEVENTA) as sales, SUM(IMPORTEVENTA - IMPORTECOSTO) as margin
-      FROM DSEDAC.LAC
-      WHERE CODIGOCLIENTEALBARAN = ? AND ANODOCUMENTO = ${currentYear - 1}
-      GROUP BY MESDOCUMENTO
-      ORDER BY MESDOCUMENTO
+      SELECT LCMMDC as month, SUM(LCIMVT) as sales, SUM(LCIMVT - LCIMCT) as margin
+      FROM DSED.LACLAE L
+      WHERE LCCDCL = ? AND LCAADC = ${currentYear - 1}
+        AND TPDC = 'LAC' AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT') AND LCSRAB NOT IN ('N', 'Z')
+      GROUP BY LCMMDC
+      ORDER BY LCMMDC
     `, [clientCode]);
+
 
         // Crear mapa de comparación
         const comparison = [];
@@ -537,9 +587,10 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
           AND C.CCNRAB = L.LCNRAB
         WHERE L.CODIGOCLIENTEALBARAN = ?
           AND L.ANODOCUMENTO IN (${targetYear}, ${targetYear - 1})
-          AND L.LCTPVT <> 'SC'
-          AND L.LCSRAB NOT IN ('K', 'N', 'O', 'G')
-          AND COALESCE(C.CCSNSD, '') <> 'E'
+           AND L.LCTPVT IN ('CC', 'VC')
+           AND L.LCCLLN IN ('AB', 'VT')
+           AND L.LCSRAB NOT IN ('N', 'Z')
+           AND COALESCE(C.CCSNSD, '') <> 'E'
         GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO
         ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC
       `, [clientCode]);
@@ -553,7 +604,7 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
           0 as margin,
           COUNT(DISTINCT NUMERODOCUMENTO) as invoices,
           COUNT(DISTINCT CODIGOARTICULO) as products
-        FROM DSEDAC.LAC
+        FROM DSEDAC.LAC L
         WHERE CODIGOCLIENTEALBARAN = ?
           AND ANODOCUMENTO IN (${targetYear}, ${targetYear - 1})
         GROUP BY ANODOCUMENTO, MESDOCUMENTO
@@ -590,8 +641,9 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
           AND C.CCNRAB = L.LCNRAB
         WHERE L.CODIGOCLIENTEALBARAN = ?
           AND L.ANODOCUMENTO = ${targetYear}
-          AND L.LCTPVT <> 'SC'
-          AND L.LCSRAB NOT IN ('K', 'N', 'O', 'G')
+          AND L.LCTPVT IN ('CC', 'VC')
+          AND L.LCCLLN IN ('AB', 'VT')
+          AND L.LCSRAB NOT IN ('N', 'Z')
           AND COALESCE(C.CCSNSD, '') <> 'E'
           ${productFilter}
         ORDER BY L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
@@ -635,8 +687,9 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
           AND C.CCNRAB = L.LCNRAB
         WHERE L.CODIGOCLIENTEALBARAN = ?
           AND L.ANODOCUMENTO = ${targetYear}
-          AND L.LCTPVT <> 'SC'
-          AND L.LCSRAB NOT IN ('K', 'N', 'O', 'G')
+          AND L.LCTPVT IN ('CC', 'VC')
+          AND L.LCCLLN IN ('AB', 'VT')
+          AND L.LCSRAB NOT IN ('N', 'Z')
           AND COALESCE(C.CCSNSD, '') <> 'E'
         GROUP BY L.CODIGOARTICULO
         ORDER BY SUM(L.IMPORTEVENTA) DESC
@@ -652,7 +705,7 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
           COUNT(DISTINCT DIADOCUMENTO || MESDOCUMENTO || ANODOCUMENTO) as purchaseDays,
           MIN(MESDOCUMENTO) as firstMonth,
           MAX(MESDOCUMENTO) as lastMonth
-        FROM DSEDAC.LAC
+        FROM DSEDAC.LAC L
         WHERE CODIGOCLIENTEALBARAN = ?
           AND ANODOCUMENTO = ${targetYear}
       `, [clientCode]);
@@ -674,9 +727,9 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 month: m,
                 monthName: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][m - 1],
                 currentYear: currSales,
-                currentYearFormatted: `${currSales.toLocaleString('es-ES', { maximumFractionDigits: 0 })} €`,
+                currentYearFormatted: formatCurrency(currSales),
                 lastYear: lastSales,
-                lastYearFormatted: `${lastSales.toLocaleString('es-ES', { maximumFractionDigits: 0 })} €`,
+                lastYearFormatted: formatCurrency(lastSales),
                 variation: Math.round(variation * 10) / 10,
                 isPositive: variation >= 0,
                 margin: parseFloat(currRow?.MARGIN) || 0,
@@ -684,6 +737,23 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 products: parseInt(currRow?.PRODUCTS) || 0
             });
         }
+
+        // Calculate Totals for Summary Card
+        const totalSalesCurrent = monthlyData.reduce((sum, m) => sum + m.currentYear, 0);
+        const totalSalesLast = monthlyData.reduce((sum, m) => sum + m.lastYear, 0);
+        const totalVariation = totalSalesLast > 0 ? ((totalSalesCurrent - totalSalesLast) / totalSalesLast) * 100 : 0;
+        const avgMonthly = totalSalesCurrent / 12;
+
+        const totals = {
+            currentYear: totalSalesCurrent,
+            currentYearFormatted: formatCurrency(totalSalesCurrent),
+            lastYear: totalSalesLast,
+            lastYearFormatted: formatCurrency(totalSalesLast),
+            variation: Math.round(totalVariation * 10) / 10,
+            isPositive: totalVariation >= 0,
+            monthlyAverage: avgMonthly,
+            monthlyAverageFormatted: formatCurrency(avgMonthly)
+        };
 
         const freq = purchaseFreq[0] || {};
         const purchaseDays = parseInt(freq.PURCHASEDAYS) || 0;
@@ -705,31 +775,39 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 contact: c.PERSONACONTACTO?.trim(),
                 route: c.CODIGORUTA?.trim()
             },
-            stats: {
+            purchaseFrequency: {
                 avgPurchasesPerMonth: Math.round(avgPurchasesPerMonth * 10) / 10,
-                totalPurchasesYear: purchaseDays
+                totalPurchaseDays: purchaseDays,
+                isFrequentBuyer: purchaseDays > 12 // Arbitrary threshold
             },
+            totals,
             monthlyData,
             topProducts: topProducts.map(p => ({
                 code: p.CODE?.trim(),
                 name: p.NAME?.trim(),
-                totalSales: formatCurrency(p.TOTALSALES),
+                totalSalesFormatted: formatCurrency(p.TOTALSALES),
+                totalSales: parseFloat(p.TOTALSALES), // Added raw value
                 totalUnits: parseInt(p.TOTALUNITS) || 0,
                 purchases: parseInt(p.PURCHASES) || 0
             })),
-            purchases: productPurchases.map(p => ({
+            productPurchases: productPurchases.map(p => ({
                 productCode: p.PRODUCTCODE?.trim(),
                 productName: p.PRODUCTNAME?.trim(),
                 date: `${String(p.DAY).padStart(2, '0')}/${String(p.MONTH).padStart(2, '0')}/${p.YEAR}`,
                 quantity: parseInt(p.QUANTITY) || 0,
                 price: formatCurrency(p.PRICE),
-                total: formatCurrency(p.TOTAL),
-                invoice: p.INVOICE
+                totalFormatted: formatCurrency(p.TOTAL), // Match Flutter expected key
+                total: parseFloat(p.TOTAL),
+                invoice: p.INVOICE,
+                lote: p.LOTE
             })),
             yearlyTotals: yearlyTotals.map(y => ({
                 year: y.YEAR,
-                totalSales: formatCurrency(y.TOTALSALES),
-                totalMargin: formatCurrency(y.TOTALMARGIN)
+                totalSalesFormatted: formatCurrency(y.TOTALSALES),
+                totalSales: parseFloat(y.TOTALSALES),
+                totalMargin: parseFloat(y.TOTALMARGIN),
+                monthlyAverageFormatted: formatCurrency(parseFloat(y.TOTALSALES) / 12),
+                activeMonths: 12 // Simplify
             }))
         });
 

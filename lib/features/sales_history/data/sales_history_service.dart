@@ -51,4 +51,35 @@ class SalesHistoryService {
       throw Exception('Error fetching sales history: $e');
     }
   }
+
+  Future<Map<String, dynamic>> getSalesHistorySummary({
+    String? vendedorCodes,
+    String? clientCode,
+    String? productSearch,
+    String? startDate,
+    String? endDate,
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        if (vendedorCodes != null) 'vendedorCodes': vendedorCodes,
+        if (clientCode != null) 'clientCode': clientCode,
+        if (productSearch != null && productSearch.isNotEmpty) 'productSearch': productSearch,
+        if (startDate != null) 'startDate': startDate,
+        if (endDate != null) 'endDate': endDate,
+      };
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.salesHistory}/summary')
+          .replace(queryParameters: queryParams);
+
+      final response = await client.get(uri);
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('Failed to load summary: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching summary: $e');
+    }
+  }
 }

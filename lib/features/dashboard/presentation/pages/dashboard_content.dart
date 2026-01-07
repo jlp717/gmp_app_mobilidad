@@ -1,14 +1,29 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+// ignore: unused_import
+import 'dart:ui'; 
+import 'package:flutter/foundation.dart'; // For compute
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/dashboard_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/widgets/modern_loading.dart';
+import '../../../../core/widgets/multi_select_dialog.dart';
+// SmartSyncHeader already imported in line 10 theoretically, but let's just keep one. 
+// Step 1420 lines 10 & 11 were both SmartSyncHeader.
+import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../widgets/matrix_data_table.dart';
+import '../widgets/hierarchy_selector.dart';
+import '../widgets/hierarchy_section.dart'; // New import
+import '../widgets/advanced_sales_chart.dart'; // Kept for HierarchySection internal use
+import '../widgets/dashboard_chart_factory.dart'; // Add factory import
 
 /// Professional Dashboard - Power BI Style for Sales Manager
-/// Multi-select filters: Years, Months, Vendors
+/// Multi-select filters: Years, Months, Vendors, Clients
+/// Drill-down capabilites
 class DashboardContent extends StatefulWidget {
   const DashboardContent({super.key});
 
@@ -16,50 +31,206 @@ class DashboardContent extends StatefulWidget {
   State<DashboardContent> createState() => _DashboardContentState();
 }
 
-class _DashboardContentState extends State<DashboardContent> {
+class _DashboardContentState extends State<DashboardContent> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   // Multi-select date filters
   Set<int> _selectedYears = {DateTime.now().year};
-  Set<int> _selectedMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+  Set<int> _selectedMonths = {for (var i = 1; i <= DateTime.now().month; i++) i}; // Default YTD
   
-  // Vendor filter (single select for simplicity)
-  String? _selectedVendedor;
+  // Filters
+  String? _selectedVendedor; // Sales Rep Code
+  Set<String> _selectedClientCodes = {};
+
+  Set<String> _selectedProductCodes = {};
+  Set<String> _selectedFamilyCodes = {};
+
+  // Pending changes for manual apply
+  Set<int> _pendingYears = {};
+  Set<int> _pendingMonths = {};
+  bool _hasPendingChanges = false;
+  
+  // Metadata for filters
   List<Map<String, dynamic>> _vendedoresDisponibles = [];
+
+  List<Map<String, dynamic>> _clientsDisponibles = [];
+  List<Map<String, dynamic>> _familiesDisponibles = [];
   
-  String _groupBy = 'vendor';
+  // HIERARCHY STATE - Supports any hierarchy combination with 2-step backend approach
+  List<String> _hierarchy = ['vendor', 'client']; // User can customize via HierarchySelector
   
   // Data state
   Map<String, dynamic>? _kpiData;
-  List<Map<String, dynamic>> _matrixRows = [];
+  List<MatrixNode> _matrixData = []; // Hierarchical Data
   List<String> _matrixPeriods = [];
   bool _isLoading = false;
   String? _error;
+  DateTime? _lastFetchTime; // Track last sync time
+
+  // State for Chart Drill Down
+  // State for Cascading Selection
+  List<MatrixNode> _selectionPath = []; // Path of selected nodes (e.g. [VendorNode, ClientNode])
 
   static const List<String> _monthNamesShort = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
   @override
   void initState() {
     super.initState();
+    _pendingYears = Set.from(_selectedYears);
+    _pendingMonths = Set.from(_selectedMonths);
     _loadVendedores();
+    // Optimization: Don't load massive client list on init for Jefe de Ventas. 
+    // Wait for filter interaction or specific vendor selection.
+    // _loadClients(); 
     _fetchAllData();
+  }
+
+  /// Load available families
+  Future<void> _loadFamilies() async {
+    try {
+      final response = await ApiClient.getList('/families', queryParameters: {'limit': '500'}, cacheKey: 'families_list', cacheTTL: const Duration(hours: 24));
+      if (mounted) {
+        setState(() {
+          _familiesDisponibles = response.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading families: $e');
+    }
   }
 
   /// Load available vendors for filter
   Future<void> _loadVendedores() async {
     try {
-      final response = await ApiClient.get('/rutero/vendedores');
+      final response = await ApiClient.get('/rutero/vendedores', cacheKey: 'vendedores_list', cacheTTL: const Duration(hours: 1));
+      debugPrint('📋 Vendedores API response: ${response.runtimeType} - keys: ${response is Map ? response.keys : 'not a map'}');
       if (mounted) {
         setState(() {
-          _vendedoresDisponibles = List<Map<String, dynamic>>.from(response['vendedores'] ?? []);
+          // Safe conversion - convert each item explicitly to Map<String, dynamic>
+          final Map<String, dynamic> data = Map<String, dynamic>.from(response as Map);
+          final rawList = data['vendedores'] ?? [];
+          debugPrint('📋 Raw vendedores list length: ${rawList is List ? rawList.length : 'not a list'}');
+          _vendedoresDisponibles = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+          debugPrint('📋 Vendedores disponibles loaded: ${_vendedoresDisponibles.length}');
         });
       }
     } catch (e) {
-      debugPrint('Error loading vendedores: $e');
+      debugPrint('❌ Error loading vendedores: $e');
+    }
+  }
+
+  /// Load clients - Optimize for Jefe de Ventas (High volume)
+  Future<void> _loadClients({bool initial = false}) async {
+    // If specific vendor selected, load all their clients (usually small subset).
+    // If Jefe de Ventas (no vendor selected), load only Top 50 initially to prevent lag.
+    final limit = _selectedVendedor != null ? '1000' : '50';
+    
+    try {
+      final params = <String, dynamic>{'limit': limit};
+      if (_selectedVendedor != null) params['vendedorCodes'] = _selectedVendedor;
+      
+      final response = await ApiClient.get('/clients/list', 
+        queryParameters: params, 
+        cacheKey: 'clients_dropdown_${_selectedVendedor ?? 'top50'}', 
+        cacheTTL: const Duration(minutes: 30)
+      );
+      
+      if (mounted) {
+        setState(() {
+          final Map<String, dynamic> data = Map<String, dynamic>.from(response as Map);
+          final rawList = data['clients'] ?? [];
+          _clientsDisponibles = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading clients: $e');
+    }
+  }
+
+  /// Open MultiSelect for Clients with Remote Search Support
+  void _openClientFilter() async {
+    // Load initial batch if empty (e.g. first open)
+    if (_clientsDisponibles.isEmpty) await _loadClients(initial: true);
+
+    if (!mounted) return;
+
+    final result = await showDialog<Set<Map<String, dynamic>>>(
+      context: context,
+      builder: (context) => MultiSelectDialog<Map<String, dynamic>>(
+        items: _clientsDisponibles,
+        // Reconstruct selection from codes
+        // We might need to keep the full objects of selected clients? 
+        // For now, we only have codes. We find matches in _clientsDisponibles or create dummy objects if missing (not ideal but visual only)
+        selectedItems: _clientsDisponibles.where((c) => _selectedClientCodes.contains(c['code'])).toSet(),
+        title: 'Filtrar Clientes',
+        labelBuilder: (item) => '${item['name']} (${item['code']})',
+        // Server-side search implementation
+        onRemoteSearch: (query) async {
+           if (query.length < 3) return _clientsDisponibles; // Return default if query too short
+           final params = <String, dynamic>{'search': query, 'limit': '50'};
+           if (_selectedVendedor != null) params['vendedorCodes'] = _selectedVendedor;
+           
+           final res = await ApiClient.get('/clients/list', queryParameters: params); // No cache for search or short TTL
+           final rawList = res['clients'] ?? [];
+           return (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        },
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedClientCodes = result.map((c) => c['code'].toString()).toSet();
+      });
+      _fetchAllData();
+    }
+
+  }
+
+  /// Family Filter Logic
+  void _openFamilyFilter() async {
+    if (_familiesDisponibles.isEmpty) await _loadFamilies();
+    if (!mounted) return;
+
+    final result = await showDialog<Set<Map<String, dynamic>>>(
+      context: context,
+      builder: (context) => MultiSelectDialog<Map<String, dynamic>>(
+        items: _familiesDisponibles,
+        selectedItems: _familiesDisponibles.where((f) => _selectedFamilyCodes.contains(f['code'])).toSet(),
+        title: 'Filtrar Familias',
+        labelBuilder: (item) => '${item['code']} - ${item['name']}',
+        onRemoteSearch: (query) async {
+           // Local search is fine for families (usually < 100) but support remote if needed
+           if (_familiesDisponibles.length > 500) {
+              final res = await ApiClient.get('/families', queryParameters: {'search': query});
+              return (res as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+           }
+           return _familiesDisponibles.where((f) => 
+             f['name'].toString().toLowerCase().contains(query.toLowerCase()) || 
+             f['code'].toString().contains(query)
+           ).toList();
+        },
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedFamilyCodes = result.map((f) => f['code'].toString()).toSet();
+      });
+      _fetchAllData();
     }
   }
 
   Future<void> _fetchAllData() async {
     if (!mounted) return;
-    setState(() { _isLoading = true; _error = null; });
+    setState(() { 
+      _isLoading = true; 
+      _error = null;
+      
+      // Dynamic Hierarchy Optimization
+      // Removed to respect User's manual hierarchy choice as requested.
+      // Users can now manually add/remove 'product' or 'family' via the selector.
+
+    });
     
     final provider = Provider.of<DashboardProvider>(context, listen: false);
     
@@ -72,23 +243,88 @@ class _DashboardContentState extends State<DashboardContent> {
       } else if (provider.vendedorCodes.isNotEmpty) {
         params['vendedorCodes'] = provider.vendedorCodes.join(',');
       }
+
+      // Client Codes
+      if (_selectedClientCodes.isNotEmpty) {
+        params['clientCodes'] = _selectedClientCodes.join(',');
+      }
+
+      // Product Codes
+      if (_selectedProductCodes.isNotEmpty) {
+        params['productCodes'] = _selectedProductCodes.join(',');
+      }
+
+      // Family Codes
+      if (_selectedFamilyCodes.isNotEmpty) {
+        params['familyCodes'] = _selectedFamilyCodes.join(',');
+      }
       
-      params['groupBy'] = _groupBy;
+      // Add year filter (Multi-select)
+      params['years'] = _selectedYears.join(',');
+      params['year'] = _selectedYears.reduce((a, b) => a > b ? a : b).toString(); // Primary year for some legacy logic checks
+      
+      params['groupBy'] = _hierarchy.join(','); // Send full hierarchy
       
       // Fetch data
       final results = await Future.wait([
-        ApiClient.get('/dashboard/matrix-data', queryParameters: params),
-        ApiClient.get('/dashboard/metrics', queryParameters: params),
+        ApiClient.get('/dashboard/matrix-data', 
+          queryParameters: params,
+          cacheKey: 'dash_matrix_${params.toString()}_v2', // Changed key (v2)
+          cacheTTL: const Duration(minutes: 15),
+        ),
+        ApiClient.get('/dashboard/metrics', 
+          queryParameters: params,
+          cacheKey: 'dashboard_metrics_${params.toString()}',
+          cacheTTL: const Duration(minutes: 5),
+        ),
       ]);
       
       if (!mounted) return;
       
+      if (!mounted) return;
+
+      // Safe type conversion for API response
+      final matrixData = Map<String, dynamic>.from(results[0] as Map);
+      final rawList = matrixData['rows'] ?? [];
+      var rawRows = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+      
+      // Filter by selected year and months
+      final filteredRows = rawRows.where((row) {
+        final dynamic yearVal = row['YEAR'] ?? row['year'];
+        final dynamic monthVal = row['MONTH'] ?? row['month'];
+        
+        int? year;
+        int? month;
+        
+        if (yearVal is int) year = yearVal;
+        else if (yearVal is num) year = yearVal.toInt();
+        else if (yearVal is String) year = int.tryParse(yearVal);
+        
+        if (monthVal is int) month = monthVal;
+        else if (monthVal is num) month = monthVal.toInt();
+        else if (monthVal is String) month = int.tryParse(monthVal);
+        
+        if (year == null || !_selectedYears.contains(year)) return false;
+        
+        if (_selectedMonths.isNotEmpty && month != null) {
+          if (!_selectedMonths.contains(month)) return false;
+        }
+        
+        return true;
+      }).toList();
+      
+      // Process Flat Rows into Tree (Outside setState)
+      final treeData = await compute(buildTreeIsolate, TreeBuildParams(rows: filteredRows, hierarchy: _hierarchy));
+      
+      if (!mounted) return;
+      
       setState(() {
-        final matrixData = results[0];
-        _matrixRows = List<Map<String, dynamic>>.from(matrixData['rows'] ?? []);
+        _matrixData = treeData;
+        _selectionPath = []; // Reset selection on new fetch
         _matrixPeriods = List<String>.from(matrixData['periods'] ?? []);
-        _kpiData = results[1];
+        _kpiData = Map<String, dynamic>.from(results[1] as Map);
         _isLoading = false;
+        _lastFetchTime = DateTime.now();
       });
     } catch (e) {
       debugPrint('Error fetching dashboard: $e');
@@ -104,7 +340,6 @@ class _DashboardContentState extends State<DashboardContent> {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value) ?? 0.0;
     if (value is Map) {
-      // Handle nested value structures like {value: 123.45}
       final v = value['value'];
       if (v != null) return _safeDouble(v);
     }
@@ -122,8 +357,49 @@ class _DashboardContentState extends State<DashboardContent> {
     return 0;
   }
 
+  void _onNodeTap(MatrixNode node, int level) {
+    setState(() {
+       // Check if this node is already in the selection path at this level
+       final bool isAlreadySelected = level < _selectionPath.length && 
+                                       _selectionPath[level].id == node.id;
+       
+       if (isAlreadySelected) {
+         // COLLAPSE: User tapped the same node - remove it and all deeper selections
+         _selectionPath = _selectionPath.sublist(0, level);
+       } else {
+         // EXPAND NEW: User tapped a different node at this level
+         // First, trim the path to remove any existing selection at this level and deeper
+         _selectionPath = _selectionPath.sublist(0, level);
+         
+         // Then add this node if it has children to expand
+         if (node.children.isNotEmpty) {
+            _selectionPath.add(node);
+         }
+       }
+    }); 
+  }
+
+
+
+  
+  void _resetFilters() {
+    setState(() {
+      _selectedVendedor = null;
+      _selectedClientCodes.clear();
+      _hierarchy = ['vendor', 'client']; // Reset hierarchy
+      _selectedYears = {DateTime.now().year};
+      _selectedMonths = {for (var i = 1; i <= DateTime.now().month; i++) i};
+      _selectionPath = [];
+    });
+    _loadClients(initial: true);
+    _fetchAllData();
+  }
+
+
+
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final provider = Provider.of<DashboardProvider>(context);
     final isJefeVentas = provider.isJefeVentas;
 
@@ -132,38 +408,77 @@ class _DashboardContentState extends State<DashboardContent> {
       body: RefreshIndicator(
         onRefresh: _fetchAllData,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.zero, // Zero padding because Header is top-full-width
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(),
-              const SizedBox(height: 16),
-              if (isJefeVentas) ...[
-                _buildVendedorSelector(),
-                const SizedBox(height: 12),
-              ],
-              _buildDateFilters(),
-              const SizedBox(height: 16),
-              if (_isLoading)
-                const Center(child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: CircularProgressIndicator(),
-                ))
-              else if (_error != null)
-                _buildErrorWidget()
-              else ...[
-                _buildKPISection(),
-                const SizedBox(height: 24),
-                _buildGroupByToggle(),
-                const SizedBox(height: 16),
-                if (_matrixRows.isNotEmpty) _buildSalesChart(),
-                const SizedBox(height: 16),
-                MatrixDataTable(
-                  rows: _matrixRows,
-                  periods: _matrixPeriods,
-                  groupBy: _groupBy,
+              // Smart Sync Header
+              SmartSyncHeader(
+                lastSync: _lastFetchTime,
+                isLoading: _isLoading,
+                onSync: _fetchAllData,
+                error: _error,
+              ),
+              
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 16),
+                    if (isJefeVentas) ...[
+                      _buildFiltersSection(),
+                      const SizedBox(height: 12),
+                    ],
+                    _buildDateFilters(),
+                    const SizedBox(height: 16),
+                      if (_isLoading && _matrixData.isEmpty) 
+                        const Padding(
+                          padding: EdgeInsets.all(60.0),
+                          child: ModernLoading(message: 'Analizando tendencias...'),
+                        )
+                      else if (_error != null && _matrixData.isEmpty)
+                        _buildErrorWidget()
+                      else ...[
+                        if (_isLoading) const LinearProgressIndicator(color: AppTheme.neonBlue),
+                        _buildKPISection(),
+                        const SizedBox(height: 24),
+                        // Hierarchy Selector Replaces Fixed Breadcrumbs
+                        // Loading overlay indicator when hierarchy changes
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            HierarchySelector(
+                              currentHierarchy: _hierarchy,
+                              onChanged: (newHierarchy) {
+                                setState(() {
+                                  _hierarchy = newHierarchy;
+                                  _selectionPath = []; // Clear selection on hierarchy change
+                                });
+                                _fetchAllData();
+                              },
+                            ),
+                            if (_isLoading)
+                              Positioned.fill(
+                                child: Container(
+                                  color: Colors.black.withOpacity(0.3),
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 20, height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        if (_matrixData.isNotEmpty) _buildCascadingSections(),
+                      ],
+                  ],
                 ),
-              ],
+              ),
             ],
           ),
         ),
@@ -179,189 +494,331 @@ class _DashboardContentState extends State<DashboardContent> {
         const Text('Panel de Control', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
         const Spacer(),
         IconButton(
-          icon: const Icon(Icons.refresh, color: Colors.white70),
-          onPressed: _fetchAllData,
+          icon: const Icon(Icons.cleaning_services_outlined, color: AppTheme.neonBlue),
+          onPressed: _resetFilters,
+          tooltip: 'Resetear Filtros',
+        ),
+        // Removed separate Refresh button as it's now in SmartSyncHeader
+      ],
+    );
+  }
+
+  Widget _buildFiltersSection() {
+    return Row(
+      children: [
+        // Vendor Dropdown
+        Expanded(
+          flex: 2,
+          child: DropdownButtonFormField<String>(
+            value: _vendedoresDisponibles.any((v) => v['code'].toString() == _selectedVendedor) ? _selectedVendedor : '',
+            isExpanded: true,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppTheme.surfaceColor,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: _selectedVendedor != null ? AppTheme.neonBlue : Colors.transparent)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
+              prefixIcon: const Icon(Icons.person, color: AppTheme.neonBlue, size: 20),
+            ),
+            dropdownColor: AppTheme.darkCard,
+            icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            items: [
+               const DropdownMenuItem<String>(value: '', child: Text('Todos')),
+               ..._vendedoresDisponibles.map((v) {
+                 return DropdownMenuItem<String>(
+                   value: v['code'].toString(),
+                   child: Text(v['name'] ?? v['code'].toString(), overflow: TextOverflow.ellipsis),
+                 );
+               }),
+            ],
+            onChanged: (val) {
+                 setState(() {
+                    _selectedVendedor = val?.isEmpty == true ? null : val;
+                 });
+              _fetchAllData();
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Client Filter Button
+        Expanded(
+          flex: 2,
+          child: GestureDetector(
+            onTap: () async {
+               if (_clientsDisponibles.isEmpty) await _loadClients();
+               if (!mounted) return;
+               
+               // Show dialog logic
+               final items = _clientsDisponibles;
+               final currentSelection = items.where((i) => _selectedClientCodes.contains(i['code'])).toSet();
+               
+               final result = await showDialog<Set<Map<String, dynamic>>>(
+                 context: context,
+                 builder: (context) => MultiSelectDialog<Map<String, dynamic>>(
+                   items: items,
+                   selectedItems: currentSelection,
+                   title: 'Filtrar Clientes',
+                   labelBuilder: (item) => item['name'] ?? item['code'] ?? '',
+                 ),
+               );
+               
+               if (result != null) {
+                 setState(() {
+                   _selectedClientCodes = result.map((m) => m['code'].toString()).toSet();
+                   if (_selectedClientCodes.isNotEmpty) _hierarchy = ['product'];
+                 });
+                 _fetchAllData();
+               }
+            },
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _selectedClientCodes.isNotEmpty ? AppTheme.neonPurple : Colors.transparent),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.people_alt, color: _selectedClientCodes.isNotEmpty ? AppTheme.neonPurple : AppTheme.textSecondary, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _selectedClientCodes.isEmpty 
+                        ? 'Clientes' 
+                        : '${_selectedClientCodes.length} selec.',
+                      style: TextStyle(color: _selectedClientCodes.isNotEmpty ? Colors.white : Colors.white54, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Family Filter Button
+        Expanded(
+          flex: 2,
+          child: GestureDetector(
+            onTap: _openFamilyFilter,
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _selectedFamilyCodes.isNotEmpty ? AppTheme.neonPurple : Colors.transparent),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.category, color: _selectedFamilyCodes.isNotEmpty ? AppTheme.neonPurple : AppTheme.textSecondary, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _selectedFamilyCodes.isEmpty 
+                        ? 'Familias' 
+                        : '${_selectedFamilyCodes.length} selec.',
+                      style: TextStyle(color: _selectedFamilyCodes.isNotEmpty ? Colors.white : Colors.white54, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Product Filter Button
+        Expanded(
+          flex: 2,
+          child: GestureDetector(
+            onTap: () async {
+               // Show product search dialog
+               final result = await showDialog<Set<Map<String, dynamic>>>(
+                 context: context,
+                 builder: (context) => _ProductSearchDialog(
+                   initialSelection: _selectedProductCodes,
+                 ),
+               );
+               
+               if (result != null) {
+                 setState(() {
+                   _selectedProductCodes = result.map((m) => m['code'].toString()).toSet();
+                 });
+                 _fetchAllData();
+               }
+            },
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _selectedProductCodes.isNotEmpty ? AppTheme.neonPurple : Colors.transparent),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.inventory_2, color: _selectedProductCodes.isNotEmpty ? AppTheme.neonPurple : AppTheme.textSecondary, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _selectedProductCodes.isEmpty 
+                        ? 'Productos' 
+                        : '${_selectedProductCodes.length} selec.',
+                      style: TextStyle(color: _selectedProductCodes.isNotEmpty ? Colors.white : Colors.white54, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildErrorWidget() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.error.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
-          const SizedBox(height: 12),
-          Text('Error: $_error', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          const SizedBox(height: 12),
-          ElevatedButton(onPressed: _fetchAllData, child: const Text('Reintentar')),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVendedorSelector() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.person_search, color: AppTheme.neonBlue, size: 20),
-          const SizedBox(width: 8),
-          const Text('Comercial:', style: TextStyle(fontSize: 12, color: Colors.white70)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: AppTheme.darkBase,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedVendedor ?? '',
-                  isExpanded: true,
-                  isDense: true,
-                  dropdownColor: AppTheme.darkCard,
-                  icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: 20),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('Todos los comerciales', style: TextStyle(color: Colors.white)),
-                    ),
-                    ..._vendedoresDisponibles.map((v) {
-                      final code = v['code']?.toString() ?? '';
-                      final name = v['name']?.toString() ?? '';
-                      final clients = (v['clients'] as num?)?.toInt() ?? 0;
-                      final displayName = name.isNotEmpty ? name : 'Vendedor $code';
-                      return DropdownMenuItem<String>(
-                        value: code,
-                        child: Text('$displayName ($clients)', style: const TextStyle(color: Colors.white)),
-                      );
-                    }),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _selectedVendedor = value?.isEmpty == true ? null : value);
-                    _fetchAllData();
-                  },
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDateFilters() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return ExpansionTile(
+      title: Row(
         children: [
-          // Years
-          Row(
-            children: [
-              const Text('Años:', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold)),
-              const Spacer(),
-              TextButton(
-                onPressed: () {
-                  setState(() => _selectedYears = {2023, 2024, 2025});
-                  _fetchAllData();
-                },
-                child: const Text('Todos', style: TextStyle(fontSize: 10)),
-              ),
-            ],
-          ),
-          Wrap(
-            spacing: 8,
-            children: [2023, 2024, 2025].map((year) => FilterChip(
-              label: Text('$year', style: const TextStyle(fontSize: 11)),
-              selected: _selectedYears.contains(year),
-              onSelected: (selected) {
-                setState(() {
-                  if (selected) {
-                    _selectedYears.add(year);
-                  } else if (_selectedYears.length > 1) {
-                    _selectedYears.remove(year);
-                  }
-                });
-                _fetchAllData();
-              },
-              selectedColor: AppTheme.neonPurple.withOpacity(0.3),
-              checkmarkColor: AppTheme.neonPurple,
-              visualDensity: VisualDensity.compact,
-            )).toList(),
-          ),
-          const SizedBox(height: 12),
-          // Months
-          Row(
-            children: [
-              const Text('Meses:', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold)),
-              const Spacer(),
-              TextButton(
-                onPressed: () {
-                  setState(() => _selectedMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12});
-                  _fetchAllData();
-                },
-                child: const Text('Todos', style: TextStyle(fontSize: 10)),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() => _selectedMonths = {for (var i = 1; i <= DateTime.now().month; i++) i});
-                  _fetchAllData();
-                },
-                child: const Text('YTD', style: TextStyle(fontSize: 10)),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() => _selectedMonths.clear());
-                  _fetchAllData();
-                },
-                child: const Text('Ninguno', style: TextStyle(fontSize: 10)),
-              ),
-            ],
-          ),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: List.generate(12, (i) => FilterChip(
-              label: Text(_monthNamesShort[i], style: const TextStyle(fontSize: 10)),
-              selected: _selectedMonths.contains(i + 1),
-              onSelected: (selected) {
-                setState(() {
-                  if (selected) {
-                    _selectedMonths.add(i + 1);
-                  } else {
-                    _selectedMonths.remove(i + 1);
-                  }
-                });
-                _fetchAllData();
-              },
-              selectedColor: AppTheme.neonBlue.withOpacity(0.3),
-              checkmarkColor: AppTheme.neonBlue,
-              visualDensity: VisualDensity.compact,
-            )),
-          ),
+          const Text('Filtros de Fecha', style: TextStyle(color: AppTheme.neonBlue, fontSize: 14)),
+          if (_hasPendingChanges) ...[
+             const SizedBox(width: 12),
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+               decoration: BoxDecoration(color: Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+               child: const Text('Cambios pendientes', style: TextStyle(color: Colors.amber, fontSize: 10)),
+             )
+          ]
         ],
       ),
+      initiallyExpanded: false,
+      collapsedBackgroundColor: AppTheme.surfaceColor.withOpacity(0.5),
+      backgroundColor: AppTheme.surfaceColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      childrenPadding: const EdgeInsets.all(12),
+      children: [
+        // Years
+        Row(
+           crossAxisAlignment: CrossAxisAlignment.start,
+           children: [
+             const Padding(
+               padding: EdgeInsets.only(top: 8),
+               child: Text('Años:', style: TextStyle(color: Colors.white, fontSize: 12)),
+             ),
+             const SizedBox(width: 12),
+             Expanded(
+               child: Wrap(
+                 spacing: 8,
+                 children: ApiConfig.availableYears.map((year) => FilterChip(
+                   label: Text('$year', style: const TextStyle(fontSize: 11)),
+                   selected: _pendingYears.contains(year),
+                   onSelected: (selected) {
+                     setState(() {
+                       if (selected) _pendingYears.add(year);
+                       else if (_pendingYears.length > 1) _pendingYears.remove(year); // Prevent empty
+                       _hasPendingChanges = true;
+                     });
+                   },
+                   selectedColor: AppTheme.neonPurple.withOpacity(0.3),
+                   checkmarkColor: AppTheme.neonPurple,
+                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                 )).toList(),
+               ),
+             ),
+           ],
+        ),
+        const SizedBox(height: 12),
+        // Months
+        Row(
+          children: [
+             const Text('Meses:', style: TextStyle(color: Colors.white, fontSize: 12)),
+             const Spacer(),
+             TextButton(
+               child: const Text('YTD', style: TextStyle(fontSize: 11)),
+               onPressed: () {
+                 setState(() {
+                   _pendingMonths = {for (var i = 1; i <= DateTime.now().month; i++) i};
+                   _hasPendingChanges = true;
+                 });
+               },
+             ),
+             TextButton(
+               child: const Text('Todos', style: TextStyle(fontSize: 11)),
+               onPressed: () {
+                 setState(() {
+                   _pendingMonths = {for (var i = 1; i <= 12; i++) i};
+                   _hasPendingChanges = true;
+                 });
+               },
+             ),
+             TextButton(
+               child: const Text('Limpiar', style: TextStyle(fontSize: 11, color: AppTheme.neonBlue)),
+               onPressed: () {
+                 setState(() {
+                   _pendingMonths.clear();
+                   _hasPendingChanges = true;
+                 });
+               },
+             ),
+          ],
+        ),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: List.generate(12, (i) => FilterChip(
+            label: Text(_monthNamesShort[i], style: const TextStyle(fontSize: 10)),
+            selected: _pendingMonths.contains(i + 1),
+            onSelected: (selected) {
+              setState(() {
+                if (selected) _pendingMonths.add(i + 1);
+                else _pendingMonths.remove(i + 1);
+                _hasPendingChanges = true;
+              });
+            },
+            selectedColor: AppTheme.neonBlue.withOpacity(0.3),
+            checkmarkColor: AppTheme.neonBlue,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          )),
+        ),
+        const SizedBox(height: 16),
+        // Apply Button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _hasPendingChanges ? () {
+              setState(() {
+                _selectedYears = Set.from(_pendingYears);
+                _selectedMonths = Set.from(_pendingMonths);
+                _hasPendingChanges = false;
+              });
+              _fetchAllData();
+            } : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonBlue,
+              disabledBackgroundColor: Colors.white10,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Aplicar Cambios', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ],
     );
   }
+
+
+  // Removed _buildHierarchyBreadcrumbs as we use HierarchySelector now
 
   Widget _buildKPISection() {
     if (_kpiData == null) return const SizedBox();
@@ -374,13 +831,20 @@ class _DashboardContentState extends State<DashboardContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Indicadores', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Indicadores Clave', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            if (_kpiData != null)
+               Text('${['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][_kpiData!['period']['month']-1]} ${_kpiData!['period']['year']}', style: const TextStyle(color: Colors.white30, fontSize: 11)),
+          ],
+        ),
         const SizedBox(height: 12),
         Row(
           children: [
             Expanded(child: _buildKPICard('Ventas Período', CurrencyFormatter.formatWhole(totalSales), Icons.euro, AppTheme.neonBlue)),
             const SizedBox(width: 12),
-            Expanded(child: _buildKPICard('Clientes', uniqueClients.toString(), Icons.people, AppTheme.neonPurple)),
+            Expanded(child: _buildKPICard('Cartera Activa', uniqueClients.toString(), Icons.people, AppTheme.neonPurple)),
           ],
         ),
         const SizedBox(height: 12),
@@ -399,132 +863,388 @@ class _DashboardContentState extends State<DashboardContent> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(title, style: const TextStyle(color: Colors.white70, fontSize: 11)),
-          const SizedBox(height: 4),
-          Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+        boxShadow: [
+          BoxShadow(color: color.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
-    );
-  }
-
-  Widget _buildGroupByToggle() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Ver matriz por:', style: TextStyle(color: Colors.white70, fontSize: 12)),
-          const SizedBox(height: 8),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'vendor', label: Text('Comercial'), icon: Icon(Icons.badge, size: 16)),
-              ButtonSegment(value: 'client', label: Text('Cliente'), icon: Icon(Icons.person, size: 16)),
-              ButtonSegment(value: 'product', label: Text('Producto'), icon: Icon(Icons.inventory, size: 16)),
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
             ],
-            selected: {_groupBy},
-            onSelectionChanged: (Set<String> selection) {
-              setState(() => _groupBy = selection.first);
-              _fetchAllData();
-            },
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) return AppTheme.neonBlue.withOpacity(0.3);
-                return AppTheme.darkBase;
-              }),
-              foregroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) return AppTheme.neonBlue;
-                return Colors.white70;
-              }),
-            ),
+          ),
+          const SizedBox(height: 12),
+          Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Column(
+        children: [
+          const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
+          const SizedBox(height: 12),
+          Text('Error: $_error', style: const TextStyle(color: Colors.white70)),
+          TextButton(onPressed: _fetchAllData, child: const Text('Reintentar')),
+        ],
+      ),
+    );
+  }
+
+  // Calculate total margin for a list of nodes
+  double _calculateTotalMargin(List<MatrixNode> nodes) {
+    return nodes.fold(0.0, (sum, node) => sum + node.margin);
+  }
+  
+  double _calculateTotalSales(List<MatrixNode> nodes) {
+    return nodes.fold(0.0, (sum, node) => sum + node.sales);
+  }
+
+  Widget _buildMarginTotalBanner(String level, double margin, double sales, int depth) {
+    final marginPct = sales > 0 ? (margin / sales) * 100 : 0.0;
+    return Container(
+      margin: EdgeInsets.only(left: depth * 16.0, bottom: 8, top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.analytics_outlined, color: Colors.orange, size: 16),
+          const SizedBox(width: 8),
+          Text(
+            'MARGEN $level: ',
+            style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            '${CurrencyFormatter.format(margin)} (${marginPct.toStringAsFixed(1)}%)',
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSalesChart() {
-    if (_matrixRows.isEmpty) return const SizedBox();
-
-    final chartData = _matrixRows.take(8).toList();
-    final maxVal = chartData.map((d) => _safeDouble(d['total'])).fold<double>(0, (a, b) => a > b ? a : b);
+  // Helper to build HierarchySection with proper level capture
+  Widget _buildHierarchySectionWithLevel({
+    required String title,
+    required String levelName,
+    required List<MatrixNode> data,
+    required MatrixNode? selectedNode,
+    required Color color,
+    required ChartType chartType,
+    required int level,
+  }) {
+    // IMPORTANT: Capture level in local variable for closure
+    final capturedLevel = level;
     
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Top ${_groupBy == 'vendor' ? 'Comerciales' : _groupBy == 'client' ? 'Clientes' : 'Productos'}',
-            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 180,
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: maxVal * 1.2,
-                barTouchData: BarTouchData(enabled: true),
-                titlesData: FlTitlesData(
-                  show: true,
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        if (value.toInt() >= chartData.length) return const SizedBox();
-                        final label = (chartData[value.toInt()]['code'] ?? '').toString();
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(label.length > 6 ? label.substring(0, 6) : label, style: const TextStyle(color: Colors.white54, fontSize: 9)),
-                        );
-                      },
-                    ),
-                  ),
-                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                ),
-                borderData: FlBorderData(show: false),
-                gridData: const FlGridData(show: false),
-                barGroups: chartData.asMap().entries.map((entry) {
-                  return BarChartGroupData(
-                    x: entry.key,
-                    barRods: [
-                      BarChartRodData(
-                        toY: _safeDouble(entry.value['total']),
-                        color: AppTheme.neonBlue,
-                        width: 18,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                      ),
-                    ],
-                  );
-                }).toList(),
+    return HierarchySection(
+      title: title,
+      levelName: levelName,
+      data: data,
+      hierarchy: _hierarchy,
+      periods: _matrixPeriods,
+      selectedNode: selectedNode,
+      color: color,
+      chartType: chartType,
+      onNodeTap: (node) => _onNodeTap(node, capturedLevel),
+    );
+  }
+
+
+  Widget _buildCascadingSections() {
+    if (_matrixData.isEmpty) return const SizedBox();
+    
+    // Single section with tree-style table (expansion happens within the table)
+    return HierarchySection(
+      title: _getSectionTitle(0, null),
+      levelName: _hierarchy.isNotEmpty ? _hierarchy[0] : 'Item', 
+      data: _matrixData,
+      hierarchy: _hierarchy,
+      periods: _matrixPeriods,
+      selectedNode: null, // Tree handles its own selection internally
+      color: AppTheme.neonBlue,
+      chartType: ChartType.bar,
+      onNodeTap: (node) {
+        // Optional: track selection if needed for other purposes
+      },
+    );
+  }
+
+
+
+
+  String _getSectionTitle(int level, MatrixNode? parent) {
+     if (level >= _hierarchy.length) return 'Detalle';
+     final type = _hierarchy[level].toLowerCase();
+     final map = {'vendor': 'Comerciales', 'client': 'Clientes', 'product': 'Productos', 'family': 'Familias'};
+     final name = map[type]?.toUpperCase() ?? type.toUpperCase();
+     
+     if (parent != null) {
+       return '$name DE ${parent.name}';
+     }
+     return 'RANKING GENERAL DE $name';
+  }
+
+  String get _activeHierarchyLabel {
+    if (_hierarchy.isEmpty) return 'Elementos';
+    final map = {'vendor': 'Comerciales', 'client': 'Clientes', 'product': 'Productos', 'family': 'Familias'};
+    return map[_hierarchy.first] ?? 'Elementos';
+  }
+}
+
+// Mutable Helper Class
+class _ProductSearchDialog extends StatefulWidget {
+  final Set<String> initialSelection;
+  const _ProductSearchDialog({Key? key, required this.initialSelection}) : super(key: key);
+
+  @override
+  State<_ProductSearchDialog> createState() => _ProductSearchDialogState();
+}
+
+class _ProductSearchDialogState extends State<_ProductSearchDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _searchResults = [];
+  Set<String> _selectedCodes = {};
+  bool _isLoading = false;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCodes = Set.from(widget.initialSelection);
+    _searchProducts(); // Load initial top products
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _searchProducts(query);
+    });
+  }
+
+  Future<void> _searchProducts([String query = '']) async {
+    setState(() => _isLoading = true);
+    try {
+      final results = await ApiClient.getList('/dashboard/products-search', queryParameters: {'query': query, 'limit': '50'});
+      if (mounted) {
+        setState(() {
+          _searchResults = (results as List).map((i) => Map<String, dynamic>.from(i as Map)).toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error searching products: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _toggleSelection(String code, String name) {
+    setState(() {
+      if (_selectedCodes.contains(code)) {
+        _selectedCodes.remove(code);
+      } else {
+        _selectedCodes.add(code);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppTheme.surfaceColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        constraints: const BoxConstraints(maxHeight: 600, maxWidth: 500),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Filtrar Productos', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('${_selectedCodes.length} seleccionados', style: const TextStyle(color: AppTheme.neonBlue, fontSize: 14)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Buscar por código o nombre...',
+                hintStyle: const TextStyle(color: Colors.white30),
+                prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                filled: true,
+                fillColor: AppTheme.darkCard,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
+                  : _searchResults.isEmpty
+                      ? const Center(child: Text('No hay resultados', style: TextStyle(color: Colors.white30)))
+                      : ListView.builder(
+                          itemCount: _searchResults.length,
+                          itemBuilder: (context, index) {
+                            final item = _searchResults[index];
+                            final code = item['code']?.toString() ?? '';
+                            final name = item['name']?.toString() ?? '';
+                            final isSelected = _selectedCodes.contains(code);
+
+                            return ListTile(
+                              onTap: () => _toggleSelection(code, name),
+                              leading: Icon(
+                                isSelected ? Icons.check_circle : Icons.circle_outlined,
+                                color: isSelected ? AppTheme.neonBlue : Colors.white24,
+                              ),
+                              title: Text(name, style: TextStyle(color: isSelected ? Colors.white : Colors.white70)),
+                              subtitle: Text(code, style: const TextStyle(color: Colors.white30, fontSize: 12)),
+                            );
+                          },
+                        ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    final selectedItems = _searchResults.where((i) => _selectedCodes.contains(i['code'])).toSet();
+                    // Just pass back dummy objects with code, as caller only needs codes
+                     final resultSet = _selectedCodes.map((c) => {'code': c}).toSet();
+                    Navigator.pop(context, resultSet);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.neonBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Aplicar'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _MutableNode {
+  final String id;
+  final String name;
+  final String type;
+  double sales = 0;
+  double margin = 0;
+  List<_MutableNode> children = [];
+
+  _MutableNode({required this.id, required this.name, required this.type});
+
+  MatrixNode toMatrixNode() {
+    return MatrixNode(
+      id: id,
+      name: name,
+      type: type,
+      sales: sales,
+      margin: margin,
+      growth: 0,
+      children: children.map((c) => c.toMatrixNode()).toList()..sort((a,b) => b.sales.compareTo(a.sales)),
+    );
+  }
+}
+
+class TreeBuildParams {
+  final List<Map<String, dynamic>> rows;
+  final List<String> hierarchy;
+  TreeBuildParams({required this.rows, required this.hierarchy});
+}
+
+// Top level function for compute
+List<MatrixNode> buildTreeIsolate(TreeBuildParams params) {
+  final rows = params.rows;
+  final hierarchy = params.hierarchy;
+  
+  if (rows.isEmpty || hierarchy.isEmpty) return [];
+
+  final Map<String, _MutableNode> encMap = {}; // Key: Path
+
+  for (final row in rows) {
+     String path = '';
+     double getDouble(dynamic v) {
+       if (v == null) return 0.0;
+       if (v is num) return v.toDouble();
+       return double.tryParse(v.toString()) ?? 0.0;
+     }
+     
+     double sales = getDouble(row['SALES'] ?? row['sales']);
+     double margin = getDouble(row['MARGIN'] ?? row['margin']);
+     
+     // Traverse hierarchy levels for this row
+     for (int i = 0; i < hierarchy.length; i++) {
+        final levelIndex = i + 1;
+        dynamic getVal(String k) => row[k] ?? row[k.toLowerCase()] ?? row[k.toUpperCase()];
+        
+        final idVal = getVal('ID_$levelIndex');
+        final nameVal = getVal('NAME_$levelIndex');
+        
+        if (idVal == null) break;
+        
+         final type = hierarchy[i];
+         final currentId = idVal.toString();
+         final currentName = nameVal?.toString() ?? currentId;
+         
+         // Use pipe separator to avoid conflicts with IDs containing slashes
+         path = i == 0 ? currentId : '$path|$currentId';
+         
+         if (!encMap.containsKey(path)) {
+            encMap[path] = _MutableNode(
+              id: currentId,
+              name: currentName,
+              type: type,
+            );
+            if (i > 0) {
+              final parentPath = path.substring(0, path.lastIndexOf('|'));
+              if (encMap.containsKey(parentPath)) {
+                encMap[parentPath]!.children.add(encMap[path]!);
+              }
+            }
+         }
+         
+         encMap[path]!.sales += sales;
+         encMap[path]!.margin += margin;
+      }
+   }
+   
+   return encMap.values
+       .where((n) => n.type == hierarchy[0])
+       .map((n) => n.toMatrixNode())
+       .toList()
+       ..sort((a,b) => b.sales.compareTo(a.sales)); // Sort root nodes too
 }
