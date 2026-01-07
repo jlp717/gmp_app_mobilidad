@@ -97,9 +97,7 @@ router.post('/login', loginLimiter, async (req, res) => {
             JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
             JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
             LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-            WHERE TRIM(P.CODIGOVENDEDOR) = '${safeUser}'
-               OR TRIM(P.CODIGOVENDEDOR) LIKE '%${safeUser}'
-               OR P.CODIGOVENDEDOR = '${safeUser}'
+            WHERE (TRIM(P.CODIGOVENDEDOR) = '${safeUser}' OR P.CODIGOVENDEDOR LIKE '%${safeUser}')
             FETCH FIRST 1 ROWS ONLY
         `, false);
 
