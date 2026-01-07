@@ -599,8 +599,8 @@ class _CommissionsPageState extends State<CommissionsPage> {
                ),
              ),
              // Tier legend removed - available in info modal (ℹ️ button)
-             // Warning for ALL mode
-              if (context.watch<FilterProvider>().selectedVendor == '' || context.watch<FilterProvider>().selectedVendor == null)
+             // Warning for ALL mode - ONLY FOR JEFE DE VENTAS
+              if (widget.isJefeVentas && (context.watch<FilterProvider>().selectedVendor == '' || context.watch<FilterProvider>().selectedVendor == null))
                Container(
                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                  padding: const EdgeInsets.all(10),

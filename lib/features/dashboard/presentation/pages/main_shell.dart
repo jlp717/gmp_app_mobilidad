@@ -247,10 +247,10 @@ class _MainShellState extends State<MainShell> {
         ),
         const SizedBox(height: 6),
         Text(
-          user.name.length > 10 ? '${user.name.substring(0, 10)}' : user.name,
-          style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+          user.name.length > 14 ? '${user.name.substring(0, 14)}' : user.name,
+          style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
           maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
         ),
         if (isJefeVentas)
           Container(
