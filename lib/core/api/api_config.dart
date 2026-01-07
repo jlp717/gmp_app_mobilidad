@@ -17,9 +17,9 @@ class ApiConfig {
   static const int _serverPort = 3333;
 
   // -----------------------------------------------------------------------------
-  // 2. PRODUCCION (4G / Internet / Ngrok)
-  // URL pública accesible desde cualquier lugar
-  static String _productionUrl = 'https://4b834588165b.ngrok-free.app'; 
+  // 2. PRODUCCION (Cloudflare Tunnel - URL Permanente)
+  // URL pública accesible desde cualquier lugar del mundo
+  static String _productionUrl = 'https://api.mari-pepa.com'; 
 
   // =============================================================================
 

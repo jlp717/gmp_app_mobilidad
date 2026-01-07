@@ -1,51 +1,93 @@
 @echo off
-echo ========================================================
-echo AUDITORIA DEL SERVIDOR - GMP MOVILIDAD
-echo ========================================================
+chcp 65001 >nul
+echo ============================================================
+echo    AUDITORIA COMPLETA DEL SERVIDOR - GMP MOVILIDAD
+echo    Fecha: %date% %time%
+echo ============================================================
 echo.
 
-echo [1/4] Verificando Sistema Operativo...
+echo [1/8] SISTEMA OPERATIVO
+echo --------------------------------------------------------
 ver
+systeminfo | findstr /B /C:"OS Name" /C:"OS Version" /C:"System Type"
 echo.
 
-echo [2/4] Verificando Node.js...
-node -v > remove_me_version.txt 2>&1
-set /p NodeVer=<remove_me_version.txt
-del remove_me_version.txt
-if "%NodeVer%"=="" (
-    echo [X] Node.js NO DETECTADO. Debes instalarlo (v20 Recomendado).
+echo [2/8] NODE.JS
+echo --------------------------------------------------------
+where node >nul 2>&1
+if %errorlevel%==0 (
+    for /f "tokens=*" %%i in ('node -v') do echo [OK] Node.js instalado: %%i
+) else (
+    echo [X] Node.js NO INSTALADO
     echo     Descarga: https://nodejs.org/en/download
-) else (
-    echo [OK] Node.js Instalado: %NodeVer%
 )
 echo.
 
-echo [3/4] Verificando Git...
-git --version > remove_me_git.txt 2>&1
-set /p GitVer=<remove_me_git.txt
-del remove_me_git.txt
-if "%GitVer%"=="" (
-    echo [!] Git NO DETECTADO. (No es critico si copias los archivos a mano).
+echo [3/8] NPM
+echo --------------------------------------------------------
+where npm >nul 2>&1
+if %errorlevel%==0 (
+    for /f "tokens=*" %%i in ('npm -v') do echo [OK] NPM instalado: %%i
 ) else (
-    echo [OK] Git Instalado: %GitVer%
+    echo [X] NPM NO INSTALADO
 )
 echo.
 
-echo [4/4] Verificando Acceso a Internet (Google.com)...
-ping google.com -n 1 > nul
-if errorlevel 1 (
-    echo [X] SIN ACCESO A INTERNET DETECTADO.
-    echo     Cloudflare Tunnel NO funcionara sin internet.
+echo [4/8] GIT
+echo --------------------------------------------------------
+where git >nul 2>&1
+if %errorlevel%==0 (
+    for /f "tokens=*" %%i in ('git --version') do echo [OK] Git instalado: %%i
 ) else (
-    echo [OK] Internet Conectado.
+    echo [!] Git NO instalado (no critico si copias archivos manual)
 )
 echo.
 
-echo ========================================================
-echo INSTRUCCIONES SIGUIENTES:
-echo 1. Si falta Node.js, instalalo.
-echo 2. Copia la carpeta 'backend' a C:\GMP_Mobile\Backend
-echo 3. Abre PowerShell como Administrador en esa carpeta.
-echo 4. Ejecuta: npm install
-echo ========================================================
+echo [5/8] CONECTIVIDAD INTERNET
+echo --------------------------------------------------------
+ping -n 1 google.com >nul 2>&1
+if %errorlevel%==0 (
+    echo [OK] Internet conectado
+) else (
+    echo [X] SIN INTERNET - Cloudflare NO funcionara
+)
+echo.
+
+echo [6/8] PUERTO 3000 (Backend API)
+echo --------------------------------------------------------
+netstat -an | findstr ":3000" >nul 2>&1
+if %errorlevel%==0 (
+    echo [!] PUERTO 3000 YA EN USO:
+    netstat -ano | findstr ":3000"
+) else (
+    echo [OK] Puerto 3000 disponible
+)
+echo.
+
+echo [7/8] DRIVER ODBC AS400/iSeries
+echo --------------------------------------------------------
+reg query "HKLM\SOFTWARE\ODBC\ODBCINST.INI" 2>nul | findstr /I "iSeries\|AS400\|IBM" >nul
+if %errorlevel%==0 (
+    echo [OK] Driver ODBC IBM detectado
+    reg query "HKLM\SOFTWARE\ODBC\ODBCINST.INI" 2>nul | findstr /I "iSeries\|AS400\|IBM"
+) else (
+    echo [?] Driver ODBC IBM no detectado en registro estandar
+    echo     Verificar si Client Access esta instalado
+)
+echo.
+
+echo [8/8] FIREWALL WINDOWS
+echo --------------------------------------------------------
+netsh advfirewall show currentprofile state 2>nul | findstr "ON OFF"
+echo.
+
+echo ============================================================
+echo    RESUMEN DE PROXIMOS PASOS
+echo ============================================================
+echo 1. Crear carpeta: C:\GMP_Mobile\Backend
+echo 2. Copiar archivos del backend (sin node_modules)
+echo 3. Abrir PowerShell como Admin en esa carpeta
+echo 4. Ejecutar: npm install
+echo 5. Ejecutar: npm install pm2 -g
+echo ============================================================
 pause
