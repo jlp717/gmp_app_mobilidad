@@ -85,10 +85,11 @@ router.post('/login', loginLimiter, async (req, res) => {
         let tipoVendedor = null;
 
         // ===================================================================
-        // STEP 1: Try to find vendor by CODE directly in VDPL1
+        // STEP 1: Try to find vendor by CODE directly in VDPL1 (Simple query)
         // ===================================================================
         logger.info(`[${requestId}] 🔍 Attempting login for: ${safeUser}`);
 
+        // First try exact match on code
         let pinRecord = await query(`
             SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
                    TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
@@ -97,12 +98,30 @@ router.post('/login', loginLimiter, async (req, res) => {
             JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
             JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
             LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-            WHERE (TRIM(P.CODIGOVENDEDOR) = '${safeUser}' OR P.CODIGOVENDEDOR LIKE '%${safeUser}')
+            WHERE TRIM(P.CODIGOVENDEDOR) = '${safeUser}'
             FETCH FIRST 1 ROWS ONLY
         `, false);
 
         // ===================================================================
-        // STEP 2: If not found by code, try to find by NAME in VDD
+        // STEP 2: If not found by exact code, try LIKE on code (handles padding)
+        // ===================================================================
+        if (pinRecord.length === 0) {
+            logger.info(`[${requestId}] 🔄 Not found by exact code, trying LIKE...`);
+            pinRecord = await query(`
+                SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
+                       TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
+                       V.TIPOVENDEDOR, X.JEFEVENTASSN
+                FROM DSEDAC.VDPL1 P
+                JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+                JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
+                LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+                WHERE P.CODIGOVENDEDOR LIKE '%${safeUser}%'
+                FETCH FIRST 1 ROWS ONLY
+            `, false);
+        }
+
+        // ===================================================================
+        // STEP 3: If still not found, try by NAME in VDD
         // ===================================================================
         if (pinRecord.length === 0) {
             logger.info(`[${requestId}] 🔄 Not found by code, searching by name...`);
