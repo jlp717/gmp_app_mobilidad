@@ -18,8 +18,9 @@ class ApiConfig {
 
   // -----------------------------------------------------------------------------
   // 2. PRODUCCION (Cloudflare Tunnel - URL Permanente)
-  // URL pública accesible desde cualquier lugar del mundo
-  static String _productionUrl = 'https://api.mari-pepa.com'; 
+  // TEMPORAL: Usando túnel de demo hasta que DNS propague
+  // CAMBIAR A: https://api.mari-pepa.com cuando DNS esté listo
+  static String _productionUrl = 'https://retailers-oct-dale-shows.trycloudflare.com'; 
 
   // =============================================================================
 

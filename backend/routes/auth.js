@@ -41,7 +41,7 @@ function failLogin(res, safeUser, requestId, message) {
 }
 
 // =============================================================================
-// LOGIN ENDPOINT
+// LOGIN ENDPOINT - Using VDPL1 as primary auth source
 // =============================================================================
 router.post('/login', loginLimiter, async (req, res) => {
     const requestId = Date.now().toString(36);
@@ -56,10 +56,10 @@ router.post('/login', loginLimiter, async (req, res) => {
         }
 
         // Sanitize and normalize inputs
-        // Sanitize and normalize inputs (Allow spaces/dots/hyphens/parens for names)
         const safeUser = username.replace(/[^a-zA-Z0-9 .-_()]/g, '').trim().toUpperCase();
+        const trimmedPwd = password.trim();
 
-        if (safeUser.length < 2 || safeUser.length > 50) {
+        if (safeUser.length < 1 || safeUser.length > 50) {
             logger.warn(`[${requestId}] Login attempt with invalid username length: ${safeUser.length}`);
             return res.status(400).json({ error: 'Usuario inválido' });
         }
@@ -75,246 +75,126 @@ router.post('/login', loginLimiter, async (req, res) => {
                     error: `Cuenta bloqueada temporalmente. Intenta de nuevo en ${minutesRemaining} minutos.`
                 });
             } else {
-                // Lockout expired, reset counter
                 failedLoginAttempts.delete(safeUser);
             }
         }
 
-        // Use parameterized query to prevent SQL injection
-        const trimmedPwd = password.trim();
-
-        // Query database for user WITHOUT password check first (to allow PIN lookup)
-        // We find the user by ID/Name, then check if they have a PIN.
-        // MODIFIED: Check both CODIGOUSUARIO and NOMBREUSUARIO for exact match
-        const users = await queryWithParams(`
-            SELECT ID, CODIGOUSUARIO, NOMBREUSUARIO, PASSWORD, SUBEMPRESA, DELEGACION, GRUPO
-            FROM DSEDAC.APPUSUARIOS
-            WHERE (UPPER(TRIM(CODIGOUSUARIO)) = ? OR UPPER(TRIM(NOMBREUSUARIO)) = ?)
-              AND SUBEMPRESA = 'GMP'
-            FETCH FIRST 1 ROWS ONLY
-        `, [safeUser, safeUser], false);
-
-        if (users.length === 0) {
-            // USABILITY FIX: If not found by UserID/Name, try finding by VENDOR CODE
-            // 1. Look up Vendor by Code to get the Name/Email
-            const vendorLookup = await query(`
-                SELECT X.CORREOELECTRONICO 
-                FROM DSEDAC.VDC V
-                JOIN DSEDAC.VDDX X ON V.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-                WHERE V.SUBEMPRESA = 'GMP' AND TRIM(V.CODIGOVENDEDOR) = ?
-                FETCH FIRST 1 ROWS ONLY
-            `, [safeUser], false);
-
-            if (vendorLookup.length > 0) {
-                const namePattern = (vendorLookup[0].CORREOELECTRONICO || '').trim().substring(0, 5); // First 5 chars
-                if (namePattern.length >= 3) {
-                    logger.info(`🔄 VendorCode ${safeUser} mapped to Pattern '${namePattern}'. Searching AppUser...`);
-                    // 2. Find AppUser by this name pattern
-                    // 2. Find AppUser by this name pattern (String Interpolation for ODBC compatibility)
-                    const safePattern = namePattern.replace(/'/g, "''");
-                    logger.info(`Searching APPUSUARIOS for LIKE '%${safePattern}%'`);
-                    users = await query(`
-                        SELECT ID, CODIGOUSUARIO, NOMBREUSUARIO, PASSWORD, SUBEMPRESA, DELEGACION 
-                        FROM DSEDAC.APPUSUARIOS 
-                        WHERE UPPER(NOMBREUSUARIO) LIKE '%${safePattern}%'
-                          AND SUBEMPRESA = 'GMP'
-                     `, false);
-                }
-            }
-        }
-
-        if (users.length === 0) {
-            // FALLBACK C: DIRECT VENDOR LOGIN (No App User)
-            // If the input is a valid Vendor Code, allow login if PIN matches.
-            // This covers vendors who don't have a linked APPUSER account.
-
-            logger.info(`🔍 User '${safeUser}' not found in APPUSUARIOS. Checking if it is a direct Vendor Code...`);
-
-            const directVendorCheck = await query(`
-                SELECT V.CODIGOVENDEDOR, V.TIPOVENDEDOR, X.JEFEVENTASSN, P.CODIGOPIN
-                FROM DSEDAC.VDC V
-                LEFT JOIN DSEDAC.VDDX X ON V.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-                LEFT JOIN DSEDAC.VDPL1 P ON V.CODIGOVENDEDOR = P.CODIGOVENDEDOR
-                WHERE V.SUBEMPRESA = 'GMP' AND TRIM(V.CODIGOVENDEDOR) = ?
-                FETCH FIRST 1 ROWS ONLY
-            `, [safeUser], false);
-
-            if (directVendorCheck.length > 0) {
-                const vendorInfo = directVendorCheck[0];
-                const dbPin = vendorInfo.CODIGOPIN?.toString().trim();
-
-                if (dbPin === trimmedPwd) {
-                    logger.info(`🔐 Direct Vendor Login Successful: ${safeUser}`);
-
-                    // Create a synthetic user session
-                    const isJefe = vendorInfo.JEFEVENTASSN === 'S';
-                    const token = Buffer.from(`VENDOR:${safeUser}:${Date.now()}`).toString('base64');
-
-                    // Fetch all vendor codes if Jefe (Logic aligned with standard flow)
-                    let vendedorCodes = [safeUser];
-                    if (isJefe) {
-                        const allVendedores = await query("SELECT DISTINCT TRIM(CODIGOVENDEDOR) as CODE FROM DSEDAC.VDC WHERE SUBEMPRESA = 'GMP'");
-                        const orphans = ['82', '20', 'UNK'];
-                        const existingCodes = new Set(allVendedores.map(v => v.CODE));
-                        orphans.forEach(o => existingCodes.add(o));
-                        vendedorCodes = Array.from(existingCodes);
-                    }
-
-                    return res.json({
-                        user: {
-                            id: `V${safeUser}`,
-                            code: safeUser,
-                            name: `Comercial ${safeUser}`, // Synthetic Name
-                            company: 'GMP',
-                            delegation: '',
-                            vendedorCode: safeUser,
-                            isJefeVentas: isJefe,
-                            tipoVendedor: vendorInfo.TIPOVENDEDOR?.trim() || '-',
-                            role: isJefe ? 'JEFE_VENTAS' : 'COMERCIAL'
-                        },
-                        vendedorCodes: vendedorCodes,
-                        token: token
-                    });
-                } else {
-                    logger.warn(`🚫 Direct Vendor Login: User ${safeUser} found but PIN mismatch.`);
-                    return failLogin(res, safeUser, requestId, 'Contraseña o PIN incorrecto');
-                }
-            }
-
-            // User doesn't exist at all (Neither AppUser nor VendorCode)
-            return failLogin(res, safeUser, requestId, 'Usuario no encontrado');
-        }
-
-        const user = users[0];
-        // trimmedPwd already declared above line 60
-        let isAuthenticated = false;
-        let authMethod = 'NONE';
-
-        // ---------------------------------------------------------
-        // A. RESOLVE VENDOR & CHECK PIN (Priority for Mobile App)
-        // ---------------------------------------------------------
-        const searchPattern = (user.NOMBREUSUARIO || '').trim().toUpperCase().substring(0, 4);
-        let vendedorInfo = [];
-
         let vendedorCode = null;
+        let vendedorName = null;
         let isJefeVentas = false;
         let tipoVendedor = null;
 
-        if (searchPattern.length >= 2) {
-            try {
-                // Sanitize pattern further to avoid SQL errors
-                const safeSearchPattern = searchPattern.replace(/'/g, "''");
+        // ===================================================================
+        // STEP 1: Try to find vendor by CODE directly in VDPL1
+        // ===================================================================
+        logger.info(`[${requestId}] 🔍 Attempting login for: ${safeUser}`);
 
-                vendedorInfo = await query(`
-                    SELECT V.CODIGOVENDEDOR, V.TIPOVENDEDOR, X.JEFEVENTASSN, X.CORREOELECTRONICO
-                    FROM DSEDAC.VDC V
-                    LEFT JOIN DSEDAC.VDDX X ON V.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-                    WHERE V.SUBEMPRESA = 'GMP' AND UPPER(X.CORREOELECTRONICO) LIKE '${safeSearchPattern}%'
-                    FETCH FIRST 1 ROWS ONLY
-                `, false); // Don't log this query to avoid noise
+        let pinRecord = await query(`
+            SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
+                   TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
+                   V.TIPOVENDEDOR, X.JEFEVENTASSN
+            FROM DSEDAC.VDPL1 P
+            JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+            JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
+            LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+            WHERE TRIM(P.CODIGOVENDEDOR) = '${safeUser}'
+            FETCH FIRST 1 ROWS ONLY
+        `, false);
 
-                if (vendedorInfo.length > 0) {
-                    vendedorCode = vendedorInfo[0].CODIGOVENDEDOR?.trim();
-                    isJefeVentas = vendedorInfo[0].JEFEVENTASSN === 'S';
-                    tipoVendedor = vendedorInfo[0].TIPOVENDEDOR?.trim();
-                }
-            } catch (err) {
-                logger.warn(`Auth vendor lookup failed for pattern ${searchPattern}: ${err.message}`);
-                // Continue without crashing - just means no vendor link
+        // ===================================================================
+        // STEP 2: If not found by code, try to find by NAME in VDD
+        // ===================================================================
+        if (pinRecord.length === 0) {
+            logger.info(`[${requestId}] 🔄 Not found by code, searching by name...`);
+
+            // Search by name (partial match anywhere in the name)
+            const nameSearch = await query(`
+                SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
+                       TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
+                       V.TIPOVENDEDOR, X.JEFEVENTASSN
+                FROM DSEDAC.VDD D
+                JOIN DSEDAC.VDPL1 P ON D.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+                JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
+                LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+                WHERE UPPER(TRIM(D.NOMBREVENDEDOR)) LIKE '%${safeUser}%'
+                FETCH FIRST 1 ROWS ONLY
+            `, false);
+
+            if (nameSearch.length > 0) {
+                pinRecord = nameSearch;
+                logger.info(`[${requestId}] ✅ Found vendor by name: ${nameSearch[0].NOMBREVENDEDOR} -> Code ${nameSearch[0].CODIGOVENDEDOR}`);
             }
         }
 
-        // FORCE JEFE STATUS FOR ADMIN/JAVIER (Testing Override)
-        const FORCE_JEFE_USERS = ['JAVIER', 'ADMIN', 'NDELAMO'];
-        if (FORCE_JEFE_USERS.includes(safeUser)) {
+        // ===================================================================
+        // STEP 3: Validate credentials
+        // ===================================================================
+        if (pinRecord.length === 0) {
+            logger.warn(`[${requestId}] ❌ User not found: ${safeUser}`);
+            return failLogin(res, safeUser, requestId, 'Usuario no encontrado');
+        }
+
+        const vendor = pinRecord[0];
+        const dbPin = vendor.CODIGOPIN?.toString().trim();
+        vendedorCode = vendor.CODIGOVENDEDOR?.toString().trim();
+        vendedorName = vendor.NOMBREVENDEDOR || `Comercial ${vendedorCode}`;
+        isJefeVentas = vendor.JEFEVENTASSN === 'S';
+        tipoVendedor = vendor.TIPOVENDEDOR?.trim();
+
+        // Check PIN
+        if (dbPin !== trimmedPwd) {
+            logger.warn(`[${requestId}] 🚫 PIN mismatch for vendor ${vendedorCode}`);
+            return failLogin(res, safeUser, requestId, 'PIN incorrecto');
+        }
+
+        // ===================================================================
+        // STEP 4: Success! Build response
+        // ===================================================================
+        logger.info(`[${requestId}] 🔐 Login successful for ${vendedorName} (${vendedorCode})`);
+        failedLoginAttempts.delete(safeUser); // Clear failed attempts on success
+
+        // FORCE JEFE STATUS FOR ADMIN USERS (Testing Override)
+        const FORCE_JEFE_CODES = ['93', '01', '95'];
+        if (FORCE_JEFE_CODES.includes(vendedorCode)) {
             isJefeVentas = true;
-            logger.info(`👑 Forced JEFE status for user: ${safeUser}`);
-        }
-
-        // If User is Linked to a Vendor, Check VDPL1 PIN
-        if (vendedorCode) {
-            try {
-                // Check PIN in DSEDAC.VDPL1
-                const pinResult = await query(`
-                    SELECT CODIGOPIN 
-                    FROM DSEDAC.VDPL1 
-                    WHERE TRIM(CODIGOVENDEDOR) = '${vendedorCode}'
-                    FETCH FIRST 1 ROWS ONLY
-                `);
-
-                if (pinResult.length > 0) {
-                    const dbPin = pinResult[0].CODIGOPIN?.toString().trim();
-                    if (dbPin === trimmedPwd) {
-                        isAuthenticated = true;
-                        authMethod = 'PIN';
-                        logger.info(`🔐 User ${safeUser} authenticated via PIN (Vendor ${vendedorCode})`);
-                    } else {
-                        logger.warn(`🚫 User ${safeUser} PIN verification failed.`);
-                    }
-                } else {
-                    logger.warn(`⚠️ User ${safeUser} is vendor ${vendedorCode} but has no PIN in VDPL1.`);
-                }
-            } catch (pinErr) {
-                logger.error(`Error checking PIN: ${pinErr.message}`);
-            }
-        }
-
-        // ---------------------------------------------------------
-        // B. FALLBACK: APPUSUARIOS PASSWORD (Legacy/Admin)
-        // ---------------------------------------------------------
-        // CRITICAL FIX: Only allow password fallback if user is NOT linked to a vendor (No PIN available)
-        // If they have a vendorCode, they MUST use the PIN.
-        if (!isAuthenticated && !vendedorCode) {
-            const dbPwd = user.PASSWORD ? user.PASSWORD.trim() : '';
-            if (dbPwd === trimmedPwd) {
-                isAuthenticated = true;
-                authMethod = 'PASSWORD';
-                logger.info(`🔑 User ${safeUser} authenticated via APPUSUARIOS Password (No Vendor Link)`);
-            }
-        }
-
-        // ---------------------------------------------------------
-        // C. FINAL DECISION
-        // ---------------------------------------------------------
-        if (!isAuthenticated) {
-            return failLogin(res, safeUser, requestId, 'Contraseña o PIN incorrecto');
+            logger.info(`[${requestId}] 👑 Forced JEFE status for vendor: ${vendedorCode}`);
         }
 
         // Fetch all vendor codes for Jefe/Admin view
-        const allVendedores = await query(`
-            SELECT DISTINCT TRIM(CODIGOVENDEDOR) as CODE FROM DSEDAC.VDC WHERE SUBEMPRESA = 'GMP'
-        `);
-        // Inject Orphan Vendor Codes (Critical for full scope)
-        const orphans = ['82', '20', 'UNK'];
-        const existingCodes = new Set(allVendedores.map(v => v.CODE));
-        orphans.forEach(o => existingCodes.add(o));
-        const vendedorCodes = Array.from(existingCodes);
+        let vendedorCodes = [vendedorCode];
+        if (isJefeVentas) {
+            const allVendedores = await query(`
+                SELECT DISTINCT TRIM(CODIGOVENDEDOR) as CODE FROM DSEDAC.VDC WHERE SUBEMPRESA = 'GMP'
+            `);
+            const orphans = ['82', '20', 'UNK'];
+            const existingCodes = new Set(allVendedores.map(v => v.CODE));
+            orphans.forEach(o => existingCodes.add(o));
+            vendedorCodes = Array.from(existingCodes);
+        }
+
+        const token = Buffer.from(`${vendedorCode}:${Date.now()}`).toString('base64');
 
         const response = {
             user: {
-                id: user.ID,
-                code: user.CODIGOUSUARIO?.trim(),
-                name: user.NOMBREUSUARIO?.trim(),
-                company: user.SUBEMPRESA?.trim(),
-                delegation: user.DELEGACION?.trim() || '',
+                id: `V${vendedorCode}`,
+                code: vendedorCode,
+                name: vendedorName,
+                company: 'GMP',
+                delegation: '',
                 vendedorCode: vendedorCode,
                 isJefeVentas: isJefeVentas,
                 tipoVendedor: tipoVendedor || '-',
                 role: isJefeVentas ? 'JEFE_VENTAS' : 'COMERCIAL'
             },
-            // If jefe ventas, return ALL codes. If commercial, return their code (if any)
-            vendedorCodes: isJefeVentas ? vendedorCodes : (vendedorCode ? [vendedorCode] : []),
-            token: Buffer.from(`${user.ID}:${user.CODIGOUSUARIO}:${Date.now()}`).toString('base64')
+            vendedorCodes: vendedorCodes,
+            token: token
         };
 
-        logger.info(`✅ Login successful: ${user.CODIGOUSUARIO} (${response.user.role})`);
+        logger.info(`✅ Login successful: ${vendedorCode} - ${vendedorName} (${response.user.role})`);
         res.json(response);
 
     } catch (error) {
         logger.error(`Login error: ${error.message}`);
-        // Return 401 Unauthorized for ANY login failure to show modal in frontend, 
-        // instead of 500 which is treated as server crash.
-        // Unless it's a rate limit error handled above.
         res.status(401).json({ error: 'Error de autenticación. Verifique sus credenciales.' });
     }
 });

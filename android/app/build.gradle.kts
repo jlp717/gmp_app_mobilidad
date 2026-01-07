@@ -43,9 +43,10 @@ android {
     defaultConfig {
         applicationId = "com.maripepa.gmp_mobilidad"
         minSdk = flutter.minSdkVersion
-        targetSdk = 36
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -63,3 +64,6 @@ flutter {
     source = "../.."
 }
 
+dependencies {
+    implementation("androidx.multidex:multidex:2.0.1")
+}
