@@ -3,12 +3,25 @@
  * Esta tabla guarda el historial de todos los cambios realizados en el rutero
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+const path = require('path');
+const envPath = path.join(__dirname, '..', '.env');
+require('dotenv').config({ path: envPath });
 const odbc = require('odbc');
 
 const DB_DSN = process.env.DB_DSN || 'GMP';
 const DB_UID = process.env.DB_UID;
 const DB_PWD = process.env.DB_PWD;
+
+// Debug: verificar que las credenciales se cargaron
+if (!DB_UID || !DB_PWD) {
+    console.error('❌ Error: Variables de entorno no encontradas');
+    console.error(`   Buscando .env en: ${envPath}`);
+    console.error(`   DB_DSN: ${DB_DSN}`);
+    console.error(`   DB_UID: ${DB_UID ? '✓ (definido)' : '✗ (no definido)'}`);
+    console.error(`   DB_PWD: ${DB_PWD ? '✓ (definido)' : '✗ (no definido)'}`);
+    process.exit(1);
+}
+
 const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;`;
 
 async function main() {
