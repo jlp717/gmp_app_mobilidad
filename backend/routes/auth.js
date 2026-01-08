@@ -137,7 +137,9 @@ router.post('/login', loginLimiter, async (req, res) => {
         const vendor = pinRecord[0];
         const dbPin = vendor.CODIGOPIN?.toString().trim();
         vendedorCode = vendor.CODIGOVENDEDOR?.toString().trim();
-        vendedorName = vendor.NOMBREVENDEDOR || `Comercial ${vendedorCode}`;
+        // Clean vendor name - remove leading code like "93 " from "93 MARI CARMEN"
+        let rawName = vendor.NOMBREVENDEDOR || `Comercial ${vendedorCode}`;
+        vendedorName = rawName.replace(/^\d+\s+/, '').trim(); // Remove leading digits and spaces
         isJefeVentas = vendor.JEFEVENTASSN === 'S';
         tipoVendedor = vendor.TIPOVENDEDOR?.trim();
 
@@ -153,12 +155,9 @@ router.post('/login', loginLimiter, async (req, res) => {
         logger.info(`[${requestId}] 🔐 Login successful for ${vendedorName} (${vendedorCode})`);
         failedLoginAttempts.delete(safeUser); // Clear failed attempts on success
 
-        // FORCE JEFE STATUS FOR ADMIN USERS (Testing Override)
-        const FORCE_JEFE_CODES = ['93', '01', '95'];
-        if (FORCE_JEFE_CODES.includes(vendedorCode)) {
-            isJefeVentas = true;
-            logger.info(`[${requestId}] 👑 Forced JEFE status for vendor: ${vendedorCode}`);
-        }
+        // NOTE: JEFE status is now determined only by JEFEVENTASSN field from DB
+        // Previously we forced JEFE for codes 93, 01, 95 but this is removed
+        // to respect actual DB roles
 
         // Fetch all vendor codes for Jefe/Admin view
         let vendedorCodes = [vendedorCode];
