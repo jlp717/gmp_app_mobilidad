@@ -121,6 +121,58 @@ router.get('/', getClientsHandler);
 router.get('/list', getClientsHandler);
 
 // =============================================================================
+// CLIENT NOTES
+// =============================================================================
+router.put('/notes', async (req, res) => {
+  try {
+    const { clientCode, notes } = req.body;
+    if (!clientCode) return res.status(400).json({ error: 'Client code required' });
+
+    // Ensure table exists (basic check)
+    try {
+      await query(`SELECT 1 FROM JAVIER.CLIENT_NOTES FETCH FIRST 1 ROWS ONLY`, false);
+    } catch (e) {
+      // If fails, try create
+      try {
+        await query(`
+                    CREATE TABLE JAVIER.CLIENT_NOTES (
+                        CLIENT_CODE VARCHAR(20) NOT NULL PRIMARY KEY,
+                        OBSERVACIONES VARCHAR(32000),
+                        MODIFIED_BY VARCHAR(100),
+                        MODIFIED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                `, false);
+      } catch (createErr) {
+        logger.warn('Failed to create CLIENT_NOTES table (might exist): ' + createErr.message);
+      }
+    }
+
+    const safeNotes = notes ? notes.replace(/'/g, "''") : '';
+    const existing = await query(`SELECT CLIENT_CODE FROM JAVIER.CLIENT_NOTES WHERE CLIENT_CODE = '${clientCode}'`, false);
+
+    if (existing.length > 0) {
+      await query(`
+                UPDATE JAVIER.CLIENT_NOTES 
+                SET OBSERVACIONES = '${safeNotes}', 
+                    MODIFIED_BY = 'JAVIER', 
+                    MODIFIED_AT = CURRENT_TIMESTAMP 
+                WHERE CLIENT_CODE = '${clientCode}'
+            `, false);
+    } else {
+      await query(`
+                INSERT INTO JAVIER.CLIENT_NOTES (CLIENT_CODE, OBSERVACIONES, MODIFIED_BY, MODIFIED_AT)
+                VALUES ('${clientCode}', '${safeNotes}', 'JAVIER', CURRENT_TIMESTAMP)
+            `, false);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error(`Error saving notes: ${error.message}`);
+    res.status(500).json({ error: 'Error guardando notas', details: error.message });
+  }
+});
+
+// =============================================================================
 // CLIENT DETAIL
 // =============================================================================
 router.get('/:code', async (req, res) => {

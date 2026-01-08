@@ -114,74 +114,71 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return CurrencyFormatter.format(value);
   }
 
-  void _openWhatsApp() {
-    final phones = (_contactInfo['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
-    
-    // Fallback logic not strictly needed here if we trust backend, but good to have
-    if (phones.isEmpty) {
-       final p1 = _contactInfo['phone'] as String?;
-       final p2 = _contactInfo['phone2'] as String?;
-       if (p1 != null && p1.isNotEmpty) phones.add({'type': 'Teléfono 1', 'number': p1});
-       if (p2 != null && p2.isNotEmpty) phones.add({'type': 'Teléfono 2', 'number': p2});
-    }
+  Future<void> _openNotesDialog() async {
+    final currentNotes = _editableNotes?['text'] as String? ?? '';
+    final ctrl = TextEditingController(text: currentNotes);
 
-    if (phones.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay teléfono disponible para WhatsApp')),
-      );
-      return;
-    }
-
-    if (phones.length == 1) {
-      _launchWhatsApp(phones.first['number'] ?? '');
-      return;
-    }
-
-    // Multiple phones selector
-    showModalBottomSheet(
+    final result = await showDialog<String>(
       context: context,
-      backgroundColor: AppTheme.surfaceColor,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            const SizedBox(height: 8),
-            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-            const SizedBox(height: 12),
-            ...phones.map((p) => ListTile(
-              leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
-              title: Text(p['number'] ?? ''),
-              subtitle: Text(p['type'] ?? 'Teléfono'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _launchWhatsApp(p['number'] ?? '');
-              },
-            )).toList(),
-            const SizedBox(height: 8),
-          ],
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        title: const Text('Observaciones Cliente'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            hintText: 'Escribe aquí las observaciones...',
+            border: OutlineInputBorder(),
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+            child: const Text('Guardar'),
+          ),
+        ],
       ),
     );
+
+    if (result != null && result != currentNotes) {
+      await _saveNotes(result);
+    }
   }
 
-  void _launchWhatsApp(String phone) async {
-    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
-    if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
-      cleanPhone = '34$cleanPhone';
-    }
-    if (cleanPhone.startsWith('+')) cleanPhone = cleanPhone.substring(1);
-
-    final message = Uri.encodeComponent('Hola, revisando tus objetivos y evolución de ventas...');
+  Future<void> _saveNotes(String notes) async {
+    // Show saving indicator? Or just optimistically update. 
+    // Let's reload data after save to be sure and show loading.
+    setState(() => _isLoading = true);
     
-    final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo abrir WhatsApp')));
+    try {
+      await ApiClient.put(
+        '${ApiConfig.clientsList}/notes',
+        data: {
+          'clientCode': widget.clientCode,
+          'notes': notes,
+        },
+      );
+      
+      // Reload to reflect changes (and get modifiedBy info correct)
+      await _loadData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Observaciones guardadas correctaemnte')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false); // Stop loading if error
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error guardando notas: $e'), backgroundColor: AppTheme.error),
+        );
+      }
     }
   }
 
@@ -204,9 +201,16 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         actions: [
           if (!_isLoading && _error == null)
             IconButton(
-              icon: const Icon(Icons.chat, color: Color(0xFF25D366)), // WhatsApp Green
-              onPressed: _openWhatsApp,
-              tooltip: 'Enviar WhatsApp',
+              icon: Icon(
+                _editableNotes != null && (_editableNotes!['text'] as String).isNotEmpty 
+                    ? Icons.edit_note 
+                    : Icons.note_add,
+                color: _editableNotes != null && (_editableNotes!['text'] as String).isNotEmpty 
+                    ? AppTheme.warning 
+                    : Colors.white,
+              ),
+              onPressed: _openNotesDialog,
+              tooltip: 'Observaciones',
             ),
           IconButton(
             icon: Icon(_showFilters ? Icons.filter_list_off : Icons.filter_list, size: 20),

@@ -649,6 +649,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             onMapTap: () => _openMaps(client),
             onCallTap: () => _makeCall(client),
             onWhatsAppTap: () => _openWhatsApp(client),
+            onNotesTap: () => _openNotesDialog(client),
             showMargin: widget.isJefeVentas,
             selectedYear: _selectedYear,
           );
@@ -737,6 +738,79 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       await launchUrl(Uri.parse('tel:$phone'));
     } catch (e) {
       // Ignore
+    }
+  }
+
+  Future<void> _openNotesDialog(Map<String, dynamic> client) async {
+    final Map<String, dynamic> currentNotes = Map<String, dynamic>.from(client['observaciones'] ?? {});
+    final text = currentNotes['text'] as String? ?? '';
+    final ctrl = TextEditingController(text: text);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        title: const Text('Observaciones Cliente'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            hintText: 'Escribe aquí las observaciones...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result != text) {
+      await _saveNotes(client, result);
+    }
+  }
+
+  Future<void> _saveNotes(Map<String, dynamic> client, String notes) async {
+    // Optimistic update locally
+    final updatedClient = Map<String, dynamic>.from(client);
+    final obs = Map<String, dynamic>.from(updatedClient['observaciones'] ?? {});
+    obs['text'] = notes;
+    updatedClient['observaciones'] = obs;
+    
+    // Find index to update
+    // Actually simpler: reload data or just show success for now.
+    // _loadDayClients(); // This would refresh the full list.
+    
+    // Let's call API first
+    try {
+      await ApiClient.put(
+        '${ApiConfig.clientsList}/notes',
+        data: {
+          'clientCode': client['code'],
+          'notes': notes,
+        },
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Observaciones guardadas')),
+        );
+        _refreshData(); // Refresh to show update
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error guardando notas: $e'), backgroundColor: AppTheme.error),
+        );
+      }
     }
   }
 
@@ -870,6 +944,7 @@ class _ClientCard extends StatelessWidget {
   final VoidCallback onMapTap;
   final VoidCallback onCallTap;
   final VoidCallback? onWhatsAppTap;
+  final VoidCallback? onNotesTap;
   final bool showMargin;
   final int selectedYear;
 
@@ -881,6 +956,7 @@ class _ClientCard extends StatelessWidget {
     required this.onMapTap,
     required this.onCallTap,
     this.onWhatsAppTap,
+    this.onNotesTap, // NEW
     this.showMargin = false,
     required this.selectedYear,
   });
@@ -937,30 +1013,34 @@ class _ClientCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Observations Banner
-            if (hasObservaciones)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.warning.withOpacity(0.15),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(14),
-                    topRight: Radius.circular(14),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 16),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        observaciones!['text'] as String,
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+            if (observaciones != null && observaciones.isNotEmpty && (observaciones['text'] as String).isNotEmpty) 
+              InkWell( // Make banner clickable to edit
+                onTap: onNotesTap, 
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: const BoxDecoration(
+                    color: AppTheme.warning,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      topRight: Radius.circular(12),
                     ),
-                  ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Colors.black87, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          observaciones['text'] as String,
+                          style: const TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.edit, size: 14, color: Colors.black54), // Edit hint
+                    ],
+                  ),
                 ),
               ),
             Padding(
@@ -1110,6 +1190,23 @@ class _ClientCard extends StatelessWidget {
                     padding: const EdgeInsets.all(4),
                     constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                   ),
+                  if (onNotesTap != null)
+                     IconButton(
+                      onPressed: onNotesTap,
+                      icon: Icon(
+                        (observaciones.isNotEmpty && (observaciones['text'] as String).isNotEmpty) 
+                            ? Icons.edit_note 
+                            : Icons.note_add, 
+                        color: (observaciones.isNotEmpty && (observaciones['text'] as String).isNotEmpty) 
+                            ? AppTheme.warning 
+                            : Colors.grey.shade400,
+                        size: 26
+                      ),
+                      tooltip: 'Observaciones',
+                      splashRadius: 24,
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                    ),
                   if (phones.isNotEmpty && onWhatsAppTap != null)
                     IconButton(
                       onPressed: onWhatsAppTap,
