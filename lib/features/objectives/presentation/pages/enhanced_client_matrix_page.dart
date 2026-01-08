@@ -202,7 +202,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           ],
         ),
         actions: [
-        actions: [
           if (!_isLoading && _error == null)
             IconButton(
               icon: const Icon(Icons.chat, color: Color(0xFF25D366)), // WhatsApp Green
