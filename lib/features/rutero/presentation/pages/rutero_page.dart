@@ -1268,7 +1268,8 @@ class _ClientCard extends StatelessWidget {
             ),
           ],
         ),
-
+      ),
+    );
   }
 }
 
