@@ -3,7 +3,7 @@ const router = express.Router();
 const { query } = require('../config/db');
 const logger = require('../middleware/logger');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER } = require('../utils/common');
+const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE } = require('../utils/common');
 
 
 // =============================================================================
@@ -260,15 +260,10 @@ router.get('/summary', async (req, res) => {
               AND ${LACLAE_SALES_FILTER}
         `;
 
-        if (!isAll) {
-            // Use exact match for performance if possible. 
-            // If legacy data has space padding, we can use OR 'code '.
-            // Attempting strict match first for speed.
-            const code = vendedorCode.trim();
-            salesQuery += ` AND (L.LCCDVD = '${code}' OR L.LCCDVD = '${code} ')`;
-        }
+        // Build vendor filter using helper function with TRIM
+        const vendedorFilter = isAll ? '' : buildVendedorFilterLACLAE(vendedorCode, 'L');
 
-        salesQuery += ` GROUP BY L.LCAADC, LCMMDC`;
+        salesQuery += ` ${vendedorFilter} GROUP BY L.LCAADC, LCMMDC`;
 
         const salesRows = await query(salesQuery);
 
