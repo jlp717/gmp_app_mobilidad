@@ -333,14 +333,16 @@ router.get('/rutero/day/:day', async (req, res) => {
         const batchSize = 200;
         const clientBatch = dayClientCodes.slice(0, batchSize);
         const safeClientFilter = clientBatch.map(c => `'${c.replace(/'/g, "''")}'`).join(',');
-        // 1. Get Client Details (Names, Addresses) - Guaranteed for all planned clients
+        // 1. Get Client Details (Names, Addresses, Phones) - Guaranteed for all planned clients
         const clientDetailsRows = await query(`
             SELECT 
                 CODIGOCLIENTE as CODE,
                 COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
                 DIRECCION as ADDRESS,
                 POBLACION as CITY,
-                TELEFONO1 as PHONE
+                TELEFONO1 as PHONE,
+                TELEFONO2 as PHONE2,
+                FAX as FAX
             FROM DSEDAC.CLI
             WHERE CODIGOCLIENTE IN (${safeClientFilter})
         `);
@@ -426,6 +428,25 @@ router.get('/rutero/day/:day', async (req, res) => {
             logger.warn(`Could not load GPS data: ${e.message}`);
         }
 
+        // 5. Get Editable Observations from JAVIER.CLIENT_NOTES
+        let notesMap = new Map();
+        try {
+            const notesRows = await query(`
+                SELECT CLIENT_CODE, OBSERVACIONES, MODIFIED_BY
+                FROM JAVIER.CLIENT_NOTES
+                WHERE CLIENT_CODE IN (${safeClientFilter})
+            `, false);
+            notesRows.forEach(n => {
+                notesMap.set(n.CLIENT_CODE?.trim(), {
+                    text: n.OBSERVACIONES,
+                    modifiedBy: n.MODIFIED_BY
+                });
+            });
+        } catch (e) {
+            // Table may not exist yet
+            logger.debug(`CLIENT_NOTES not found: ${e.message}`);
+        }
+
         // Build response
         const clients = currentYearRows.map(r => {
             const code = r.CODE?.trim() || '';
@@ -441,6 +462,13 @@ router.get('/rutero/day/:day', async (req, res) => {
                 : (ytdSales > 0 ? 100 : 0);
             const isPositive = ytdSales >= prevSales;
             const gps = gpsMap.get(code) || { lat: null, lon: null };
+            const notes = notesMap.get(code) || null;
+
+            // Build phones array for WhatsApp selector
+            const phones = [];
+            if (r.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: r.PHONE.trim() });
+            if (r.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: r.PHONE2.trim() });
+            if (r.FAX?.trim()) phones.push({ type: 'Fax/Móvil', number: r.FAX.trim() });
 
             return {
                 code,
@@ -448,6 +476,8 @@ router.get('/rutero/day/:day', async (req, res) => {
                 address: r.ADDRESS?.trim() || '',
                 city: r.CITY?.trim() || '',
                 phone: r.PHONE?.trim() || '',
+                phones: phones, // Array for WhatsApp selector
+                observaciones: notes, // Editable notes
                 latitude: gps.lat,
                 longitude: gps.lon,
                 status: {

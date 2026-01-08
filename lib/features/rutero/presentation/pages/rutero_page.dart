@@ -648,6 +648,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             onTap: () => _navigateToMatrix(client),
             onMapTap: () => _openMaps(client),
             onCallTap: () => _makeCall(client),
+            onWhatsAppTap: () => _openWhatsApp(client),
             showMargin: widget.isJefeVentas,
             selectedYear: _selectedYear,
           );
@@ -738,6 +739,78 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       // Ignore
     }
   }
+
+  void _openWhatsApp(Map<String, dynamic> client) {
+    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
+    if (phones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay teléfono disponible')),
+      );
+      return;
+    }
+
+    // If only one phone, open directly
+    if (phones.length == 1) {
+      _launchWhatsApp(phones.first['number'] ?? '');
+      return;
+    }
+
+    // Multiple phones - show selector
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 8),
+            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const SizedBox(height: 12),
+            ...phones.map((p) => ListTile(
+              leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+              title: Text(p['number'] ?? ''),
+              subtitle: Text(p['type'] ?? 'Teléfono'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchWhatsApp(p['number'] ?? '');
+              },
+            )).toList(),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _launchWhatsApp(String phone) async {
+    // Clean phone number - remove non-digits except +
+    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    // Add Spain prefix if not present
+    if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
+      cleanPhone = '34$cleanPhone';
+    }
+    if (cleanPhone.startsWith('+')) {
+      cleanPhone = cleanPhone.substring(1);
+    }
+
+    // Professional message
+    final message = Uri.encodeComponent(
+      'Hola, soy tu comercial de Mari Pepa. '
+      'Me gustaría saber cómo va todo y recordarte que mañana es día de visita. '
+      '¿Está todo en orden? ¿Necesitas algo en particular?'
+    );
+
+    final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
 }
 
 // Role toggle button widget
@@ -796,6 +869,7 @@ class _ClientCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onMapTap;
   final VoidCallback onCallTap;
+  final VoidCallback? onWhatsAppTap;
   final bool showMargin;
   final int selectedYear;
 
@@ -806,6 +880,7 @@ class _ClientCard extends StatelessWidget {
     required this.onTap,
     required this.onMapTap,
     required this.onCallTap,
+    this.onWhatsAppTap,
     this.showMargin = false,
     required this.selectedYear,
   });
@@ -817,6 +892,8 @@ class _ClientCard extends StatelessWidget {
     final address = client['address'] as String? ?? '';
     final city = client['city'] as String? ?? '';
     final status = client['status'] as Map<String, dynamic>? ?? {};
+    final observaciones = client['observaciones'] as Map<String, dynamic>?;
+    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
     
     final isPositive = status['isPositive'] == true;
     // Use ytdSales (YTD accumulated sales) as main value
@@ -831,18 +908,23 @@ class _ClientCard extends StatelessWidget {
 
     final accentColor = isPositive ? AppTheme.success : AppTheme.error;
     
+    // Check if has observations
+    final hasObservaciones = observaciones != null && 
+        observaciones['text'] != null && 
+        (observaciones['text'] as String).isNotEmpty;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: accentColor.withOpacity(0.5),
-          width: 1.5,
+          color: hasObservaciones ? AppTheme.warning.withOpacity(0.8) : accentColor.withOpacity(0.5),
+          width: hasObservaciones ? 2 : 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: accentColor.withOpacity(0.1),
+            color: (hasObservaciones ? AppTheme.warning : accentColor).withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -851,10 +933,40 @@ class _ClientCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Observations Banner
+            if (hasObservaciones)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withOpacity(0.15),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(14),
+                    topRight: Radius.circular(14),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        observaciones!['text'] as String,
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
               // Progress indicator - shows YoY variation
               Container(
                 width: 85,
@@ -998,6 +1110,15 @@ class _ClientCard extends StatelessWidget {
                     padding: const EdgeInsets.all(4),
                     constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                   ),
+                  if (phones.isNotEmpty && onWhatsAppTap != null)
+                    IconButton(
+                      onPressed: onWhatsAppTap,
+                      icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 26),
+                      tooltip: 'WhatsApp',
+                      splashRadius: 24,
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                    ),
                   IconButton(
                     onPressed: onCallTap,
                     icon: Icon(Icons.phone, color: AppTheme.neonBlue, size: 26),
@@ -1008,8 +1129,10 @@ class _ClientCard extends StatelessWidget {
                   ),
                 ],
               ),
-            ],
-          ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
