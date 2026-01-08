@@ -318,8 +318,22 @@ class _CommissionsPageState extends State<CommissionsPage> {
                    Text('Franja $dailyTier (${dailyRate.toStringAsFixed(1)}%)', style: TextStyle(fontSize: 9, color: dailyColor))
                  else if (!dailyGreen && actual > 0)
                    Text('Por debajo', style: TextStyle(fontSize: 9, color: dailyColor))
-               ],
+                ],
           )),
+          // DIFERENCIA (Venta Real - Obj. Acumulado)
+          DataCell(isFuture 
+            ? const Text('-', style: TextStyle(color: Colors.grey))
+            : Text(
+                (actual - proRatedTarget) >= 0 
+                  ? '+${CurrencyFormatter.format(actual - proRatedTarget)}'
+                  : CurrencyFormatter.format(actual - proRatedTarget),
+                style: TextStyle(
+                  color: (actual - proRatedTarget) >= 0 ? AppTheme.success : AppTheme.error,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11
+                )
+              )
+          ),
           // COMISIÓN PROVISIONAL
           DataCell(isFuture || isInformative
             ? const Text('-', style: TextStyle(color: Colors.grey))
@@ -375,6 +389,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
             const DataCell(SizedBox()), // DÍAS
             const DataCell(SizedBox()), // OBJ. ACUM.
             const DataCell(SizedBox()), // RITMO
+            const DataCell(SizedBox()), // DIFF
             const DataCell(SizedBox()), // COM. PROV.
          ]
        ));
@@ -675,6 +690,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                         DataColumn(label: Text('DÍAS', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
                         DataColumn(label: Text('OBJ. ACUM.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
                         DataColumn(label: Text('RITMO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
+                        DataColumn(label: Text('DIFF', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
                         DataColumn(label: Text('COM. PROV.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
                       ],
 
