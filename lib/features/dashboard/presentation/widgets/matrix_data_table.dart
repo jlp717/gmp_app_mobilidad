@@ -109,8 +109,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                   Expanded(flex: 5, child: Text('ITEM', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
                   Expanded(flex: 3, child: Text('VENTA', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
                   Expanded(flex: 2, child: Text('MARG %', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
-                  // M.ACUM column header in ORANGE
-                  Expanded(flex: 2, child: Text('M.ACUM', textAlign: TextAlign.right, style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
+                  Expanded(flex: 2, child: Text('M.ACUM', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
                 ],
               ),
             ),
@@ -329,17 +328,22 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               ),
             ),
             
-            // ACCUMULATED MARGIN - orange text, no background container
+            // ACCUMULATED MARGIN - use same color logic as MARG
             Expanded(
               flex: 2,
-              child: Text(
-                hasChildren ? '${accMarginPct.toStringAsFixed(1)}%' : '-',
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  color: hasChildren ? Colors.orange : Colors.white24,
-                  fontSize: 12,
-                  fontWeight: hasChildren ? FontWeight.bold : FontWeight.normal,
-                ),
+              child: Builder(
+                builder: (context) {
+                  final Color accMarginColor = accMarginPct > 20 ? AppTheme.neonGreen : (accMarginPct > 10 ? Colors.amber : AppTheme.error);
+                  return Text(
+                    hasChildren ? '${accMarginPct.toStringAsFixed(1)}%' : '-',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: hasChildren ? accMarginColor : Colors.white24,
+                      fontSize: 12,
+                      fontWeight: hasChildren ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  );
+                },
               ),
             ),
           ],
