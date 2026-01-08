@@ -549,7 +549,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SELECT CLIENT_CODE, OBSERVACIONES, MODIFIED_BY
                 FROM JAVIER.CLIENT_NOTES
                 WHERE CLIENT_CODE IN (${safeClientFilter})
-            `, false);
+            `, false, false);
             notesRows.forEach(n => {
                 notesMap.set(n.CLIENT_CODE?.trim(), {
                     text: n.OBSERVACIONES,
