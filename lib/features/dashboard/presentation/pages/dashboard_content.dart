@@ -533,11 +533,16 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
                  );
                }),
             ],
-            onChanged: (val) {
+            onChanged: (val) async {
                  setState(() {
                     _selectedVendedor = val?.isEmpty == true ? null : val;
+                    // Clear dependent filters when vendor changes (interdependent filters)
+                    _selectedClientCodes.clear();
+                    _clientsDisponibles.clear(); // Force reload
                  });
-              _fetchAllData();
+                 // Reload clients for the new vendor selection
+                 await _loadClients();
+                 _fetchAllData();
             },
           ),
         ),
