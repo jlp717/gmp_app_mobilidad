@@ -230,6 +230,8 @@ router.get('/:code', async (req, res) => {
     if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
     if (c.FAX?.trim()) phones.push({ type: 'Fax/Móvil', number: c.FAX.trim() });
 
+    logger.info(`[CLIENT ${clientCode}] phones: ${JSON.stringify(phones)}, editableNotes: ${JSON.stringify(editableNotes)}`);
+
     res.json({
       client: {
         code: c.CODE?.trim(),
