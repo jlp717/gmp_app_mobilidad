@@ -8,21 +8,13 @@ const envPath = path.join(__dirname, '..', '.env');
 require('dotenv').config({ path: envPath });
 const odbc = require('odbc');
 
-const DB_DSN = process.env.DB_DSN || 'GMP';
-const DB_UID = process.env.DB_UID;
-const DB_PWD = process.env.DB_PWD;
-
-// Debug: verificar que las credenciales se cargaron
-if (!DB_UID || !DB_PWD) {
-    console.error('❌ Error: Variables de entorno no encontradas');
-    console.error(`   Buscando .env en: ${envPath}`);
-    console.error(`   DB_DSN: ${DB_DSN}`);
-    console.error(`   DB_UID: ${DB_UID ? '✓ (definido)' : '✗ (no definido)'}`);
-    console.error(`   DB_PWD: ${DB_PWD ? '✓ (definido)' : '✗ (no definido)'}`);
-    process.exit(1);
-}
-
+// Usar las mismas variables que usa el servidor principal (db.js)
+const DB_UID = process.env.ODBC_UID || 'JAVIER';
+const DB_PWD = process.env.ODBC_PWD || 'JAVIER';
+const DB_DSN = process.env.ODBC_DSN || 'GMP';
 const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;`;
+
+console.log(`📋 Configuración: DSN=${DB_DSN}, UID=${DB_UID}`);
 
 async function main() {
     let conn;
