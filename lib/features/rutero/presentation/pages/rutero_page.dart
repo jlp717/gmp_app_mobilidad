@@ -251,24 +251,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     }
   }
 
-  Future<void> _openReorderModal() async {
-    if (_dayClients.isEmpty) return;
-    
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => RuteroReorderModal(
-          clients: _dayClients,
-          employeeCode: _activeVendedorCode,
-          day: _selectedDay,
-        ),
-      ),
-    );
-    
-    if (result == true) {
-      _loadDayClients();
-    }
-  }
+
 
   // Currency formatting WITHOUT rounding
   String _formatCurrency(double value) {
@@ -894,7 +877,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   }
   void _openReorderModal() async {
     // Show FULL list in reorder dialog to ensure consistency
-    final clientsToOrder = List<Map<String, dynamic>>.from(_clients);
+    final clientsToOrder = List<Map<String, dynamic>>.from(_dayClients);
     
     final result = await showDialog<List<Map<String, dynamic>>>(
       context: context,
@@ -922,7 +905,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
               'posicion': e.key
           }).toList();
           
-          await ApiClient.post('/rutero/config', data: {
+          await ApiClient.post('/rutero/config', {
               'vendedor': _activeVendedorCode,
               'dia': _selectedDay.toLowerCase(),
               'orden': orderPayload
@@ -1285,13 +1268,7 @@ class _ClientCard extends StatelessWidget {
             ),
           ],
         ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+
   }
 }
 
@@ -1384,7 +1361,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
           });
           
           try {
-             await ApiClient.post('/rutero/move_clients', data: {
+             await ApiClient.post('/rutero/move_clients', {
                  'vendedor': widget.activeVendedor,
                  'moves': [
                      {
@@ -1446,7 +1423,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     // Or just a Container.
     return Dialog(
         insetPadding: const EdgeInsets.all(10),
-        backgroundColor: AppTheme.background,
+        backgroundColor: AppTheme.darkBase,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Column(
             children: [
