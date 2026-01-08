@@ -546,32 +546,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
         Expanded(
           flex: 2,
           child: GestureDetector(
-            onTap: () async {
-               if (_clientsDisponibles.isEmpty) await _loadClients();
-               if (!mounted) return;
-               
-               // Show dialog logic
-               final items = _clientsDisponibles;
-               final currentSelection = items.where((i) => _selectedClientCodes.contains(i['code'])).toSet();
-               
-               final result = await showDialog<Set<Map<String, dynamic>>>(
-                 context: context,
-                 builder: (context) => MultiSelectDialog<Map<String, dynamic>>(
-                   items: items,
-                   selectedItems: currentSelection,
-                   title: 'Filtrar Clientes',
-                   labelBuilder: (item) => item['name'] ?? item['code'] ?? '',
-                 ),
-               );
-               
-               if (result != null) {
-                 setState(() {
-                   _selectedClientCodes = result.map((m) => m['code'].toString()).toSet();
-                   if (_selectedClientCodes.isNotEmpty) _hierarchy = ['product'];
-                 });
-                 _fetchAllData();
-               }
-            },
+            onTap: _openClientFilter, // Use dedicated method with proper loading
             child: Container(
               height: 44,
               padding: const EdgeInsets.symmetric(horizontal: 12),
