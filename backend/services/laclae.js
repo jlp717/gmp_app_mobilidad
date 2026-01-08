@@ -182,7 +182,7 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial') {
     return Array.from(finalClients);
 }
 
-// Get week counts from cache
+// Get week counts from cache - FIXED: Considera los overrides de RUTERO_CONFIG
 function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
     if (!laclaeCacheReady) return null; // Use fallback
 
@@ -194,13 +194,38 @@ function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
 
     vendedors.forEach(vendedor => {
         const vendorClients = laclaeCache[vendedor] || {};
+        const configClients = ruteroConfigCache[vendedor] || {};
+        
+        // Set of clients that have been moved via RUTERO_CONFIG
+        const movedClients = new Set(Object.keys(configClients));
+        
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
             const days = isDelivery ? data.deliveryDays : data.visitDays;
-            days.forEach(day => {
-                if (counts.hasOwnProperty(day)) {
-                    clientsSet[day].add(clientCode);
+            
+            // Check if this client has an override
+            const override = configClients[clientCode];
+            
+            if (override) {
+                // Client has override - only count on override day
+                const overrideDay = override.day;
+                if (counts.hasOwnProperty(overrideDay)) {
+                    clientsSet[overrideDay].add(clientCode);
                 }
-            });
+            } else {
+                // No override - use natural days from LACLAE
+                days.forEach(day => {
+                    if (counts.hasOwnProperty(day)) {
+                        clientsSet[day].add(clientCode);
+                    }
+                });
+            }
+        });
+        
+        // Also add clients that exist ONLY in RuteroConfig (orphan overrides)
+        Object.entries(configClients).forEach(([clientCode, cfg]) => {
+            if (counts.hasOwnProperty(cfg.day)) {
+                clientsSet[cfg.day].add(clientCode);
+            }
         });
     });
 

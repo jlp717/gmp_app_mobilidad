@@ -182,15 +182,37 @@ router.get('/rutero/vendedores', async (req, res) => {
 });
 
 // =============================================================================
-// RUTERO MOVE CLIENTS (Change Day)
+// RUTERO MOVE CLIENTS (Change Day) - CON VALIDACIÓN DE DOMINGO
 // =============================================================================
 router.post('/rutero/move_clients', async (req, res) => {
     let conn;
     try {
-        const { vendedor, moves } = req.body; // moves: [{ client, toDay, clientName }]
+        const { vendedor, moves, targetPosition } = req.body; 
+        // moves: [{ client, toDay, clientName, position? }]
+        // targetPosition: 'end' | 'start' | number (optional, default 'end')
 
         if (!vendedor || !moves || !Array.isArray(moves)) {
             return res.status(400).json({ error: 'Datos inválidos. Se requiere vendedor y array de movimientos.' });
+        }
+
+        // ⚠️ VALIDACIÓN: Nunca permitir Domingo como día destino
+        const DIAS_PROHIBIDOS = ['domingo'];
+        const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+        
+        for (const move of moves) {
+            const dayLower = (move.toDay || '').toLowerCase();
+            if (DIAS_PROHIBIDOS.includes(dayLower)) {
+                return res.status(400).json({ 
+                    error: 'No se permite mover clientes al Domingo',
+                    invalidDay: move.toDay
+                });
+            }
+            if (!DIAS_VALIDOS.includes(dayLower)) {
+                return res.status(400).json({ 
+                    error: `Día inválido: ${move.toDay}`,
+                    validDays: DIAS_VALIDOS
+                });
+            }
         }
 
         const pool = getPool();
@@ -199,30 +221,74 @@ router.post('/rutero/move_clients', async (req, res) => {
         conn = await pool.connect();
         await conn.beginTransaction();
 
+        const movedClientsInfo = [];
+
         for (const move of moves) {
-            const { client, toDay } = move;
+            const { client, toDay, position } = move;
             if (!client || !toDay) continue;
+
+            const dayLower = toDay.toLowerCase();
 
             // 1. Remove from any previous assignment
             await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND CLIENTE = '${client}'`);
 
-            // 2. Add to new day (Append to end)
-            // Get max order for that day
-            const maxOrderRes = await conn.query(`
-                SELECT MAX(ORDEN) as MAX_ORD 
-                FROM JAVIER.RUTERO_CONFIG 
-                WHERE VENDEDOR = '${vendedor}' AND DIA = '${toDay}'
-            `);
-            const nextOrder = (maxOrderRes[0]?.MAX_ORD || 0) + 10;
+            // 2. Determine position based on parameter
+            let targetOrder;
+            const effectivePosition = position ?? targetPosition ?? 'end';
+            
+            if (effectivePosition === 'start' || effectivePosition === 0) {
+                // Shift all existing clients down and insert at position 0
+                await conn.query(`
+                    UPDATE JAVIER.RUTERO_CONFIG 
+                    SET ORDEN = ORDEN + 10 
+                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}'
+                `);
+                targetOrder = 0;
+            } else if (typeof effectivePosition === 'number' && effectivePosition > 0) {
+                // Insert at specific position, shifting others if needed
+                targetOrder = effectivePosition * 10;
+                await conn.query(`
+                    UPDATE JAVIER.RUTERO_CONFIG 
+                    SET ORDEN = ORDEN + 10 
+                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= ${targetOrder}
+                `);
+            } else {
+                // Default: Append to end
+                const maxOrderRes = await conn.query(`
+                    SELECT MAX(ORDEN) as MAX_ORD 
+                    FROM JAVIER.RUTERO_CONFIG 
+                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}'
+                `);
+                targetOrder = (maxOrderRes[0]?.MAX_ORD || 0) + 10;
+            }
 
+            // 3. Insert at calculated position
             await conn.query(`
                 INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
-                VALUES ('${vendedor}', '${toDay}', '${client}', ${nextOrder})
+                VALUES ('${vendedor}', '${dayLower}', '${client}', ${targetOrder})
             `);
+
+            movedClientsInfo.push({
+                client,
+                toDay: dayLower,
+                position: targetOrder
+            });
         }
 
         await conn.commit();
         await reloadRuteroConfig();
+
+        // Get updated counts for the affected days
+        const affectedDays = [...new Set(moves.map(m => m.toDay.toLowerCase()))];
+        const updatedCounts = {};
+        
+        for (const day of affectedDays) {
+            const countRes = await conn.query(`
+                SELECT COUNT(*) as CNT FROM JAVIER.RUTERO_CONFIG 
+                WHERE VENDEDOR = '${vendedor}' AND DIA = '${day}'
+            `);
+            updatedCounts[day] = countRes[0]?.CNT || 0;
+        }
 
         // Audit Email
         try {
@@ -237,17 +303,21 @@ router.post('/rutero/move_clients', async (req, res) => {
                 count: moves.length,
                 movedClients: detailedMoves
             });
-        } catch (e) { }
+        } catch (e) { /* ignore email errors */ }
 
-        res.json({ success: true, message: 'Clientes movidos correctamente' });
+        res.json({ 
+            success: true, 
+            message: 'Clientes movidos correctamente',
+            movedClients: movedClientsInfo,
+            updatedCounts
+        });
 
     } catch (error) {
         if (conn) { try { await conn.rollback(); } catch (e) { } }
         logger.error(`Rutero move error: ${error.message}`);
-        res.status(500).json({ error: 'Error moviendo clientes' });
+        res.status(500).json({ error: 'Error moviendo clientes', details: error.message });
     } finally {
         if (conn) { try { await conn.close(); } catch (e) { } }
-    }
 });
 
 // =============================================================================
@@ -359,6 +429,68 @@ router.get('/rutero/config', async (req, res) => {
     } catch (error) {
         logger.error(`Rutero config fetch error: ${error.message}`);
         res.status(500).json({ error: 'Error recuperando orden' });
+    }
+});
+
+// =============================================================================
+// RUTERO DAY COUNTS - Obtener contadores actualizados de cada día
+// =============================================================================
+router.get('/rutero/counts', async (req, res) => {
+    try {
+        const { vendedorCodes, role } = req.query;
+        
+        // Usar caché actualizada que ya considera overrides
+        const counts = getWeekCountsFromCache(vendedorCodes, role || 'comercial');
+        
+        if (!counts) {
+            return res.json({ 
+                counts: { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 },
+                cacheStatus: 'loading'
+            });
+        }
+        
+        // También obtener total único de clientes
+        const totalClients = getTotalClientsFromCache(vendedorCodes, role || 'comercial');
+        
+        res.json({ 
+            counts,
+            totalUniqueClients: totalClients,
+            cacheStatus: 'ready'
+        });
+    } catch (error) {
+        logger.error(`Rutero counts error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo contadores' });
+    }
+});
+
+// =============================================================================
+// RUTERO AVAILABLE POSITIONS - Para selector de posición
+// =============================================================================
+router.get('/rutero/positions/:day', async (req, res) => {
+    try {
+        const { day } = req.params;
+        const { vendedorCodes, role } = req.query;
+        
+        // Get clients for that day
+        const dayClients = getClientsForDay(vendedorCodes, day, role || 'comercial');
+        
+        if (!dayClients) {
+            return res.json({ positions: [], count: 0, cacheStatus: 'loading' });
+        }
+        
+        res.json({
+            positions: dayClients.length > 0 
+                ? Array.from({ length: dayClients.length + 1 }, (_, i) => ({
+                    value: i,
+                    label: i === 0 ? 'Al inicio' : (i === dayClients.length ? 'Al final' : `Posición ${i}`)
+                  }))
+                : [{ value: 0, label: 'Primera posición' }],
+            count: dayClients.length,
+            cacheStatus: 'ready'
+        });
+    } catch (error) {
+        logger.error(`Rutero positions error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo posiciones' });
     }
 });
 

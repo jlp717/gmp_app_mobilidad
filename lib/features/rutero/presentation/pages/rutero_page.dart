@@ -6,6 +6,7 @@ import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../objectives/presentation/pages/enhanced_client_matrix_page.dart';
 import '../widgets/rutero_reorder_modal.dart';
+import '../widgets/rutero_dialogs.dart'; // NEW: Import dialogs
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/widgets/modern_loading.dart';
 import 'package:provider/provider.dart';
@@ -890,10 +891,46 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     );
     
     if (result != null) {
-       _saveNewOrder(result);
-    } else {
-       // Refresh if moves happened even if canceled
-       _refreshData();
+       await _saveNewOrder(result);
+    }
+    
+    // SIEMPRE refrescar después de cerrar el diálogo para actualizar contadores
+    // ya que pueden haberse movido clientes a otros días
+    await _refreshDataAndCounts();
+  }
+
+  /// Refresca datos y contadores después de cambios
+  Future<void> _refreshDataAndCounts() async {
+    // Primero refrescar contadores desde el backend
+    try {
+      final countsResponse = await ApiClient.get(
+        '/rutero/counts',
+        queryParameters: {
+          'vendedorCodes': _activeVendedorCode,
+          'role': _selectedRole,
+        },
+      );
+      
+      if (countsResponse['counts'] != null && mounted) {
+        setState(() {
+          _weekData = Map<String, int>.from(
+            (countsResponse['counts'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toInt()))
+          );
+          _totalUniqueClients = (countsResponse['totalUniqueClients'] as num?)?.toInt() ?? 
+            _weekData.values.fold(0, (a, b) => a + b);
+        });
+      }
+    } catch (e) {
+      // Si falla, hacer refresh completo
+      await _loadWeekData();
+      return;
+    }
+    
+    // Luego refrescar la lista del día actual
+    await _loadDayClients();
+    
+    if (mounted) {
+      setState(() => _lastFetchTime = DateTime.now());
     }
   }
 
@@ -911,17 +948,25 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
               'orden': orderPayload
           });
           
-          _refreshData();
+          // Refrescar contadores y datos
+          await _refreshDataAndCounts();
+          
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-               const SnackBar(content: Text('Orden actualizado correctamente')),
+               const SnackBar(
+                 content: Text('✅ Orden actualizado correctamente'),
+                 backgroundColor: AppTheme.success,
+               ),
             );
           }
       } catch (e) {
           if (mounted) {
             setState(() => _isLoadingWeek = false);
             ScaffoldMessenger.of(context).showSnackBar(
-               SnackBar(content: Text('Error guardando orden: $e'), backgroundColor: AppTheme.error),
+               SnackBar(
+                 content: Text('Error guardando orden: $e'),
+                 backgroundColor: AppTheme.error,
+               ),
             );
           }
       }
@@ -1292,11 +1337,15 @@ class ReorderDialog extends StatefulWidget {
 class _ReorderDialogState extends State<ReorderDialog> {
   late List<Map<String, dynamic>> _items;
   final ScrollController _scrollController = ScrollController();
+  bool _hasChanges = false; // Track if order has changed
+  List<String> _originalOrder = []; // Store original order to detect changes
 
   @override
   void initState() {
     super.initState();
     _items = List.from(widget.clients);
+    // Store original order for comparison
+    _originalOrder = _items.map((c) => c['code'] as String).toList();
   }
 
   void _onReorder(int oldIndex, int newIndex) {
@@ -1304,7 +1353,21 @@ class _ReorderDialogState extends State<ReorderDialog> {
       if (newIndex > oldIndex) newIndex -= 1;
       final item = _items.removeAt(oldIndex);
       _items.insert(newIndex, item);
+      _checkForChanges();
     });
+  }
+  
+  void _checkForChanges() {
+    final currentOrder = _items.map((c) => c['code'] as String).toList();
+    _hasChanges = !_listEquals(currentOrder, _originalOrder);
+  }
+  
+  bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
   
   void _moveItem(int index, int delta) {
@@ -1326,103 +1389,200 @@ class _ReorderDialogState extends State<ReorderDialog> {
              setState(() {
                  final item = _items.removeAt(index);
                  _items.insert(targetIndex, item);
+                 _checkForChanges();
              });
          }
      }
   }
 
+  /// NUEVO FLUJO: Mover cliente a otro día con confirmación completa
   Future<void> _moveClientToDay(int index) async {
       final client = _items[index];
-      final days = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+      final clientName = client['name'] ?? 'Cliente';
+      final clientCode = client['code'] ?? '';
       
+      // PASO 1: Selector de día destino (excluye Domingo)
       final selectedDay = await showDialog<String>(
           context: context,
-          builder: (ctx) => AlertDialog(
-             backgroundColor: AppTheme.surfaceColor,
-             title: const Text('Mover a otro día'),
-             content: SingleChildScrollView(
-                 child: Column(
-                     mainAxisSize: MainAxisSize.min,
-                     children: days.where((d) => d != widget.currentDay).map((d) => 
-                         ListTile(
-                             title: Text(d.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                             onTap: () => Navigator.pop(ctx, d),
-                         )
-                     ).toList(),
-                 ),
-             ),
-          )
+          builder: (ctx) => DaySelectorDialog(
+            currentDay: widget.currentDay,
+            clientName: clientName,
+            clientCode: clientCode,
+          ),
       );
       
-      if (selectedDay != null) {
-          // Optimistic removal
-          setState(() {
-              _items.removeAt(index);
-          });
-          
-          try {
-             await ApiClient.post('/rutero/move_clients', {
-                 'vendedor': widget.activeVendedor,
-                 'moves': [
-                     {
-                         'client': client['code'],
-                         'toDay': selectedDay,
-                         'clientName': client['name']
-                     }
-                 ]
-             });
-             
-             if (mounted) {
-                 ScaffoldMessenger.of(context).showSnackBar(
-                     SnackBar(content: Text('${client['name']} movido al ${selectedDay.toUpperCase()}'), backgroundColor: AppTheme.success),
-                 );
-             }
-          } catch (e) {
-             // Rollback? Too complex, just warn.
-              if (mounted) {
-                 ScaffoldMessenger.of(context).showSnackBar(
-                     SnackBar(content: Text('Error moviendo cliente: $e'), backgroundColor: AppTheme.error),
-                 );
-             }
-          }
-      }
+      if (selectedDay == null) return; // Usuario canceló
+      
+      // PASO 2: Selector de posición en día destino
+      final selectedPosition = await showDialog<String>(
+          context: context,
+          builder: (ctx) => PositionSelectorDialog(
+            targetDay: selectedDay,
+            vendorCode: widget.activeVendedor,
+            role: 'comercial',
+            clientName: clientName,
+          ),
+      );
+      
+      if (selectedPosition == null) return; // Usuario canceló
+      
+      // PASO 3: Confirmación final con resumen
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => MoveConfirmationDialog(
+            clientName: clientName,
+            clientCode: clientCode,
+            fromDay: widget.currentDay,
+            toDay: selectedDay,
+            position: selectedPosition,
+          ),
+      );
+      
+      if (confirmed != true) return; // Usuario canceló
+      
+      // PASO 4: Ejecutar el movimiento
+      await _executeMove(client, selectedDay, selectedPosition, index);
   }
   
-  void _confirmSave() {
-     showDialog(
-         context: context,
-         builder: (ctx) => AlertDialog(
-             backgroundColor: AppTheme.surfaceColor,
-             title: Row(children: const [
-                 Icon(Icons.perm_device_information, color: AppTheme.neonBlue), 
-                 SizedBox(width: 8), 
-                 Text('Confirmar Rutero')
-             ]),
-             content: const Text(
-                 '¿Estás seguro de aplicar este orden? Recuerda que es importante para la planificación eficiente del rutero y afectará a tus visitas programadas. Se actualizará próximamente.',
-                 style: TextStyle(height: 1.5),
-             ),
-             actions: [
-                 TextButton(child: const Text('Cancelar', style: TextStyle(color: Colors.grey)), onPressed: () => Navigator.pop(ctx)),
-                 ElevatedButton(
-                     style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
-                     child: const Text('Confirmar y Guardar'),
-                     onPressed: () {
-                         Navigator.pop(ctx); // Close alert
-                         Navigator.pop(context, _items); // Return items to parent
-                     }
-                 )
-             ]
-         )
-     );
+  Future<void> _executeMove(
+    Map<String, dynamic> client,
+    String toDay,
+    String position,
+    int index,
+  ) async {
+    // Mostrar loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: AppTheme.neonPink),
+            SizedBox(width: 16),
+            Text('Moviendo cliente...'),
+          ],
+        ),
+      ),
+    );
+    
+    try {
+      // Determinar la posición numérica
+      dynamic targetPosition;
+      if (position == 'start') {
+        targetPosition = 'start';
+      } else if (position == 'end') {
+        targetPosition = 'end';
+      } else {
+        targetPosition = int.tryParse(position) ?? 'end';
+      }
+      
+      await ApiClient.post('/rutero/move_clients', {
+        'vendedor': widget.activeVendedor,
+        'moves': [
+          {
+            'client': client['code'],
+            'toDay': toDay.toLowerCase(),
+            'clientName': client['name'],
+            'position': targetPosition,
+          }
+        ],
+        'targetPosition': targetPosition,
+      });
+      
+      // Cerrar loading
+      if (mounted) Navigator.pop(context);
+      
+      // Actualizar lista local
+      setState(() {
+        _items.removeAt(index);
+        _checkForChanges();
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${client['name']} movido al ${toDay.toUpperCase()}'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      // Cerrar loading
+      if (mounted) Navigator.pop(context);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error moviendo cliente: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
+  }
+  
+  /// Confirmación antes de guardar el nuevo orden
+  Future<void> _confirmSave() async {
+    if (!_hasChanges && _items.length == widget.clients.length) {
+      // No hay cambios de orden
+      Navigator.pop(context);
+      return;
+    }
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ReorderConfirmationDialog(
+        changesCount: _items.length,
+        day: widget.currentDay,
+      ),
+    );
+    
+    if (confirmed == true) {
+      Navigator.pop(context, _items); // Retornar items para guardar
+    }
+  }
+  
+  /// Confirmar descarte de cambios al cerrar
+  Future<bool> _confirmDiscard() async {
+    if (!_hasChanges) return true;
+    
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppTheme.warning),
+            const SizedBox(width: 8),
+            const Text('¿Descartar cambios?'),
+          ],
+        ),
+        content: const Text(
+          'Has modificado el orden de la ruta. ¿Quieres descartar los cambios sin guardar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Continuar editando'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+            child: const Text('Descartar'),
+          ),
+        ],
+      ),
+    );
+    
+    return discard == true;
   }
 
   @override
   Widget build(BuildContext context) {
-    // We need a Scaffold for the ReorderableListView inside a dialog to work well?
-    // Or just a Container.
-    return Dialog(
+    return WillPopScope(
+      onWillPop: _confirmDiscard,
+      child: Dialog(
         insetPadding: const EdgeInsets.all(10),
         backgroundColor: AppTheme.darkBase,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1434,8 +1594,28 @@ class _ReorderDialogState extends State<ReorderDialog> {
                     child: Row(
                         children: [
                             const Text('Organizar Rutero', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                            if (_hasChanges)
+                              Container(
+                                margin: const EdgeInsets.only(left: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warning.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Cambios sin guardar',
+                                  style: TextStyle(fontSize: 10, color: AppTheme.warning),
+                                ),
+                              ),
                             const Spacer(),
-                            IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () async {
+                                if (await _confirmDiscard()) {
+                                  Navigator.pop(context);
+                                }
+                              },
+                            ),
                         ],
                     ),
                 ),
@@ -1446,78 +1626,92 @@ class _ReorderDialogState extends State<ReorderDialog> {
                     width: double.infinity,
                     color: AppTheme.surfaceColor,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text('Arrastra para ordenar o usa las flechas. Mueve clientes de día con el botón calendario.', 
-                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    child: Text(
+                      'Arrastra para ordenar o usa las flechas. Usa el icono 📅 para mover a otro día.\n'
+                      '⚠️ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
                 ),
                 
                 // List
                 Expanded(
-                    child: ReorderableListView.builder(
-                        scrollController: _scrollController,
-                        onReorder: _onReorder,
-                        itemCount: _items.length,
-                        itemBuilder: (ctx, index) {
-                            final item = _items[index];
-                            final pos = index + 1;
-                            
-                            return Container(
-                                key: ValueKey(item['code']),
-                                decoration: const BoxDecoration(
-                                    border: Border(bottom: BorderSide(color: Colors.black12))
-                                ),
-                                child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                                    leading: ReorderableDragStartListener(
-                                        index: index,
-                                        child: const Padding(
-                                            padding: EdgeInsets.all(12),
-                                            child: Icon(Icons.drag_handle, color: Colors.grey),
-                                        ),
-                                    ),
-                                    title: Text(item['name'] ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                    subtitle: Text(item['code'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                    trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                            // Arrows
-                                            Column(
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                    InkWell(onTap: () => _moveItem(index, -1), child: const Icon(Icons.arrow_drop_up, size: 20)),
-                                                    InkWell(onTap: () => _moveItem(index, 1), child: const Icon(Icons.arrow_drop_down, size: 20)),
-                                                ],
-                                            ),
-                                            const SizedBox(width: 8),
-                                            // Numeric Input
-                                            SizedBox(
-                                                width: 40,
-                                                height: 35,
-                                                child: TextField(
-                                                    keyboardType: TextInputType.number,
-                                                    textAlign: TextAlign.center,
-                                                    decoration: const InputDecoration(
-                                                        contentPadding: EdgeInsets.zero,
-                                                        border: OutlineInputBorder(),
-                                                        isDense: true
-                                                    ),
-                                                    controller: TextEditingController(text: '$pos')
-                                                      ..selection = TextSelection.collapsed(offset: '$pos'.length), // ugly hack to set cursor? No, controller rebuilds..
-                                                    onSubmitted: (val) => _updatePositionManual(index, val),
-                                                ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            // Change Day Button
-                                            IconButton(
-                                                icon: const Icon(Icons.calendar_month, color: AppTheme.neonBlue),
-                                                tooltip: 'Mover a otro día',
-                                                onPressed: () => _moveClientToDay(index),
-                                            ),
-                                        ],
-                                    ),
-                                ),
-                            );
-                        },
-                    ),
+                    child: _items.isEmpty 
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.inbox, size: 48, color: Colors.grey.shade600),
+                              const SizedBox(height: 8),
+                              const Text('No hay clientes en este día'),
+                            ],
+                          ),
+                        )
+                      : ReorderableListView.builder(
+                          scrollController: _scrollController,
+                          onReorder: _onReorder,
+                          itemCount: _items.length,
+                          itemBuilder: (ctx, index) {
+                              final item = _items[index];
+                              final pos = index + 1;
+                              
+                              return Container(
+                                  key: ValueKey(item['code']),
+                                  decoration: const BoxDecoration(
+                                      border: Border(bottom: BorderSide(color: Colors.black12))
+                                  ),
+                                  child: ListTile(
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                                      leading: ReorderableDragStartListener(
+                                          index: index,
+                                          child: const Padding(
+                                              padding: EdgeInsets.all(12),
+                                              child: Icon(Icons.drag_handle, color: Colors.grey),
+                                          ),
+                                      ),
+                                      title: Text(item['name'] ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                      subtitle: Text(item['code'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                      trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                              // Arrows
+                                              Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                      InkWell(onTap: () => _moveItem(index, -1), child: const Icon(Icons.arrow_drop_up, size: 20)),
+                                                      InkWell(onTap: () => _moveItem(index, 1), child: const Icon(Icons.arrow_drop_down, size: 20)),
+                                                  ],
+                                              ),
+                                              const SizedBox(width: 8),
+                                              // Numeric Input
+                                              SizedBox(
+                                                  width: 40,
+                                                  height: 35,
+                                                  child: TextField(
+                                                      keyboardType: TextInputType.number,
+                                                      textAlign: TextAlign.center,
+                                                      decoration: const InputDecoration(
+                                                          contentPadding: EdgeInsets.zero,
+                                                          border: OutlineInputBorder(),
+                                                          isDense: true
+                                                      ),
+                                                      controller: TextEditingController(text: '$pos')
+                                                        ..selection = TextSelection.collapsed(offset: '$pos'.length),
+                                                      onSubmitted: (val) => _updatePositionManual(index, val),
+                                                  ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              // Change Day Button
+                                              IconButton(
+                                                  icon: const Icon(Icons.calendar_month, color: AppTheme.neonBlue),
+                                                  tooltip: 'Mover a otro día',
+                                                  onPressed: () => _moveClientToDay(index),
+                                              ),
+                                          ],
+                                      ),
+                                  ),
+                              );
+                          },
+                      ),
                 ),
                 
                 // Footer
@@ -1526,15 +1720,22 @@ class _ReorderDialogState extends State<ReorderDialog> {
                     child: SizedBox(
                         width: double.infinity,
                         height: 48,
-                        child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonPink),
+                        child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _hasChanges ? AppTheme.neonPink : Colors.grey,
+                            ),
                             onPressed: _confirmSave,
-                            child: const Text('GUARDAR CAMBIOS', style: TextStyle(fontWeight: FontWeight.bold)),
+                            icon: const Icon(Icons.save),
+                            label: Text(
+                              _hasChanges ? 'GUARDAR CAMBIOS' : 'CERRAR',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
                         ),
                     ),
                 ),
             ],
         ),
+      ),
     );
   }
 }

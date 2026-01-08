@@ -76,6 +76,9 @@ class ApiConfig {
   static const String ruteroClientStatus = '/rutero/client';
   static const String ruteroClientDetail = '/rutero/client';
   static const String ruteroConfig = '/rutero/config';
+  static const String ruteroCounts = '/rutero/counts';
+  static const String ruteroPositions = '/rutero/positions';
+  static const String ruteroMoveClients = '/rutero/move_clients';
 
   // Objectives Endpoints
   static const String objectives = '/objectives';
