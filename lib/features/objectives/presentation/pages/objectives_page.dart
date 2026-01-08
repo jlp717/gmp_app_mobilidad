@@ -740,11 +740,22 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                 ),
               ),
               const SizedBox(width: 8), // Spacing
-              // Sync/Refresh Button
-              IconButton(
-                icon: const Icon(Icons.sync, color: AppTheme.neonBlue),
-                tooltip: 'Sincronizar datos',
-                onPressed: _isLoading ? null : _loadData,
+              // Sync/Refresh Button - Visible style like other pages
+              GestureDetector(
+                onTap: _isLoading ? null : _loadData,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonBlue.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.neonBlue.withOpacity(0.5)),
+                  ),
+                  child: Icon(
+                    _isLoading ? Icons.hourglass_empty : Icons.sync,
+                    color: AppTheme.neonBlue,
+                    size: 20,
+                  ),
+                ),
               ),
             ],
           ),
