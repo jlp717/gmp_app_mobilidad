@@ -229,6 +229,20 @@ router.post('/rutero/move_clients', async (req, res) => {
 
             const dayLower = toDay.toLowerCase();
 
+            // 0. Capturar día y posición anterior antes de eliminar
+            let previousDay = null;
+            let previousOrder = null;
+            try {
+                const prevRes = await conn.query(`
+                    SELECT DIA, ORDEN FROM JAVIER.RUTERO_CONFIG 
+                    WHERE VENDEDOR = '${vendedor}' AND CLIENTE = '${client}'
+                `);
+                if (prevRes && prevRes.length > 0) {
+                    previousDay = prevRes[0].DIA;
+                    previousOrder = prevRes[0].ORDEN;
+                }
+            } catch (e) { /* ignore */ }
+
             // 1. Remove from any previous assignment
             await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND CLIENTE = '${client}'`);
 
@@ -270,12 +284,34 @@ router.post('/rutero/move_clients', async (req, res) => {
 
             movedClientsInfo.push({
                 client,
+                clientName: move.clientName || 'Cliente',
+                fromDay: previousDay || 'ninguno',
                 toDay: dayLower,
-                position: targetOrder
+                previousPosition: previousOrder,
+                newPosition: targetOrder
             });
         }
 
         await conn.commit();
+        
+        // ═══════════════════════════════════════════════════════════════
+        // REGISTRAR EN LOG DE CAMBIOS (JAVIER.RUTERO_LOG)
+        // ═══════════════════════════════════════════════════════════════
+        try {
+            for (const moved of movedClientsInfo) {
+                await conn.query(`
+                    INSERT INTO JAVIER.RUTERO_LOG 
+                    (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES)
+                    VALUES ('${vendedor}', 'CAMBIO_DIA', '${moved.fromDay}', '${moved.toDay}', '${moved.client}', 
+                            '${(moved.clientName || '').replace(/'/g, "''")}', 
+                            ${moved.previousPosition ?? 'NULL'}, ${moved.newPosition}, 
+                            'Movido de ${moved.fromDay} a ${moved.toDay}')
+                `);
+            }
+        } catch (logErr) {
+            logger.warn(`Log insert failed (non-blocking): ${logErr.message}`);
+        }
+        
         await reloadRuteroConfig();
 
         // Get updated counts for the affected days
@@ -290,18 +326,19 @@ router.post('/rutero/move_clients', async (req, res) => {
             updatedCounts[day] = countRes[0]?.CNT || 0;
         }
 
-        // Audit Email
+        // Audit Email con información detallada
         try {
-            const detailedMoves = moves.map(m => ({
-                client: m.client,
-                name: m.clientName || 'Cliente',
-                toDay: m.toDay
-            }));
-
             sendAuditEmail(vendedor, 'Cambio de Día (Movimiento)', {
                 action: 'Move Clients',
-                count: moves.length,
-                movedClients: detailedMoves
+                count: movedClientsInfo.length,
+                movedClients: movedClientsInfo.map(m => ({
+                    code: m.client,
+                    name: m.clientName,
+                    fromDay: m.fromDay,
+                    toDay: m.toDay,
+                    previousPosition: m.previousPosition,
+                    newPosition: m.newPosition
+                }))
             });
         } catch (e) { /* ignore email errors */ }
 
@@ -365,6 +402,25 @@ router.post('/rutero/config', async (req, res) => {
         }
 
         await conn.commit();
+
+        // ═══════════════════════════════════════════════════════════════
+        // REGISTRAR EN LOG DE CAMBIOS (JAVIER.RUTERO_LOG)
+        // ═══════════════════════════════════════════════════════════════
+        try {
+            for (const item of orden) {
+                if (item.cliente) {
+                    await conn.query(`
+                        INSERT INTO JAVIER.RUTERO_LOG 
+                        (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES)
+                        VALUES ('${vendedor}', 'REORDENAMIENTO', '${dia}', '${dia}', '${item.cliente}', 
+                                '', NULL, ${parseInt(item.posicion) || 0}, 
+                                'Reordenado en ${dia} a posición ${item.posicion}')
+                    `);
+                }
+            }
+        } catch (logErr) {
+            logger.warn(`Log insert failed (non-blocking): ${logErr.message}`);
+        }
 
         // Reload cache immediately so other calls see changes
         await reloadRuteroConfig();

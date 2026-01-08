@@ -136,11 +136,19 @@ function clientsTableFuturistic(clients, isReorder = false, maxShow = 15) {
         const bgColor = idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
         
         if (isReorder) {
+            // Para reordenamiento: mostrar posición anterior vs nueva si disponible
+            const prevPos = c.posicionAnterior !== undefined ? c.posicionAnterior : null;
+            const showChange = prevPos !== null && prevPos !== pos;
+            
             rows += `
             <tr style="background:${bgColor};">
-                <td style="padding:10px 12px;border-bottom:1px solid #334155;width:50px;">
+                <td style="padding:10px 12px;border-bottom:1px solid #334155;width:60px;">
+                    ${showChange ? `
+                        <span style="color:#64748B;font-size:10px;text-decoration:line-through;">#${prevPos + 1}</span>
+                        <span style="color:#64748B;margin:0 3px;">→</span>
+                    ` : ''}
                     <span style="background:linear-gradient(135deg,#6366F1,#A855F7);color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;">
-                        ${pos + 1}
+                        #${pos + 1}
                     </span>
                 </td>
                 <td style="padding:10px 12px;border-bottom:1px solid #334155;">
@@ -149,18 +157,24 @@ function clientsTableFuturistic(clients, isReorder = false, maxShow = 15) {
                 </td>
             </tr>`;
         } else {
+            // Para movimiento de día: mostrar día origen, día destino, y posiciones
             const fromColor = getDayColor(c.fromDay);
             const toColor = getDayColor(c.toDay);
+            const prevPos = c.previousPosition !== undefined ? Math.floor(c.previousPosition / 10) + 1 : '?';
+            const newPos = c.newPosition !== undefined ? Math.floor(c.newPosition / 10) + 1 : '?';
+            
             rows += `
             <tr style="background:${bgColor};">
                 <td style="padding:10px 12px;border-bottom:1px solid #334155;">
                     <span style="color:#F1F5F9;font-size:13px;font-weight:500;">${c.name || c.nombre}</span>
-                    <span style="color:#64748B;font-size:11px;margin-left:8px;">#${c.code || c.codigo}</span>
+                    <br><span style="color:#64748B;font-size:11px;">Código: ${c.code || c.codigo}</span>
                 </td>
-                <td style="padding:10px 12px;border-bottom:1px solid #334155;text-align:right;white-space:nowrap;">
-                    <span style="color:${fromColor};font-size:12px;">${formatDayName(c.fromDay)}</span>
-                    <span style="color:#64748B;margin:0 6px;">→</span>
-                    <span style="background:${toColor};color:#fff;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">${formatDayName(c.toDay)}</span>
+                <td style="padding:10px 12px;border-bottom:1px solid #334155;text-align:right;">
+                    <div style="margin-bottom:4px;">
+                        <span style="color:${fromColor};font-size:11px;padding:2px 6px;border:1px solid ${fromColor}40;border-radius:4px;">${formatDayName(c.fromDay)} #${prevPos}</span>
+                        <span style="color:#64748B;margin:0 6px;">→</span>
+                        <span style="background:${toColor};color:#fff;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">${formatDayName(c.toDay)} #${newPos}</span>
+                    </div>
                 </td>
             </tr>`;
         }
@@ -176,8 +190,8 @@ function clientsTableFuturistic(clients, isReorder = false, maxShow = 15) {
         </tr>`;
     }
     
-    const headerText = isReorder ? 'Pos.' : 'Cliente';
-    const headerText2 = isReorder ? 'Cliente' : 'Cambio de Día';
+    const headerText = isReorder ? 'Nueva Posición' : 'Cliente';
+    const headerText2 = isReorder ? 'Cliente' : 'Cambio (Día + Posición)';
     
     return `
     <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #334155;border-radius:10px;overflow:hidden;margin-top:12px;">

@@ -23,6 +23,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   DashboardProvider? _dashboardProvider;
+  bool _isNavExpanded = true; // Estado del navbar colapsable
 
   @override
   void initState() {
@@ -152,54 +153,94 @@ class _MainShellState extends State<MainShell> {
       body: SafeArea(
         child: Row(
           children: [
-            // Custom Sidebar Navigation for Tablets
-            Container(
-              width: 90,
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
-                border: Border(
-                  right: BorderSide(
-                    color: Colors.white.withOpacity(0.05),
-                    width: 1,
+            // Custom Sidebar Navigation - Colapsable
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              width: _isNavExpanded ? 90 : 0,
+              child: _isNavExpanded ? Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  border: Border(
+                    right: BorderSide(
+                      color: Colors.white.withOpacity(0.05),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 16),
+                    
+                    // User Avatar
+                    _buildUserAvatar(user, isJefeVentas),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Navigation Items - Take available space
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        itemCount: navItems.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _buildNavItem(
+                              item: navItems[index],
+                              isSelected: safeIndex == index,
+                              onTap: () => setState(() => _currentIndex = index),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    
+                    // Bottom Section - Collapse button and Logout
+                    const Divider(height: 1, color: Colors.white10),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        children: [
+                          // Collapse button
+                          _buildCollapseButton(),
+                          const SizedBox(height: 8),
+                          _buildLogoutButton(authProvider),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ) : null,
+            ),
+            
+            // Expand button cuando está colapsado
+            if (!_isNavExpanded)
+              GestureDetector(
+                onTap: () => setState(() => _isNavExpanded = true),
+                child: Container(
+                  width: 24,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceColor,
+                    border: Border(
+                      right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
+                    ),
+                  ),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neonBlue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppTheme.neonBlue,
+                        size: 16,
+                      ),
+                    ),
                   ),
                 ),
               ),
-              child: Column(
-                children: [
-                  const SizedBox(height: 16),
-                  
-                  // User Avatar
-                  _buildUserAvatar(user, isJefeVentas),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Navigation Items - Take available space
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      itemCount: navItems.length,
-                      itemBuilder: (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: _buildNavItem(
-                            item: navItems[index],
-                            isSelected: safeIndex == index,
-                            onTap: () => setState(() => _currentIndex = index),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  
-                  // Bottom Section - Logout
-                  const Divider(height: 1, color: Colors.white10),
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: _buildLogoutButton(authProvider),
-                  ),
-                ],
-              ),
-            ),
             
             // Main Content Area
             Expanded(
@@ -353,6 +394,38 @@ class _MainShellState extends State<MainShell> {
               style: TextStyle(
                 fontSize: 10,
                 color: AppTheme.error,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCollapseButton() {
+    return InkWell(
+      onTap: () => setState(() => _isNavExpanded = !_isNavExpanded),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: AppTheme.neonBlue.withOpacity(0.1),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              _isNavExpanded ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+              color: AppTheme.neonBlue,
+              size: 20,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _isNavExpanded ? 'Ocultar' : '',
+              style: const TextStyle(
+                fontSize: 9,
+                color: AppTheme.neonBlue,
                 fontWeight: FontWeight.w500,
               ),
             ),
