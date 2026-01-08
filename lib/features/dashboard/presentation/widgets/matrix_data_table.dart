@@ -108,8 +108,9 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                 children: const [
                   Expanded(flex: 5, child: Text('ITEM', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
                   Expanded(flex: 3, child: Text('VENTA', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
-                  Expanded(flex: 2, child: Text('MARG', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
-                  Expanded(flex: 2, child: Text('M.ACUM', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
+                  Expanded(flex: 2, child: Text('MARG %', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
+                  // M.ACUM column header in ORANGE
+                  Expanded(flex: 2, child: Text('M.ACUM', textAlign: TextAlign.right, style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
                 ],
               ),
             ),
@@ -141,11 +142,12 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     }
     final marginPct = totalSales > 0 ? (totalMargin / totalSales) * 100 : 0.0;
     
+    // TOTAL ROW - Orange background for distinction
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.neonBlue.withOpacity(0.15),
-        border: Border(top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5), width: 2)),
+        color: Colors.orange.withOpacity(0.15),
+        border: Border(top: BorderSide(color: Colors.orange.withOpacity(0.5), width: 2)),
       ),
       child: Row(
         children: [
@@ -153,9 +155,9 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
             flex: 5,
             child: Row(
               children: const [
-                Icon(Icons.summarize, color: AppTheme.neonBlue, size: 16),
+                Icon(Icons.summarize, color: Colors.orange, size: 16),
                 SizedBox(width: 6),
-                Text('TOTAL', style: TextStyle(color: AppTheme.neonBlue, fontSize: 13, fontWeight: FontWeight.bold)),
+                Text('TOTAL', style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -167,19 +169,20 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
             ),
           ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              CurrencyFormatter.format(totalMargin),
-              textAlign: TextAlign.right,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-          ),
-          // M.ACUM column - orange text, no background
+          // MARG column - show % not €
           Expanded(
             flex: 2,
             child: Text(
               '${marginPct.toStringAsFixed(1)}%',
+              textAlign: TextAlign.right,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
+          // M.ACUM column - total margin in €
+          Expanded(
+            flex: 2,
+            child: Text(
+              CurrencyFormatter.format(totalMargin),
               textAlign: TextAlign.right,
               style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
             ),
