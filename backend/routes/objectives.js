@@ -12,6 +12,75 @@ const {
 } = require('../utils/common');
 
 
+// =============================================================================
+// INHERITED OBJECTIVES LOGIC
+// For new vendors who don't have full history, we calculate objectives based
+// on the sales of previous vendors who managed their current clients.
+// =============================================================================
+
+/**
+ * Get all clients currently managed by a vendor (from current year or most recent data)
+ */
+async function getVendorCurrentClients(vendorCode, currentYear) {
+    const rows = await query(`
+        SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
+        FROM DSED.LACLAE L
+        WHERE TRIM(L.LCCDVD) = '${vendorCode}'
+          AND L.LCAADC = ${currentYear}
+          AND ${LACLAE_SALES_FILTER}
+    `, false);
+
+    // If no clients in current year, try previous year
+    if (rows.length === 0) {
+        const prevRows = await query(`
+            SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
+            FROM DSED.LACLAE L
+            WHERE TRIM(L.LCCDVD) = '${vendorCode}'
+              AND L.LCAADC = ${currentYear - 1}
+              AND ${LACLAE_SALES_FILTER}
+        `, false);
+        return prevRows.map(r => r.CLIENT_CODE);
+    }
+
+    return rows.map(r => r.CLIENT_CODE);
+}
+
+/**
+ * Get monthly sales for a set of clients in a given year (by ALL vendors)
+ * This allows us to calculate inherited targets for new vendors
+ */
+async function getClientsMonthlySales(clientCodes, year) {
+    if (!clientCodes || clientCodes.length === 0) return {};
+
+    const clientList = clientCodes.map(c => `'${c}'`).join(',');
+
+    const rows = await query(`
+        SELECT 
+            L.LCMMDC as MONTH,
+            SUM(L.LCIMVT) as SALES,
+            SUM(L.LCIMCT) as COST,
+            COUNT(DISTINCT L.LCCDCL) as CLIENTS
+        FROM DSED.LACLAE L
+        WHERE TRIM(L.LCCDCL) IN (${clientList})
+          AND L.LCAADC = ${year}
+          AND ${LACLAE_SALES_FILTER}
+        GROUP BY L.LCMMDC
+    `, false);
+
+    // Build map: month -> {sales, cost, clients}
+    const monthlyMap = {};
+    rows.forEach(r => {
+        monthlyMap[r.MONTH] = {
+            sales: parseFloat(r.SALES) || 0,
+            cost: parseFloat(r.COST) || 0,
+            clients: parseInt(r.CLIENTS) || 0
+        };
+    });
+
+    return monthlyMap;
+}
+
+
 // Mapeo mes número -> campo de cuota en COFC
 const MONTH_QUOTA_MAP = {
     1: 'CUOTAENERO', 2: 'CUOTAFEBRERO', 3: 'CUOTAMARZO', 4: 'CUOTAABRIL',
@@ -240,20 +309,60 @@ router.get('/evolution', async (req, res) => {
         const yearlyData = {};
         const yearTotals = {};
 
+        // =====================================================================
+        // INHERITED OBJECTIVES: Pre-load inherited sales for new vendors
+        // =====================================================================
+        // For vendors with incomplete history (some months with 0 sales in prevYear),
+        // we calculate the target based on sales of their current clients by ANY vendor.
+        let inheritedMonthlySales = {};
+        const isAll = !vendedorCodes || vendedorCodes === 'ALL';
+
+        if (!isAll) {
+            // Check if vendor has any months without data in previous year (for current year objectives)
+            const currentYear = yearsArray[0] || getCurrentDate().getFullYear();
+            const prevYear = currentYear - 1;
+
+            const monthsWithData = rows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
+            const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(m => !monthsWithData.includes(m));
+
+            if (missingMonths.length > 0) {
+                // Vendor is "new" or has incomplete history - load inherited sales
+                console.log(`📊 [OBJECTIVES] Vendor ${vendedorCodes} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
+
+                const firstCode = vendedorCodes.split(',')[0].trim();
+                const currentClients = await getVendorCurrentClients(firstCode, currentYear);
+                if (currentClients.length > 0) {
+                    inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
+                    console.log(`📊 [OBJECTIVES] Found ${currentClients.length} clients. Loaded inherited sales for ${Object.keys(inheritedMonthlySales).length} months.`);
+                }
+            }
+        }
+
         yearsArray.forEach(year => {
             // Calculate Annual Objective first: Total Previous Year Sales * 1.10
             let prevYearTotal = 0;
+            let inheritedTotal = 0;
             let currentYearTotalSoFar = 0;
 
             for (let m = 1; m <= 12; m++) {
                 const row = rows.find(r => r.YEAR == year && r.MONTH == m); // Loose equality
                 const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
 
-                if (prevRow) prevYearTotal += parseFloat(prevRow.SALES) || 0;
+                let ownPrevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
+
+                // Use inherited sales when vendor has no own sales for this month
+                if (ownPrevSales === 0 && inheritedMonthlySales[m]) {
+                    inheritedTotal += inheritedMonthlySales[m].sales;
+                } else {
+                    prevYearTotal += ownPrevSales;
+                }
+
                 if (row) currentYearTotalSoFar += parseFloat(row.SALES) || 0;
             }
 
-            const annualObjective = prevYearTotal > 0 ? prevYearTotal * 1.10 : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * 1.10 : 0);
+            // Combined: own sales + inherited sales from clients
+            const combinedPrevTotal = prevYearTotal + inheritedTotal;
+            const annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * 1.10 : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * 1.10 : 0);
             const monthlyObjective = annualObjective / 12;
 
             yearlyData[year] = [];
@@ -266,17 +375,22 @@ router.get('/evolution', async (req, res) => {
                 const cost = row ? parseFloat(row.COST) || 0 : 0;
                 const clients = row ? parseInt(row.CLIENTS) || 0 : 0;
 
-                // SEASONAL OBJECTIVE:
-                // If we have history (prevYearTotal > 0), we follow it STRICTLY, even if it's 0 for some months.
-                // This preserves seasonality (high summer, low winter).
-                // Only if we have NO history at all do we fall back to linear distribution.
+                // SEASONAL OBJECTIVE with INHERITED support:
+                // If we have combined history (own + inherited), use it for seasonality.
                 let seasonalObjective = 0;
 
-                if (prevYearTotal > 0) {
-                    const prevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
-                    seasonalObjective = prevSales * 1.10;
+                if (combinedPrevTotal > 0) {
+                    // Get own sales first
+                    let baseSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
+
+                    // If no own sales, use inherited sales for this month
+                    if (baseSales === 0 && inheritedMonthlySales[m]) {
+                        baseSales = inheritedMonthlySales[m].sales;
+                    }
+
+                    seasonalObjective = baseSales * 1.10;
                 } else if (annualObjective > 0) {
-                    // No history for the entire previous year. Fallback to linear.
+                    // No history at all. Fallback to linear.
                     seasonalObjective = annualObjective / 12;
                 }
 
