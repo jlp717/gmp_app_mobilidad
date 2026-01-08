@@ -1013,7 +1013,7 @@ class _ClientCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Observations Banner
-            if (observaciones != null && observaciones.isNotEmpty && (observaciones['text'] as String).isNotEmpty) 
+            if (hasObservaciones) 
               InkWell( // Make banner clickable to edit
                 onTap: onNotesTap, 
                 child: Container(
@@ -1032,7 +1032,7 @@ class _ClientCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          observaciones['text'] as String,
+                          observaciones!['text'] as String,
                           style: const TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1194,12 +1194,8 @@ class _ClientCard extends StatelessWidget {
                      IconButton(
                       onPressed: onNotesTap,
                       icon: Icon(
-                        (observaciones.isNotEmpty && (observaciones['text'] as String).isNotEmpty) 
-                            ? Icons.edit_note 
-                            : Icons.note_add, 
-                        color: (observaciones.isNotEmpty && (observaciones['text'] as String).isNotEmpty) 
-                            ? AppTheme.warning 
-                            : Colors.grey.shade400,
+                        hasObservaciones ? Icons.edit_note : Icons.note_add, 
+                        color: hasObservaciones ? AppTheme.warning : Colors.grey.shade400,
                         size: 26
                       ),
                       tooltip: 'Observaciones',
