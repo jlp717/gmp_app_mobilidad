@@ -124,10 +124,12 @@ router.get('/:code', async (req, res) => {
     const clientCode = code.trim();
 
     // Basic client info - using parameterized query
+    // Include all phone fields for WhatsApp feature
     const clientInfo = await queryWithParams(`
       SELECT C.CODIGOCLIENTE as code, C.NOMBRECLIENTE as name, C.NIF as nif,
   C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
   C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
+  C.FAX as fax, C.EMAIL as email,
   C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
   C.OBSERVACIONES1 as notes, C.ANOALTA as yearCreated
       FROM DSEDAC.CLI C
@@ -137,6 +139,27 @@ router.get('/:code', async (req, res) => {
 
     if (clientInfo.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+
+    // Get editable observations from our custom table
+    let editableNotes = null;
+    try {
+      const notesResult = await query(`
+        SELECT OBSERVACIONES, MODIFIED_BY, MODIFIED_AT
+        FROM JAVIER.CLIENT_NOTES
+        WHERE CLIENT_CODE = '${clientCode}'
+        FETCH FIRST 1 ROWS ONLY
+      `, false);
+      if (notesResult[0]) {
+        editableNotes = {
+          text: notesResult[0].OBSERVACIONES,
+          modifiedBy: notesResult[0].MODIFIED_BY,
+          modifiedAt: notesResult[0].MODIFIED_AT
+        };
+      }
+    } catch (e) {
+      // Table may not exist yet, ignore
+      logger.debug(`CLIENT_NOTES table not found: ${e.message}`);
     }
 
     // Sales summary - parameterized query
@@ -201,6 +224,12 @@ router.get('/:code', async (req, res) => {
     const s = salesSummary[0] || {};
     const p = paymentStatus[0] || {};
 
+    // Build phone list for WhatsApp feature
+    const phones = [];
+    if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
+    if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
+    if (c.FAX?.trim()) phones.push({ type: 'Fax/Móvil', number: c.FAX.trim() });
+
     res.json({
       client: {
         code: c.CODE?.trim(),
@@ -212,9 +241,13 @@ router.get('/:code', async (req, res) => {
         postalCode: c.POSTALCODE?.trim(),
         phone: c.PHONE?.trim(),
         phone2: c.PHONE2?.trim(),
+        fax: c.FAX?.trim(),
+        email: c.EMAIL?.trim(),
+        phones: phones, // Array for WhatsApp selector
         route: c.ROUTE?.trim(),
         contactPerson: c.CONTACTPERSON?.trim(),
-        notes: c.NOTES?.trim(),
+        notes: c.NOTES?.trim(), // Original read-only notes from CLI
+        editableNotes: editableNotes, // Editable notes from our table
         yearCreated: c.YEARCREATED,
         salesStats: {
           totalSales: formatCurrency(s.TOTALSALES),
@@ -247,6 +280,94 @@ router.get('/:code', async (req, res) => {
   } catch (error) {
     logger.error(`Client detail error: ${error.message}`);
     res.status(500).json({ error: 'Error obteniendo detalle de cliente', details: error.message });
+  }
+});
+
+// =============================================================================
+// CLIENT EDITABLE NOTES (GET/PUT)
+// =============================================================================
+router.get('/:code/notes', async (req, res) => {
+  try {
+    const clientCode = req.params.code.trim();
+
+    // First ensure table exists
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS JAVIER.CLIENT_NOTES (
+          CLIENT_CODE VARCHAR(20) NOT NULL PRIMARY KEY,
+          OBSERVACIONES VARCHAR(500),
+          MODIFIED_BY VARCHAR(50),
+          MODIFIED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `, false);
+    } catch (e) {
+      // Table may already exist
+    }
+
+    const result = await query(`
+      SELECT OBSERVACIONES, MODIFIED_BY, MODIFIED_AT
+      FROM JAVIER.CLIENT_NOTES
+      WHERE CLIENT_CODE = '${clientCode}'
+    `, false);
+
+    if (result[0]) {
+      res.json({
+        notes: result[0].OBSERVACIONES,
+        modifiedBy: result[0].MODIFIED_BY,
+        modifiedAt: result[0].MODIFIED_AT
+      });
+    } else {
+      res.json({ notes: null, modifiedBy: null, modifiedAt: null });
+    }
+  } catch (error) {
+    logger.error(`Get notes error: ${error.message}`);
+    res.status(500).json({ error: 'Error obteniendo notas' });
+  }
+});
+
+router.put('/:code/notes', async (req, res) => {
+  try {
+    const clientCode = req.params.code.trim();
+    const { notes, vendorCode, vendorName } = req.body;
+
+    if (notes === undefined) {
+      return res.status(400).json({ error: 'Campo notes requerido' });
+    }
+
+    const safeNotes = notes.substring(0, 500).replace(/'/g, "''");
+    const safeVendor = (vendorName || vendorCode || 'UNKNOWN').substring(0, 50).replace(/'/g, "''");
+
+    // Ensure table exists
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS JAVIER.CLIENT_NOTES (
+          CLIENT_CODE VARCHAR(20) NOT NULL PRIMARY KEY,
+          OBSERVACIONES VARCHAR(500),
+          MODIFIED_BY VARCHAR(50),
+          MODIFIED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `, false);
+    } catch (e) {
+      // Table may already exist
+    }
+
+    // UPSERT: Update if exists, insert if not (MERGE statement for DB2)
+    await query(`
+      MERGE INTO JAVIER.CLIENT_NOTES AS target
+      USING (VALUES ('${clientCode}')) AS source(CLIENT_CODE)
+      ON target.CLIENT_CODE = source.CLIENT_CODE
+      WHEN MATCHED THEN
+        UPDATE SET OBSERVACIONES = '${safeNotes}', MODIFIED_BY = '${safeVendor}', MODIFIED_AT = CURRENT_TIMESTAMP
+      WHEN NOT MATCHED THEN
+        INSERT (CLIENT_CODE, OBSERVACIONES, MODIFIED_BY, MODIFIED_AT)
+        VALUES ('${clientCode}', '${safeNotes}', '${safeVendor}', CURRENT_TIMESTAMP)
+    `, false);
+
+    logger.info(`[NOTES] Client ${clientCode} notes updated by ${safeVendor}`);
+    res.json({ success: true, message: 'Notas guardadas correctamente' });
+  } catch (error) {
+    logger.error(`Save notes error: ${error.message}`);
+    res.status(500).json({ error: 'Error guardando notas', details: error.message });
   }
 });
 

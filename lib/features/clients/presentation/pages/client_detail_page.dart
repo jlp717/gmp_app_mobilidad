@@ -165,6 +165,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final city = client['city'] ?? '';
     final phone = client['phone'] ?? '';
     final nif = client['nif'] ?? '';
+    final editableNotes = client['editableNotes'] as Map<String, dynamic>?;
+    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -172,6 +174,73 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Editable Notes Banner (if exists)
+          if (editableNotes != null && editableNotes['text'] != null && (editableNotes['text'] as String).isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.warning.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.warning.withOpacity(0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          editableNotes['text'] as String,
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
+                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 18, color: AppTheme.warning),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => _showEditNotesDialog(code, editableNotes['text'] as String?),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            // Show add notes button if no notes
+            InkWell(
+              onTap: () => _showEditNotesDialog(code, null),
+              child: Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonBlue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
+                    const SizedBox(width: 6),
+                    const Text('Añadir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          
           Row(
             children: [
               CircleAvatar(
@@ -201,6 +270,16 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   ],
                 ),
               ),
+              // WhatsApp Button
+              if (phones.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.chat, size: 20, color: Color(0xFF25D366)), // WhatsApp green
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _showWhatsAppDialog(phones),
+                  tooltip: 'WhatsApp',
+                ),
+              const SizedBox(width: 8),
               if (phone.isNotEmpty)
                 IconButton(
                   icon: const Icon(Icons.phone, size: 20, color: AppTheme.success),
@@ -229,6 +308,111 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
         ],
       ),
     );
+  }
+
+  void _showEditNotesDialog(String clientCode, String? currentNotes) {
+    final controller = TextEditingController(text: currentNotes ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        title: const Text('Observaciones del Cliente'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          maxLength: 500,
+          decoration: const InputDecoration(
+            hintText: 'Ej: Cliente de vacaciones hasta el 15/01',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ApiClient.put(
+                  '${ApiConfig.clientDetail}/$clientCode/notes',
+                  body: {
+                    'notes': controller.text,
+                    'vendorCode': widget.vendedorCodes,
+                    'vendorName': widget.vendedorCodes, // Will be resolved by backend
+                  },
+                );
+                _loadClientDetail(); // Refresh
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error guardando: $e'), backgroundColor: AppTheme.error),
+                  );
+                }
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showWhatsAppDialog(List<Map<String, dynamic>> phones) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 8),
+            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const SizedBox(height: 12),
+            ...phones.map((p) => ListTile(
+              leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+              title: Text(p['number'] ?? ''),
+              subtitle: Text(p['type'] ?? 'Teléfono'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _openWhatsApp(p['number'] ?? '');
+              },
+            )).toList(),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openWhatsApp(String phone) async {
+    // Clean phone number
+    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
+      cleanPhone = '34$cleanPhone'; // Default to Spain
+    }
+    if (cleanPhone.startsWith('+')) {
+      cleanPhone = cleanPhone.substring(1);
+    }
+    
+    // Build personalized message
+    final message = Uri.encodeComponent(
+      'Hola, soy tu comercial de Mari Pepa. '
+      'Me gustaría saber cómo va todo y recordarte que mañana es día de visita. '
+      '¿Está todo en orden? ¿Necesitas algo en particular?'
+    );
+    
+    final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Widget _buildSummaryTab(Map<String, dynamic> summary, Map<String, dynamic> payments, List<Map<String, dynamic>> monthlyTrend) {
