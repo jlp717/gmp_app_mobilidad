@@ -952,6 +952,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           await _refreshDataAndCounts();
           
           if (mounted) {
+            setState(() => _isLoadingWeek = false);
             ScaffoldMessenger.of(context).showSnackBar(
                const SnackBar(
                  content: Text('✅ Orden actualizado correctamente'),
