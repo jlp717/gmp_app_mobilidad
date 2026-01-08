@@ -7,6 +7,51 @@ let laclaeCache = {};
 let laclaeCacheReady = false;
 
 // Load LACLAE visit/delivery data into memory cache
+// Rutero Configuration Cache (Overrides)
+// Structure: { clientCode: { day: 'lunes', order: 1, vendedor: 'XX' } }
+// Note: clientCode is unique enough, but technically a client could be visited by multiple vendors?
+// Assuming JAVIER.RUTERO_CONFIG is per pair VENDEDOR-CLIENTE.
+// Structure: { vendor: { clientCode: { day: 'lunes', order: 1 } } }
+let ruteroConfigCache = {};
+
+async function loadRuteroConfigCache(conn) {
+    try {
+        const rows = await conn.query(`
+            SELECT TRIM(VENDEDOR) as VENDEDOR, TRIM(CLIENTE) as CLIENTE, TRIM(DIA) as DIA, ORDEN
+            FROM JAVIER.RUTERO_CONFIG
+        `);
+
+        ruteroConfigCache = {};
+        rows.forEach(r => {
+            if (!r.VENDEDOR || !r.CLIENTE) return;
+            if (!ruteroConfigCache[r.VENDEDOR]) ruteroConfigCache[r.VENDEDOR] = {};
+
+            ruteroConfigCache[r.VENDEDOR][r.CLIENTE] = {
+                day: r.DIA?.toLowerCase(),
+                order: r.ORDEN
+            };
+        });
+        logger.info(`📅 Rutero Config loaded: ${rows.length} overrides`);
+    } catch (e) {
+        logger.warn(`⚠️ Failed to load Rutero Config (might not exist yet): ${e.message}`);
+    }
+}
+
+// Reload function exposed for planner.js
+async function reloadRuteroConfig() {
+    const dbPool = getPool();
+    if (!dbPool) return;
+    try {
+        const conn = await dbPool.connect();
+        await loadRuteroConfigCache(conn);
+        await conn.close();
+    } catch (e) {
+        logger.error(`Reload config failed: ${e.message}`);
+    }
+}
+
+
+// Load LACLAE visit/delivery data into memory cache
 async function loadLaclaeCache() {
     logger.info('📅 Loading LACLAE cache (visit/delivery days)...');
     const start = Date.now();
@@ -20,7 +65,7 @@ async function loadLaclaeCache() {
     try {
         const conn = await dbPool.connect();
         try {
-            // Load visit/delivery flags for all clients - this takes a while but only once at startup
+            // Load base LACLAE data
             const rows = await conn.query(`
         SELECT DISTINCT
           R1_T8CDVD as VENDEDOR,
@@ -69,6 +114,9 @@ async function loadLaclaeCache() {
                 });
             });
 
+            // Load Overrides
+            await loadRuteroConfigCache(conn);
+
             const vendorCount = Object.keys(laclaeCache).length;
             const totalClients = Object.values(laclaeCache).reduce((sum, v) => sum + Object.keys(v).length, 0);
             const duration = Date.now() - start;
@@ -91,21 +139,47 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial') {
 
     const dayLower = day.toLowerCase();
     const isDelivery = role === 'repartidor';
-    const clients = [];
+    let finalClients = new Set();
 
     const vendedors = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : Object.keys(laclaeCache);
 
     vendedors.forEach(vendedor => {
+        // 1. Get Natural Clients (LACLAE)
         const vendorClients = laclaeCache[vendedor] || {};
+        const configClients = ruteroConfigCache[vendedor] || {};
+
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
             const days = isDelivery ? data.deliveryDays : data.visitDays;
-            if (days.includes(dayLower)) {
-                clients.push(clientCode);
+
+            // Check override
+            const override = configClients[clientCode];
+
+            let shouldInclude = false;
+
+            if (override) {
+                // If overridden, ONLY appear if override day matches
+                if (override.day === dayLower) shouldInclude = true;
+            } else {
+                // No override, use natural days
+                if (days.includes(dayLower)) shouldInclude = true;
+            }
+
+            if (shouldInclude) {
+                finalClients.add(clientCode);
+            }
+        });
+
+        // 2. Add clients that exist ONLY in RuteroConfig (orphan overrides? rare but possible)
+        // or clients that were missed above because they aren't in LACLAE cache for this vendor?
+        // Let's iterate configClients ensuring we catch anyone moved TO this day
+        Object.entries(configClients).forEach(([clientCode, cfg]) => {
+            if (cfg.day === dayLower) {
+                finalClients.add(clientCode);
             }
         });
     });
 
-    return [...new Set(clients)]; // Unique clients
+    return Array.from(finalClients);
 }
 
 // Get week counts from cache
@@ -227,5 +301,6 @@ module.exports = {
     getVendedoresFromCache,
     getVendorActiveDaysFromCache,
     getVendorDeliveryDaysFromCache,
-    getCachedVendorCodes
+    getCachedVendorCodes,
+    reloadRuteroConfig
 };

@@ -15,8 +15,10 @@ const {
     getWeekCountsFromCache,
     getTotalClientsFromCache,
     getClientsForDay,
-    getVendedoresFromCache
+    getVendedoresFromCache,
+    reloadRuteroConfig
 } = require('../services/laclae');
+const { sendAuditEmail } = require('../services/emailService');
 
 const DAY_NAMES = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 
@@ -180,6 +182,78 @@ router.get('/rutero/vendedores', async (req, res) => {
 });
 
 // =============================================================================
+// RUTERO MOVE CLIENTS (Change Day)
+// =============================================================================
+router.post('/rutero/move_clients', async (req, res) => {
+    let conn;
+    try {
+        const { vendedor, moves } = req.body; // moves: [{ client, toDay, clientName }]
+
+        if (!vendedor || !moves || !Array.isArray(moves)) {
+            return res.status(400).json({ error: 'Datos inválidos. Se requiere vendedor y array de movimientos.' });
+        }
+
+        const pool = getPool();
+        if (!pool) throw new Error("Database pool not initialized");
+
+        conn = await pool.connect();
+        await conn.beginTransaction();
+
+        for (const move of moves) {
+            const { client, toDay } = move;
+            if (!client || !toDay) continue;
+
+            // 1. Remove from any previous assignment
+            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND CLIENTE = '${client}'`);
+
+            // 2. Add to new day (Append to end)
+            // Get max order for that day
+            const maxOrderRes = await conn.query(`
+                SELECT MAX(ORDEN) as MAX_ORD 
+                FROM JAVIER.RUTERO_CONFIG 
+                WHERE VENDEDOR = '${vendedor}' AND DIA = '${toDay}'
+            `);
+            const nextOrder = (maxOrderRes[0]?.MAX_ORD || 0) + 10;
+
+            await conn.query(`
+                INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
+                VALUES ('${vendedor}', '${toDay}', '${client}', ${nextOrder})
+            `);
+        }
+
+        await conn.commit();
+        await reloadRuteroConfig();
+
+        // Audit Email
+        try {
+            const detailedMoves = moves.map(m => ({
+                client: m.client,
+                name: m.clientName || 'Cliente',
+                toDay: m.toDay
+            }));
+
+            sendAuditEmail(vendedor, 'Cambio de Día (Movimiento)', {
+                action: 'Move Clients',
+                count: moves.length,
+                movedClients: detailedMoves
+            });
+        } catch (e) { }
+
+        res.json({ success: true, message: 'Clientes movidos correctamente' });
+
+    } catch (error) {
+        if (conn) { try { await conn.rollback(); } catch (e) { } }
+        logger.error(`Rutero move error: ${error.message}`);
+        res.status(500).json({ error: 'Error moviendo clientes' });
+    } finally {
+        if (conn) { try { await conn.close(); } catch (e) { } }
+    }
+});
+
+// =============================================================================
+// RUTERO CONFIGURATION (GET/POST)
+// =============================================================================
+// =============================================================================
 // RUTERO CONFIGURATION (GET/POST)
 // =============================================================================
 router.post('/rutero/config', async (req, res) => {
@@ -198,22 +272,63 @@ router.post('/rutero/config', async (req, res) => {
         conn = await pool.connect();
         await conn.beginTransaction();
 
-        // 1. Delete existing config for this vendor/day
+        // 1. Delete existing config for this vendor/day AND for these specific clients anywhere
+        // Why? If moving a client from Monday to Tuesday, we must remove them from Monday (if overridden)
+        // AND remove them from any previous Tuesday config to avoid duplicates before inserting.
+
+        // A. Clear current day overrides entirely (overwrite logic for this day)
         await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}'`);
 
-        // 2. Insert new order
-        // Note: ODBC basic driver might not support batch inserts efficiently, so we loop.
-        for (const item of orden) {
-            if (item.cliente) {
-                await conn.query(`
-          INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
-          VALUES ('${vendedor}', '${dia}', '${item.cliente}', ${parseInt(item.posicion) || 0})
-        `);
+        // B. Ensure clients being saved are removed from ANY other day overrides
+        if (orden.length > 0) {
+            const clientCodes = orden.map(o => `'${o.cliente}'`).join(',');
+            // This deletes them from ANY day (incl. current, which is redundant but safe)
+            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND CLIENTE IN (${clientCodes})`);
+
+            // 2. Insert new order
+            for (const item of orden) {
+                if (item.cliente) {
+                    await conn.query(`
+                      INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
+                      VALUES ('${vendedor}', '${dia}', '${item.cliente}', ${parseInt(item.posicion) || 0})
+                    `);
+                }
             }
         }
 
         await conn.commit();
-        res.json({ success: true, message: 'Orden actualizado' });
+
+        // Reload cache immediately so other calls see changes
+        await reloadRuteroConfig();
+
+        // 3. Send Audit Email (Best Effort)
+        try {
+            // Fetch names for nicer email
+            let clientNamesMap = {};
+            if (orden.length > 0) {
+                const clientCodes = orden.map(o => `'${o.cliente}'`).join(',');
+                const names = await query(`SELECT CODIGOCLIENTE as C, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as N FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${clientCodes}) FETCH FIRST 1000 ROWS ONLY`);
+                names.forEach(n => clientNamesMap[n.C.trim()] = n.N.trim());
+            }
+
+            const auditDetails = {
+                action: 'Actualización de Rutero',
+                diaObjetivo: dia,
+                totalClientes: orden.length,
+                clientesAfectados: orden.map(o => ({
+                    codigo: o.cliente,
+                    nombre: clientNamesMap[o.cliente] || 'Desconocido',
+                    posicion: o.posicion
+                }))
+            };
+
+            // Fire and forget email
+            sendAuditEmail(vendedor, `Modificación Rutero (${dia})`, auditDetails);
+        } catch (emailErr) {
+            logger.warn(`Email audit skipped: ${emailErr.message}`);
+        }
+
+        res.json({ success: true, message: 'Orden actualizado y notificado' });
 
     } catch (error) {
         if (conn) {
