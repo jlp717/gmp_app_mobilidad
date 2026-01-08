@@ -11,6 +11,7 @@ import '../../../../core/widgets/modern_loading.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
+import '../../../../core/providers/auth_provider.dart';
 
 /// Rutero Page - Premium Design with Visit/Delivery Toggle
 /// Shows clients to visit/deliver each day with YoY comparison
@@ -873,11 +874,17 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       cleanPhone = cleanPhone.substring(1);
     }
 
+    // Personal identification
+    final auth = context.read<AuthProvider>();
+    final nombreComercial = auth.currentUser?.name ?? 'tu comercial';
+    final manana = DateTime.now().add(const Duration(days: 1));
+    final fecha = '${manana.day}/${manana.month}/${manana.year}';
+
     // Professional message
     final message = Uri.encodeComponent(
-      'Hola, soy tu comercial de Mari Pepa. '
-      'Me gustaría saber cómo va todo y recordarte que mañana es día de visita. '
-      '¿Está todo en orden? ¿Necesitas algo en particular?'
+      'Hola, soy $nombreComercial de Mari Pepa. '
+      'Mañana día $fecha tenemos visita. '
+      '¿Necesitas cualquier cosilla?'
     );
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
