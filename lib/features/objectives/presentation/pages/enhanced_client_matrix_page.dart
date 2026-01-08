@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/api/api_client.dart';
@@ -36,6 +37,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   Map<String, dynamic> _monthlyTotals = {};
   Map<String, dynamic> _availableFilters = {};
   
+  // NEW: Client specific info
+  Map<String, dynamic>? _editableNotes;
+  Map<String, dynamic> _contactInfo = {};
+
   Set<int> _selectedYears = {DateTime.now().year};
   Set<int> _selectedMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
   // Pending filter state (only apply when user clicks Apply)
@@ -94,6 +99,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         _summary = response['summary'] ?? {};
         _monthlyTotals = response['monthlyTotals'] ?? {};
         _availableFilters = response['availableFilters'] ?? {};
+        _editableNotes = response['editableNotes'];
+        _contactInfo = response['contactInfo'] ?? {};
         _isLoading = false;
         if (_families.length == 1) _expandedFamilies.add(_families.first['familyCode'] ?? '');
       });
@@ -104,8 +111,78 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
   String _formatCurrency(double value) {
     // Always show full number with proper formatting (2.900 € not 2.9K)
-    // Always show full number with proper formatting (2.900 € not 2.9K)
     return CurrencyFormatter.format(value);
+  }
+
+  void _openWhatsApp() {
+    final phones = (_contactInfo['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
+    
+    // Fallback logic not strictly needed here if we trust backend, but good to have
+    if (phones.isEmpty) {
+       final p1 = _contactInfo['phone'] as String?;
+       final p2 = _contactInfo['phone2'] as String?;
+       if (p1 != null && p1.isNotEmpty) phones.add({'type': 'Teléfono 1', 'number': p1});
+       if (p2 != null && p2.isNotEmpty) phones.add({'type': 'Teléfono 2', 'number': p2});
+    }
+
+    if (phones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay teléfono disponible para WhatsApp')),
+      );
+      return;
+    }
+
+    if (phones.length == 1) {
+      _launchWhatsApp(phones.first['number'] ?? '');
+      return;
+    }
+
+    // Multiple phones selector
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 8),
+            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const SizedBox(height: 12),
+            ...phones.map((p) => ListTile(
+              leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+              title: Text(p['number'] ?? ''),
+              subtitle: Text(p['type'] ?? 'Teléfono'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchWhatsApp(p['number'] ?? '');
+              },
+            )).toList(),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _launchWhatsApp(String phone) async {
+    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
+      cleanPhone = '34$cleanPhone';
+    }
+    if (cleanPhone.startsWith('+')) cleanPhone = cleanPhone.substring(1);
+
+    final message = Uri.encodeComponent('Hola, revisando tus objetivos y evolución de ventas...');
+    
+    final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo abrir WhatsApp')));
+    }
   }
 
   @override
@@ -125,6 +202,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           ],
         ),
         actions: [
+        actions: [
+          if (!_isLoading && _error == null)
+            IconButton(
+              icon: const Icon(Icons.chat, color: Color(0xFF25D366)), // WhatsApp Green
+              onPressed: _openWhatsApp,
+              tooltip: 'Enviar WhatsApp',
+            ),
           IconButton(
             icon: Icon(_showFilters ? Icons.filter_list_off : Icons.filter_list, size: 20),
             onPressed: () => setState(() => _showFilters = !_showFilters),
@@ -139,6 +223,29 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           : SafeArea(
               child: Column(
                 children: [
+                  if (_editableNotes != null && (_editableNotes!['text'] as String).isNotEmpty) 
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.warning.withOpacity(0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _editableNotes!['text'] as String,
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (_showFilters) _buildFilters(),
                   _buildSummaryRow(),
                   _buildMonthlyRow(),

@@ -341,8 +341,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 DIRECCION as ADDRESS,
                 POBLACION as CITY,
                 TELEFONO1 as PHONE,
-                TELEFONO2 as PHONE2,
-                FAX as FAX
+                TELEFONO2 as PHONE2
             FROM DSEDAC.CLI
             WHERE CODIGOCLIENTE IN (${safeClientFilter})
         `);
@@ -468,7 +467,6 @@ router.get('/rutero/day/:day', async (req, res) => {
             const phones = [];
             if (r.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: r.PHONE.trim() });
             if (r.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: r.PHONE2.trim() });
-            if (r.FAX?.trim()) phones.push({ type: 'Fax/Móvil', number: r.FAX.trim() });
 
             return {
                 code,

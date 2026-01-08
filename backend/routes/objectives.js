@@ -456,6 +456,45 @@ router.get('/matrix', async (req, res) => {
         yearsArray.forEach(y => allYearsToFetch.add(y - 1));
         const yearsFilter = Array.from(allYearsToFetch).join(',');
 
+        // --- NEW: Client Contact & Observations ---
+        let contactInfo = { phone: '', phone2: '', email: '', phones: [] };
+        let editableNotes = null;
+        try {
+            // Get phones
+            const contactRows = await query(`
+                SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2, EMAIL 
+                FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
+            `);
+            if (contactRows.length > 0) {
+                const c = contactRows[0];
+                const phones = [];
+                if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
+                if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
+
+                contactInfo = {
+                    phone: c.PHONE?.trim() || '',
+                    phone2: c.PHONE2?.trim() || '',
+                    email: c.EMAIL?.trim() || '',
+                    phones: phones
+                };
+            }
+
+            // Get editable notes
+            const notesRows = await query(`
+                SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES 
+                WHERE CLIENT_CODE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
+            `, false);
+            if (notesRows.length > 0) {
+                editableNotes = {
+                    text: notesRows[0].OBSERVACIONES,
+                    modifiedBy: notesRows[0].MODIFIED_BY
+                };
+            }
+        } catch (e) {
+            logger.warn(`Could not load client details for matrix: ${e.message}`);
+        }
+        // -------------------------------------------
+
         // Build filter conditions
         let filterConditions = '';
         if (productCode && productCode.trim()) {
@@ -846,6 +885,8 @@ router.get('/matrix', async (req, res) => {
 
         res.json({
             clientCode,
+            contactInfo, // NEW
+            editableNotes, // NEW
             summary,
             grandTotal: {
                 sales: grandTotalSales,

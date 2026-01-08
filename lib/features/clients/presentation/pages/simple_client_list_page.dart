@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
@@ -114,6 +115,95 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   }
 
   // ... (_navigateToClientMatrix)
+
+
+  void _openWhatsApp(Map<String, dynamic> client) {
+    // Backend now returns phones array with simple objects
+    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
+    
+    // Fallback if phones array is empty but phone fields exist (legacy compat)
+    if (phones.isEmpty) {
+      if (client['phone'] != null && (client['phone'] as String).isNotEmpty) {
+        phones.add({'type': 'Teléfono 1', 'number': client['phone']});
+      }
+      if (client['phone2'] != null && (client['phone2'] as String).isNotEmpty) {
+        phones.add({'type': 'Teléfono 2', 'number': client['phone2']});
+      }
+    }
+
+    if (phones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay teléfono disponible para WhatsApp')),
+      );
+      return;
+    }
+
+    // If only one phone, open directly
+    if (phones.length == 1) {
+      _launchWhatsApp(phones.first['number'] ?? '');
+      return;
+    }
+
+    // Multiple phones - show selector
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 8),
+            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const SizedBox(height: 12),
+            ...phones.map((p) => ListTile(
+              leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+              title: Text(p['number'] ?? ''),
+              subtitle: Text(p['type'] ?? 'Teléfono'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchWhatsApp(p['number'] ?? '');
+              },
+            )).toList(),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _launchWhatsApp(String phone) async {
+    // Clean phone number - remove non-digits except +
+    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    // Add Spain prefix if not present
+    if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
+      cleanPhone = '34$cleanPhone';
+    }
+    if (cleanPhone.startsWith('+')) {
+      cleanPhone = cleanPhone.substring(1);
+    }
+
+    // Professional message
+    final message = Uri.encodeComponent(
+      'Hola, soy tu comercial de Mari Pepa. '
+      'Me gustaría saber cómo va todo y recordarte que mañana es día de visita. '
+      '¿Está todo en orden? ¿Necesitas algo en particular?'
+    );
+
+    final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir WhatsApp')),
+      );
+    }
+  }
 
   void _navigateToClientMatrix(Map<String, dynamic> client) {
     final code = client['code'] as String? ?? '';
@@ -261,6 +351,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
             client: client,
             isJefeVentas: widget.isJefeVentas,
             onTap: () => _navigateToClientMatrix(client),
+            onWhatsAppTap: () => _openWhatsApp(client),
           );
         },
       ),
@@ -272,8 +363,9 @@ class _ClientCard extends StatelessWidget {
   final Map<String, dynamic> client;
   final bool isJefeVentas;
   final VoidCallback? onTap;
+  final VoidCallback? onWhatsAppTap;
 
-  const _ClientCard({required this.client, this.isJefeVentas = false, this.onTap});
+  const _ClientCard({required this.client, this.isJefeVentas = false, this.onTap, this.onWhatsAppTap});
 
   @override
   Widget build(BuildContext context) {
@@ -410,9 +502,21 @@ class _ClientCard extends StatelessWidget {
                 ],
               ),
 
+              // WhatsApp button
+              if (phone.isNotEmpty && onWhatsAppTap != null) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: onWhatsAppTap,
+                  icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 24),
+                  tooltip: 'WhatsApp',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                ),
+              ],
+
               // Route badge
               if (route.isNotEmpty) ...[
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
