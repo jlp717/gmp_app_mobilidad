@@ -138,7 +138,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonPink),
             child: const Text('Guardar'),
           ),
         ],

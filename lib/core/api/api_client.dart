@@ -207,6 +207,28 @@ class ApiClient {
     }
   }
 
+  /// PUT request
+  static Future<Map<String, dynamic>> put(
+    String endpoint, {
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      final fullUrl = '${dio.options.baseUrl}$endpoint';
+      debugPrint('[ApiClient] PUT $fullUrl');
+      
+      final response = await dio.put(endpoint, data: data);
+      
+      debugPrint('[ApiClient] Response status: ${response.statusCode}');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      debugPrint('[ApiClient] DioException: ${e.type} - ${e.message}');
+      throw _handleError(e);
+    } catch (e) {
+      debugPrint('[ApiClient] Unexpected error: $e');
+      rethrow;
+    }
+  }
+
   static bool _isNetworkError(DioException e) {
     return e.type == DioExceptionType.connectionError ||
            e.type == DioExceptionType.connectionTimeout ||
