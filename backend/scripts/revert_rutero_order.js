@@ -21,8 +21,12 @@
  *       Eliminar las entradas de RUTERO_CONFIG restaura el orden natural.
  */
 
-const { getPool, query } = require('../config/db');
-const logger = require('../middleware/logger');
+const odbc = require('odbc');
+const dotenv = require('dotenv');
+const path = require('path');
+
+// Cargar variables de entorno desde el directorio backend
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -30,6 +34,12 @@ const isDryRun = args.includes('--dry-run');
 const deleteAll = args.includes('--all');
 const vendorArg = args.find(a => a.startsWith('--vendor='));
 const specificVendor = vendorArg ? vendorArg.split('=')[1] : null;
+
+// Configuración de BD
+const DB_UID = process.env.ODBC_UID || 'JAVIER';
+const DB_PWD = process.env.ODBC_PWD || 'JAVIER';
+const DB_DSN = process.env.ODBC_DSN || 'GMP';
+const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;`;
 
 async function revertRuteroOrder() {
     console.log('='.repeat(60));
@@ -39,15 +49,12 @@ async function revertRuteroOrder() {
     console.log(`Objetivo: ${deleteAll ? 'TODA la tabla' : (specificVendor ? `Vendedor ${specificVendor}` : 'Todos los vendedores con overrides')}`);
     console.log('');
 
-    const pool = getPool();
-    if (!pool) {
-        console.error('❌ Error: No se pudo inicializar el pool de base de datos');
-        process.exit(1);
-    }
-
     let conn;
     try {
-        conn = await pool.connect();
+        // Conectar directamente a la BD
+        console.log('🔌 Conectando a la base de datos...');
+        conn = await odbc.connect(DB_CONFIG);
+        console.log('✅ Conexión establecida\n');
 
         // 1. Primero, verificar qué datos hay en la tabla
         console.log('📊 Analizando configuraciones actuales en JAVIER.RUTERO_CONFIG...\n');
@@ -118,7 +125,7 @@ async function revertRuteroOrder() {
             
             clientDetails.forEach((row, idx) => {
                 if (idx < 20 || idx === clientDetails.length - 1) {
-                    console.log(`  ${row.DIA?.padEnd(10)} | Pos ${String(row.ORDEN).padStart(3)} | ${row.CLIENTE} | ${(row.NOMBRE || 'Sin nombre').substring(0, 30)}`);
+                    console.log(`  ${(row.DIA || '').padEnd(10)} | Pos ${String(row.ORDEN).padStart(3)} | ${row.CLIENTE} | ${(row.NOMBRE || 'Sin nombre').substring(0, 30)}`);
                 } else if (idx === 20) {
                     console.log(`  ... (${clientDetails.length - 21} más)`);
                 }
@@ -129,15 +136,12 @@ async function revertRuteroOrder() {
         if (!isDryRun) {
             console.log('\n⚠️  PROCEDIENDO A ELIMINAR CONFIGURACIONES...\n');
             
-            await conn.beginTransaction();
-            
             let deleteQuery = 'DELETE FROM JAVIER.RUTERO_CONFIG';
             if (specificVendor) {
                 deleteQuery += ` WHERE VENDEDOR = '${specificVendor}'`;
             }
             
             await conn.query(deleteQuery);
-            await conn.commit();
             
             console.log('✅ ÉXITO: Configuraciones eliminadas correctamente.');
             console.log('   El rutero ahora usa el orden original de LACLAE.');
@@ -151,9 +155,6 @@ async function revertRuteroOrder() {
 
     } catch (error) {
         console.error(`\n❌ Error: ${error.message}`);
-        if (conn) {
-            try { await conn.rollback(); } catch (e) { /* ignore */ }
-        }
         process.exit(1);
     } finally {
         if (conn) {
@@ -162,26 +163,13 @@ async function revertRuteroOrder() {
     }
 }
 
-// Inicializar conexión y ejecutar
-async function main() {
-    try {
-        // Esperar a que el pool esté listo
-        const pool = getPool();
-        if (!pool) {
-            // El pool puede necesitar tiempo para inicializarse
-            console.log('⏳ Esperando inicialización del pool de BD...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-        
-        await revertRuteroOrder();
-        
-    } catch (error) {
-        console.error('Error fatal:', error);
+// Ejecutar directamente
+revertRuteroOrder()
+    .then(() => {
+        console.log('\n✅ Script completado.');
+        process.exit(0);
+    })
+    .catch(err => {
+        console.error('Error fatal:', err);
         process.exit(1);
-    }
-    
-    // Dar tiempo para que se cierren conexiones
-    setTimeout(() => process.exit(0), 1000);
-}
-
-main();
+    });
