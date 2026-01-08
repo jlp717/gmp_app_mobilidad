@@ -318,11 +318,9 @@ router.post('/rutero/move_clients', async (req, res) => {
         res.status(500).json({ error: 'Error moviendo clientes', details: error.message });
     } finally {
         if (conn) { try { await conn.close(); } catch (e) { } }
+    }
 });
 
-// =============================================================================
-// RUTERO CONFIGURATION (GET/POST)
-// =============================================================================
 // =============================================================================
 // RUTERO CONFIGURATION (GET/POST)
 // =============================================================================
