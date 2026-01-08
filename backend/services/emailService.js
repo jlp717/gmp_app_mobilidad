@@ -3,7 +3,7 @@ const logger = require('../middleware/logger');
 
 // SMTP Configuration (Provided by user)
 const SMTP_CONFIG = {
-    host: 'smtp.example.com',
+    host: 'mail.mari-pepa.com',
     port: 587,
     secure: false, // true for 465, false for other ports
     auth: {
