@@ -12,6 +12,7 @@ import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import 'enhanced_client_matrix_page.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
+import '../../../../core/widgets/smart_sync_header.dart';
 
 /// Objectives Page - Track sales goals with multi-select filters
 class ObjectivesPage extends StatefulWidget {
@@ -33,6 +34,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
   
   bool _isLoading = true;
   String? _error;
+  DateTime? _lastFetchTime;
   
   // Multi-select filters
   Set<int> _selectedYears = {DateTime.now().year};
@@ -202,6 +204,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         _calculateObjectives();
         
         _isLoading = false;
+        _lastFetchTime = DateTime.now();
       });
     } catch (e) {
       debugPrint('Error loading objectives: $e');
@@ -739,26 +742,16 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                   ),
                 ),
               ),
-              const SizedBox(width: 8), // Spacing
-              // Sync/Refresh Button - Visible style like other pages
-              GestureDetector(
-                onTap: _isLoading ? null : _loadData,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.neonBlue.withOpacity(0.5)),
-                  ),
-                  child: Icon(
-                    _isLoading ? Icons.hourglass_empty : Icons.sync,
-                    color: AppTheme.neonBlue,
-                    size: 20,
-                  ),
-                ),
-              ),
             ],
           ),
+        ),
+        
+        // SmartSyncHeader - igual que en Clientes
+        SmartSyncHeader(
+          lastSync: _lastFetchTime,
+          isLoading: _isLoading,
+          onSync: _loadData,
+          error: _error,
         ),
         
         // Selector de vendedor para jefe de ventas
