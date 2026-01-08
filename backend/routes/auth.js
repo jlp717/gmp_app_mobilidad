@@ -107,7 +107,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         if (pinRecord.length === 0) {
             logger.info(`[${requestId}] 🔄 Not found by code, searching by name...`);
 
-            // Search by name (partial match anywhere in the name)
+            // Search by name - compare without spaces to handle "MARICARMEN" vs "93 MARI CARMEN"
             const nameSearch = await query(`
                 SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
                        TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
@@ -116,7 +116,7 @@ router.post('/login', loginLimiter, async (req, res) => {
                 JOIN DSEDAC.VDPL1 P ON D.CODIGOVENDEDOR = P.CODIGOVENDEDOR
                 JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
                 LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-                WHERE UPPER(TRIM(D.NOMBREVENDEDOR)) LIKE '%${safeUser}%'
+                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%${safeUser.replace(/\s/g, '')}%'
                 FETCH FIRST 1 ROWS ONLY
             `, false);
 
