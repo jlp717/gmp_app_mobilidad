@@ -91,8 +91,8 @@ class _CommissionsPageState extends State<CommissionsPage> {
                 child: const Text('⚠️ Todas las cifras son SIN IVA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.lightBlue)),
               ),
               const SizedBox(height: 16),
-              _buildStep('📊 Objetivo = Ventas 2025 + 3% IPC', 
-                  'Tu objetivo 2026 es lo que vendiste en 2025 más un 3%.\nEjemplo: 100.000€ (2025) → 103.000€ Objetivo (2026).'),
+              _buildStep('📊 Objetivo Anual', 
+                  'Tu objetivo se calcula en base a las ventas del año anterior más un pequeño porcentaje de incremento.'),
               const SizedBox(height: 12),
               _buildStep('✅ Estado Mensual', 
                   '• VERDE ✓ = Superas el objetivo del mes\n• ROJO ✗ = Por debajo del objetivo\n• Solo comisionas si superas el 100%'),
@@ -598,25 +598,24 @@ class _CommissionsPageState extends State<CommissionsPage> {
                  ],
                ),
              ),
-             // Tier legend removed - available in info modal (ℹ️ button)
              // Warning for ALL mode - ONLY FOR JEFE DE VENTAS
               if (widget.isJefeVentas && (context.watch<FilterProvider>().selectedVendor == '' || context.watch<FilterProvider>().selectedVendor == null))
                Container(
                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                  padding: const EdgeInsets.all(10),
                  decoration: BoxDecoration(
-                   color: Colors.orange.withOpacity(0.1),
+                   color: Colors.blue.withOpacity(0.1),
                    borderRadius: BorderRadius.circular(8),
-                   border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                   border: Border.all(color: Colors.blue.withOpacity(0.3)),
                  ),
                  child: Row(
                    children: [
-                     const Icon(Icons.info_outline, color: Colors.orange, size: 18),
+                     const Icon(Icons.info_outline, color: Colors.blue, size: 18),
                      const SizedBox(width: 8),
                      Expanded(
                        child: Text(
-                         'Vista agregada: Los días de ritmo son orientativos (L-V estándar). Para datos precisos, consulte cada comercial individualmente o los Objetivos del mes completo.',
-                         style: TextStyle(fontSize: 11, color: Colors.orange.shade200),
+                         'Vista general: Mostrando datos agregados de todos los comerciales. Seleccione uno del filtro para ver detalles individuales.',
+                         style: TextStyle(fontSize: 11, color: Colors.blue.shade200),
                        ),
                      ),
                    ],

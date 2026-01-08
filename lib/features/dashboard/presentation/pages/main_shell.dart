@@ -247,7 +247,7 @@ class _MainShellState extends State<MainShell> {
         ),
         const SizedBox(height: 6),
         Text(
-          user.name.length > 14 ? '${user.name.substring(0, 14)}' : user.name,
+          user.name.length > 16 ? '${user.name.substring(0, 16)}' : user.name,
           style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
           maxLines: 1,
           textAlign: TextAlign.center,
