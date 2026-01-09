@@ -303,7 +303,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
   Widget _buildFilters() {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 260), // Increased for FI filters
+      constraints: const BoxConstraints(maxHeight: 340), // Increased for all 5 FI filters
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,

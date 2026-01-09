@@ -371,23 +371,22 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
           ],
         ),
         const SizedBox(height: 8),
-        // Row 2: FI2 (Subcategoría) - only if FI1 selected
-        if (_selectedFi1 != null || _fi2Options.isNotEmpty)
-          _buildDropdown(
-            label: 'Subcategoría',
-            value: _selectedFi2,
-            options: _fi2Options,
-            loading: _loadingFi2,
-            onChanged: widget.enabled ? _onFi2Changed : null,
-            icon: Icons.subdirectory_arrow_right,
-            enabled: _selectedFi1 != null,
-          ),
-        // Advanced filters (FI3, FI4) - show when showAdvanced=true and FI1 selected
-        if (widget.showAdvanced && _selectedFi1 != null) ...[
+        // Row 2: FI2 (Subcategoría) - Siempre visible pero disabled si no hay FI1
+        _buildDropdown(
+          label: 'Subcategoría',
+          value: _selectedFi2,
+          options: _fi2Options,
+          loading: _loadingFi2,
+          onChanged: widget.enabled ? _onFi2Changed : null,
+          icon: Icons.subdirectory_arrow_right,
+          enabled: _selectedFi1 != null,
+        ),
+        // Advanced filters (FI3, FI4) - Siempre visibles cuando showAdvanced=true
+        if (widget.showAdvanced) ...[
           const SizedBox(height: 8),
           Row(
             children: [
-              // FI3 - Detalle (siempre mostrar si showAdvanced, con loading si cargando)
+              // FI3 - Detalle
               Expanded(
                 child: _buildDropdown(
                   label: 'Detalle',
@@ -396,11 +395,11 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
                   loading: _loadingFi3,
                   onChanged: widget.enabled ? _onFi3Changed : null,
                   icon: Icons.tune,
-                  enabled: _fi3Options.isNotEmpty || _loadingFi3,
+                  enabled: _selectedFi1 != null && (_fi3Options.isNotEmpty || _loadingFi3),
                 ),
               ),
               const SizedBox(width: 8),
-              // FI4 - Especial (siempre mostrar si showAdvanced)
+              // FI4 - Especial
               Expanded(
                 child: _buildDropdown(
                   label: 'Especial',
@@ -409,7 +408,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
                   loading: _loadingFi4,
                   onChanged: widget.enabled ? _onFi4Changed : null,
                   icon: Icons.eco,
-                  enabled: _fi4Options.isNotEmpty || _loadingFi4,
+                  enabled: _selectedFi1 != null && (_fi4Options.isNotEmpty || _loadingFi4),
                 ),
               ),
             ],
