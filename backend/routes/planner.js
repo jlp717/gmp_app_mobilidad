@@ -228,23 +228,29 @@ router.post('/rutero/move_clients', async (req, res) => {
             if (!client || !toDay) continue;
 
             const dayLower = toDay.toLowerCase();
+            const clientTrimmed = client.trim();
 
             // 0. Capturar día y posición anterior antes de eliminar
             let previousDay = null;
             let previousOrder = null;
             try {
                 const prevRes = await conn.query(`
-                    SELECT DIA, ORDEN FROM JAVIER.RUTERO_CONFIG 
-                    WHERE VENDEDOR = '${vendedor}' AND CLIENTE = '${client}'
+                    SELECT TRIM(DIA) as DIA, ORDEN FROM JAVIER.RUTERO_CONFIG 
+                    WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'
                 `);
                 if (prevRes && prevRes.length > 0) {
-                    previousDay = prevRes[0].DIA;
+                    previousDay = prevRes[0].DIA?.trim() || null;
                     previousOrder = prevRes[0].ORDEN;
+                    logger.info(`📋 Move: Cliente ${clientTrimmed} estaba en día "${previousDay}" orden ${previousOrder}`);
+                } else {
+                    logger.info(`📋 Move: Cliente ${clientTrimmed} no tenía día asignado previamente`);
                 }
-            } catch (e) { /* ignore */ }
+            } catch (e) { 
+                logger.warn(`Could not get previous day: ${e.message}`);
+            }
 
             // 1. Remove from any previous assignment
-            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND CLIENTE = '${client}'`);
+            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'`);
 
             // 2. Determine position based on parameter
             let targetOrder;
@@ -279,13 +285,13 @@ router.post('/rutero/move_clients', async (req, res) => {
             // 3. Insert at calculated position
             await conn.query(`
                 INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
-                VALUES ('${vendedor}', '${dayLower}', '${client}', ${targetOrder})
+                VALUES ('${vendedor}', '${dayLower}', '${clientTrimmed}', ${targetOrder})
             `);
 
             movedClientsInfo.push({
-                client,
+                client: clientTrimmed,
                 clientName: move.clientName || 'Cliente',
-                fromDay: previousDay || 'ninguno',
+                fromDay: previousDay || null,
                 toDay: dayLower,
                 previousPosition: previousOrder,
                 newPosition: targetOrder

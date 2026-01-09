@@ -435,15 +435,16 @@ async function sendConsolidatedEmail(vendorName, changes) {
         
         allMovedClients.forEach((c, idx) => {
             const bgColor = idx % 2 === 0 ? '#FFFFFF' : '#F0FDF4';
-            const fromDay = formatDayName(c.fromDay);
+            const fromDay = c.fromDay ? formatDayName(c.fromDay) : '(nuevo)';
             const toDay = formatDayName(c.toDay);
+            const isNew = !c.fromDay;
             content += `
                 <tr style="background:${bgColor};">
                     <td style="padding:10px 12px;border-bottom:1px solid #D1FAE5;">
                         <span style="color:#1E293B;font-size:13px;font-weight:500;">${c.name || c.clientName || 'Cliente'}</span>
                     </td>
                     <td style="padding:10px 12px;border-bottom:1px solid #D1FAE5;text-align:center;">
-                        <span style="color:#64748B;font-size:12px;">${fromDay}</span>
+                        <span style="color:${isNew ? '#10B981' : '#64748B'};font-size:12px;${isNew ? 'font-style:italic;' : ''}">${fromDay}</span>
                         <span style="color:#10B981;font-weight:700;margin:0 6px;">→</span>
                         <span style="background:#10B981;color:#FFFFFF;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">${toDay}</span>
                     </td>

@@ -460,9 +460,9 @@ router.get('/matrix', async (req, res) => {
         let contactInfo = { phone: '', phone2: '', email: '', phones: [] };
         let editableNotes = null;
         try {
-            // Get phones
+            // Get phones (EMAIL no existe en DSEDAC.CLI)
             const contactRows = await query(`
-                SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2, EMAIL 
+                SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2 
                 FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
             `);
             if (contactRows.length > 0) {
