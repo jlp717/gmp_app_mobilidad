@@ -1,7 +1,6 @@
 /**
  * Script para crear la tabla JAVIER.RUTERO_LOG
  * Esta tabla guarda el historial de todos los cambios realizados en el rutero
- * Compatible con IBM iSeries / AS400
  */
 
 const path = require('path');
@@ -24,67 +23,49 @@ async function main() {
         conn = await odbc.connect(DB_CONFIG);
         console.log('✅ Conexión establecida');
 
-        // Verificar si la tabla ya existe
-        const checkTable = `
-            SELECT COUNT(*) AS CNT 
-            FROM QSYS2.SYSTABLES 
-            WHERE TABLE_SCHEMA = 'JAVIER' AND TABLE_NAME = 'RUTERO_LOG'
+        // Crear tabla de log si no existe
+        const createTableSQL = `
+            CREATE TABLE JAVIER.RUTERO_LOG (
+                ID INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                FECHA_HORA TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                VENDEDOR VARCHAR(10) NOT NULL,
+                TIPO_CAMBIO VARCHAR(50) NOT NULL,
+                DIA_ORIGEN VARCHAR(20),
+                DIA_DESTINO VARCHAR(20),
+                CLIENTE VARCHAR(20) NOT NULL,
+                NOMBRE_CLIENTE VARCHAR(100),
+                POSICION_ANTERIOR INTEGER,
+                POSICION_NUEVA INTEGER,
+                DETALLES VARCHAR(500)
+            )
         `;
-        
-        const result = await conn.query(checkTable);
-        const tableExists = result[0]?.CNT > 0;
-        
-        if (tableExists) {
-            console.log('ℹ️  La tabla JAVIER.RUTERO_LOG ya existe');
-        } else {
-            // Crear tabla de log - Sintaxis compatible con IBM iSeries
-            const createTableSQL = `
-                CREATE TABLE JAVIER.RUTERO_LOG (
-                    ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1),
-                    FECHA_HORA TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    VENDEDOR VARCHAR(10) NOT NULL,
-                    TIPO_CAMBIO VARCHAR(50) NOT NULL,
-                    DIA_ORIGEN VARCHAR(20),
-                    DIA_DESTINO VARCHAR(20),
-                    CLIENTE VARCHAR(20) NOT NULL,
-                    NOMBRE_CLIENTE VARCHAR(100),
-                    POSICION_ANTERIOR INTEGER,
-                    POSICION_NUEVA INTEGER,
-                    DETALLES VARCHAR(500),
-                    CONSTRAINT RUTERO_LOG_PK PRIMARY KEY (ID)
-                )
-            `;
 
+        try {
             await conn.query(createTableSQL);
             console.log('✅ Tabla JAVIER.RUTERO_LOG creada exitosamente');
+        } catch (err) {
+            if (err.message.includes('already exists') || err.message.includes('SQL0601')) {
+                console.log('ℹ️  La tabla JAVIER.RUTERO_LOG ya existe');
+            } else {
+                throw err;
+            }
         }
 
-        // Crear índices para búsquedas rápidas (ignorar errores si ya existen)
+        // Crear índices para búsquedas rápidas
         try {
-            await conn.query('CREATE INDEX JAVIER.RUTERO_LOG_VEND_IDX ON JAVIER.RUTERO_LOG (VENDEDOR)');
+            await conn.query('CREATE INDEX RUTERO_LOG_VEND_IDX ON JAVIER.RUTERO_LOG (VENDEDOR)');
             console.log('✅ Índice por vendedor creado');
-        } catch (e) { 
-            if (!e.message.includes('already exists') && !e.message.includes('SQL0601')) {
-                console.log('ℹ️  Índice por vendedor ya existe o no se pudo crear');
-            }
-        }
+        } catch (e) { /* ignore if exists */ }
 
         try {
-            await conn.query('CREATE INDEX JAVIER.RUTERO_LOG_FECHA_IDX ON JAVIER.RUTERO_LOG (FECHA_HORA)');
+            await conn.query('CREATE INDEX RUTERO_LOG_FECHA_IDX ON JAVIER.RUTERO_LOG (FECHA_HORA)');
             console.log('✅ Índice por fecha creado');
-        } catch (e) { 
-            if (!e.message.includes('already exists') && !e.message.includes('SQL0601')) {
-                console.log('ℹ️  Índice por fecha ya existe o no se pudo crear');
-            }
-        }
+        } catch (e) { /* ignore if exists */ }
 
         console.log('\n🎉 Tabla de logs lista para usar');
 
     } catch (error) {
         console.error('❌ Error:', error.message);
-        if (error.odbcErrors) {
-            error.odbcErrors.forEach(e => console.error('   ODBC:', e.message));
-        }
         process.exit(1);
     } finally {
         if (conn) await conn.close();

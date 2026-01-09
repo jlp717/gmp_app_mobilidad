@@ -196,7 +196,7 @@ class _MainShellState extends State<MainShell> {
                       ),
                     ),
                     
-                    // Bottom Section - Collapse button, Network Settings and Logout
+                    // Bottom Section - Collapse button and Logout
                     const Divider(height: 1, color: Colors.white10),
                     Padding(
                       padding: const EdgeInsets.all(12),
@@ -204,9 +204,6 @@ class _MainShellState extends State<MainShell> {
                         children: [
                           // Collapse button
                           _buildCollapseButton(),
-                          const SizedBox(height: 8),
-                          // Network Settings button
-                          _buildNetworkSettingsButton(),
                           const SizedBox(height: 8),
                           _buildLogoutButton(authProvider),
                         ],
