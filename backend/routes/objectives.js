@@ -560,9 +560,11 @@ router.get('/matrix', async (req, res) => {
         -- Average prices for comparison
         AVG(L.PRECIOTARIFACLIENTE) as AVG_CLIENT_TARIFF,
         AVG(L.PRECIOTARIFA01) as AVG_BASE_TARIFF,
-        -- FI codes for grouping
+        -- FI codes for 5-level hierarchy grouping
         COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
         COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
+        COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
+        COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
         COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
       FROM DSEDAC.LAC L
       LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
@@ -578,7 +580,7 @@ router.get('/matrix', async (req, res) => {
         -- FILTERS to match LACLAE logic
         AND ${LAC_SALES_FILTER}
         ${filterConditions}
-      GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.ANODOCUMENTO, L.MESDOCUMENTO, AX.FILTRO01, AX.FILTRO02, A.CODIGOSECCIONLARGA
+      GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.ANODOCUMENTO, L.MESDOCUMENTO, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
       ORDER BY SALES DESC
     `);
 
@@ -589,34 +591,66 @@ router.get('/matrix', async (req, res) => {
         // Logic to build distinct filter lists based on ACTUAL data found
         const availableFamiliesMap = new Map();
         const availableSubfamiliesMap = new Map();
-        // NEW: FI filter maps
+        // FI filter maps for all 5 levels
         const availableFi1Map = new Map();
         const availableFi2Map = new Map();
+        const availableFi3Map = new Map();
+        const availableFi4Map = new Map();
         const availableFi5Map = new Map();
 
-        // Load FI descriptions
-        let fi1Names = {}, fi2Names = {}, fi5Names = {};
+        // Load FI descriptions for all levels
+        let fi1Names = {}, fi2Names = {}, fi3Names = {}, fi4Names = {}, fi5Names = {};
         try {
             // 1. Load Name Maps
             const famRows = await query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM DSEDAC.FAM`);
             famRows.forEach(r => { familyNames[r.CODIGOFAMILIA?.trim()] = r.DESCRIPCIONFAMILIA?.trim() || r.CODIGOFAMILIA?.trim(); });
             
-            // Load FI names
-            const fi1Rows = await query(`SELECT TRIM(CODIGOFILTRO) as CODE, TRIM(DESCRIPCIONFILTRO) as NAME FROM DSEDAC.FI1`, false, false);
-            fi1Rows.forEach(r => { fi1Names[r.CODE] = r.NAME; });
+            // Load FI names for all 5 levels
+            const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false);
+            fi1Rows.forEach(r => { 
+                const code = (r.CODIGOFILTRO || '').toString().trim();
+                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                if (code) fi1Names[code] = name;
+            });
             
-            const fi2Rows = await query(`SELECT TRIM(CODIGOFILTRO) as CODE, TRIM(DESCRIPCIONFILTRO) as NAME FROM DSEDAC.FI2`, false, false);
-            fi2Rows.forEach(r => { fi2Names[r.CODE] = r.NAME; });
+            const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false);
+            fi2Rows.forEach(r => { 
+                const code = (r.CODIGOFILTRO || '').toString().trim();
+                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                if (code) fi2Names[code] = name;
+            });
             
-            const fi5Rows = await query(`SELECT TRIM(CODIGOFILTRO) as CODE, TRIM(DESCRIPCIONFILTRO) as NAME FROM DSEDAC.FI5`, false, false);
-            fi5Rows.forEach(r => { fi5Names[r.CODE] = r.NAME; });
+            const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false);
+            fi3Rows.forEach(r => { 
+                const code = (r.CODIGOFILTRO || '').toString().trim();
+                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                if (code) fi3Names[code] = name;
+            });
+            
+            const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false);
+            fi4Rows.forEach(r => { 
+                const code = (r.CODIGOFILTRO || '').toString().trim();
+                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                if (code) fi4Names[code] = name;
+            });
+            
+            const fi5Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI5`, false, false);
+            fi5Rows.forEach(r => { 
+                const code = (r.CODIGOFILTRO || '').toString().trim();
+                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                if (code) fi5Names[code] = name;
+            });
 
         } catch (e) {
             logger.warn(`Could not load family/FI names: ${e.message}`);
         }
 
-        // Build hierarchy: Family -> Subfamily -> Product
+        // Build hierarchy: Family -> Subfamily -> Product (legacy)
         const familyMap = new Map();
+        
+        // NEW: Build 5-level FI hierarchy: FI1 -> FI2 -> FI3 -> FI4 -> Products
+        const fiHierarchyMap = new Map();
+        
         let grandTotalSales = 0, grandTotalCost = 0, grandTotalUnits = 0;
         let grandTotalPrevSales = 0, grandTotalPrevCost = 0, grandTotalPrevUnits = 0;
         const productSet = new Set();
@@ -648,12 +682,14 @@ router.get('/matrix', async (req, res) => {
             const avgClientTariff = parseFloat(row.AVG_CLIENT_TARIFF) || 0;
             const avgBaseTariff = parseFloat(row.AVG_BASE_TARIFF) || 0;
             
-            // FI codes from row
+            // FI codes from row - all 5 levels
             const fi1Code = row.FI1_CODE?.trim() || '';
             const fi2Code = row.FI2_CODE?.trim() || '';
+            const fi3Code = row.FI3_CODE?.trim() || '';
+            const fi4Code = row.FI4_CODE?.trim() || '';
             const fi5Code = row.FI5_CODE?.trim() || '';
 
-            // Populate Distinct Filter Maps
+            // Populate Distinct Filter Maps (legacy)
             if (!availableFamiliesMap.has(famCode)) {
                 availableFamiliesMap.set(famCode, {
                     code: famCode,
@@ -667,7 +703,7 @@ router.get('/matrix', async (req, res) => {
                 });
             }
             
-            // Populate FI Filter Maps
+            // Populate FI Filter Maps - all 5 levels
             if (fi1Code && !availableFi1Map.has(fi1Code)) {
                 availableFi1Map.set(fi1Code, {
                     code: fi1Code,
@@ -678,6 +714,18 @@ router.get('/matrix', async (req, res) => {
                 availableFi2Map.set(fi2Code, {
                     code: fi2Code,
                     name: fi2Names[fi2Code] ? `${fi2Code} - ${fi2Names[fi2Code]}` : fi2Code
+                });
+            }
+            if (fi3Code && !availableFi3Map.has(fi3Code)) {
+                availableFi3Map.set(fi3Code, {
+                    code: fi3Code,
+                    name: fi3Names[fi3Code] ? `${fi3Code} - ${fi3Names[fi3Code]}` : fi3Code
+                });
+            }
+            if (fi4Code && !availableFi4Map.has(fi4Code)) {
+                availableFi4Map.set(fi4Code, {
+                    code: fi4Code,
+                    name: fi4Names[fi4Code] ? `${fi4Code} - ${fi4Names[fi4Code]}` : fi4Code
                 });
             }
             if (fi5Code && !availableFi5Map.has(fi5Code)) {
@@ -788,6 +836,117 @@ router.get('/matrix', async (req, res) => {
                 product.monthlyData[year][month].units += units;
                 if (avgDiscountPct > 0) product.monthlyData[year][month].avgDiscountPct = avgDiscountPct;
                 if (avgDiscountEur > 0) product.monthlyData[year][month].avgDiscountEur = avgDiscountEur;
+                
+                // ===== BUILD 5-LEVEL FI HIERARCHY (FI1 > FI2 > FI3 > FI4 > Products) =====
+                const fi1Key = fi1Code || 'SIN_CAT';
+                const fi2Key = fi2Code || 'General';
+                const fi3Key = fi3Code || '';
+                const fi4Key = fi4Code || '';
+                
+                // FI1 Level (Categoría)
+                if (!fiHierarchyMap.has(fi1Key)) {
+                    fiHierarchyMap.set(fi1Key, {
+                        code: fi1Key,
+                        name: fi1Names[fi1Key] ? `${fi1Key} - ${fi1Names[fi1Key]}` : (fi1Key === 'SIN_CAT' ? 'Sin Categoría' : fi1Key),
+                        level: 1,
+                        totalSales: 0, totalCost: 0, totalUnits: 0,
+                        children: new Map()
+                    });
+                }
+                const fi1Level = fiHierarchyMap.get(fi1Key);
+                if (isSelectedYear(year)) {
+                    fi1Level.totalSales += sales;
+                    fi1Level.totalCost += cost;
+                    fi1Level.totalUnits += units;
+                }
+                
+                // FI2 Level (Subcategoría)
+                if (!fi1Level.children.has(fi2Key)) {
+                    fi1Level.children.set(fi2Key, {
+                        code: fi2Key,
+                        name: fi2Names[fi2Key] ? `${fi2Key} - ${fi2Names[fi2Key]}` : (fi2Key === 'General' ? 'General' : fi2Key),
+                        level: 2,
+                        totalSales: 0, totalCost: 0, totalUnits: 0,
+                        children: new Map()
+                    });
+                }
+                const fi2Level = fi1Level.children.get(fi2Key);
+                if (isSelectedYear(year)) {
+                    fi2Level.totalSales += sales;
+                    fi2Level.totalCost += cost;
+                    fi2Level.totalUnits += units;
+                }
+                
+                // FI3 Level (Detalle) - Solo si hay código FI3
+                const fi3Display = fi3Key || 'General';
+                if (!fi2Level.children.has(fi3Display)) {
+                    fi2Level.children.set(fi3Display, {
+                        code: fi3Display,
+                        name: fi3Names[fi3Key] ? `${fi3Key} - ${fi3Names[fi3Key]}` : (fi3Display === 'General' ? 'General' : fi3Display),
+                        level: 3,
+                        totalSales: 0, totalCost: 0, totalUnits: 0,
+                        children: new Map()
+                    });
+                }
+                const fi3Level = fi2Level.children.get(fi3Display);
+                if (isSelectedYear(year)) {
+                    fi3Level.totalSales += sales;
+                    fi3Level.totalCost += cost;
+                    fi3Level.totalUnits += units;
+                }
+                
+                // FI4 Level (Especial) - Solo si hay código FI4
+                const fi4Display = fi4Key || 'General';
+                if (!fi3Level.children.has(fi4Display)) {
+                    fi3Level.children.set(fi4Display, {
+                        code: fi4Display,
+                        name: fi4Names[fi4Key] ? `${fi4Key} - ${fi4Names[fi4Key]}` : (fi4Display === 'General' ? 'General' : fi4Display),
+                        level: 4,
+                        totalSales: 0, totalCost: 0, totalUnits: 0,
+                        products: new Map()
+                    });
+                }
+                const fi4Level = fi3Level.children.get(fi4Display);
+                if (isSelectedYear(year)) {
+                    fi4Level.totalSales += sales;
+                    fi4Level.totalCost += cost;
+                    fi4Level.totalUnits += units;
+                }
+                
+                // Product level within FI4
+                if (!fi4Level.products.has(prodCode)) {
+                    fi4Level.products.set(prodCode, {
+                        code: prodCode,
+                        name: prodName,
+                        unitType: unitType,
+                        fi5Code: fi5Code,
+                        fi5Name: fi5Names[fi5Code] || fi5Code,
+                        totalSales: 0, totalCost: 0, totalUnits: 0,
+                        prevYearSales: 0, prevYearCost: 0, prevYearUnits: 0,
+                        hasDiscount: false, hasSpecialPrice: false,
+                        avgDiscountPct: 0, avgDiscountEur: 0,
+                        monthlyData: {}
+                    });
+                }
+                const fiProduct = fi4Level.products.get(prodCode);
+                if (isSelectedYear(year)) {
+                    fiProduct.totalSales += sales;
+                    fiProduct.totalCost += cost;
+                    fiProduct.totalUnits += units;
+                    if (hasDiscount) fiProduct.hasDiscount = true;
+                    if (hasSpecialPrice) fiProduct.hasSpecialPrice = true;
+                    if (avgDiscountPct > 0) fiProduct.avgDiscountPct = avgDiscountPct;
+                    if (avgDiscountEur > 0) fiProduct.avgDiscountEur = avgDiscountEur;
+                } else if (isPrevYear(year)) {
+                    fiProduct.prevYearSales += sales;
+                    fiProduct.prevYearCost += cost;
+                    fiProduct.prevYearUnits += units;
+                }
+                // Monthly data for FI product
+                if (!fiProduct.monthlyData[year]) fiProduct.monthlyData[year] = {};
+                if (!fiProduct.monthlyData[year][month]) fiProduct.monthlyData[year][month] = { sales: 0, units: 0 };
+                fiProduct.monthlyData[year][month].sales += sales;
+                fiProduct.monthlyData[year][month].units += units;
             }
         });
 
@@ -926,6 +1085,107 @@ router.get('/matrix', async (req, res) => {
             };
         }).sort((a, b) => b.totalSales - a.totalSales);
 
+        // ===== FINALIZE 5-LEVEL FI HIERARCHY =====
+        // Helper to format FI product with calculations
+        const formatFiProduct = (p) => {
+            const margin = p.totalSales - p.totalCost;
+            const marginPercent = p.totalSales > 0 ? (margin / p.totalSales) * 100 : 0;
+            const avgPrice = p.totalUnits > 0 ? p.totalSales / p.totalUnits : 0;
+            const prevAvgPrice = p.prevYearUnits > 0 ? p.prevYearSales / p.prevYearUnits : 0;
+            const variation = p.prevYearSales > 0 ? ((p.totalSales - p.prevYearSales) / p.prevYearSales) * 100 : 0;
+            let yoyTrend = 'neutral';
+            if (variation > 5) yoyTrend = 'up';
+            if (variation < -5) yoyTrend = 'down';
+            
+            return {
+                code: p.code,
+                name: p.name,
+                unitType: p.unitType || 'UDS',
+                fi5Code: p.fi5Code || '',
+                fi5Name: p.fi5Name || '',
+                totalSales: parseFloat(p.totalSales.toFixed(2)),
+                totalUnits: parseFloat(p.totalUnits.toFixed(2)),
+                totalCost: parseFloat(p.totalCost.toFixed(2)),
+                totalMarginPercent: parseFloat(marginPercent.toFixed(1)),
+                avgUnitPrice: parseFloat(avgPrice.toFixed(2)),
+                prevYearSales: parseFloat(p.prevYearSales.toFixed(2)),
+                prevYearUnits: parseFloat(p.prevYearUnits.toFixed(2)),
+                prevYearAvgPrice: parseFloat(prevAvgPrice.toFixed(2)),
+                hasDiscount: p.hasDiscount,
+                hasSpecialPrice: p.hasSpecialPrice,
+                yoyTrend,
+                yoyVariation: parseFloat(variation.toFixed(1))
+            };
+        };
+        
+        // Build FI hierarchy array
+        const fiHierarchy = Array.from(fiHierarchyMap.values()).map(fi1 => {
+            const margin1 = fi1.totalSales - fi1.totalCost;
+            const marginPercent1 = fi1.totalSales > 0 ? (margin1 / fi1.totalSales) * 100 : 0;
+            
+            const children1 = Array.from(fi1.children.values()).map(fi2 => {
+                const margin2 = fi2.totalSales - fi2.totalCost;
+                const marginPercent2 = fi2.totalSales > 0 ? (margin2 / fi2.totalSales) * 100 : 0;
+                
+                const children2 = Array.from(fi2.children.values()).map(fi3 => {
+                    const margin3 = fi3.totalSales - fi3.totalCost;
+                    const marginPercent3 = fi3.totalSales > 0 ? (margin3 / fi3.totalSales) * 100 : 0;
+                    
+                    const children3 = Array.from(fi3.children.values()).map(fi4 => {
+                        const margin4 = fi4.totalSales - fi4.totalCost;
+                        const marginPercent4 = fi4.totalSales > 0 ? (margin4 / fi4.totalSales) * 100 : 0;
+                        const products = Array.from(fi4.products.values())
+                            .map(formatFiProduct)
+                            .sort((a, b) => b.totalSales - a.totalSales);
+                        
+                        return {
+                            code: fi4.code,
+                            name: fi4.name,
+                            level: 4,
+                            totalSales: parseFloat(fi4.totalSales.toFixed(2)),
+                            totalUnits: parseFloat(fi4.totalUnits.toFixed(2)),
+                            totalMarginPercent: parseFloat(marginPercent4.toFixed(1)),
+                            productCount: products.length,
+                            products
+                        };
+                    }).filter(f => f.totalSales > 0 || f.productCount > 0).sort((a, b) => b.totalSales - a.totalSales);
+                    
+                    return {
+                        code: fi3.code,
+                        name: fi3.name,
+                        level: 3,
+                        totalSales: parseFloat(fi3.totalSales.toFixed(2)),
+                        totalUnits: parseFloat(fi3.totalUnits.toFixed(2)),
+                        totalMarginPercent: parseFloat(marginPercent3.toFixed(1)),
+                        childCount: children3.length,
+                        children: children3
+                    };
+                }).filter(f => f.totalSales > 0 || f.childCount > 0).sort((a, b) => b.totalSales - a.totalSales);
+                
+                return {
+                    code: fi2.code,
+                    name: fi2.name,
+                    level: 2,
+                    totalSales: parseFloat(fi2.totalSales.toFixed(2)),
+                    totalUnits: parseFloat(fi2.totalUnits.toFixed(2)),
+                    totalMarginPercent: parseFloat(marginPercent2.toFixed(1)),
+                    childCount: children2.length,
+                    children: children2
+                };
+            }).filter(f => f.totalSales > 0 || f.childCount > 0).sort((a, b) => b.totalSales - a.totalSales);
+            
+            return {
+                code: fi1.code,
+                name: fi1.name,
+                level: 1,
+                totalSales: parseFloat(fi1.totalSales.toFixed(2)),
+                totalUnits: parseFloat(fi1.totalUnits.toFixed(2)),
+                totalMarginPercent: parseFloat(marginPercent1.toFixed(1)),
+                childCount: children1.length,
+                children: children1
+            };
+        }).filter(f => f.totalSales > 0 || f.childCount > 0).sort((a, b) => b.totalSales - a.totalSales);
+
         // Calculate Aggregated Summary
         const grandTotalMargin = grandTotalSales - grandTotalCost;
         const grandTotalPrevMargin = grandTotalPrevSales - grandTotalPrevCost;
@@ -958,8 +1218,8 @@ router.get('/matrix', async (req, res) => {
 
         res.json({
             clientCode,
-            contactInfo, // NEW
-            editableNotes, // NEW
+            contactInfo,
+            editableNotes,
             summary,
             grandTotal: {
                 sales: grandTotalSales,
@@ -972,12 +1232,15 @@ router.get('/matrix', async (req, res) => {
             availableFilters: {
                 families: Array.from(availableFamiliesMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
                 subfamilies: Array.from(availableSubfamiliesMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
-                // NEW: FI hierarchical filters available in this client's data
+                // FI hierarchical filters - all 5 levels
                 fi1: Array.from(availableFi1Map.values()).sort((a, b) => a.name.localeCompare(b.name)),
                 fi2: Array.from(availableFi2Map.values()).sort((a, b) => a.name.localeCompare(b.name)),
+                fi3: Array.from(availableFi3Map.values()).sort((a, b) => a.name.localeCompare(b.name)),
+                fi4: Array.from(availableFi4Map.values()).sort((a, b) => a.name.localeCompare(b.name)),
                 fi5: Array.from(availableFi5Map.values()).sort((a, b) => a.name.localeCompare(b.name))
             },
-            families,
+            families, // Legacy: familia > subfamilia > productos
+            fiHierarchy, // NEW: FI1 > FI2 > FI3 > FI4 > productos (5 niveles)
             years: yearsArray,
             months: { start: monthStart, end: monthEnd }
         });

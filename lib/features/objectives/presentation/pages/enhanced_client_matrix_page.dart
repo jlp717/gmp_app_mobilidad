@@ -32,13 +32,19 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   String? _error;
   bool _showFilters = false;
   
+  // Legacy familia/subfamilia hierarchy
   List<Map<String, dynamic>> _families = [];
+  // NEW: 5-level FI hierarchy (FI1 > FI2 > FI3 > FI4 > productos)
+  List<Map<String, dynamic>> _fiHierarchy = [];
+  // Toggle for hierarchy view mode
+  bool _useFiHierarchy = true; // Default to FI hierarchy
+  
   Map<String, dynamic> _grandTotal = {};
   Map<String, dynamic> _summary = {};
   Map<String, dynamic> _monthlyTotals = {};
   Map<String, dynamic> _availableFilters = {};
   
-  // NEW: Client specific info
+  // Client specific info
   Map<String, dynamic>? _editableNotes;
   Map<String, dynamic> _contactInfo = {};
 
@@ -50,21 +56,19 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   bool _filtersDirty = false; // Track if filters changed
   String _productCodeSearch = '';
   String _productNameSearch = '';
-  // REMOVED: Old Familia/Subfamilia filters
-  // String? _selectedFamilyCode;
-  // String? _selectedSubfamilyCode;
   
-  // NEW: FI hierarchical filters state
+  // FI hierarchical filters state
   FiFilterState _fiFilters = const FiFilterState();
   FiFilterOptions? _fiOptions;
   
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   
+  // Expansion state for legacy hierarchy
   final Set<String> _expandedFamilies = {};
   final Set<String> _expandedSubfamilies = {};
-  
-  // final _cf = NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 2);
+  // Expansion state for FI hierarchy (keyed by level-code)
+  final Set<String> _expandedFiNodes = {};
   
   static const _mNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   static List<int> get _years => ApiConfig.availableYears;
@@ -103,8 +107,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       );
 
       setState(() {
+        // Legacy family/subfamily hierarchy
         final rawFamilies = response['families'] ?? [];
         _families = (rawFamilies as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        
+        // NEW: 5-level FI hierarchy
+        final rawFiHierarchy = response['fiHierarchy'] ?? [];
+        _fiHierarchy = (rawFiHierarchy as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        
         _grandTotal = response['grandTotal'] ?? {};
         _summary = response['summary'] ?? {};
         _monthlyTotals = response['monthlyTotals'] ?? {};
@@ -122,7 +132,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         );
         
         _isLoading = false;
-        if (_families.length == 1) _expandedFamilies.add(_families.first['familyCode'] ?? '');
+        
+        // Auto-expand first item if only one
+        if (_fiHierarchy.length == 1) {
+          _expandedFiNodes.add('fi1_${_fiHierarchy.first['fi1Code'] ?? ''}');
+        }
+        if (_families.length == 1) {
+          _expandedFamilies.add(_families.first['familyCode'] ?? '');
+        }
       });
     } catch (e) {
       setState(() { _error = e.toString(); _isLoading = false; });
@@ -290,10 +307,16 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   if (_showFilters) _buildFilters(),
                   _buildSummaryRow(),
                   _buildMonthlyRow(),
+                  // Toggle between FI hierarchy and legacy family view
+                  _buildHierarchyToggle(),
                   Expanded(
-                    child: _families.isEmpty 
-                      ? const Center(child: Text('Sin datos', style: TextStyle(color: Colors.grey)))
-                      : _buildFamilyList(),
+                    child: _useFiHierarchy 
+                      ? (_fiHierarchy.isEmpty 
+                          ? const Center(child: Text('Sin datos FI', style: TextStyle(color: Colors.grey)))
+                          : _buildFiHierarchyList())
+                      : (_families.isEmpty 
+                          ? const Center(child: Text('Sin datos', style: TextStyle(color: Colors.grey)))
+                          : _buildFamilyList()),
                   ),
                 ],
               ),
@@ -621,6 +644,342 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         ],
       ),
     );
+  }
+
+  // ===== FI HIERARCHY WIDGETS =====
+  
+  Widget _buildHierarchyToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Text(
+            _useFiHierarchy ? 'Jerarquía FI' : 'Familia/Subfamilia',
+            style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(width: 8),
+          Transform.scale(
+            scale: 0.8,
+            child: Switch(
+              value: _useFiHierarchy,
+              onChanged: (v) => setState(() => _useFiHierarchy = v),
+              activeColor: AppTheme.neonBlue,
+              activeTrackColor: AppTheme.neonBlue.withOpacity(0.3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFiHierarchyList() {
+    if (_fiHierarchy.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.folder_off, size: 40, color: AppTheme.textSecondary.withOpacity(0.5)),
+            const SizedBox(height: 8),
+            Text('No hay jerarquía FI disponible', style: TextStyle(color: AppTheme.textSecondary)),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => setState(() => _useFiHierarchy = false),
+              child: const Text('Ver Familia/Subfamilia'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return ListView.builder(
+      padding: const EdgeInsets.all(4),
+      itemCount: _fiHierarchy.length,
+      itemBuilder: (c, i) => _buildFi1Card(_fiHierarchy[i]),
+    );
+  }
+
+  Widget _buildFi1Card(Map<String, dynamic> fi1) {
+    final code = fi1['fi1Code'] as String? ?? '';
+    final name = fi1['fi1Name'] as String? ?? code;
+    final nodeKey = 'fi1_$code';
+    final expanded = _expandedFiNodes.contains(nodeKey);
+    final children = List<Map<String, dynamic>>.from(
+      (fi1['children'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? []
+    );
+    final sales = (fi1['totalSales'] as num?)?.toDouble() ?? 0;
+    final units = (fi1['totalUnits'] as num?)?.toDouble() ?? 0;
+    final margin = (fi1['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+
+    return Card(
+      color: AppTheme.surfaceColor,
+      margin: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            leading: CircleAvatar(
+              radius: 14, backgroundColor: AppTheme.neonPurple.withOpacity(0.2),
+              child: const Text('F1', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+            ),
+            title: Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            subtitle: Text('$code • ${children.length} FI2', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(_formatCurrency(sales), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+                Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+              ],
+            ),
+            onTap: () => setState(() { if (expanded) _expandedFiNodes.remove(nodeKey); else _expandedFiNodes.add(nodeKey); }),
+          ),
+          if (expanded) ...children.map((fi2) => _buildFi2Card(fi2, code)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFi2Card(Map<String, dynamic> fi2, String parentCode) {
+    final code = fi2['fi2Code'] as String? ?? '';
+    final name = fi2['fi2Name'] as String? ?? code;
+    final nodeKey = 'fi2_${parentCode}_$code';
+    final expanded = _expandedFiNodes.contains(nodeKey);
+    final children = List<Map<String, dynamic>>.from(
+      (fi2['children'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? []
+    );
+    final sales = (fi2['totalSales'] as num?)?.toDouble() ?? 0;
+    final units = (fi2['totalUnits'] as num?)?.toDouble() ?? 0;
+    final margin = (fi2['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(left: 16, right: 4, bottom: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            leading: CircleAvatar(
+              radius: 12, backgroundColor: AppTheme.neonBlue.withOpacity(0.2),
+              child: const Text('F2', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+            ),
+            title: Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            subtitle: Text('$code • ${children.length} FI3', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(_formatCurrency(sales), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+                Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+              ],
+            ),
+            onTap: () => setState(() { if (expanded) _expandedFiNodes.remove(nodeKey); else _expandedFiNodes.add(nodeKey); }),
+          ),
+          if (expanded) ...children.map((fi3) => _buildFi3Card(fi3, nodeKey)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFi3Card(Map<String, dynamic> fi3, String parentKey) {
+    final code = fi3['fi3Code'] as String? ?? '';
+    final name = fi3['fi3Name'] as String? ?? code;
+    final nodeKey = 'fi3_${parentKey}_$code';
+    final expanded = _expandedFiNodes.contains(nodeKey);
+    final children = List<Map<String, dynamic>>.from(
+      (fi3['children'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? []
+    );
+    final sales = (fi3['totalSales'] as num?)?.toDouble() ?? 0;
+    final units = (fi3['totalUnits'] as num?)?.toDouble() ?? 0;
+    final margin = (fi3['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(left: 24, right: 4, bottom: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundColor,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+            leading: CircleAvatar(
+              radius: 10, backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
+              child: const Text('F3', style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+            ),
+            title: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+            subtitle: Text('$code • ${children.length} FI4', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(_formatCurrency(sales), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+              ],
+            ),
+            onTap: () => setState(() { if (expanded) _expandedFiNodes.remove(nodeKey); else _expandedFiNodes.add(nodeKey); }),
+          ),
+          if (expanded) ...children.map((fi4) => _buildFi4Card(fi4, nodeKey)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFi4Card(Map<String, dynamic> fi4, String parentKey) {
+    final code = fi4['fi4Code'] as String? ?? '';
+    final name = fi4['fi4Name'] as String? ?? code;
+    final nodeKey = 'fi4_${parentKey}_$code';
+    final expanded = _expandedFiNodes.contains(nodeKey);
+    final products = List<Map<String, dynamic>>.from(
+      (fi4['products'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? []
+    );
+    final sales = (fi4['totalSales'] as num?)?.toDouble() ?? 0;
+    final units = (fi4['totalUnits'] as num?)?.toDouble() ?? 0;
+    final margin = (fi4['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(left: 32, right: 4, bottom: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+            leading: CircleAvatar(
+              radius: 9, backgroundColor: AppTheme.warning.withOpacity(0.2),
+              child: const Text('F4', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: AppTheme.warning)),
+            ),
+            title: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
+            subtitle: Text('$code • ${products.length} prod.', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(_formatCurrency(sales), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.warning)),
+                Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+              ],
+            ),
+            onTap: () => setState(() { if (expanded) _expandedFiNodes.remove(nodeKey); else _expandedFiNodes.add(nodeKey); }),
+          ),
+          if (expanded) 
+            Padding(
+              padding: const EdgeInsets.only(left: 8, right: 4, bottom: 4),
+              child: Column(
+                children: products.map((p) => _buildFiProduct(p)).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFiProduct(Map<String, dynamic> p) {
+    final code = p['code'] as String? ?? '';
+    final name = p['name'] as String? ?? code;
+    final sales = (p['totalSales'] as num?)?.toDouble() ?? 0;
+    final units = (p['totalUnits'] as num?)?.toDouble() ?? 0;
+    final margin = (p['marginPercent'] as num?)?.toDouble() ?? 0;
+    final yoyTrend = p['yoyTrend'] as String? ?? '';
+    final monthly = p['monthly'] as Map<String, dynamic>? ?? {};
+
+    Color borderColor = AppTheme.surfaceColor;
+    if (yoyTrend == 'up') borderColor = AppTheme.success;
+    else if (yoyTrend == 'down') borderColor = AppTheme.error;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 3),
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: borderColor.withOpacity(0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(code, style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(_formatCurrency(sales), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: borderColor == AppTheme.surfaceColor ? AppTheme.textPrimary : borderColor)),
+                  Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+                ],
+              ),
+            ],
+          ),
+          if (monthly.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            SizedBox(
+              height: 28,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: 12,
+                itemBuilder: (ctx, m) {
+                  final mKey = (m + 1).toString();
+                  final mData = monthly[mKey] as Map<String, dynamic>? ?? {};
+                  final mSales = (mData['sales'] as num?)?.toDouble() ?? 0;
+                  final mYoy = mData['yoyVar'] as String? ?? '';
+                  
+                  Color mColor = AppTheme.surfaceColor;
+                  if (mYoy == 'up') mColor = AppTheme.success;
+                  else if (mYoy == 'down') mColor = AppTheme.error;
+
+                  return Container(
+                    width: 32,
+                    margin: const EdgeInsets.only(right: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: mColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(color: mColor.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(_mNames[m].substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 7, fontWeight: FontWeight.bold)),
+                        Text(_formatCompact(mSales), style: const TextStyle(fontSize: 7)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatCompact(double v) {
+    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
+    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
+    return v.toStringAsFixed(0);
   }
 
   Widget _buildFamilyList() {
