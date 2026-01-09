@@ -26,6 +26,46 @@ function initEmailService() {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SISTEMA DE BATCH - Acumula cambios y envía un solo email
+// ═══════════════════════════════════════════════════════════════════════════
+const pendingChanges = new Map(); // vendedor -> { changes: [], timer: null }
+const BATCH_DELAY_MS = 5000; // Esperar 5 segundos antes de enviar
+
+function queueAuditEmail(vendorName, changeType, details) {
+    if (!pendingChanges.has(vendorName)) {
+        pendingChanges.set(vendorName, { changes: [], timer: null });
+    }
+    
+    const vendorQueue = pendingChanges.get(vendorName);
+    vendorQueue.changes.push({ type: changeType, details, timestamp: new Date() });
+    
+    // Cancelar timer anterior y crear uno nuevo
+    if (vendorQueue.timer) {
+        clearTimeout(vendorQueue.timer);
+    }
+    
+    vendorQueue.timer = setTimeout(() => {
+        flushVendorEmails(vendorName);
+    }, BATCH_DELAY_MS);
+    
+    logger.info(`📧 Queued change for vendor ${vendorName} (${vendorQueue.changes.length} pending)`);
+}
+
+async function flushVendorEmails(vendorName) {
+    const vendorQueue = pendingChanges.get(vendorName);
+    if (!vendorQueue || vendorQueue.changes.length === 0) return;
+    
+    const changes = [...vendorQueue.changes];
+    vendorQueue.changes = [];
+    vendorQueue.timer = null;
+    
+    logger.info(`📧 Flushing ${changes.length} changes for vendor ${vendorName}`);
+    
+    // Consolidar todos los cambios en un solo email
+    await sendConsolidatedEmail(vendorName, changes);
+}
+
 // Mapeo de nombres de días
 const DAY_NAMES = {
     'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
@@ -283,152 +323,242 @@ function transfersTable(clients, direction = 'in', maxShow = 10) {
 }
 
 /**
- * Envía email de auditoría de cambios en Rutero
+ * Envía email consolidado con todos los cambios
  */
-async function sendAuditEmail(vendorName, changeType, details) {
+async function sendConsolidatedEmail(vendorName, changes) {
     if (!transporter) initEmailService();
-
+    
     const now = new Date();
     const timestamp = now.toLocaleString('es-ES', { 
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
         hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
     });
     
-    let content = '';
-    let headerTitle = 'Modificación de Ruta';
-    let subjectLine = 'Modificación';
+    // Separar cambios por tipo
+    const reorderChanges = changes.filter(c => c.details.clientesAfectados);
+    const moveChanges = changes.filter(c => c.details.movedClients);
     
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CASO 1: REORDENAMIENTO (clientes cambian de posición en el mismo día)
-    // ═══════════════════════════════════════════════════════════════════════════
-    if (details.clientesAfectados && details.clientesAfectados.length > 0) {
-        const dayName = formatDayName(details.diaObjetivo);
-        const totalClientes = details.totalClientes || details.clientesAfectados.length;
+    // Consolidar datos
+    let allReorderedClients = [];
+    let allMovedClients = [];
+    let affectedDays = new Set();
+    
+    reorderChanges.forEach(c => {
+        if (c.details.diaObjetivo) affectedDays.add(c.details.diaObjetivo);
+        if (c.details.clientesAfectados) {
+            const changedOnly = c.details.clientesAfectados.filter(cl => cl.hayCambio);
+            allReorderedClients.push(...changedOnly);
+        }
+    });
+    
+    moveChanges.forEach(c => {
+        if (c.details.movedClients) {
+            allMovedClients.push(...c.details.movedClients);
+            c.details.movedClients.forEach(m => {
+                if (m.fromDay) affectedDays.add(m.fromDay);
+                if (m.toDay) affectedDays.add(m.toDay);
+            });
+        }
+    });
+    
+    const daysArray = [...affectedDays].map(d => formatDayName(d));
+    const totalChanges = allReorderedClients.length + allMovedClients.length;
+    
+    // Construir contenido
+    let content = '';
+    
+    // Banner de resumen
+    content += `
+    <div style="background:linear-gradient(135deg, #1E3A5F 0%, #2D5A87 100%);border-radius:8px;padding:20px 24px;margin-bottom:24px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+                <td>
+                    <h2 style="margin:0;color:#FFFFFF;font-size:24px;font-weight:700;">
+                        ${totalChanges} ${totalChanges === 1 ? 'Cambio' : 'Cambios'} Realizados
+                    </h2>
+                    <p style="margin:8px 0 0;color:#93C5FD;font-size:14px;">
+                        Comercial #${vendorName} • ${daysArray.join(', ')}
+                    </p>
+                </td>
+                <td align="right" style="vertical-align:middle;">
+                    <div style="background:rgba(255,255,255,0.15);border-radius:50%;width:56px;height:56px;text-align:center;line-height:56px;">
+                        <span style="font-size:24px;">📊</span>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>`;
+    
+    // Resumen rápido
+    const summaryItems = [];
+    if (allMovedClients.length > 0) {
+        summaryItems.push({ label: 'Clientes cambiados de día', value: allMovedClients.length, icon: '🔀' });
+    }
+    if (allReorderedClients.length > 0) {
+        summaryItems.push({ label: 'Posiciones reordenadas', value: allReorderedClients.length, icon: '↕️' });
+    }
+    
+    if (summaryItems.length > 0) {
+        content += `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+            <tr>`;
+        summaryItems.forEach((item, idx) => {
+            const borderRight = idx < summaryItems.length - 1 ? 'border-right:1px solid #E2E8F0;' : '';
+            content += `
+                <td style="text-align:center;padding:16px;${borderRight}">
+                    <div style="font-size:28px;margin-bottom:8px;">${item.icon}</div>
+                    <div style="font-size:28px;font-weight:700;color:#1E293B;">${item.value}</div>
+                    <div style="font-size:12px;color:#64748B;margin-top:4px;">${item.label}</div>
+                </td>`;
+        });
+        content += `</tr></table>`;
+    }
+    
+    // Sección: Clientes movidos de día
+    if (allMovedClients.length > 0) {
+        content += `
+        <div style="background:#ECFDF5;border:1px solid #10B981;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
+            <h3 style="margin:0 0 12px;color:#065F46;font-size:14px;font-weight:600;">
+                🔀 Cambios de Día de Visita
+            </h3>
+            <p style="margin:0 0 16px;color:#047857;font-size:12px;">
+                Estos clientes ahora serán visitados en un día diferente al anterior.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:6px;overflow:hidden;">
+                <thead>
+                    <tr style="background:#065F46;">
+                        <th style="padding:10px 12px;text-align:left;color:#FFFFFF;font-size:11px;">CLIENTE</th>
+                        <th style="padding:10px 12px;text-align:center;color:#FFFFFF;font-size:11px;">CAMBIO</th>
+                        <th style="padding:10px 12px;text-align:right;color:#FFFFFF;font-size:11px;">CÓDIGO</th>
+                    </tr>
+                </thead>
+                <tbody>`;
         
-        // Filtrar solo los que realmente cambiaron de posición
-        const changedClients = details.clientesAfectados.filter(c => 
-            c.posicionAnterior !== undefined && c.posicionAnterior !== c.posicion
-        );
-        const unchangedCount = totalClientes - changedClients.length;
+        allMovedClients.forEach((c, idx) => {
+            const bgColor = idx % 2 === 0 ? '#FFFFFF' : '#F0FDF4';
+            const fromDay = formatDayName(c.fromDay);
+            const toDay = formatDayName(c.toDay);
+            content += `
+                <tr style="background:${bgColor};">
+                    <td style="padding:10px 12px;border-bottom:1px solid #D1FAE5;">
+                        <span style="color:#1E293B;font-size:13px;font-weight:500;">${c.name || c.clientName || 'Cliente'}</span>
+                    </td>
+                    <td style="padding:10px 12px;border-bottom:1px solid #D1FAE5;text-align:center;">
+                        <span style="color:#64748B;font-size:12px;">${fromDay}</span>
+                        <span style="color:#10B981;font-weight:700;margin:0 6px;">→</span>
+                        <span style="background:#10B981;color:#FFFFFF;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">${toDay}</span>
+                    </td>
+                    <td style="padding:10px 12px;border-bottom:1px solid #D1FAE5;text-align:right;">
+                        <span style="color:#64748B;font-size:12px;font-family:monospace;">${c.code || c.client || ''}</span>
+                    </td>
+                </tr>`;
+        });
         
-        // Ordenar por magnitud de cambio (los más significativos primero)
-        changedClients.sort((a, b) => {
+        content += `</tbody></table>
+        </div>`;
+    }
+    
+    // Sección: Reordenamiento de posiciones
+    if (allReorderedClients.length > 0) {
+        // Ordenar por magnitud del cambio
+        allReorderedClients.sort((a, b) => {
             const diffA = Math.abs((a.posicionAnterior || 0) - (a.posicion || 0));
             const diffB = Math.abs((b.posicionAnterior || 0) - (b.posicion || 0));
             return diffB - diffA;
         });
         
-        headerTitle = `Ruta Actualizada — ${dayName}`;
-        subjectLine = changedClients.length > 0 
-            ? `${dayName}: ${changedClients.length} cambios de posición`
-            : `${dayName}: Ruta reordenada`;
-        
-        // Resumen ejecutivo
-        content += executiveSummaryBox([
-            { label: 'Comercial', value: `#${vendorName}` },
-            { label: 'Día afectado', value: dayName },
-            { label: 'Total clientes en ruta', value: totalClientes },
-            { label: 'Posiciones modificadas', value: changedClients.length },
-            { label: 'Sin cambios', value: unchangedCount }
-        ]);
-        
-        // Tabla de cambios
-        if (changedClients.length > 0) {
-            content += sectionTitle('📋', 'Detalle de Cambios de Posición', 
-                'Ordenados por magnitud del cambio (más significativos primero)');
-            content += changesTable(changedClients, 15);
-        } else {
-            // Si no hay cambios detectables, mostrar la lista como referencia
-            content += sectionTitle('📋', 'Ruta Actual', 
-                'No se detectaron cambios de posición respecto al estado anterior');
-            content += `<p style="color:#64748B;font-size:13px;background:#F8FAFC;padding:16px;border-radius:6px;margin:12px 0;">
-                La ruta contiene ${totalClientes} clientes. El orden se ha confirmado sin modificaciones.
-            </p>`;
-        }
-        
-        // Nota sobre clientes sin cambios
-        if (unchangedCount > 0 && changedClients.length > 0) {
-            content += `
-            <p style="color:#64748B;font-size:12px;margin-top:16px;padding:12px;background:#F8FAFC;border-radius:6px;">
-                ℹ️ Los ${unchangedCount} clientes restantes mantienen su posición original.
-            </p>`;
-        }
-    }
-    
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CASO 2: MOVIMIENTO ENTRE DÍAS (clientes cambian de un día a otro)
-    // ═══════════════════════════════════════════════════════════════════════════
-    else if (details.movedClients && details.movedClients.length > 0) {
-        const count = details.movedClients.length;
-        
-        // Agrupar por día destino
-        const byDestination = {};
-        details.movedClients.forEach(c => {
-            const dest = c.toDay || 'desconocido';
-            if (!byDestination[dest]) byDestination[dest] = [];
-            byDestination[dest].push(c);
-        });
-        
-        const destinations = Object.keys(byDestination).map(d => formatDayName(d));
-        const destSummary = destinations.join(', ');
-        
-        headerTitle = `Cambio de Día de Visita`;
-        subjectLine = `${count} cliente(s) → ${destSummary}`;
-        
-        // Resumen ejecutivo
-        const summaryItems = [
-            { label: 'Comercial', value: `#${vendorName}` },
-            { label: 'Clientes trasladados', value: count }
-        ];
-        
-        // Añadir resumen por destino
-        Object.entries(byDestination).forEach(([day, clients]) => {
-            summaryItems.push({ 
-                label: `→ ${formatDayName(day)}`, 
-                value: `${clients.length} cliente(s)` 
-            });
-        });
-        
-        content += executiveSummaryBox(summaryItems);
-        
-        // Tablas por destino
-        Object.entries(byDestination).forEach(([day, clients]) => {
-            content += sectionTitle('📅', `Trasladados a ${formatDayName(day)}`, 
-                `${clients.length} cliente(s)`);
-            content += transfersTable(clients, 'out', 10);
-        });
-        
-        // Explicación
         content += `
-        <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:14px;margin-top:20px;">
-            <p style="margin:0;color:#92400E;font-size:12px;line-height:1.5;">
-                <strong>⚠️ Importante:</strong> Estos clientes ya no serán visitados en su día anterior. 
-                El comercial los visitará en el nuevo día asignado.
+        <div style="background:#EFF6FF;border:1px solid #3B82F6;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
+            <h3 style="margin:0 0 12px;color:#1E40AF;font-size:14px;font-weight:600;">
+                ↕️ Cambios de Posición en la Ruta
+            </h3>
+            <p style="margin:0 0 16px;color:#1D4ED8;font-size:12px;">
+                Estos clientes han cambiado su orden de visita dentro del mismo día. El número indica la posición en la ruta (1 = primera visita del día).
             </p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:6px;overflow:hidden;">
+                <thead>
+                    <tr style="background:#1E40AF;">
+                        <th style="padding:10px 12px;text-align:center;color:#FFFFFF;font-size:11px;width:60px;">ANTES</th>
+                        <th style="padding:10px 12px;text-align:center;color:#FFFFFF;font-size:11px;width:30px;"></th>
+                        <th style="padding:10px 12px;text-align:center;color:#FFFFFF;font-size:11px;width:60px;">AHORA</th>
+                        <th style="padding:10px 12px;text-align:center;color:#FFFFFF;font-size:11px;width:60px;">CAMBIO</th>
+                        <th style="padding:10px 12px;text-align:left;color:#FFFFFF;font-size:11px;">CLIENTE</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        
+        const showMax = 20;
+        const toShow = allReorderedClients.slice(0, showMax);
+        
+        toShow.forEach((c, idx) => {
+            const bgColor = idx % 2 === 0 ? '#FFFFFF' : '#EFF6FF';
+            const oldPos = (c.posicionAnterior || 0) + 1;
+            const newPos = (c.posicion || 0) + 1;
+            const diff = oldPos - newPos;
+            
+            let changeIndicator, changeColor;
+            if (diff > 0) {
+                changeIndicator = `▲ +${diff}`;
+                changeColor = '#059669';
+            } else if (diff < 0) {
+                changeIndicator = `▼ ${diff}`;
+                changeColor = '#DC2626';
+            } else {
+                changeIndicator = '—';
+                changeColor = '#94A3B8';
+            }
+            
+            content += `
+                <tr style="background:${bgColor};">
+                    <td style="padding:10px 12px;border-bottom:1px solid #DBEAFE;text-align:center;">
+                        <span style="color:#64748B;font-size:12px;">#${oldPos}</span>
+                    </td>
+                    <td style="padding:10px 12px;border-bottom:1px solid #DBEAFE;text-align:center;">
+                        <span style="color:#94A3B8;">→</span>
+                    </td>
+                    <td style="padding:10px 12px;border-bottom:1px solid #DBEAFE;text-align:center;">
+                        <span style="background:#1E40AF;color:#FFFFFF;padding:3px 10px;border-radius:4px;font-size:12px;font-weight:600;">#${newPos}</span>
+                    </td>
+                    <td style="padding:10px 12px;border-bottom:1px solid #DBEAFE;text-align:center;">
+                        <span style="color:${changeColor};font-size:12px;font-weight:600;">${changeIndicator}</span>
+                    </td>
+                    <td style="padding:10px 12px;border-bottom:1px solid #DBEAFE;">
+                        <span style="color:#1E293B;font-size:13px;font-weight:500;">${c.nombre || c.name || 'Cliente'}</span>
+                        <span style="color:#64748B;font-size:11px;margin-left:8px;">${c.codigo || c.code || ''}</span>
+                    </td>
+                </tr>`;
+        });
+        
+        if (allReorderedClients.length > showMax) {
+            content += `
+                <tr style="background:#F8FAFC;">
+                    <td colspan="5" style="padding:12px;text-align:center;color:#64748B;font-size:12px;">
+                        ... y ${allReorderedClients.length - showMax} cambios más
+                    </td>
+                </tr>`;
+        }
+        
+        content += `</tbody></table>
         </div>`;
     }
     
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CASO 3: OTRO TIPO DE CAMBIO (genérico)
-    // ═══════════════════════════════════════════════════════════════════════════
-    else {
-        headerTitle = changeType || 'Modificación de Rutero';
-        subjectLine = changeType || 'Modificación';
-        
-        content += executiveSummaryBox([
-            { label: 'Comercial', value: `#${vendorName}` },
-            { label: 'Tipo de cambio', value: changeType || 'General' }
-        ]);
-        
-        content += `
-        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:16px;margin-top:12px;">
-            <pre style="margin:0;color:#475569;font-size:11px;white-space:pre-wrap;word-break:break-word;font-family:monospace;">
-${JSON.stringify(details, null, 2)}
-            </pre>
-        </div>`;
-    }
+    // Nota explicativa
+    content += `
+    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:16px;margin-top:8px;">
+        <p style="margin:0;color:#475569;font-size:12px;line-height:1.6;">
+            <strong style="color:#1E293B;">¿Qué significan estos cambios?</strong><br><br>
+            ${allMovedClients.length > 0 ? '• <strong>Cambio de día:</strong> El cliente será visitado en un día diferente de la semana.<br>' : ''}
+            ${allReorderedClients.length > 0 ? '• <strong>Cambio de posición:</strong> El orden de visita ha cambiado. Un número menor significa que será visitado antes en la jornada.<br>' : ''}
+            • Los cambios se aplican inmediatamente a la ruta del comercial.
+        </p>
+    </div>`;
 
-    const htmlBody = generateProfessionalTemplate(content, headerTitle, timestamp);
+    const htmlBody = generateProfessionalTemplate(content, 'Resumen de Cambios en Ruta', timestamp);
+    
+    // Construir asunto descriptivo
+    let subjectParts = [];
+    if (allMovedClients.length > 0) subjectParts.push(`${allMovedClients.length} cambio(s) de día`);
+    if (allReorderedClients.length > 0) subjectParts.push(`${allReorderedClients.length} reorden(es)`);
+    const subjectLine = subjectParts.join(' + ') || 'Modificación';
 
     const mailOptions = {
         from: `"GMP Rutas" <${SMTP_CONFIG.auth.user}>`,
@@ -439,12 +569,21 @@ ${JSON.stringify(details, null, 2)}
 
     try {
         const info = await transporter.sendMail(mailOptions);
-        logger.info(`📧 Audit email sent: ${info.messageId}`);
+        logger.info(`📧 Consolidated email sent: ${info.messageId} (${changes.length} changes)`);
         return true;
     } catch (error) {
-        logger.error(`❌ Error sending audit email: ${error.message}`);
+        logger.error(`❌ Error sending consolidated email: ${error.message}`);
         return false;
     }
+}
+
+/**
+ * Envía email de auditoría de cambios en Rutero
+ * AHORA USA SISTEMA DE BATCH - acumula cambios y envía uno solo
+ */
+async function sendAuditEmail(vendorName, changeType, details) {
+    // Usar sistema de batch para consolidar emails
+    queueAuditEmail(vendorName, changeType, details);
 }
 
 module.exports = { sendAuditEmail };

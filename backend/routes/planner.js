@@ -377,6 +377,22 @@ router.post('/rutero/config', async (req, res) => {
         conn = await pool.connect();
         await conn.beginTransaction();
 
+        // ═══════════════════════════════════════════════════════════════
+        // CAPTURAR POSICIONES ANTERIORES ANTES DE BORRAR
+        // ═══════════════════════════════════════════════════════════════
+        let previousPositions = {};
+        try {
+            const prevRows = await conn.query(`
+                SELECT CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG 
+                WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}'
+            `);
+            prevRows.forEach(row => {
+                previousPositions[row.CLIENTE?.trim()] = row.ORDEN;
+            });
+        } catch (e) { 
+            logger.warn(`Could not fetch previous positions: ${e.message}`);
+        }
+
         // 1. Delete existing config for this vendor/day AND for these specific clients anywhere
         // Why? If moving a client from Monday to Tuesday, we must remove them from Monday (if overridden)
         // AND remove them from any previous Tuesday config to avoid duplicates before inserting.
@@ -435,15 +451,30 @@ router.post('/rutero/config', async (req, res) => {
                 names.forEach(n => clientNamesMap[n.C.trim()] = n.N.trim());
             }
 
+            // Calcular clientes que realmente cambiaron de posición
+            const clientesConCambio = orden.map(o => {
+                const clienteId = o.cliente?.trim();
+                const posAnterior = previousPositions[clienteId];
+                const posNueva = parseInt(o.posicion) || 0;
+                const hayCambio = posAnterior !== undefined && posAnterior !== posNueva;
+                
+                return {
+                    codigo: o.cliente,
+                    nombre: clientNamesMap[o.cliente] || 'Desconocido',
+                    posicion: posNueva,
+                    posicionAnterior: posAnterior !== undefined ? posAnterior : posNueva,
+                    hayCambio: hayCambio
+                };
+            });
+
+            const clientesCambiados = clientesConCambio.filter(c => c.hayCambio);
+
             const auditDetails = {
                 action: 'Actualización de Rutero',
                 diaObjetivo: dia,
                 totalClientes: orden.length,
-                clientesAfectados: orden.map(o => ({
-                    codigo: o.cliente,
-                    nombre: clientNamesMap[o.cliente] || 'Desconocido',
-                    posicion: o.posicion
-                }))
+                cambiosDetectados: clientesCambiados.length,
+                clientesAfectados: clientesConCambio
             };
 
             // Fire and forget email
