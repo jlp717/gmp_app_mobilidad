@@ -439,7 +439,9 @@ router.get('/matrix', async (req, res) => {
     try {
         const {
             clientCode, years, startMonth = '1', endMonth = '12',
-            productCode, productName, familyCode, subfamilyCode
+            productCode, productName, familyCode, subfamilyCode,
+            // NEW: FI filters
+            fi1, fi2, fi3, fi4, fi5
         } = req.query;
 
         if (!clientCode) {
@@ -503,12 +505,38 @@ router.get('/matrix', async (req, res) => {
         if (productName && productName.trim()) {
             filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE '%${productName.trim().toUpperCase()}%' OR UPPER(L.DESCRIPCION) LIKE '%${productName.trim().toUpperCase()}%')`;
         }
+        // Legacy family/subfamily filters (mantener compatibilidad)
         if (familyCode && familyCode.trim()) {
             filterConditions += ` AND A.CODIGOFAMILIA = '${familyCode.trim()}'`;
         }
         if (subfamilyCode && subfamilyCode.trim()) {
             filterConditions += ` AND A.CODIGOSUBFAMILIA = '${subfamilyCode.trim()}'`;
         }
+        
+        // NEW: FI hierarchical filters (join con ARTX)
+        let needsArtxJoin = false;
+        if (fi1 && fi1.trim()) {
+            filterConditions += ` AND TRIM(AX.FILTRO01) = '${fi1.trim()}'`;
+            needsArtxJoin = true;
+        }
+        if (fi2 && fi2.trim()) {
+            filterConditions += ` AND TRIM(AX.FILTRO02) = '${fi2.trim()}'`;
+            needsArtxJoin = true;
+        }
+        if (fi3 && fi3.trim()) {
+            filterConditions += ` AND TRIM(AX.FILTRO03) = '${fi3.trim()}'`;
+            needsArtxJoin = true;
+        }
+        if (fi4 && fi4.trim()) {
+            filterConditions += ` AND TRIM(AX.FILTRO04) = '${fi4.trim()}'`;
+            needsArtxJoin = true;
+        }
+        if (fi5 && fi5.trim()) {
+            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = '${fi5.trim()}'`;
+        }
+        
+        // Build ARTX join if needed
+        const artxJoin = needsArtxJoin ? 'LEFT JOIN DSEDAC.ARTX AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO' : '';
 
         // Get product purchases for this client
         const rows = await query(`
@@ -531,9 +559,14 @@ router.get('/matrix', async (req, res) => {
         AVG(CASE WHEN L.IMPORTEDESCUENTOUNIDAD <> 0 THEN L.IMPORTEDESCUENTOUNIDAD ELSE NULL END) as AVG_DISCOUNT_EUR,
         -- Average prices for comparison
         AVG(L.PRECIOTARIFACLIENTE) as AVG_CLIENT_TARIFF,
-        AVG(L.PRECIOTARIFA01) as AVG_BASE_TARIFF
+        AVG(L.PRECIOTARIFA01) as AVG_BASE_TARIFF,
+        -- FI codes for grouping
+        COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
+        COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
+        COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
       FROM DSEDAC.LAC L
       LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+      LEFT JOIN DSEDAC.ARTX AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO
       LEFT JOIN DSEDAC.CAC C ON C.CCSBAB = L.LCSBAB 
         AND C.CCYEAB = L.LCYEAB 
         AND C.CCSRAB = L.LCSRAB 
@@ -545,7 +578,7 @@ router.get('/matrix', async (req, res) => {
         -- FILTERS to match LACLAE logic
         AND ${LAC_SALES_FILTER}
         ${filterConditions}
-      GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.ANODOCUMENTO, L.MESDOCUMENTO
+      GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.ANODOCUMENTO, L.MESDOCUMENTO, AX.FILTRO01, AX.FILTRO02, A.CODIGOSECCIONLARGA
       ORDER BY SALES DESC
     `);
 
@@ -556,15 +589,30 @@ router.get('/matrix', async (req, res) => {
         // Logic to build distinct filter lists based on ACTUAL data found
         const availableFamiliesMap = new Map();
         const availableSubfamiliesMap = new Map();
+        // NEW: FI filter maps
+        const availableFi1Map = new Map();
+        const availableFi2Map = new Map();
+        const availableFi5Map = new Map();
 
+        // Load FI descriptions
+        let fi1Names = {}, fi2Names = {}, fi5Names = {};
         try {
             // 1. Load Name Maps
             const famRows = await query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM DSEDAC.FAM`);
             famRows.forEach(r => { familyNames[r.CODIGOFAMILIA?.trim()] = r.DESCRIPCIONFAMILIA?.trim() || r.CODIGOFAMILIA?.trim(); });
-            // SFM Empty
+            
+            // Load FI names
+            const fi1Rows = await query(`SELECT TRIM(CODIGOFILTRO) as CODE, TRIM(DESCRIPCIONFILTRO) as NAME FROM DSEDAC.FI1`, false, false);
+            fi1Rows.forEach(r => { fi1Names[r.CODE] = r.NAME; });
+            
+            const fi2Rows = await query(`SELECT TRIM(CODIGOFILTRO) as CODE, TRIM(DESCRIPCIONFILTRO) as NAME FROM DSEDAC.FI2`, false, false);
+            fi2Rows.forEach(r => { fi2Names[r.CODE] = r.NAME; });
+            
+            const fi5Rows = await query(`SELECT TRIM(CODIGOFILTRO) as CODE, TRIM(DESCRIPCIONFILTRO) as NAME FROM DSEDAC.FI5`, false, false);
+            fi5Rows.forEach(r => { fi5Names[r.CODE] = r.NAME; });
 
         } catch (e) {
-            logger.warn(`Could not load family names: ${e.message}`);
+            logger.warn(`Could not load family/FI names: ${e.message}`);
         }
 
         // Build hierarchy: Family -> Subfamily -> Product
@@ -599,6 +647,11 @@ router.get('/matrix', async (req, res) => {
 
             const avgClientTariff = parseFloat(row.AVG_CLIENT_TARIFF) || 0;
             const avgBaseTariff = parseFloat(row.AVG_BASE_TARIFF) || 0;
+            
+            // FI codes from row
+            const fi1Code = row.FI1_CODE?.trim() || '';
+            const fi2Code = row.FI2_CODE?.trim() || '';
+            const fi5Code = row.FI5_CODE?.trim() || '';
 
             // Populate Distinct Filter Maps
             if (!availableFamiliesMap.has(famCode)) {
@@ -611,6 +664,26 @@ router.get('/matrix', async (req, res) => {
                 availableSubfamiliesMap.set(subfamCode, {
                     code: subfamCode,
                     name: subfamilyNames[subfamCode] ? `${subfamCode} - ${subfamilyNames[subfamCode]}` : subfamCode
+                });
+            }
+            
+            // Populate FI Filter Maps
+            if (fi1Code && !availableFi1Map.has(fi1Code)) {
+                availableFi1Map.set(fi1Code, {
+                    code: fi1Code,
+                    name: fi1Names[fi1Code] ? `${fi1Code} - ${fi1Names[fi1Code]}` : fi1Code
+                });
+            }
+            if (fi2Code && !availableFi2Map.has(fi2Code)) {
+                availableFi2Map.set(fi2Code, {
+                    code: fi2Code,
+                    name: fi2Names[fi2Code] ? `${fi2Code} - ${fi2Names[fi2Code]}` : fi2Code
+                });
+            }
+            if (fi5Code && !availableFi5Map.has(fi5Code)) {
+                availableFi5Map.set(fi5Code, {
+                    code: fi5Code,
+                    name: fi5Names[fi5Code] ? `${fi5Code} - ${fi5Names[fi5Code]}` : fi5Code
                 });
             }
 
@@ -898,7 +971,11 @@ router.get('/matrix', async (req, res) => {
             monthlyTotals: flatMonthlyTotals,
             availableFilters: {
                 families: Array.from(availableFamiliesMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
-                subfamilies: Array.from(availableSubfamiliesMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+                subfamilies: Array.from(availableSubfamiliesMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
+                // NEW: FI hierarchical filters available in this client's data
+                fi1: Array.from(availableFi1Map.values()).sort((a, b) => a.name.localeCompare(b.name)),
+                fi2: Array.from(availableFi2Map.values()).sort((a, b) => a.name.localeCompare(b.name)),
+                fi5: Array.from(availableFi5Map.values()).sort((a, b) => a.name.localeCompare(b.name))
             },
             families,
             years: yearsArray,

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/modern_loading.dart';
+import '../../../../core/widgets/fi_filters_widget.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/utils/currency_formatter.dart';
@@ -49,8 +50,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   bool _filtersDirty = false; // Track if filters changed
   String _productCodeSearch = '';
   String _productNameSearch = '';
-  String? _selectedFamilyCode;
-  String? _selectedSubfamilyCode;
+  // REMOVED: Old Familia/Subfamilia filters
+  // String? _selectedFamilyCode;
+  // String? _selectedSubfamilyCode;
+  
+  // NEW: FI hierarchical filters state
+  FiFilterState _fiFilters = const FiFilterState();
+  FiFilterOptions? _fiOptions;
   
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -86,8 +92,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           'endMonth': _endMonth.toString(),
           if (_productCodeSearch.isNotEmpty) 'productCode': _productCodeSearch,
           if (_productNameSearch.isNotEmpty) 'productName': _productNameSearch,
-          if (_selectedFamilyCode != null) 'familyCode': _selectedFamilyCode!,
-          if (_selectedSubfamilyCode != null) 'subfamilyCode': _selectedSubfamilyCode!,
+          // NEW: FI hierarchical filters
+          if (_fiFilters.fi1 != null) 'fi1': _fiFilters.fi1!,
+          if (_fiFilters.fi2 != null) 'fi2': _fiFilters.fi2!,
+          if (_fiFilters.fi3 != null) 'fi3': _fiFilters.fi3!,
+          if (_fiFilters.fi4 != null) 'fi4': _fiFilters.fi4!,
+          if (_fiFilters.fi5 != null) 'fi5': _fiFilters.fi5!,
           'includeYoY': 'true',
         },
       );
@@ -101,11 +111,39 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         _availableFilters = response['availableFilters'] ?? {};
         _editableNotes = response['editableNotes'];
         _contactInfo = response['contactInfo'] ?? {};
+        
+        // Parse FI options from availableFilters
+        _fiOptions = FiFilterOptions(
+          fi1: _parseFiOptions(_availableFilters['fi1']),
+          fi2: _parseFiOptions(_availableFilters['fi2']),
+          fi3: _parseFiOptions(_availableFilters['fi3']),
+          fi4: _parseFiOptions(_availableFilters['fi4']),
+          fi5: _parseFiOptions(_availableFilters['fi5']),
+        );
+        
         _isLoading = false;
         if (_families.length == 1) _expandedFamilies.add(_families.first['familyCode'] ?? '');
       });
     } catch (e) {
       setState(() { _error = e.toString(); _isLoading = false; });
+    }
+  }
+
+  /// Parse FI options from API response
+  List<FiOption> _parseFiOptions(dynamic data) {
+    if (data == null) return [];
+    try {
+      return (data as List).map((item) {
+        if (item is Map<String, dynamic>) {
+          return FiOption.fromJson(item);
+        } else if (item is Map) {
+          return FiOption.fromJson(Map<String, dynamic>.from(item));
+        }
+        return FiOption(code: item.toString(), name: item.toString());
+      }).toList();
+    } catch (e) {
+      debugPrint('Error parsing FI options: $e');
+      return [];
     }
   }
 
@@ -264,13 +302,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   Widget _buildFilters() {
-    final rawFams = _availableFilters['families'] ?? [];
-    final fams = (rawFams as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
-    final rawSubs = _availableFilters['subfamilies'] ?? [];
-    final subs = (rawSubs as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
-    
     return Container(
-      constraints: const BoxConstraints(maxHeight: 180),
+      constraints: const BoxConstraints(maxHeight: 260), // Increased for FI filters
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
@@ -352,7 +385,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               ],
             ),
             const SizedBox(height: 6),
-            // Search and dropdowns in rows
+            // Search fields row
             Row(
               children: [
                 Expanded(child: _buildTextField(_codeCtrl, 'Código', (v) { _productCodeSearch = v; _filtersDirty = true; setState(() {}); })),
@@ -360,13 +393,40 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 Expanded(child: _buildTextField(_nameCtrl, 'Descripción', (v) { _productNameSearch = v; _filtersDirty = true; setState(() {}); })),
               ],
             ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(child: _buildDropdown('Familia', _selectedFamilyCode, fams, (v) { _selectedFamilyCode = v; _selectedSubfamilyCode = null; _filtersDirty = true; setState(() {}); })),
-                const SizedBox(width: 6),
-                Expanded(child: _buildDropdown('Subfamilia', _selectedSubfamilyCode, subs, (v) { _selectedSubfamilyCode = v; _filtersDirty = true; setState(() {}); })),
-              ],
+            const SizedBox(height: 8),
+            // NEW: FI Hierarchical Filters (replaces Familia/Subfamilia)
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.darkBase,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade700),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.filter_alt, size: 14, color: AppTheme.neonBlue),
+                      const SizedBox(width: 4),
+                      const Text('Filtros de Producto', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  FiFiltersWidget(
+                    compact: true,
+                    showAdvanced: false, // Hide FI3/FI4 for simplicity
+                    initialFilters: _fiFilters,
+                    availableOptions: _fiOptions,
+                    onFiltersChanged: (newFilters) {
+                      setState(() {
+                        _fiFilters = newFilters;
+                        _filtersDirty = true;
+                      });
+                    },
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
             // APPLY BUTTON

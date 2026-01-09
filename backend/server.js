@@ -23,6 +23,7 @@ const objectivesRoutes = require('./routes/objectives');
 const exportRoutes = require('./routes/export');
 const chatbotRoutes = require('./routes/chatbot');
 const commissionsRoutes = require('./routes/commissions');
+const filtersRoutes = require('./routes/filters');
 
 const app = express();
 app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
@@ -119,6 +120,7 @@ app.use('/api/objectives', objectivesRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/commissions', commissionsRoutes);
+app.use('/api/filters', filtersRoutes);
 
 // Start server
 async function startServer() {

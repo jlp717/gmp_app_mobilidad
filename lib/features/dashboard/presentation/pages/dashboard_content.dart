@@ -12,6 +12,7 @@ import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/widgets/multi_select_dialog.dart';
+import '../../../../core/widgets/fi_filters_widget.dart';
 // SmartSyncHeader already imported in line 10 theoretically, but let's just keep one. 
 // Step 1420 lines 10 & 11 were both SmartSyncHeader.
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
@@ -43,7 +44,8 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   Set<String> _selectedClientCodes = {};
 
   Set<String> _selectedProductCodes = {};
-  Set<String> _selectedFamilyCodes = {};
+  // NEW: FI hierarchical filters (replaces _selectedFamilyCodes)
+  FiFilterState _fiFilters = const FiFilterState();
 
   // Pending changes for manual apply
   Set<int> _pendingYears = {};
@@ -54,7 +56,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   List<Map<String, dynamic>> _vendedoresDisponibles = [];
 
   List<Map<String, dynamic>> _clientsDisponibles = [];
-  List<Map<String, dynamic>> _familiesDisponibles = [];
+  // REMOVED: _familiesDisponibles - now using FI API directly
   
   // HIERARCHY STATE - Supports any hierarchy combination with 2-step backend approach
   List<String> _hierarchy = ['vendor', 'client']; // User can customize via HierarchySelector
@@ -85,17 +87,55 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
     _fetchAllData();
   }
 
-  /// Load available families
-  Future<void> _loadFamilies() async {
-    try {
-      final response = await ApiClient.getList('/families', queryParameters: {'limit': '500'}, cacheKey: 'families_list', cacheTTL: const Duration(hours: 24));
-      if (mounted) {
-        setState(() {
-          _familiesDisponibles = response.map((item) => Map<String, dynamic>.from(item as Map)).toList();
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading families: $e');
+  /// REMOVED: _loadFamilies - FI options are loaded by FiFiltersWidget
+
+  /// FI Filters Dialog (replaces Family Filter)
+  void _openFiFiltersDialog() async {
+    final result = await showDialog<FiFilterState>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: AppTheme.surfaceColor,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          constraints: const BoxConstraints(maxWidth: 400, maxHeight: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.filter_alt, color: AppTheme.neonBlue),
+                  const SizedBox(width: 8),
+                  const Text('Filtros de Producto', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: _FiFilterDialogContent(
+                    initialFilters: _fiFilters,
+                    onApply: (newFilters) {
+                      Navigator.pop(context, newFilters);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _fiFilters = result;
+      });
+      _fetchAllData();
     }
   }
 
@@ -186,39 +226,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
 
   }
 
-  /// Family Filter Logic
-  void _openFamilyFilter() async {
-    if (_familiesDisponibles.isEmpty) await _loadFamilies();
-    if (!mounted) return;
-
-    final result = await showDialog<Set<Map<String, dynamic>>>(
-      context: context,
-      builder: (context) => MultiSelectDialog<Map<String, dynamic>>(
-        items: _familiesDisponibles,
-        selectedItems: _familiesDisponibles.where((f) => _selectedFamilyCodes.contains(f['code'])).toSet(),
-        title: 'Filtrar Familias',
-        labelBuilder: (item) => '${item['code']} - ${item['name']}',
-        onRemoteSearch: (query) async {
-           // Local search is fine for families (usually < 100) but support remote if needed
-           if (_familiesDisponibles.length > 500) {
-              final res = await ApiClient.get('/families', queryParameters: {'search': query});
-              return (res as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
-           }
-           return _familiesDisponibles.where((f) => 
-             f['name'].toString().toLowerCase().contains(query.toLowerCase()) || 
-             f['code'].toString().contains(query)
-           ).toList();
-        },
-      ),
-    );
-
-    if (result != null) {
-      setState(() {
-        _selectedFamilyCodes = result.map((f) => f['code'].toString()).toSet();
-      });
-      _fetchAllData();
-    }
-  }
+  // REMOVED: _openFamilyFilter - replaced by _openFiFiltersDialog above
 
   Future<void> _fetchAllData() async {
     if (!mounted) return;
@@ -254,10 +262,12 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
         params['productCodes'] = _selectedProductCodes.join(',');
       }
 
-      // Family Codes
-      if (_selectedFamilyCodes.isNotEmpty) {
-        params['familyCodes'] = _selectedFamilyCodes.join(',');
-      }
+      // NEW: FI Hierarchical Filters (replaces Family Codes)
+      if (_fiFilters.fi1 != null) params['fi1'] = _fiFilters.fi1!;
+      if (_fiFilters.fi2 != null) params['fi2'] = _fiFilters.fi2!;
+      if (_fiFilters.fi3 != null) params['fi3'] = _fiFilters.fi3!;
+      if (_fiFilters.fi4 != null) params['fi4'] = _fiFilters.fi4!;
+      if (_fiFilters.fi5 != null) params['fi5'] = _fiFilters.fi5!;
       
       // Add year filter (Multi-select)
       params['years'] = _selectedYears.join(',');
@@ -386,6 +396,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
     setState(() {
       _selectedVendedor = null;
       _selectedClientCodes.clear();
+      _fiFilters = const FiFilterState(); // Reset FI filters
       _hierarchy = ['vendor', 'client']; // Reset hierarchy
       _selectedYears = {DateTime.now().year};
       _selectedMonths = {for (var i = 1; i <= DateTime.now().month; i++) i};
@@ -395,7 +406,16 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
     _fetchAllData();
   }
 
-
+  /// Build summary text for active FI filters
+  String _buildFiFilterSummary() {
+    final parts = <String>[];
+    if (_fiFilters.fi1 != null) parts.add('Cat');
+    if (_fiFilters.fi2 != null) parts.add('Sub');
+    if (_fiFilters.fi5 != null) parts.add('Tipo');
+    if (_fiFilters.fi3 != null) parts.add('Det');
+    if (_fiFilters.fi4 != null) parts.add('Esp');
+    return parts.isEmpty ? 'Categorías' : parts.join('+');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -580,29 +600,29 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
           ),
         ),
         const SizedBox(width: 8),
-        // Family Filter Button
+        // FI Filters Button (replaces Family Filter)
         Expanded(
           flex: 2,
           child: GestureDetector(
-            onTap: _openFamilyFilter,
+            onTap: _openFiFiltersDialog,
             child: Container(
               height: 44,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 color: AppTheme.surfaceColor,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _selectedFamilyCodes.isNotEmpty ? AppTheme.neonPurple : Colors.transparent),
+                border: Border.all(color: _fiFilters.isNotEmpty ? AppTheme.neonBlue : Colors.transparent),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.category, color: _selectedFamilyCodes.isNotEmpty ? AppTheme.neonPurple : AppTheme.textSecondary, size: 18),
+                  Icon(Icons.filter_alt, color: _fiFilters.isNotEmpty ? AppTheme.neonBlue : AppTheme.textSecondary, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _selectedFamilyCodes.isEmpty 
-                        ? 'Familias' 
-                        : '${_selectedFamilyCodes.length} selec.',
-                      style: TextStyle(color: _selectedFamilyCodes.isNotEmpty ? Colors.white : Colors.white54, fontSize: 13),
+                      _fiFilters.isEmpty 
+                        ? 'Categorías' 
+                        : _buildFiFilterSummary(),
+                      style: TextStyle(color: _fiFilters.isNotEmpty ? Colors.white : Colors.white54, fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -1227,4 +1247,61 @@ List<MatrixNode> buildTreeIsolate(TreeBuildParams params) {
        .map((n) => n.toMatrixNode())
        .toList()
        ..sort((a,b) => b.sales.compareTo(a.sales)); // Sort root nodes too
+}
+
+/// Dialog content for FI filters
+class _FiFilterDialogContent extends StatefulWidget {
+  final FiFilterState initialFilters;
+  final Function(FiFilterState) onApply;
+
+  const _FiFilterDialogContent({
+    required this.initialFilters,
+    required this.onApply,
+  });
+
+  @override
+  State<_FiFilterDialogContent> createState() => _FiFilterDialogContentState();
+}
+
+class _FiFilterDialogContentState extends State<_FiFilterDialogContent> {
+  late FiFilterState _currentFilters;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentFilters = widget.initialFilters;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FiFiltersWidget(
+          compact: false, // Expanded layout for dialog
+          showAdvanced: true, // Show all FI levels
+          initialFilters: _currentFilters,
+          onFiltersChanged: (newFilters) {
+            setState(() => _currentFilters = newFilters);
+          },
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () => widget.onApply(_currentFilters),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
+              child: const Text('Aplicar'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
