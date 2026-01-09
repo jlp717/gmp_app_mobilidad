@@ -516,6 +516,26 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
   }) {
     final isActive = value != null;
     final effectiveEnabled = enabled && !loading && widget.enabled;
+    final hasOptions = options.isNotEmpty;
+    
+    // Colores consistentes con el diseño de la app
+    Color getBorderColor() {
+      if (!effectiveEnabled) return Colors.grey.shade700;
+      if (isActive) return AppTheme.neonBlue;
+      return Colors.grey.shade600;
+    }
+    
+    Color getFillColor() {
+      if (!effectiveEnabled) return AppTheme.surfaceColor.withOpacity(0.5);
+      if (isActive) return AppTheme.neonBlue.withOpacity(0.15);
+      return AppTheme.surfaceColor;
+    }
+    
+    Color getIconColor() {
+      if (!effectiveEnabled) return Colors.grey.shade600;
+      if (isActive) return AppTheme.neonBlue;
+      return AppTheme.textSecondary;
+    }
     
     return SizedBox(
       height: 36,
@@ -525,35 +545,35 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
           labelText: label,
           labelStyle: TextStyle(
             fontSize: 10,
-            color: effectiveEnabled ? AppTheme.textSecondary : Colors.grey,
+            color: effectiveEnabled ? (isActive ? AppTheme.neonBlue : AppTheme.textSecondary) : Colors.grey.shade600,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
           ),
           prefixIcon: loading
-              ? const SizedBox(
+              ? SizedBox(
                   width: 20,
                   height: 20,
                   child: Padding(
-                    padding: EdgeInsets.all(8),
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    padding: const EdgeInsets.all(8),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.neonBlue,
+                    ),
                   ),
                 )
               : Icon(
                   icon,
                   size: 16,
-                  color: isActive ? AppTheme.neonBlue : AppTheme.textSecondary,
+                  color: getIconColor(),
                 ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
           isDense: true,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: isActive ? AppTheme.neonBlue : Colors.grey.shade600,
-            ),
+            borderSide: BorderSide(color: getBorderColor(), width: isActive ? 1.5 : 1),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: isActive ? AppTheme.neonBlue : Colors.grey.shade600,
-            ),
+            borderSide: BorderSide(color: getBorderColor(), width: isActive ? 1.5 : 1),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
@@ -561,27 +581,25 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
           ),
           disabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey.shade800),
+            borderSide: BorderSide(color: Colors.grey.shade700),
           ),
           filled: true,
-          fillColor: effectiveEnabled 
-              ? (isActive ? AppTheme.neonBlue.withOpacity(0.1) : AppTheme.surfaceColor)
-              : Colors.grey.shade900,
+          fillColor: getFillColor(),
         ),
         dropdownColor: AppTheme.surfaceColor,
         style: TextStyle(
           fontSize: 11,
-          color: effectiveEnabled ? Colors.white : Colors.grey,
+          color: effectiveEnabled ? Colors.white : Colors.grey.shade500,
         ),
         icon: Icon(
           Icons.arrow_drop_down,
-          color: effectiveEnabled ? Colors.white54 : Colors.grey.shade700,
+          color: effectiveEnabled ? (isActive ? AppTheme.neonBlue : Colors.white54) : Colors.grey.shade700,
         ),
         items: [
           DropdownMenuItem<String?>(
             value: null,
             child: Text(
-              'Todos',
+              hasOptions ? 'Todos' : (loading ? 'Cargando...' : 'Sin opciones'),
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.grey.shade400,

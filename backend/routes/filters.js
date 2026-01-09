@@ -39,89 +39,84 @@ async function refreshCacheIfNeeded() {
     logger.info('📦 Refrescando caché de filtros FI...');
 
     try {
-        // FI1 - Categorías principales (ordenadas por uso)
+        // FI1 - Categorías principales (query simple sin JOIN para evitar problemas)
         const fi1Result = await query(`
             SELECT 
-                TRIM(f.CODIGOFILTRO) as code,
-                TRIM(f.DESCRIPCIONFILTRO) as name,
-                f.ORDEN as orden,
-                COUNT(DISTINCT x.CODIGOARTICULO) as articleCount
-            FROM DSEDAC.FI1 f
-            LEFT JOIN DSEDAC.ARTX x ON TRIM(x.FILTRO01) = TRIM(f.CODIGOFILTRO)
-            LEFT JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
-            GROUP BY f.CODIGOFILTRO, f.DESCRIPCIONFILTRO, f.ORDEN
-            HAVING COUNT(DISTINCT x.CODIGOARTICULO) > 0
-            ORDER BY f.ORDEN, f.DESCRIPCIONFILTRO
+                CODIGOFILTRO as code,
+                DESCRIPCIONFILTRO as name,
+                ORDEN as orden
+            FROM DSEDAC.FI1 
+            ORDER BY ORDEN, DESCRIPCIONFILTRO
         `, true, false);
 
         filtersCache.fi1 = fi1Result.map(f => ({
-            code: f.code?.trim() || '',
-            name: f.name?.trim() || '',
+            code: (f.code || '').trim(),
+            name: (f.name || '').trim(),
             orden: f.orden,
-            count: f.articleCount || 0
+            count: 0
         })).filter(f => f.code);
 
-        // FI2 - Subcategorías con su padre FI1
+        // FI2 - Subcategorías
         const fi2Result = await query(`
             SELECT 
-                TRIM(f.CODIGOFILTRO) as code,
-                TRIM(f.DESCRIPCIONFILTRO) as name,
-                f.ORDEN as orden
-            FROM DSEDAC.FI2 f
-            ORDER BY f.ORDEN, f.DESCRIPCIONFILTRO
+                CODIGOFILTRO as code,
+                DESCRIPCIONFILTRO as name,
+                ORDEN as orden
+            FROM DSEDAC.FI2
+            ORDER BY ORDEN, DESCRIPCIONFILTRO
         `, true, false);
 
         filtersCache.fi2All = fi2Result.map(f => ({
-            code: f.code?.trim() || '',
-            name: f.name?.trim() || '',
+            code: (f.code || '').trim(),
+            name: (f.name || '').trim(),
             orden: f.orden
         })).filter(f => f.code);
 
         // FI3 - Atributos adicionales
         const fi3Result = await query(`
             SELECT 
-                TRIM(f.CODIGOFILTRO) as code,
-                TRIM(f.DESCRIPCIONFILTRO) as name,
-                f.ORDEN as orden
-            FROM DSEDAC.FI3 f
-            ORDER BY f.ORDEN, f.DESCRIPCIONFILTRO
+                CODIGOFILTRO as code,
+                DESCRIPCIONFILTRO as name,
+                ORDEN as orden
+            FROM DSEDAC.FI3
+            ORDER BY ORDEN, DESCRIPCIONFILTRO
         `, true, false);
 
         filtersCache.fi3All = fi3Result.map(f => ({
-            code: f.code?.trim() || '',
-            name: f.name?.trim() || '',
+            code: (f.code || '').trim(),
+            name: (f.name || '').trim(),
             orden: f.orden
         })).filter(f => f.code);
 
         // FI4 - Características especiales
         const fi4Result = await query(`
             SELECT 
-                TRIM(f.CODIGOFILTRO) as code,
-                TRIM(f.DESCRIPCIONFILTRO) as name,
-                f.ORDEN as orden
-            FROM DSEDAC.FI4 f
-            ORDER BY f.ORDEN, f.DESCRIPCIONFILTRO
+                CODIGOFILTRO as code,
+                DESCRIPCIONFILTRO as name,
+                ORDEN as orden
+            FROM DSEDAC.FI4
+            ORDER BY ORDEN, DESCRIPCIONFILTRO
         `, true, false);
 
         filtersCache.fi4All = fi4Result.map(f => ({
-            code: f.code?.trim() || '',
-            name: f.name?.trim() || '',
+            code: (f.code || '').trim(),
+            name: (f.name || '').trim(),
             orden: f.orden
         })).filter(f => f.code);
 
-        // FI5 - Secciones/Tipo conservación (usa CODIGOSECCIONLARGA de ART)
+        // FI5 - Secciones/Tipo conservación
         const fi5Result = await query(`
             SELECT 
-                TRIM(CODIGOFILTRO) as code,
-                TRIM(DESCRIPCIONFILTRO) as name,
+                CODIGOFILTRO as code,
+                DESCRIPCIONFILTRO as name,
                 ORDEN as orden
             FROM DSEDAC.FI5
             ORDER BY ORDEN, DESCRIPCIONFILTRO
         `, true, false);
 
         filtersCache.fi5 = fi5Result.map(f => ({
-            code: f.code?.trim() || '',
-            name: f.name?.trim() || '',
+            code: (f.code || '').trim(),
+            name: (f.name || '').trim(),
             orden: f.orden
         })).filter(f => f.code);
 
@@ -165,26 +160,20 @@ router.get('/fi2', async (req, res) => {
 
         if (fi1Code) {
             // Obtener FI2 que realmente existen para artículos con ese FI1
+            // Query simplificada para compatibilidad con DB2 iSeries
             const fi2ForFi1 = await query(`
-                SELECT DISTINCT
-                    TRIM(x.FILTRO02) as code,
-                    TRIM(f.DESCRIPCIONFILTRO) as name,
-                    f.ORDEN as orden,
-                    COUNT(DISTINCT x.CODIGOARTICULO) as count
+                SELECT DISTINCT x.FILTRO02 as code
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
-                LEFT JOIN DSEDAC.FI2 f ON TRIM(x.FILTRO02) = TRIM(f.CODIGOFILTRO)
-                WHERE TRIM(x.FILTRO01) = '${fi1Code.trim()}'
-                AND x.FILTRO02 IS NOT NULL AND TRIM(x.FILTRO02) <> ''
-                GROUP BY TRIM(x.FILTRO02), f.DESCRIPCIONFILTRO, f.ORDEN
-                ORDER BY f.ORDEN, f.DESCRIPCIONFILTRO
+                WHERE x.FILTRO01 = '${fi1Code.trim().padEnd(10)}'
+                AND x.FILTRO02 IS NOT NULL 
+                AND x.FILTRO02 <> ''
+                AND x.FILTRO02 <> '          '
             `);
 
-            result = fi2ForFi1.map(f => ({
-                code: f.code?.trim() || '',
-                name: f.name?.trim() || f.code?.trim() || '',
-                count: f.count || 0
-            })).filter(f => f.code);
+            // Mapear los códigos encontrados con los datos del cache
+            const codesInUse = new Set(fi2ForFi1.map(r => (r.code || '').trim()).filter(c => c));
+            result = (filtersCache.fi2All || []).filter(f => codesInUse.has(f.code));
 
         } else {
             // Devolver todos los FI2
@@ -218,29 +207,21 @@ router.get('/fi3', async (req, res) => {
         if (fi2Code || fi1Code) {
             // Construir condición dinámica
             let whereConditions = [];
-            if (fi1Code) whereConditions.push(`TRIM(x.FILTRO01) = '${fi1Code.trim()}'`);
-            if (fi2Code) whereConditions.push(`TRIM(x.FILTRO02) = '${fi2Code.trim()}'`);
+            if (fi1Code) whereConditions.push(`x.FILTRO01 = '${fi1Code.trim().padEnd(10)}'`);
+            if (fi2Code) whereConditions.push(`x.FILTRO02 = '${fi2Code.trim().padEnd(10)}'`);
 
             const fi3Filtered = await query(`
-                SELECT DISTINCT
-                    TRIM(x.FILTRO03) as code,
-                    TRIM(f.DESCRIPCIONFILTRO) as name,
-                    f.ORDEN as orden,
-                    COUNT(DISTINCT x.CODIGOARTICULO) as count
+                SELECT DISTINCT x.FILTRO03 as code
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
-                LEFT JOIN DSEDAC.FI3 f ON TRIM(x.FILTRO03) = TRIM(f.CODIGOFILTRO)
                 WHERE ${whereConditions.join(' AND ')}
-                AND x.FILTRO03 IS NOT NULL AND TRIM(x.FILTRO03) <> ''
-                GROUP BY TRIM(x.FILTRO03), f.DESCRIPCIONFILTRO, f.ORDEN
-                ORDER BY f.ORDEN, f.DESCRIPCIONFILTRO
+                AND x.FILTRO03 IS NOT NULL 
+                AND x.FILTRO03 <> ''
+                AND x.FILTRO03 <> '          '
             `);
 
-            result = fi3Filtered.map(f => ({
-                code: f.code?.trim() || '',
-                name: f.name?.trim() || f.code?.trim() || '',
-                count: f.count || 0
-            })).filter(f => f.code);
+            const codesInUse = new Set(fi3Filtered.map(r => (r.code || '').trim()).filter(c => c));
+            result = (filtersCache.fi3All || []).filter(f => codesInUse.has(f.code));
 
         } else {
             result = filtersCache.fi3All || [];
@@ -270,30 +251,22 @@ router.get('/fi4', async (req, res) => {
 
         if (fi1Code || fi2Code || fi3Code) {
             let whereConditions = [];
-            if (fi1Code) whereConditions.push(`TRIM(x.FILTRO01) = '${fi1Code.trim()}'`);
-            if (fi2Code) whereConditions.push(`TRIM(x.FILTRO02) = '${fi2Code.trim()}'`);
-            if (fi3Code) whereConditions.push(`TRIM(x.FILTRO03) = '${fi3Code.trim()}'`);
+            if (fi1Code) whereConditions.push(`x.FILTRO01 = '${fi1Code.trim().padEnd(10)}'`);
+            if (fi2Code) whereConditions.push(`x.FILTRO02 = '${fi2Code.trim().padEnd(10)}'`);
+            if (fi3Code) whereConditions.push(`x.FILTRO03 = '${fi3Code.trim().padEnd(10)}'`);
 
             const fi4Filtered = await query(`
-                SELECT DISTINCT
-                    TRIM(x.FILTRO04) as code,
-                    TRIM(f.DESCRIPCIONFILTRO) as name,
-                    f.ORDEN as orden,
-                    COUNT(DISTINCT x.CODIGOARTICULO) as count
+                SELECT DISTINCT x.FILTRO04 as code
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
-                LEFT JOIN DSEDAC.FI4 f ON TRIM(x.FILTRO04) = TRIM(f.CODIGOFILTRO)
                 WHERE ${whereConditions.join(' AND ')}
-                AND x.FILTRO04 IS NOT NULL AND TRIM(x.FILTRO04) <> ''
-                GROUP BY TRIM(x.FILTRO04), f.DESCRIPCIONFILTRO, f.ORDEN
-                ORDER BY f.ORDEN, f.DESCRIPCIONFILTRO
+                AND x.FILTRO04 IS NOT NULL 
+                AND x.FILTRO04 <> ''
+                AND x.FILTRO04 <> '          '
             `);
 
-            result = fi4Filtered.map(f => ({
-                code: f.code?.trim() || '',
-                name: f.name?.trim() || f.code?.trim() || '',
-                count: f.count || 0
-            })).filter(f => f.code);
+            const codesInUse = new Set(fi4Filtered.map(r => (r.code || '').trim()).filter(c => c));
+            result = (filtersCache.fi4All || []).filter(f => codesInUse.has(f.code));
 
         } else {
             result = filtersCache.fi4All || [];
