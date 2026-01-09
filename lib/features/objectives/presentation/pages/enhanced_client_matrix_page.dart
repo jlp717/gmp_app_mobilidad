@@ -34,10 +34,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   
   // Legacy familia/subfamilia hierarchy
   List<Map<String, dynamic>> _families = [];
-  // NEW: 5-level FI hierarchy (FI1 > FI2 > FI3 > FI4 > productos)
+  // 5-level FI hierarchy (FI1 > FI2 > FI3 > FI4 > productos)
   List<Map<String, dynamic>> _fiHierarchy = [];
-  // Toggle for hierarchy view mode
-  bool _useFiHierarchy = true; // Default to FI hierarchy
   
   Map<String, dynamic> _grandTotal = {};
   Map<String, dynamic> _summary = {};
@@ -307,16 +305,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   if (_showFilters) _buildFilters(),
                   _buildSummaryRow(),
                   _buildMonthlyRow(),
-                  // Toggle between FI hierarchy and legacy family view
-                  _buildHierarchyToggle(),
+                  // Solo jerarquía FI de 5 niveles
                   Expanded(
-                    child: _useFiHierarchy 
-                      ? (_fiHierarchy.isEmpty 
-                          ? const Center(child: Text('Sin datos FI', style: TextStyle(color: Colors.grey)))
-                          : _buildFiHierarchyList())
-                      : (_families.isEmpty 
-                          ? const Center(child: Text('Sin datos', style: TextStyle(color: Colors.grey)))
-                          : _buildFamilyList()),
+                    child: _fiHierarchy.isEmpty 
+                      ? const Center(child: Text('Sin datos', style: TextStyle(color: Colors.grey)))
+                      : _buildFiHierarchyList(),
                   ),
                 ],
               ),
@@ -646,52 +639,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
-  // ===== FI HIERARCHY WIDGETS =====
-  
-  Widget _buildHierarchyToggle() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Text(
-            _useFiHierarchy ? 'Jerarquía FI' : 'Familia/Subfamilia',
-            style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-          ),
-          const SizedBox(width: 8),
-          Transform.scale(
-            scale: 0.8,
-            child: Switch(
-              value: _useFiHierarchy,
-              onChanged: (v) => setState(() => _useFiHierarchy = v),
-              activeColor: AppTheme.neonBlue,
-              activeTrackColor: AppTheme.neonBlue.withOpacity(0.3),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // ===== FI HIERARCHY WIDGETS (5 niveles) =====
 
   Widget _buildFiHierarchyList() {
-    if (_fiHierarchy.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.folder_off, size: 40, color: AppTheme.textSecondary.withOpacity(0.5)),
-            const SizedBox(height: 8),
-            Text('No hay jerarquía FI disponible', style: TextStyle(color: AppTheme.textSecondary)),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () => setState(() => _useFiHierarchy = false),
-              child: const Text('Ver Familia/Subfamilia'),
-            ),
-          ],
-        ),
-      );
-    }
-    
     return ListView.builder(
       padding: const EdgeInsets.all(4),
       itemCount: _fiHierarchy.length,
@@ -700,8 +650,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   Widget _buildFi1Card(Map<String, dynamic> fi1) {
-    final code = fi1['fi1Code'] as String? ?? '';
-    final name = fi1['fi1Name'] as String? ?? code;
+    final code = fi1['code'] as String? ?? '';
+    final name = fi1['name'] as String? ?? code;
     final nodeKey = 'fi1_$code';
     final expanded = _expandedFiNodes.contains(nodeKey);
     final children = List<Map<String, dynamic>>.from(
@@ -710,41 +660,68 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final sales = (fi1['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (fi1['totalUnits'] as num?)?.toDouble() ?? 0;
     final margin = (fi1['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final childCount = (fi1['childCount'] as num?)?.toInt() ?? children.length;
 
     return Card(
       color: AppTheme.surfaceColor,
       margin: const EdgeInsets.only(bottom: 4),
       child: Column(
         children: [
-          ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            leading: CircleAvatar(
-              radius: 14, backgroundColor: AppTheme.neonPurple.withOpacity(0.2),
-              child: const Text('F1', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+          InkWell(
+            onTap: () => setState(() { 
+              if (expanded) _expandedFiNodes.remove(nodeKey); 
+              else _expandedFiNodes.add(nodeKey); 
+            }),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  // Expand icon
+                  Icon(
+                    expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                    color: AppTheme.neonPurple,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 6),
+                  // Level badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonPurple.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text('FI1', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+                  ),
+                  const SizedBox(width: 8),
+                  // Name - "Código - Descripción"
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('$childCount subcategorías', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  // Stats
+                  _buildLevelStats(sales, units, margin, AppTheme.neonPurple),
+                ],
+              ),
             ),
-            title: Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            subtitle: Text('$code • ${children.length} FI2', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(_formatCurrency(sales), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
-                Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
-              ],
-            ),
-            onTap: () => setState(() { if (expanded) _expandedFiNodes.remove(nodeKey); else _expandedFiNodes.add(nodeKey); }),
           ),
-          if (expanded) ...children.map((fi2) => _buildFi2Card(fi2, code)),
+          if (expanded) 
+            Padding(
+              padding: const EdgeInsets.only(left: 12, bottom: 4),
+              child: Column(children: children.map((fi2) => _buildFi2Card(fi2, code)).toList()),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildFi2Card(Map<String, dynamic> fi2, String parentCode) {
-    final code = fi2['fi2Code'] as String? ?? '';
-    final name = fi2['fi2Name'] as String? ?? code;
+    final code = fi2['code'] as String? ?? '';
+    final name = fi2['name'] as String? ?? code;
     final nodeKey = 'fi2_${parentCode}_$code';
     final expanded = _expandedFiNodes.contains(nodeKey);
     final children = List<Map<String, dynamic>>.from(
@@ -753,45 +730,68 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final sales = (fi2['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (fi2['totalUnits'] as num?)?.toDouble() ?? 0;
     final margin = (fi2['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final childCount = (fi2['childCount'] as num?)?.toInt() ?? children.length;
 
     return Container(
-      margin: const EdgeInsets.only(left: 16, right: 4, bottom: 2),
+      margin: const EdgeInsets.only(right: 4, bottom: 2),
       decoration: BoxDecoration(
         color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border(left: BorderSide(color: AppTheme.neonBlue, width: 3)),
       ),
       child: Column(
         children: [
-          ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            leading: CircleAvatar(
-              radius: 12, backgroundColor: AppTheme.neonBlue.withOpacity(0.2),
-              child: const Text('F2', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+          InkWell(
+            onTap: () => setState(() { 
+              if (expanded) _expandedFiNodes.remove(nodeKey); 
+              else _expandedFiNodes.add(nodeKey); 
+            }),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  Icon(
+                    expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                    color: AppTheme.neonBlue,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonBlue.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: const Text('FI2', style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('$childCount grupos', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  _buildLevelStats(sales, units, margin, AppTheme.neonBlue),
+                ],
+              ),
             ),
-            title: Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-            subtitle: Text('$code • ${children.length} FI3', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(_formatCurrency(sales), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
-                Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
-              ],
-            ),
-            onTap: () => setState(() { if (expanded) _expandedFiNodes.remove(nodeKey); else _expandedFiNodes.add(nodeKey); }),
           ),
-          if (expanded) ...children.map((fi3) => _buildFi3Card(fi3, nodeKey)),
+          if (expanded) 
+            Padding(
+              padding: const EdgeInsets.only(left: 12, bottom: 4),
+              child: Column(children: children.map((fi3) => _buildFi3Card(fi3, nodeKey)).toList()),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildFi3Card(Map<String, dynamic> fi3, String parentKey) {
-    final code = fi3['fi3Code'] as String? ?? '';
-    final name = fi3['fi3Name'] as String? ?? code;
+    final code = fi3['code'] as String? ?? '';
+    final name = fi3['name'] as String? ?? code;
     final nodeKey = 'fi3_${parentKey}_$code';
     final expanded = _expandedFiNodes.contains(nodeKey);
     final children = List<Map<String, dynamic>>.from(
@@ -800,45 +800,68 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final sales = (fi3['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (fi3['totalUnits'] as num?)?.toDouble() ?? 0;
     final margin = (fi3['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final childCount = (fi3['childCount'] as num?)?.toInt() ?? children.length;
 
     return Container(
-      margin: const EdgeInsets.only(left: 24, right: 4, bottom: 2),
+      margin: const EdgeInsets.only(right: 4, bottom: 2),
       decoration: BoxDecoration(
         color: AppTheme.darkBase,
         borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+        border: Border(left: BorderSide(color: AppTheme.neonGreen, width: 3)),
       ),
       child: Column(
         children: [
-          ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 6),
-            leading: CircleAvatar(
-              radius: 10, backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
-              child: const Text('F3', style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+          InkWell(
+            onTap: () => setState(() { 
+              if (expanded) _expandedFiNodes.remove(nodeKey); 
+              else _expandedFiNodes.add(nodeKey); 
+            }),
+            child: Padding(
+              padding: const EdgeInsets.all(7),
+              child: Row(
+                children: [
+                  Icon(
+                    expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                    color: AppTheme.neonGreen,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonGreen.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: const Text('FI3', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('$childCount líneas', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  _buildLevelStats(sales, units, margin, AppTheme.neonGreen, compact: true),
+                ],
+              ),
             ),
-            title: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
-            subtitle: Text('$code • ${children.length} FI4', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(_formatCurrency(sales), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
-                Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-              ],
-            ),
-            onTap: () => setState(() { if (expanded) _expandedFiNodes.remove(nodeKey); else _expandedFiNodes.add(nodeKey); }),
           ),
-          if (expanded) ...children.map((fi4) => _buildFi4Card(fi4, nodeKey)),
+          if (expanded) 
+            Padding(
+              padding: const EdgeInsets.only(left: 12, bottom: 4),
+              child: Column(children: children.map((fi4) => _buildFi4Card(fi4, nodeKey)).toList()),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildFi4Card(Map<String, dynamic> fi4, String parentKey) {
-    final code = fi4['fi4Code'] as String? ?? '';
-    final name = fi4['fi4Name'] as String? ?? code;
+    final code = fi4['code'] as String? ?? '';
+    final name = fi4['name'] as String? ?? code;
     final nodeKey = 'fi4_${parentKey}_$code';
     final expanded = _expandedFiNodes.contains(nodeKey);
     final products = List<Map<String, dynamic>>.from(
@@ -847,130 +870,268 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final sales = (fi4['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (fi4['totalUnits'] as num?)?.toDouble() ?? 0;
     final margin = (fi4['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final productCount = (fi4['productCount'] as num?)?.toInt() ?? products.length;
 
     return Container(
-      margin: const EdgeInsets.only(left: 32, right: 4, bottom: 2),
+      margin: const EdgeInsets.only(right: 4, bottom: 2),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor.withOpacity(0.5),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
+        border: Border(left: BorderSide(color: AppTheme.warning, width: 3)),
       ),
       child: Column(
         children: [
-          ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 6),
-            leading: CircleAvatar(
-              radius: 9, backgroundColor: AppTheme.warning.withOpacity(0.2),
-              child: const Text('F4', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: AppTheme.warning)),
+          InkWell(
+            onTap: () => setState(() { 
+              if (expanded) _expandedFiNodes.remove(nodeKey); 
+              else _expandedFiNodes.add(nodeKey); 
+            }),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Row(
+                children: [
+                  Icon(
+                    expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                    color: AppTheme.warning,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 3),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warning.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: const Text('FI4', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: AppTheme.warning)),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('$productCount productos', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  _buildLevelStats(sales, units, margin, AppTheme.warning, compact: true),
+                ],
+              ),
             ),
-            title: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
-            subtitle: Text('$code • ${products.length} prod.', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(_formatCurrency(sales), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.warning)),
-                Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-              ],
-            ),
-            onTap: () => setState(() { if (expanded) _expandedFiNodes.remove(nodeKey); else _expandedFiNodes.add(nodeKey); }),
           ),
           if (expanded) 
             Padding(
               padding: const EdgeInsets.only(left: 8, right: 4, bottom: 4),
-              child: Column(
-                children: products.map((p) => _buildFiProduct(p)).toList(),
-              ),
+              child: Column(children: products.map((p) => _buildFiProduct(p)).toList()),
             ),
         ],
       ),
     );
   }
 
+  /// Helper widget to show level aggregated stats
+  Widget _buildLevelStats(double sales, double units, double margin, Color color, {bool compact = false}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(_formatCurrency(sales), style: TextStyle(fontSize: compact ? 10 : 12, fontWeight: FontWeight.bold, color: color)),
+            Text('${units.toStringAsFixed(0)} uds', style: TextStyle(fontSize: compact ? 7 : 9, color: AppTheme.textSecondary)),
+          ],
+        ),
+        if (widget.isJefeVentas) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 6, vertical: compact ? 2 : 3),
+            decoration: BoxDecoration(
+              color: margin >= 0 ? AppTheme.success.withOpacity(0.15) : AppTheme.error.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '${margin.toStringAsFixed(1)}%',
+              style: TextStyle(
+                fontSize: compact ? 9 : 10,
+                fontWeight: FontWeight.bold,
+                color: margin >= 0 ? AppTheme.success : AppTheme.error,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildFiProduct(Map<String, dynamic> p) {
     final code = p['code'] as String? ?? '';
     final name = p['name'] as String? ?? code;
+    final unitType = (p['unitType'] as String?)?.toUpperCase() ?? 'UDS';
     final sales = (p['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (p['totalUnits'] as num?)?.toDouble() ?? 0;
-    final margin = (p['marginPercent'] as num?)?.toDouble() ?? 0;
+    final cost = (p['totalCost'] as num?)?.toDouble() ?? 0;
+    final marginPercent = (p['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final avgPrice = (p['avgUnitPrice'] as num?)?.toDouble() ?? 0;
+    final prevYearSales = (p['prevYearSales'] as num?)?.toDouble() ?? 0;
+    final prevYearUnits = (p['prevYearUnits'] as num?)?.toDouble() ?? 0;
+    final prevYearAvgPrice = (p['prevYearAvgPrice'] as num?)?.toDouble() ?? 0;
     final yoyTrend = p['yoyTrend'] as String? ?? '';
-    final monthly = p['monthly'] as Map<String, dynamic>? ?? {};
+    final yoyVariation = (p['yoyVariation'] as num?)?.toDouble() ?? 0;
+    final hasDiscount = p['hasDiscount'] as bool? ?? false;
+    
+    // Calculate cost per unit
+    final costPerUnit = units > 0 ? cost / units : 0.0;
+    final marginPerUnit = avgPrice - costPerUnit;
+    
+    // Sales variation
+    final salesVar = prevYearSales > 0 ? ((sales - prevYearSales) / prevYearSales) * 100 : 0.0;
+    
+    // Unit label
+    String unitLabel;
+    switch (unitType) {
+      case 'CAJA': unitLabel = 'Caja'; break;
+      case 'KG': case 'KILO': unitLabel = 'Kg'; break;
+      case 'UNIDAD': unitLabel = 'Ud'; break;
+      default: unitLabel = unitType.isNotEmpty && unitType.length > 4 ? unitType.substring(0, 4) : unitType;
+    }
 
     Color borderColor = AppTheme.surfaceColor;
     if (yoyTrend == 'up') borderColor = AppTheme.success;
     else if (yoyTrend == 'down') borderColor = AppTheme.error;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 3),
-      padding: const EdgeInsets.all(6),
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: borderColor.withOpacity(0.5)),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: hasDiscount ? Colors.orange.withOpacity(0.5) : borderColor.withOpacity(0.3), width: hasDiscount ? 1.5 : 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Product header: Code + Name
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text(code, style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
-                  ],
-                ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                child: Text(code, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(_formatCurrency(sales), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: borderColor == AppTheme.surfaceColor ? AppTheme.textPrimary : borderColor)),
-                  Text('${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
-                ],
+              if (hasDiscount)
+                Container(
+                  margin: const EdgeInsets.only(left: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(3)),
+                  child: const Text('DTO', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: Colors.orange)),
+                ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis),
               ),
             ],
           ),
-          if (monthly.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            SizedBox(
-              height: 28,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: 12,
-                itemBuilder: (ctx, m) {
-                  final mKey = (m + 1).toString();
-                  final mData = monthly[mKey] as Map<String, dynamic>? ?? {};
-                  final mSales = (mData['sales'] as num?)?.toDouble() ?? 0;
-                  final mYoy = mData['yoyVar'] as String? ?? '';
-                  
-                  Color mColor = AppTheme.surfaceColor;
-                  if (mYoy == 'up') mColor = AppTheme.success;
-                  else if (mYoy == 'down') mColor = AppTheme.error;
-
-                  return Container(
-                    width: 32,
-                    margin: const EdgeInsets.only(right: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: mColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(3),
-                      border: Border.all(color: mColor.withOpacity(0.3)),
-                    ),
+          const SizedBox(height: 6),
+          
+          // Pricing row: PVP, Coste, Margen, UDS
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppTheme.neonPurple.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              children: [
+                // PVP por unidad
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text('PVP/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      Text(_formatCurrency(avgPrice), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+                      if (prevYearAvgPrice > 0)
+                        Text('(${_formatCurrency(prevYearAvgPrice)})', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                    ],
+                  ),
+                ),
+                // Coste (solo Jefe Ventas)
+                if (widget.isJefeVentas)
+                  Expanded(
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(_mNames[m].substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 7, fontWeight: FontWeight.bold)),
-                        Text(_formatCompact(mSales), style: const TextStyle(fontSize: 7)),
+                        Text('Coste/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                        Text(_formatCurrency(costPerUnit), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
                       ],
                     ),
-                  );
-                },
-              ),
+                  ),
+                // Margen por unidad (solo Jefe Ventas)
+                if (widget.isJefeVentas)
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text('Margen/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                        Text(_formatCurrency(marginPerUnit), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: marginPerUnit >= 0 ? AppTheme.success : AppTheme.error)),
+                      ],
+                    ),
+                  ),
+                // Unidades
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(unitLabel, style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      Text(units >= 100 ? units.toStringAsFixed(0) : units.toStringAsFixed(2), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.neonBlue)),
+                      if (prevYearUnits > 0)
+                        Text('(${prevYearUnits >= 100 ? prevYearUnits.toStringAsFixed(0) : prevYearUnits.toStringAsFixed(2)})', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
+          const SizedBox(height: 6),
+          
+          // Totals row with YoY comparison
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppTheme.darkBase,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                // Total ventas
+                Column(
+                  children: [
+                    Text('Total ${_selectedYears.length == 1 ? _selectedYears.first : ""}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_formatCurrency(sales), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: borderColor == AppTheme.surfaceColor ? AppTheme.neonBlue : borderColor)),
+                        if (prevYearSales > 0)
+                          Text(' (${_formatCurrency(prevYearSales)})', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                    if (prevYearSales > 0)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(salesVar >= 0 ? Icons.trending_up : Icons.trending_down, size: 10, color: salesVar >= 0 ? AppTheme.success : AppTheme.error),
+                          Text(' ${salesVar >= 0 ? "+" : ""}${salesVar.toStringAsFixed(0)}%', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: salesVar >= 0 ? AppTheme.success : AppTheme.error)),
+                        ],
+                      ),
+                  ],
+                ),
+                // Margen % (Jefe Ventas)
+                if (widget.isJefeVentas)
+                  Column(
+                    children: [
+                      Text('Margen', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      Text('${marginPercent.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: marginPercent >= 0 ? AppTheme.success : AppTheme.error)),
+                    ],
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
