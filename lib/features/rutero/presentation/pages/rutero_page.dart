@@ -1029,7 +1029,8 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       try {
           final orderPayload = newOrder.asMap().entries.map((e) => {
               'cliente': e.value['code'],
-              'posicion': e.key
+              'posicion': e.key,
+              'posicionOriginal': e.value['posicionOriginal'] ?? e.key,
           }).toList();
           
           await ApiClient.post('/rutero/config', {
@@ -1430,6 +1431,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
   final ScrollController _scrollController = ScrollController();
   bool _hasChanges = false; // Track if order has changed
   List<String> _originalOrder = []; // Store original order to detect changes
+  Map<String, int> _originalPositions = {}; // Store original position of each client
 
   @override
   void initState() {
@@ -1437,6 +1439,10 @@ class _ReorderDialogState extends State<ReorderDialog> {
     _items = List.from(widget.clients);
     // Store original order for comparison
     _originalOrder = _items.map((c) => c['code'] as String).toList();
+    // Store original position (index) of each client
+    for (int i = 0; i < _items.length; i++) {
+      _originalPositions[_items[i]['code'] as String] = i;
+    }
   }
 
   void _onReorder(int oldIndex, int newIndex) {
@@ -1630,7 +1636,15 @@ class _ReorderDialogState extends State<ReorderDialog> {
     );
     
     if (confirmed == true) {
-      Navigator.pop(context, _items); // Retornar items para guardar
+      // Añadir posición original a cada item antes de retornar
+      final itemsWithOriginalPos = _items.map((item) {
+        final code = item['code'] as String;
+        return {
+          ...item,
+          'posicionOriginal': _originalPositions[code] ?? 0,
+        };
+      }).toList();
+      Navigator.pop(context, itemsWithOriginalPos); // Retornar items con posición original
     }
   }
   

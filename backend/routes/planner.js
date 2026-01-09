@@ -462,22 +462,28 @@ router.post('/rutero/config', async (req, res) => {
             }
 
             // Calcular clientes que realmente cambiaron de posición
+            // Ahora usamos posicionOriginal que viene de la app
             const clientesConCambio = orden.map(o => {
                 const clienteId = o.cliente?.trim();
-                const posAnterior = previousPositions[clienteId];
                 const posNueva = parseInt(o.posicion) || 0;
-                const hayCambio = posAnterior !== undefined && posAnterior !== posNueva;
+                // Usar posicionOriginal de la app, o buscar en previousPositions (RUTERO_CONFIG), o asumir sin cambio
+                let posAnterior = o.posicionOriginal !== undefined ? parseInt(o.posicionOriginal) : previousPositions[clienteId];
+                if (posAnterior === undefined) posAnterior = posNueva; // Sin info anterior = sin cambio
+                
+                const hayCambio = posAnterior !== posNueva;
                 
                 return {
                     codigo: o.cliente,
                     nombre: clientNamesMap[o.cliente] || 'Desconocido',
                     posicion: posNueva,
-                    posicionAnterior: posAnterior !== undefined ? posAnterior : posNueva,
+                    posicionAnterior: posAnterior,
                     hayCambio: hayCambio
                 };
             });
 
             const clientesCambiados = clientesConCambio.filter(c => c.hayCambio);
+            
+            logger.info(`📊 Reorder: ${clientesCambiados.length} de ${orden.length} clientes cambiaron de posición`);
 
             const auditDetails = {
                 action: 'Actualización de Rutero',
