@@ -30,7 +30,7 @@ function initEmailService() {
 // SISTEMA DE BATCH - Acumula cambios y envía un solo email
 // ═══════════════════════════════════════════════════════════════════════════
 const pendingChanges = new Map(); // vendedor -> { changes: [], timer: null }
-const BATCH_DELAY_MS = 5000; // Esperar 5 segundos antes de enviar
+const BATCH_DELAY_MS = 15000; // Esperar 15 segundos antes de enviar (el usuario puede tardar en cerrar modales)
 
 function queueAuditEmail(vendorName, changeType, details) {
     if (!pendingChanges.has(vendorName)) {

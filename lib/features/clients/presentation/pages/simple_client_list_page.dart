@@ -132,20 +132,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
       }
     }
 
-    if (phones.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay teléfono disponible para WhatsApp')),
-      );
-      return;
-    }
-
-    // If only one phone, open directly
-    if (phones.length == 1) {
-      _launchWhatsApp(phones.first['number'] ?? '');
-      return;
-    }
-
-    // Multiple phones - show selector
+    // Always show selector with custom option
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surfaceColor,
@@ -162,6 +149,11 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
             const SizedBox(height: 8),
             const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
+            if (phones.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('No hay teléfonos guardados', style: TextStyle(color: AppTheme.textSecondary)),
+              ),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
               title: Text(p['number'] ?? ''),
@@ -170,12 +162,61 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
                 Navigator.pop(ctx);
                 _launchWhatsApp(p['number'] ?? '');
               },
-            )).toList(),
+            )),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
+              title: const Text('Introducir número manualmente'),
+              subtitle: const Text('Escribe un número personalizado'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showCustomPhoneDialog(isWhatsApp: true);
+              },
+            ),
             const SizedBox(height: 8),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _showCustomPhoneDialog({required bool isWhatsApp}) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        title: Text(isWhatsApp ? 'WhatsApp' : 'Llamar'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.phone,
+          decoration: InputDecoration(
+            labelText: 'Número de teléfono',
+            hintText: 'Ej: 600 123 456',
+            prefixIcon: Icon(isWhatsApp ? Icons.chat : Icons.phone),
+            border: const OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isWhatsApp ? const Color(0xFF25D366) : AppTheme.neonBlue,
+            ),
+            child: Text(isWhatsApp ? 'Enviar WhatsApp' : 'Llamar'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result != null && result.trim().isNotEmpty) {
+      _launchWhatsApp(result.trim());
+    }
   }
 
   void _launchWhatsApp(String phone) async {

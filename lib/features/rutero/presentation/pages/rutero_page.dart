@@ -711,18 +711,105 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   }
 
   Future<void> _makeCall(Map<String, dynamic> client) async {
-    final phone = client['phone'] ?? '';
-    if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay teléfono disponible')),
-      );
-      return;
-    }
+    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
     
+    // Show selector with all phones + custom option
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Llamar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 8),
+            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const SizedBox(height: 12),
+            if (phones.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('No hay teléfonos guardados', style: TextStyle(color: AppTheme.textSecondary)),
+              ),
+            ...phones.map((p) => ListTile(
+              leading: const Icon(Icons.phone, color: AppTheme.neonBlue),
+              title: Text(p['number'] ?? ''),
+              subtitle: Text(p['type'] ?? 'Teléfono'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchPhoneCall(p['number'] ?? '');
+              },
+            )),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
+              title: const Text('Introducir número manualmente'),
+              subtitle: const Text('Escribe un número personalizado'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showCustomPhoneDialog(isWhatsApp: false);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _launchPhoneCall(String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
     try {
-      await launchUrl(Uri.parse('tel:$phone'));
+      await launchUrl(Uri.parse('tel:$cleanPhone'));
     } catch (e) {
       // Ignore
+    }
+  }
+
+  Future<void> _showCustomPhoneDialog({required bool isWhatsApp}) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        title: Text(isWhatsApp ? 'WhatsApp' : 'Llamar'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.phone,
+          decoration: InputDecoration(
+            labelText: 'Número de teléfono',
+            hintText: 'Ej: 600 123 456',
+            prefixIcon: Icon(isWhatsApp ? Icons.chat : Icons.phone),
+            border: const OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isWhatsApp ? const Color(0xFF25D366) : AppTheme.neonBlue,
+            ),
+            child: Text(isWhatsApp ? 'Enviar WhatsApp' : 'Llamar'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result != null && result.trim().isNotEmpty) {
+      if (isWhatsApp) {
+        _launchWhatsApp(result.trim());
+      } else {
+        _launchPhoneCall(result.trim());
+      }
     }
   }
 
@@ -801,20 +888,8 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
 
   void _openWhatsApp(Map<String, dynamic> client) {
     final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
-    if (phones.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay teléfono disponible')),
-      );
-      return;
-    }
 
-    // If only one phone, open directly
-    if (phones.length == 1) {
-      _launchWhatsApp(phones.first['number'] ?? '');
-      return;
-    }
-
-    // Multiple phones - show selector
+    // Always show selector with custom option
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surfaceColor,
@@ -831,6 +906,11 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             const SizedBox(height: 8),
             const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
+            if (phones.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('No hay teléfonos guardados', style: TextStyle(color: AppTheme.textSecondary)),
+              ),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
               title: Text(p['number'] ?? ''),
@@ -839,7 +919,17 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                 Navigator.pop(ctx);
                 _launchWhatsApp(p['number'] ?? '');
               },
-            )).toList(),
+            )),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
+              title: const Text('Introducir número manualmente'),
+              subtitle: const Text('Escribe un número personalizado'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showCustomPhoneDialog(isWhatsApp: true);
+              },
+            ),
             const SizedBox(height: 8),
           ],
         ),
