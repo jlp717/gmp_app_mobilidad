@@ -27,38 +27,36 @@ function initEmailService() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SISTEMA DE BATCH - Acumula cambios y envía un solo email
+// SISTEMA DE ACUMULACIÓN - Solo envía cuando se llama explícitamente
 // ═══════════════════════════════════════════════════════════════════════════
-const pendingChanges = new Map(); // vendedor -> { changes: [], timer: null }
-const BATCH_DELAY_MS = 15000; // Esperar 15 segundos antes de enviar (el usuario puede tardar en cerrar modales)
+const pendingChanges = new Map(); // vendedor -> { changes: [] }
 
+/**
+ * Acumula un cambio para enviar después (NO envía inmediatamente)
+ */
 function queueAuditEmail(vendorName, changeType, details) {
     if (!pendingChanges.has(vendorName)) {
-        pendingChanges.set(vendorName, { changes: [], timer: null });
+        pendingChanges.set(vendorName, { changes: [] });
     }
     
     const vendorQueue = pendingChanges.get(vendorName);
     vendorQueue.changes.push({ type: changeType, details, timestamp: new Date() });
     
-    // Cancelar timer anterior y crear uno nuevo
-    if (vendorQueue.timer) {
-        clearTimeout(vendorQueue.timer);
-    }
-    
-    vendorQueue.timer = setTimeout(() => {
-        flushVendorEmails(vendorName);
-    }, BATCH_DELAY_MS);
-    
-    logger.info(`📧 Queued change for vendor ${vendorName} (${vendorQueue.changes.length} pending)`);
+    logger.info(`📧 Queued change for vendor ${vendorName} (${vendorQueue.changes.length} pending, waiting for explicit flush)`);
 }
 
+/**
+ * Envía todos los cambios acumulados para un vendedor (llamar al pulsar GUARDAR)
+ */
 async function flushVendorEmails(vendorName) {
     const vendorQueue = pendingChanges.get(vendorName);
-    if (!vendorQueue || vendorQueue.changes.length === 0) return;
+    if (!vendorQueue || vendorQueue.changes.length === 0) {
+        logger.info(`📧 No pending changes for vendor ${vendorName}`);
+        return;
+    }
     
     const changes = [...vendorQueue.changes];
     vendorQueue.changes = [];
-    vendorQueue.timer = null;
     
     logger.info(`📧 Flushing ${changes.length} changes for vendor ${vendorName}`);
     
@@ -579,12 +577,23 @@ async function sendConsolidatedEmail(vendorName, changes) {
 }
 
 /**
- * Envía email de auditoría de cambios en Rutero
- * AHORA USA SISTEMA DE BATCH - acumula cambios y envía uno solo
+ * Acumula cambio para enviar después (NO envía inmediatamente)
+ * Usar sendAuditEmailNow para enviar y flushear todo
  */
 async function sendAuditEmail(vendorName, changeType, details) {
-    // Usar sistema de batch para consolidar emails
+    // Solo acumular, no enviar
     queueAuditEmail(vendorName, changeType, details);
 }
 
-module.exports = { sendAuditEmail };
+/**
+ * Acumula el cambio actual Y envía todos los pendientes inmediatamente
+ * Llamar esto cuando el usuario pulsa "GUARDAR CAMBIOS"
+ */
+async function sendAuditEmailNow(vendorName, changeType, details) {
+    // Acumular este cambio
+    queueAuditEmail(vendorName, changeType, details);
+    // Enviar todo lo acumulado
+    await flushVendorEmails(vendorName);
+}
+
+module.exports = { sendAuditEmail, sendAuditEmailNow, flushVendorEmails };

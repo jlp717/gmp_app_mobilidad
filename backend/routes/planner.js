@@ -18,7 +18,7 @@ const {
     getVendedoresFromCache,
     reloadRuteroConfig
 } = require('../services/laclae');
-const { sendAuditEmail } = require('../services/emailService');
+const { sendAuditEmail, sendAuditEmailNow } = require('../services/emailService');
 
 const DAY_NAMES = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 
@@ -483,8 +483,9 @@ router.post('/rutero/config', async (req, res) => {
                 clientesAfectados: clientesConCambio
             };
 
-            // Fire and forget email
-            sendAuditEmail(vendedor, `Modificación Rutero (${dia})`, auditDetails);
+            // ENVIAR EMAIL AHORA - Este es el "GUARDAR CAMBIOS" del modal
+            // Acumula este cambio Y envía todos los pendientes (incluidos move_clients anteriores)
+            sendAuditEmailNow(vendedor, `Modificación Rutero (${dia})`, auditDetails);
         } catch (emailErr) {
             logger.warn(`Email audit skipped: ${emailErr.message}`);
         }
