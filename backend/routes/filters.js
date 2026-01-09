@@ -28,6 +28,18 @@ let filtersCache = {
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 /**
+ * Helper: Normaliza resultado de query DB2 (maneja case-sensitivity de aliases)
+ * DB2 iSeries devuelve los aliases en mayúsculas por defecto
+ */
+function normalizeRow(row) {
+    const normalized = {};
+    for (const key in row) {
+        normalized[key.toLowerCase()] = row[key];
+    }
+    return normalized;
+}
+
+/**
  * Refresca la caché de filtros si es necesario
  */
 async function refreshCacheIfNeeded() {
@@ -39,92 +51,89 @@ async function refreshCacheIfNeeded() {
     logger.info('📦 Refrescando caché de filtros FI...');
 
     try {
-        // FI1 - Categorías principales (query simple sin JOIN para evitar problemas)
-        const fi1Result = await query(`
-            SELECT 
-                CODIGOFILTRO as code,
-                DESCRIPCIONFILTRO as name,
-                ORDEN as orden
-            FROM DSEDAC.FI1 
-            ORDER BY ORDEN, DESCRIPCIONFILTRO
-        `, true, false);
-
-        filtersCache.fi1 = fi1Result.map(f => ({
-            code: (f.code || '').trim(),
-            name: (f.name || '').trim(),
-            orden: f.orden,
-            count: 0
-        })).filter(f => f.code);
+        // FI1 - Categorías principales
+        const fi1Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI1 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi1Result = await query(fi1Sql, true, true);
+        logger.info(`🔍 FI1 raw result: ${fi1Result.length} rows, sample keys: ${fi1Result[0] ? Object.keys(fi1Result[0]).join(', ') : 'empty'}`);
+        
+        filtersCache.fi1 = fi1Result.map(f => {
+            // DB2 devuelve nombres de columna originales (no aliases)
+            const code = (f.CODIGOFILTRO || f.codigofiltro || '').toString().trim();
+            const name = (f.DESCRIPCIONFILTRO || f.descripcionfiltro || '').toString().trim();
+            const orden = f.ORDEN || f.orden || 0;
+            return { code, name, orden, count: 0 };
+        }).filter(f => f.code && f.code.length > 0);
 
         // FI2 - Subcategorías
-        const fi2Result = await query(`
-            SELECT 
-                CODIGOFILTRO as code,
-                DESCRIPCIONFILTRO as name,
-                ORDEN as orden
-            FROM DSEDAC.FI2
-            ORDER BY ORDEN, DESCRIPCIONFILTRO
-        `, true, false);
-
-        filtersCache.fi2All = fi2Result.map(f => ({
-            code: (f.code || '').trim(),
-            name: (f.name || '').trim(),
-            orden: f.orden
-        })).filter(f => f.code);
+        const fi2Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI2 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi2Result = await query(fi2Sql, true, true);
+        logger.info(`🔍 FI2 raw result: ${fi2Result.length} rows`);
+        
+        filtersCache.fi2All = fi2Result.map(f => {
+            const code = (f.CODIGOFILTRO || f.codigofiltro || '').toString().trim();
+            const name = (f.DESCRIPCIONFILTRO || f.descripcionfiltro || '').toString().trim();
+            const orden = f.ORDEN || f.orden || 0;
+            return { code, name, orden };
+        }).filter(f => f.code && f.code.length > 0);
 
         // FI3 - Atributos adicionales
-        const fi3Result = await query(`
-            SELECT 
-                CODIGOFILTRO as code,
-                DESCRIPCIONFILTRO as name,
-                ORDEN as orden
-            FROM DSEDAC.FI3
-            ORDER BY ORDEN, DESCRIPCIONFILTRO
-        `, true, false);
-
-        filtersCache.fi3All = fi3Result.map(f => ({
-            code: (f.code || '').trim(),
-            name: (f.name || '').trim(),
-            orden: f.orden
-        })).filter(f => f.code);
+        const fi3Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI3 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi3Result = await query(fi3Sql, true, true);
+        logger.info(`🔍 FI3 raw result: ${fi3Result.length} rows`);
+        
+        filtersCache.fi3All = fi3Result.map(f => {
+            const code = (f.CODIGOFILTRO || f.codigofiltro || '').toString().trim();
+            const name = (f.DESCRIPCIONFILTRO || f.descripcionfiltro || '').toString().trim();
+            const orden = f.ORDEN || f.orden || 0;
+            return { code, name, orden };
+        }).filter(f => f.code && f.code.length > 0);
 
         // FI4 - Características especiales
-        const fi4Result = await query(`
-            SELECT 
-                CODIGOFILTRO as code,
-                DESCRIPCIONFILTRO as name,
-                ORDEN as orden
-            FROM DSEDAC.FI4
-            ORDER BY ORDEN, DESCRIPCIONFILTRO
-        `, true, false);
-
-        filtersCache.fi4All = fi4Result.map(f => ({
-            code: (f.code || '').trim(),
-            name: (f.name || '').trim(),
-            orden: f.orden
-        })).filter(f => f.code);
+        const fi4Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI4 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi4Result = await query(fi4Sql, true, true);
+        logger.info(`🔍 FI4 raw result: ${fi4Result.length} rows`);
+        
+        filtersCache.fi4All = fi4Result.map(f => {
+            const code = (f.CODIGOFILTRO || f.codigofiltro || '').toString().trim();
+            const name = (f.DESCRIPCIONFILTRO || f.descripcionfiltro || '').toString().trim();
+            const orden = f.ORDEN || f.orden || 0;
+            return { code, name, orden };
+        }).filter(f => f.code && f.code.length > 0);
 
         // FI5 - Secciones/Tipo conservación
-        const fi5Result = await query(`
-            SELECT 
-                CODIGOFILTRO as code,
-                DESCRIPCIONFILTRO as name,
-                ORDEN as orden
-            FROM DSEDAC.FI5
-            ORDER BY ORDEN, DESCRIPCIONFILTRO
-        `, true, false);
-
-        filtersCache.fi5 = fi5Result.map(f => ({
-            code: (f.code || '').trim(),
-            name: (f.name || '').trim(),
-            orden: f.orden
-        })).filter(f => f.code);
+        const fi5Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI5 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi5Result = await query(fi5Sql, true, true);
+        logger.info(`🔍 FI5 raw result: ${fi5Result.length} rows`);
+        
+        filtersCache.fi5 = fi5Result.map(f => {
+            const code = (f.CODIGOFILTRO || f.codigofiltro || '').toString().trim();
+            const name = (f.DESCRIPCIONFILTRO || f.descripcionfiltro || '').toString().trim();
+            const orden = f.ORDEN || f.orden || 0;
+            return { code, name, orden };
+        }).filter(f => f.code && f.code.length > 0);
 
         filtersCache.lastUpdated = now;
-        logger.info(`✅ Caché FI actualizada: ${filtersCache.fi1.length} FI1, ${filtersCache.fi2All.length} FI2, ${filtersCache.fi5.length} FI5`);
+        logger.info(`✅ Caché FI actualizada: ${filtersCache.fi1.length} FI1, ${filtersCache.fi2All.length} FI2, ${filtersCache.fi3All.length} FI3, ${filtersCache.fi4All.length} FI4, ${filtersCache.fi5.length} FI5`);
+
+        // Si alguno está vacío, logueamos advertencia
+        if (filtersCache.fi1.length === 0) {
+            logger.warn('⚠️ FI1 vacío - verificar tabla DSEDAC.FI1');
+        }
+        if (filtersCache.fi2All.length === 0) {
+            logger.warn('⚠️ FI2 vacío - verificar tabla DSEDAC.FI2');
+        }
 
     } catch (err) {
-        logger.error('❌ Error refrescando caché FI:', err.message);
+        logger.error('❌ Error refrescando caché FI:', err.message, err.stack);
+        // Mantener caché anterior si existe
+        if (!filtersCache.lastUpdated) {
+            // Primera carga fallida - inicializar con arrays vacíos
+            filtersCache.fi1 = [];
+            filtersCache.fi2All = [];
+            filtersCache.fi3All = [];
+            filtersCache.fi4All = [];
+            filtersCache.fi5 = [];
+        }
     }
 }
 
@@ -160,20 +169,25 @@ router.get('/fi2', async (req, res) => {
 
         if (fi1Code) {
             // Obtener FI2 que realmente existen para artículos con ese FI1
-            // Query simplificada para compatibilidad con DB2 iSeries
-            const fi2ForFi1 = await query(`
-                SELECT DISTINCT x.FILTRO02 as code
+            const fi2Sql = `
+                SELECT DISTINCT FILTRO02
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
                 WHERE x.FILTRO01 = '${fi1Code.trim().padEnd(10)}'
                 AND x.FILTRO02 IS NOT NULL 
-                AND x.FILTRO02 <> ''
-                AND x.FILTRO02 <> '          '
-            `);
+                AND TRIM(x.FILTRO02) <> ''
+            `;
+            const fi2ForFi1 = await query(fi2Sql, true, true);
+            logger.info(`🔍 FI2 para FI1=${fi1Code}: ${fi2ForFi1.length} códigos encontrados`);
 
             // Mapear los códigos encontrados con los datos del cache
-            const codesInUse = new Set(fi2ForFi1.map(r => (r.code || '').trim()).filter(c => c));
+            // DB2 devuelve el nombre de columna original (FILTRO02), no el alias
+            const codesInUse = new Set(
+                fi2ForFi1.map(r => (r.FILTRO02 || r.filtro02 || '').toString().trim())
+                         .filter(c => c && c.length > 0)
+            );
             result = (filtersCache.fi2All || []).filter(f => codesInUse.has(f.code));
+            logger.info(`🔍 FI2 mapeados: ${result.length} de ${codesInUse.size} códigos en uso`);
 
         } else {
             // Devolver todos los FI2
@@ -210,17 +224,21 @@ router.get('/fi3', async (req, res) => {
             if (fi1Code) whereConditions.push(`x.FILTRO01 = '${fi1Code.trim().padEnd(10)}'`);
             if (fi2Code) whereConditions.push(`x.FILTRO02 = '${fi2Code.trim().padEnd(10)}'`);
 
-            const fi3Filtered = await query(`
-                SELECT DISTINCT x.FILTRO03 as code
+            const fi3Sql = `
+                SELECT DISTINCT FILTRO03
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
                 WHERE ${whereConditions.join(' AND ')}
                 AND x.FILTRO03 IS NOT NULL 
-                AND x.FILTRO03 <> ''
-                AND x.FILTRO03 <> '          '
-            `);
+                AND TRIM(x.FILTRO03) <> ''
+            `;
+            const fi3Filtered = await query(fi3Sql, true, true);
+            logger.info(`🔍 FI3 filtrados: ${fi3Filtered.length} códigos`);
 
-            const codesInUse = new Set(fi3Filtered.map(r => (r.code || '').trim()).filter(c => c));
+            const codesInUse = new Set(
+                fi3Filtered.map(r => (r.FILTRO03 || r.filtro03 || '').toString().trim())
+                           .filter(c => c && c.length > 0)
+            );
             result = (filtersCache.fi3All || []).filter(f => codesInUse.has(f.code));
 
         } else {
@@ -255,17 +273,21 @@ router.get('/fi4', async (req, res) => {
             if (fi2Code) whereConditions.push(`x.FILTRO02 = '${fi2Code.trim().padEnd(10)}'`);
             if (fi3Code) whereConditions.push(`x.FILTRO03 = '${fi3Code.trim().padEnd(10)}'`);
 
-            const fi4Filtered = await query(`
-                SELECT DISTINCT x.FILTRO04 as code
+            const fi4Sql = `
+                SELECT DISTINCT FILTRO04
                 FROM DSEDAC.ARTX x
                 INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
                 WHERE ${whereConditions.join(' AND ')}
                 AND x.FILTRO04 IS NOT NULL 
-                AND x.FILTRO04 <> ''
-                AND x.FILTRO04 <> '          '
-            `);
+                AND TRIM(x.FILTRO04) <> ''
+            `;
+            const fi4Filtered = await query(fi4Sql, true, true);
+            logger.info(`🔍 FI4 filtrados: ${fi4Filtered.length} códigos`);
 
-            const codesInUse = new Set(fi4Filtered.map(r => (r.code || '').trim()).filter(c => c));
+            const codesInUse = new Set(
+                fi4Filtered.map(r => (r.FILTRO04 || r.filtro04 || '').toString().trim())
+                           .filter(c => c && c.length > 0)
+            );
             result = (filtersCache.fi4All || []).filter(f => codesInUse.has(f.code));
 
         } else {
