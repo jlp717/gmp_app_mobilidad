@@ -9,6 +9,7 @@ import '../../../rutero/presentation/pages/rutero_page.dart';
 import '../../../objectives/presentation/pages/objectives_page.dart';
 import '../../../chatbot/presentation/pages/chatbot_page.dart';
 import '../../../commissions/presentation/pages/commissions_page.dart';
+import '../../../settings/presentation/pages/network_settings_page.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -195,7 +196,7 @@ class _MainShellState extends State<MainShell> {
                       ),
                     ),
                     
-                    // Bottom Section - Collapse button and Logout
+                    // Bottom Section - Collapse button, Network Settings and Logout
                     const Divider(height: 1, color: Colors.white10),
                     Padding(
                       padding: const EdgeInsets.all(12),
@@ -203,6 +204,9 @@ class _MainShellState extends State<MainShell> {
                         children: [
                           // Collapse button
                           _buildCollapseButton(),
+                          const SizedBox(height: 8),
+                          // Network Settings button
+                          _buildNetworkSettingsButton(),
                           const SizedBox(height: 8),
                           _buildLogoutButton(authProvider),
                         ],
@@ -394,6 +398,36 @@ class _MainShellState extends State<MainShell> {
               style: TextStyle(
                 fontSize: 10,
                 color: AppTheme.error,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNetworkSettingsButton() {
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const NetworkSettingsPage()),
+      ),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: AppTheme.neonPurple.withOpacity(0.1),
+        ),
+        child: const Column(
+          children: [
+            Icon(Icons.wifi, color: AppTheme.neonPurple, size: 20),
+            SizedBox(height: 4),
+            Text(
+              'Red',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppTheme.neonPurple,
                 fontWeight: FontWeight.w500,
               ),
             ),

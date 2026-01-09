@@ -32,62 +32,53 @@ const DAY_NAMES = {
     'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado', 'domingo': 'Domingo'
 };
 
-// Colores neon para cada día (estilo futurista)
-const DAY_COLORS = {
-    'lunes': '#00D9FF', 'martes': '#A855F7', 'miercoles': '#10B981',
-    'jueves': '#F59E0B', 'viernes': '#EF4444', 'sabado': '#06B6D4', 'domingo': '#6B7280'
-};
-
 const formatDayName = (day) => DAY_NAMES[day?.toLowerCase()] || day;
-const getDayColor = (day) => DAY_COLORS[day?.toLowerCase()] || '#00D9FF';
 
 /**
- * Genera el template HTML futurista
+ * Genera el template HTML profesional y limpio
  */
-function generateFuturisticTemplate(content, headerTitle, actionBadge, timestamp) {
+function generateProfessionalTemplate(content, headerTitle, timestamp) {
     return `<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin:0;padding:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#0F172A;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0F172A;padding:16px 0;">
+<body style="margin:0;padding:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#F1F5F9;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9;padding:24px 0;">
         <tr><td align="center">
-            <table width="580" cellpadding="0" cellspacing="0" style="background:linear-gradient(145deg,#1E293B 0%,#0F172A 100%);border-radius:16px;border:1px solid #334155;overflow:hidden;">
+            <table width="640" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:8px;border:1px solid #E2E8F0;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
                 
-                <!-- Header compacto -->
-                <tr><td style="background:linear-gradient(135deg,#6366F1 0%,#A855F7 50%,#EC4899 100%);padding:20px 24px;">
+                <!-- Header profesional -->
+                <tr><td style="background:#1E293B;padding:24px 32px;">
                     <table width="100%" cellpadding="0" cellspacing="0">
                         <tr>
                             <td>
-                                <h1 style="color:#fff;margin:0;font-size:20px;font-weight:700;letter-spacing:-0.5px;">
+                                <h1 style="color:#FFFFFF;margin:0;font-size:18px;font-weight:600;letter-spacing:-0.3px;">
                                     ${headerTitle}
                                 </h1>
-                                <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:12px;">
+                                <p style="color:#94A3B8;margin:6px 0 0;font-size:13px;">
                                     ${timestamp}
                                 </p>
                             </td>
                             <td align="right" style="vertical-align:middle;">
-                                <span style="background:rgba(255,255,255,0.2);color:#fff;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">
-                                    ${actionBadge}
-                                </span>
+                                <span style="color:#64748B;font-size:12px;">GMP App</span>
                             </td>
                         </tr>
                     </table>
                 </td></tr>
                 
                 <!-- Contenido -->
-                <tr><td style="padding:20px 24px;">
+                <tr><td style="padding:28px 32px;">
                     ${content}
                 </td></tr>
                 
-                <!-- Footer minimalista -->
-                <tr><td style="background:#1E293B;padding:14px 24px;border-top:1px solid #334155;">
+                <!-- Footer -->
+                <tr><td style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #E2E8F0;">
                     <table width="100%" cellpadding="0" cellspacing="0">
                         <tr>
-                            <td><span style="color:#64748B;font-size:11px;">🤖 Correo automático</span></td>
-                            <td align="right"><span style="color:#475569;font-size:10px;">GMP App • Mari Pepa</span></td>
+                            <td><span style="color:#64748B;font-size:11px;">Notificación automática de gestión de rutas</span></td>
+                            <td align="right"><span style="color:#94A3B8;font-size:11px;">Mari Pepa</span></td>
                         </tr>
                     </table>
                 </td></tr>
@@ -100,105 +91,113 @@ function generateFuturisticTemplate(content, headerTitle, actionBadge, timestamp
 }
 
 /**
- * Card de resumen de cambios
+ * Caja de resumen ejecutivo
  */
-function summaryCard(icon, title, subtitle, accentColor) {
+function executiveSummaryBox(items) {
+    let rows = '';
+    items.forEach(item => {
+        rows += `
+        <tr>
+            <td style="padding:8px 16px;border-bottom:1px solid #F1F5F9;">
+                <span style="color:#64748B;font-size:12px;">${item.label}</span>
+            </td>
+            <td style="padding:8px 16px;border-bottom:1px solid #F1F5F9;text-align:right;">
+                <span style="color:#1E293B;font-size:13px;font-weight:600;">${item.value}</span>
+            </td>
+        </tr>`;
+    });
+    
     return `
-    <div style="background:linear-gradient(135deg,${accentColor}15 0%,${accentColor}05 100%);border:1px solid ${accentColor}40;border-radius:12px;padding:16px;margin-bottom:16px;">
-        <table width="100%" cellpadding="0" cellspacing="0">
-            <tr>
-                <td width="40" style="vertical-align:top;">
-                    <div style="width:36px;height:36px;background:${accentColor}20;border-radius:10px;text-align:center;line-height:36px;font-size:18px;">
-                        ${icon}
-                    </div>
-                </td>
-                <td style="padding-left:12px;">
-                    <p style="margin:0;color:#F1F5F9;font-size:15px;font-weight:600;">${title}</p>
-                    <p style="margin:3px 0 0;color:#94A3B8;font-size:12px;">${subtitle}</p>
-                </td>
-            </tr>
-        </table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;margin-bottom:24px;">
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/**
+ * Sección con título
+ */
+function sectionTitle(icon, title, subtitle = null) {
+    return `
+    <div style="margin:24px 0 12px 0;border-bottom:2px solid #E2E8F0;padding-bottom:8px;">
+        <h2 style="margin:0;color:#1E293B;font-size:14px;font-weight:600;">
+            ${icon} ${title}
+        </h2>
+        ${subtitle ? `<p style="margin:4px 0 0;color:#64748B;font-size:12px;">${subtitle}</p>` : ''}
     </div>`;
 }
 
 /**
- * Tabla de clientes compacta y futurista
+ * Indicador de cambio de posición
  */
-function clientsTableFuturistic(clients, isReorder = false, maxShow = 15) {
-    if (!clients || clients.length === 0) return '';
+function positionChangeIndicator(oldPos, newPos) {
+    const diff = oldPos - newPos; // positivo = subió, negativo = bajó
+    if (diff > 0) {
+        return `<span style="color:#059669;font-size:11px;font-weight:600;">▲ +${diff}</span>`;
+    } else if (diff < 0) {
+        return `<span style="color:#DC2626;font-size:11px;font-weight:600;">▼ ${diff}</span>`;
+    }
+    return `<span style="color:#94A3B8;font-size:11px;">—</span>`;
+}
+
+/**
+ * Tabla de cambios de posición (reordenamiento interno)
+ */
+function changesTable(changes, maxShow = 15) {
+    if (!changes || changes.length === 0) {
+        return `<p style="color:#64748B;font-size:13px;margin:12px 0;">No se detectaron cambios de posición.</p>`;
+    }
     
-    const showClients = clients.slice(0, maxShow);
-    const remaining = clients.length - maxShow;
+    const showChanges = changes.slice(0, maxShow);
+    const remaining = changes.length - maxShow;
     
     let rows = '';
-    showClients.forEach((c, idx) => {
-        const pos = c.posicion !== undefined ? c.posicion : (c.position !== undefined ? c.position : idx);
-        const bgColor = idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent';
+    showChanges.forEach((c, idx) => {
+        const bgColor = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+        const oldPos = c.posicionAnterior + 1;
+        const newPos = c.posicion + 1;
         
-        if (isReorder) {
-            // Para reordenamiento: mostrar posición anterior vs nueva si disponible
-            const prevPos = c.posicionAnterior !== undefined ? c.posicionAnterior : null;
-            const showChange = prevPos !== null && prevPos !== pos;
-            
-            rows += `
-            <tr style="background:${bgColor};">
-                <td style="padding:10px 12px;border-bottom:1px solid #334155;width:60px;">
-                    ${showChange ? `
-                        <span style="color:#64748B;font-size:10px;text-decoration:line-through;">#${prevPos + 1}</span>
-                        <span style="color:#64748B;margin:0 3px;">→</span>
-                    ` : ''}
-                    <span style="background:linear-gradient(135deg,#6366F1,#A855F7);color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;">
-                        #${pos + 1}
-                    </span>
-                </td>
-                <td style="padding:10px 12px;border-bottom:1px solid #334155;">
-                    <span style="color:#F1F5F9;font-size:13px;font-weight:500;">${c.nombre || c.name}</span>
-                    <span style="color:#64748B;font-size:11px;margin-left:8px;">#${c.codigo || c.code}</span>
-                </td>
-            </tr>`;
-        } else {
-            // Para movimiento de día: mostrar día origen, día destino, y posiciones
-            const fromColor = getDayColor(c.fromDay);
-            const toColor = getDayColor(c.toDay);
-            const prevPos = c.previousPosition !== undefined ? Math.floor(c.previousPosition / 10) + 1 : '?';
-            const newPos = c.newPosition !== undefined ? Math.floor(c.newPosition / 10) + 1 : '?';
-            
-            rows += `
-            <tr style="background:${bgColor};">
-                <td style="padding:10px 12px;border-bottom:1px solid #334155;">
-                    <span style="color:#F1F5F9;font-size:13px;font-weight:500;">${c.name || c.nombre}</span>
-                    <br><span style="color:#64748B;font-size:11px;">Código: ${c.code || c.codigo}</span>
-                </td>
-                <td style="padding:10px 12px;border-bottom:1px solid #334155;text-align:right;">
-                    <div style="margin-bottom:4px;">
-                        <span style="color:${fromColor};font-size:11px;padding:2px 6px;border:1px solid ${fromColor}40;border-radius:4px;">${formatDayName(c.fromDay)} #${prevPos}</span>
-                        <span style="color:#64748B;margin:0 6px;">→</span>
-                        <span style="background:${toColor};color:#fff;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">${formatDayName(c.toDay)} #${newPos}</span>
-                    </div>
-                </td>
-            </tr>`;
-        }
+        rows += `
+        <tr style="background:${bgColor};">
+            <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:center;width:70px;">
+                <span style="color:#64748B;font-size:12px;">#${oldPos}</span>
+            </td>
+            <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:center;width:30px;">
+                <span style="color:#94A3B8;">→</span>
+            </td>
+            <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:center;width:70px;">
+                <span style="background:#1E293B;color:#FFFFFF;padding:3px 10px;border-radius:4px;font-size:12px;font-weight:600;">#${newPos}</span>
+            </td>
+            <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;width:50px;text-align:center;">
+                ${positionChangeIndicator(oldPos, newPos)}
+            </td>
+            <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;">
+                <span style="color:#1E293B;font-size:13px;font-weight:500;">${c.nombre || c.name}</span>
+            </td>
+            <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:right;">
+                <span style="color:#64748B;font-size:12px;font-family:monospace;">${c.codigo || c.code}</span>
+            </td>
+        </tr>`;
     });
     
-    // Mostrar indicador si hay más clientes
     if (remaining > 0) {
         rows += `
-        <tr>
-            <td colspan="2" style="padding:10px 12px;text-align:center;">
-                <span style="color:#64748B;font-size:11px;">... y ${remaining} cliente(s) más</span>
+        <tr style="background:#F8FAFC;">
+            <td colspan="6" style="padding:12px;text-align:center;color:#64748B;font-size:12px;">
+                ... y ${remaining} cambio(s) adicional(es)
             </td>
         </tr>`;
     }
     
-    const headerText = isReorder ? 'Nueva Posición' : 'Cliente';
-    const headerText2 = isReorder ? 'Cliente' : 'Cambio (Día + Posición)';
-    
     return `
-    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #334155;border-radius:10px;overflow:hidden;margin-top:12px;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;">
         <thead>
-            <tr style="background:linear-gradient(90deg,#1E293B,#334155);">
-                <th style="padding:10px 12px;text-align:left;color:#94A3B8;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">${headerText}</th>
-                <th style="padding:10px 12px;text-align:${isReorder ? 'left' : 'right'};color:#94A3B8;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">${headerText2}</th>
+            <tr style="background:#1E293B;">
+                <th style="padding:10px 12px;text-align:center;color:#FFFFFF;font-size:11px;font-weight:600;">ANTES</th>
+                <th style="padding:10px 12px;text-align:center;color:#94A3B8;font-size:11px;"></th>
+                <th style="padding:10px 12px;text-align:center;color:#FFFFFF;font-size:11px;font-weight:600;">AHORA</th>
+                <th style="padding:10px 12px;text-align:center;color:#FFFFFF;font-size:11px;font-weight:600;">CAMBIO</th>
+                <th style="padding:10px 12px;text-align:left;color:#FFFFFF;font-size:11px;font-weight:600;">CLIENTE</th>
+                <th style="padding:10px 12px;text-align:right;color:#FFFFFF;font-size:11px;font-weight:600;">CÓDIGO</th>
             </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -206,18 +205,81 @@ function clientsTableFuturistic(clients, isReorder = false, maxShow = 15) {
 }
 
 /**
- * Info chips compactos
+ * Tabla de clientes trasladados entre días
  */
-function infoChips(items) {
-    let chips = '';
-    items.forEach(item => {
-        chips += `
-        <td style="padding-right:16px;">
-            <span style="color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">${item.label}</span>
-            <br><span style="color:#F1F5F9;font-size:14px;font-weight:600;">${item.value}</span>
-        </td>`;
+function transfersTable(clients, direction = 'in', maxShow = 10) {
+    if (!clients || clients.length === 0) return '';
+    
+    const showClients = clients.slice(0, maxShow);
+    const remaining = clients.length - maxShow;
+    
+    let rows = '';
+    showClients.forEach((c, idx) => {
+        const bgColor = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+        const dayFrom = formatDayName(c.fromDay);
+        const dayTo = formatDayName(c.toDay);
+        const pos = c.newPosition !== undefined ? Math.floor(c.newPosition / 10) + 1 : '—';
+        
+        if (direction === 'in') {
+            // Clientes que ENTRAN a este día
+            rows += `
+            <tr style="background:${bgColor};">
+                <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;width:100px;">
+                    <span style="color:#64748B;font-size:12px;">${dayFrom}</span>
+                </td>
+                <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:center;width:60px;">
+                    <span style="background:#059669;color:#FFFFFF;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;">#${pos}</span>
+                </td>
+                <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;">
+                    <span style="color:#1E293B;font-size:13px;font-weight:500;">${c.name || c.nombre}</span>
+                </td>
+                <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:right;">
+                    <span style="color:#64748B;font-size:12px;font-family:monospace;">${c.code || c.codigo}</span>
+                </td>
+            </tr>`;
+        } else {
+            // Clientes que SALEN de este día
+            rows += `
+            <tr style="background:${bgColor};">
+                <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;width:100px;">
+                    <span style="background:#DC2626;color:#FFFFFF;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;">${dayTo}</span>
+                </td>
+                <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;">
+                    <span style="color:#1E293B;font-size:13px;font-weight:500;">${c.name || c.nombre}</span>
+                </td>
+                <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:right;">
+                    <span style="color:#64748B;font-size:12px;font-family:monospace;">${c.code || c.codigo}</span>
+                </td>
+            </tr>`;
+        }
     });
-    return `<table cellpadding="0" cellspacing="0" style="margin-bottom:16px;"><tr>${chips}</tr></table>`;
+    
+    if (remaining > 0) {
+        const cols = direction === 'in' ? 4 : 3;
+        rows += `
+        <tr style="background:#F8FAFC;">
+            <td colspan="${cols}" style="padding:12px;text-align:center;color:#64748B;font-size:12px;">
+                ... y ${remaining} cliente(s) más
+            </td>
+        </tr>`;
+    }
+    
+    const headers = direction === 'in' 
+        ? `<th style="padding:10px 12px;text-align:left;color:#FFFFFF;font-size:11px;font-weight:600;">ORIGEN</th>
+           <th style="padding:10px 12px;text-align:center;color:#FFFFFF;font-size:11px;font-weight:600;">POS.</th>
+           <th style="padding:10px 12px;text-align:left;color:#FFFFFF;font-size:11px;font-weight:600;">CLIENTE</th>
+           <th style="padding:10px 12px;text-align:right;color:#FFFFFF;font-size:11px;font-weight:600;">CÓDIGO</th>`
+        : `<th style="padding:10px 12px;text-align:left;color:#FFFFFF;font-size:11px;font-weight:600;">DESTINO</th>
+           <th style="padding:10px 12px;text-align:left;color:#FFFFFF;font-size:11px;font-weight:600;">CLIENTE</th>
+           <th style="padding:10px 12px;text-align:right;color:#FFFFFF;font-size:11px;font-weight:600;">CÓDIGO</th>`;
+    
+    return `
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;">
+        <thead>
+            <tr style="background:#1E293B;">${headers}</tr>
+        </thead>
+        <tbody>${rows}</tbody>
+    </table>`;
 }
 
 /**
@@ -228,123 +290,150 @@ async function sendAuditEmail(vendorName, changeType, details) {
 
     const now = new Date();
     const timestamp = now.toLocaleString('es-ES', { 
-        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
         hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
     });
     
     let content = '';
-    let headerTitle = 'Cambio en Rutero';
-    let actionBadge = 'Modificación';
+    let headerTitle = 'Modificación de Ruta';
     let subjectLine = 'Modificación';
     
-    // Detectar tipo de operación y construir contenido
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CASO 1: REORDENAMIENTO (clientes cambian de posición en el mismo día)
+    // ═══════════════════════════════════════════════════════════════════════════
     if (details.clientesAfectados && details.clientesAfectados.length > 0) {
-        // ═══════════════════════════════════════════════════════════════
-        // REORDENAMIENTO de clientes en un día
-        // ═══════════════════════════════════════════════════════════════
         const dayName = formatDayName(details.diaObjetivo);
-        const dayColor = getDayColor(details.diaObjetivo);
         const totalClientes = details.totalClientes || details.clientesAfectados.length;
         
-        headerTitle = '📍 Reordenamiento de Ruta';
-        actionBadge = dayName.toUpperCase();
-        subjectLine = `Reorden ${dayName} (${totalClientes} clientes)`;
+        // Filtrar solo los que realmente cambiaron de posición
+        const changedClients = details.clientesAfectados.filter(c => 
+            c.posicionAnterior !== undefined && c.posicionAnterior !== c.posicion
+        );
+        const unchangedCount = totalClientes - changedClients.length;
         
-        // Info chips
-        content += infoChips([
+        // Ordenar por magnitud de cambio (los más significativos primero)
+        changedClients.sort((a, b) => {
+            const diffA = Math.abs((a.posicionAnterior || 0) - (a.posicion || 0));
+            const diffB = Math.abs((b.posicionAnterior || 0) - (b.posicion || 0));
+            return diffB - diffA;
+        });
+        
+        headerTitle = `Ruta Actualizada — ${dayName}`;
+        subjectLine = changedClients.length > 0 
+            ? `${dayName}: ${changedClients.length} cambios de posición`
+            : `${dayName}: Ruta reordenada`;
+        
+        // Resumen ejecutivo
+        content += executiveSummaryBox([
             { label: 'Comercial', value: `#${vendorName}` },
-            { label: 'Día', value: dayName },
-            { label: 'Clientes', value: totalClientes }
+            { label: 'Día afectado', value: dayName },
+            { label: 'Total clientes en ruta', value: totalClientes },
+            { label: 'Posiciones modificadas', value: changedClients.length },
+            { label: 'Sin cambios', value: unchangedCount }
         ]);
         
-        // Card de resumen explicativo
-        content += summaryCard(
-            '🔄',
-            'Se ha cambiado el orden de visita',
-            `El comercial ${vendorName} ahora visitará los ${totalClientes} clientes del ${dayName} en el nuevo orden mostrado abajo.`,
-            dayColor
-        );
+        // Tabla de cambios
+        if (changedClients.length > 0) {
+            content += sectionTitle('📋', 'Detalle de Cambios de Posición', 
+                'Ordenados por magnitud del cambio (más significativos primero)');
+            content += changesTable(changedClients, 15);
+        } else {
+            // Si no hay cambios detectables, mostrar la lista como referencia
+            content += sectionTitle('📋', 'Ruta Actual', 
+                'No se detectaron cambios de posición respecto al estado anterior');
+            content += `<p style="color:#64748B;font-size:13px;background:#F8FAFC;padding:16px;border-radius:6px;margin:12px 0;">
+                La ruta contiene ${totalClientes} clientes. El orden se ha confirmado sin modificaciones.
+            </p>`;
+        }
         
-        // Explicación clara
-        content += `
-        <div style="background:#1E293B;border-radius:8px;padding:12px 14px;margin-bottom:12px;">
-            <p style="margin:0;color:#94A3B8;font-size:12px;line-height:1.5;">
-                <strong style="color:#F1F5F9;">¿Qué significa esto?</strong><br>
-                El orden de la tabla indica cómo el comercial visitará a los clientes durante el día. 
-                El cliente en la posición <strong style="color:#A855F7;">1</strong> será el primero en ser visitado.
-            </p>
-        </div>`;
-        
-        // Tabla de clientes
-        content += clientsTableFuturistic(details.clientesAfectados, true, 20);
-        
-    } else if (details.movedClients && details.movedClients.length > 0) {
-        // ═══════════════════════════════════════════════════════════════
-        // MOVIMIENTO de clientes a otro día
-        // ═══════════════════════════════════════════════════════════════
+        // Nota sobre clientes sin cambios
+        if (unchangedCount > 0 && changedClients.length > 0) {
+            content += `
+            <p style="color:#64748B;font-size:12px;margin-top:16px;padding:12px;background:#F8FAFC;border-radius:6px;">
+                ℹ️ Los ${unchangedCount} clientes restantes mantienen su posición original.
+            </p>`;
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CASO 2: MOVIMIENTO ENTRE DÍAS (clientes cambian de un día a otro)
+    // ═══════════════════════════════════════════════════════════════════════════
+    else if (details.movedClients && details.movedClients.length > 0) {
         const count = details.movedClients.length;
-        const destinations = [...new Set(details.movedClients.map(c => c.toDay))];
-        const destNames = destinations.map(d => formatDayName(d)).join(', ');
         
-        headerTitle = '🔀 Cambio de Día de Visita';
-        actionBadge = `${count} CLIENTE${count > 1 ? 'S' : ''}`;
-        subjectLine = `Cambio día → ${destNames}`;
+        // Agrupar por día destino
+        const byDestination = {};
+        details.movedClients.forEach(c => {
+            const dest = c.toDay || 'desconocido';
+            if (!byDestination[dest]) byDestination[dest] = [];
+            byDestination[dest].push(c);
+        });
         
-        // Info chips
-        content += infoChips([
+        const destinations = Object.keys(byDestination).map(d => formatDayName(d));
+        const destSummary = destinations.join(', ');
+        
+        headerTitle = `Cambio de Día de Visita`;
+        subjectLine = `${count} cliente(s) → ${destSummary}`;
+        
+        // Resumen ejecutivo
+        const summaryItems = [
             { label: 'Comercial', value: `#${vendorName}` },
-            { label: 'Clientes movidos', value: count },
-            { label: 'Destino', value: destNames }
-        ]);
+            { label: 'Clientes trasladados', value: count }
+        ];
         
-        // Card de resumen
-        content += summaryCard(
-            '📅',
-            `${count} cliente${count > 1 ? 's' : ''} cambió de día`,
-            `Se ${count > 1 ? 'han movido' : 'ha movido'} a ${destNames}. El comercial ${vendorName} los visitará en su nuevo día asignado.`,
-            '#10B981'
-        );
+        // Añadir resumen por destino
+        Object.entries(byDestination).forEach(([day, clients]) => {
+            summaryItems.push({ 
+                label: `→ ${formatDayName(day)}`, 
+                value: `${clients.length} cliente(s)` 
+            });
+        });
         
-        // Explicación clara
+        content += executiveSummaryBox(summaryItems);
+        
+        // Tablas por destino
+        Object.entries(byDestination).forEach(([day, clients]) => {
+            content += sectionTitle('📅', `Trasladados a ${formatDayName(day)}`, 
+                `${clients.length} cliente(s)`);
+            content += transfersTable(clients, 'out', 10);
+        });
+        
+        // Explicación
         content += `
-        <div style="background:#1E293B;border-radius:8px;padding:12px 14px;margin-bottom:12px;">
-            <p style="margin:0;color:#94A3B8;font-size:12px;line-height:1.5;">
-                <strong style="color:#F1F5F9;">¿Qué significa esto?</strong><br>
-                Los clientes listados ya no serán visitados en su día anterior. 
-                Ahora el comercial los visitará en el nuevo día indicado con el badge de color.
+        <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:14px;margin-top:20px;">
+            <p style="margin:0;color:#92400E;font-size:12px;line-height:1.5;">
+                <strong>⚠️ Importante:</strong> Estos clientes ya no serán visitados en su día anterior. 
+                El comercial los visitará en el nuevo día asignado.
             </p>
         </div>`;
-        
-        // Tabla de clientes
-        content += clientsTableFuturistic(details.movedClients, false, 15);
-        
-    } else {
-        // ═══════════════════════════════════════════════════════════════
-        // Otro tipo de cambio genérico
-        // ═══════════════════════════════════════════════════════════════
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CASO 3: OTRO TIPO DE CAMBIO (genérico)
+    // ═══════════════════════════════════════════════════════════════════════════
+    else {
         headerTitle = changeType || 'Modificación de Rutero';
-        actionBadge = 'CAMBIO';
         subjectLine = changeType || 'Modificación';
         
-        content += infoChips([
+        content += executiveSummaryBox([
             { label: 'Comercial', value: `#${vendorName}` },
-            { label: 'Tipo', value: changeType || 'General' }
+            { label: 'Tipo de cambio', value: changeType || 'General' }
         ]);
         
         content += `
-        <div style="background:#1E293B;border-radius:8px;padding:14px;margin-top:12px;">
-            <pre style="margin:0;color:#94A3B8;font-size:11px;white-space:pre-wrap;word-break:break-word;font-family:monospace;">
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:16px;margin-top:12px;">
+            <pre style="margin:0;color:#475569;font-size:11px;white-space:pre-wrap;word-break:break-word;font-family:monospace;">
 ${JSON.stringify(details, null, 2)}
             </pre>
         </div>`;
     }
 
-    const htmlBody = generateFuturisticTemplate(content, headerTitle, actionBadge, timestamp);
+    const htmlBody = generateProfessionalTemplate(content, headerTitle, timestamp);
 
     const mailOptions = {
         from: `"GMP Rutas" <${SMTP_CONFIG.auth.user}>`,
         to: 'noreply@mari-pepa.com',
-        subject: `🗺️ Comercial ${vendorName} • ${subjectLine}`,
+        subject: `Comercial ${vendorName} — ${subjectLine}`,
         html: htmlBody
     };
 

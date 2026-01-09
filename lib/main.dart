@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme/app_theme.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/cache/cache_service.dart';
+import 'core/api/api_client.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/main_shell.dart';
 import 'features/sales_history/providers/sales_history_provider.dart';
@@ -18,6 +19,10 @@ void main() async {
 
   // Initialize Hive cache before anything else
   await CacheService.init();
+
+  // Initialize API client with automatic server detection
+  // Supports: Production, LAN, Emulator, WSA (Windows Subsystem for Android)
+  await ApiClient.initialize();
 
   // Initialize date formatting for Spanish
   await initializeDateFormatting('es', null);

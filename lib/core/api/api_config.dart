@@ -1,34 +1,46 @@
+import '../services/network_service.dart';
+
 /// API Configuration and Constants
-enum ApiEnvironment { development, production }
+/// Ahora usa NetworkService para detección automática de servidor
+enum ApiEnvironment { development, production, autoDetect }
 
 class ApiConfig {
   // =============================================================================
   // ENVIRONMENT CONFIGURATION - SENIOR ARCHITECTURE
   // =============================================================================
   
-  // CAMBIAR AQUI PARA CAMBIAR EL MODO DE LA APP
-  static ApiEnvironment _currentEnvironment = ApiEnvironment.production;
+  // MODO AUTOMÁTICO: Detecta el mejor servidor disponible
+  // Soporta: Producción, LAN, Emulador, WSA (Windows Subsystem for Android)
+  static ApiEnvironment _currentEnvironment = ApiEnvironment.autoDetect;
   
   // -----------------------------------------------------------------------------
   // 1. DESARROLLO (WiFi Local)
-  // IP detectada automáticamente
-  // Funciona si la tablet está en el mismo WiFi y el Firewall permite puerto 3333
-  static String _developmentIp = '127.0.0.1'; // Fallback localhost
-  static const int _serverPort = 3333;
+  static String _developmentIp = '127.0.0.1';
+  static const int _serverPort = 3000;
 
   // -----------------------------------------------------------------------------
-  // 2. PRODUCCION (Cloudflare Tunnel - URL Permanente)
-  // TEMPORAL: Usando túnel de demo hasta que DNS propague
-  // CAMBIAR A: https://api.mari-pepa.com cuando DNS esté listo
+  // 2. PRODUCCION (Cloudflare Tunnel)
   static String _productionUrl = 'https://retailers-oct-dale-shows.trycloudflare.com'; 
 
   // =============================================================================
 
+  /// Indica si el servicio de red está inicializado
+  static bool get isNetworkReady => NetworkService.isInitialized;
+
+  /// Inicializa la configuración de red (detecta servidor automáticamente)
+  static Future<void> initialize() async {
+    if (_currentEnvironment == ApiEnvironment.autoDetect) {
+      await NetworkService.initialize();
+    }
+  }
+
   /// Obtiene la URL base activa
   static String get baseUrl {
     switch (_currentEnvironment) {
+      case ApiEnvironment.autoDetect:
+        // Usar NetworkService para detección inteligente
+        return NetworkService.activeBaseUrl;
       case ApiEnvironment.production:
-        // Asegurar que no termine en / si ya tiene /api, o ajustar según necesidad
         return _productionUrl.endsWith('/api') ? _productionUrl : '$_productionUrl/api';
       case ApiEnvironment.development:
         return 'http://$_developmentIp:$_serverPort/api';
@@ -40,7 +52,7 @@ class ApiConfig {
     _currentEnvironment = env;
   }
 
-  /// Actualiza la URL de producción (para Ngrok dinámico)
+  /// Actualiza la URL de producción
   static void setProductionUrl(String url) {
     _productionUrl = url;
   }
@@ -49,9 +61,25 @@ class ApiConfig {
   static void setDevelopmentIp(String ip) {
     _developmentIp = ip;
   }
+
+  /// Fuerza un servidor específico manualmente
+  static Future<bool> setServerManually(String baseUrl) async {
+    return await NetworkService.setServer(baseUrl);
+  }
+
+  /// Re-detecta el mejor servidor (útil cuando cambia la red)
+  static Future<void> refreshConnection() async {
+    await NetworkService.refreshConnection();
+  }
+
+  /// Obtiene diagnósticos de red para debugging
+  static Future<Map<String, dynamic>> getNetworkDiagnostics() async {
+    return await NetworkService.getDiagnostics();
+  }
   
-  // Alternativa para emulador Android
-  static const String emulatorUrl = 'http://10.0.2.2:3333/api';
+  // Alternativas para referencia
+  static const String emulatorUrl = 'http://10.0.2.2:3000/api';
+  static const String wsaUrl = 'http://172.31.192.1:3000/api';
 
 
   // Auth Endpoints

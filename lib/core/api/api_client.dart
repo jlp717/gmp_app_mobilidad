@@ -2,13 +2,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'api_config.dart';
 import '../cache/cache_service.dart';
+import '../services/network_service.dart';
 
 /// API Client for all backend communications
-/// Enhanced with retry logic and cache integration
+/// Enhanced with automatic server detection and fallback
 class ApiClient {
   static Dio? _dio;
   static int _maxRetries = 3;
   static Duration _retryDelay = const Duration(seconds: 1);
+  static bool _isInitialized = false;
 
   /// Pending requests map for request deduplication
   /// Prevents duplicate API calls when multiple widgets request the same data
@@ -16,6 +18,22 @@ class ApiClient {
 
   /// Callback for 401 Unauthorized events (Global Logout)
   static VoidCallback? onUnauthorized;
+
+  /// Initialize the API client with automatic server detection
+  static Future<void> initialize() async {
+    if (_isInitialized) return;
+    
+    try {
+      // Inicializar NetworkService para detectar servidor automáticamente
+      await ApiConfig.initialize();
+      _isInitialized = true;
+      debugPrint('[ApiClient] ✅ Inicializado con servidor: ${ApiConfig.baseUrl}');
+    } catch (e) {
+      debugPrint('[ApiClient] ⚠️ Error en inicialización: $e');
+      // Continuar con configuración por defecto
+      _isInitialized = true;
+    }
+  }
 
   /// Initialize or get Dio instance
   static Dio get dio {
@@ -53,7 +71,20 @@ class ApiClient {
   /// Reinitialize Dio (useful when base URL changes)
   static void reinitialize() {
     _dio = null;
-    _pendingRequests.clear(); // Clear pending requests on reinit
+    _pendingRequests.clear();
+  }
+
+  /// Intenta reconectar a otro servidor disponible
+  static Future<bool> tryReconnect() async {
+    debugPrint('[ApiClient] 🔄 Intentando reconectar...');
+    try {
+      await ApiConfig.refreshConnection();
+      reinitialize();
+      return ApiConfig.isNetworkReady;
+    } catch (e) {
+      debugPrint('[ApiClient] ❌ Error en reconexión: $e');
+      return false;
+    }
   }
 
   /// Set authentication token
