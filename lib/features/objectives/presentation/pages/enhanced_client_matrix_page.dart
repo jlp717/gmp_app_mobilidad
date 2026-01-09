@@ -415,7 +415,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   const SizedBox(height: 6),
                   FiFiltersWidget(
                     compact: true,
-                    showAdvanced: false, // Hide FI3/FI4 for simplicity
+                    showAdvanced: true, // Show all 5 FI levels
                     initialFilters: _fiFilters,
                     availableOptions: _fiOptions,
                     onFiltersChanged: (newFilters) {
