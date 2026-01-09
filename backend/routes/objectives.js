@@ -850,6 +850,8 @@ router.get('/matrix', async (req, res) => {
                         name: fi1Names[fi1Key] ? `${fi1Key} - ${fi1Names[fi1Key]}` : (fi1Key === 'SIN_CAT' ? 'Sin Categoría' : fi1Key),
                         level: 1,
                         totalSales: 0, totalCost: 0, totalUnits: 0,
+                        prevYearSales: 0, prevYearCost: 0, prevYearUnits: 0,
+                        monthlyData: {},
                         children: new Map()
                     });
                 }
@@ -858,7 +860,17 @@ router.get('/matrix', async (req, res) => {
                     fi1Level.totalSales += sales;
                     fi1Level.totalCost += cost;
                     fi1Level.totalUnits += units;
+                } else if (isPrevYear(year)) {
+                    fi1Level.prevYearSales += sales;
+                    fi1Level.prevYearCost += cost;
+                    fi1Level.prevYearUnits += units;
                 }
+                // Monthly data for FI1
+                if (!fi1Level.monthlyData[year]) fi1Level.monthlyData[year] = {};
+                if (!fi1Level.monthlyData[year][month]) fi1Level.monthlyData[year][month] = { sales: 0, cost: 0, units: 0 };
+                fi1Level.monthlyData[year][month].sales += sales;
+                fi1Level.monthlyData[year][month].cost += cost;
+                fi1Level.monthlyData[year][month].units += units;
                 
                 // FI2 Level (Subcategoría)
                 if (!fi1Level.children.has(fi2Key)) {
@@ -867,6 +879,8 @@ router.get('/matrix', async (req, res) => {
                         name: fi2Names[fi2Key] ? `${fi2Key} - ${fi2Names[fi2Key]}` : (fi2Key === 'General' ? 'General' : fi2Key),
                         level: 2,
                         totalSales: 0, totalCost: 0, totalUnits: 0,
+                        prevYearSales: 0, prevYearCost: 0, prevYearUnits: 0,
+                        monthlyData: {},
                         children: new Map()
                     });
                 }
@@ -875,7 +889,17 @@ router.get('/matrix', async (req, res) => {
                     fi2Level.totalSales += sales;
                     fi2Level.totalCost += cost;
                     fi2Level.totalUnits += units;
+                } else if (isPrevYear(year)) {
+                    fi2Level.prevYearSales += sales;
+                    fi2Level.prevYearCost += cost;
+                    fi2Level.prevYearUnits += units;
                 }
+                // Monthly data for FI2
+                if (!fi2Level.monthlyData[year]) fi2Level.monthlyData[year] = {};
+                if (!fi2Level.monthlyData[year][month]) fi2Level.monthlyData[year][month] = { sales: 0, cost: 0, units: 0 };
+                fi2Level.monthlyData[year][month].sales += sales;
+                fi2Level.monthlyData[year][month].cost += cost;
+                fi2Level.monthlyData[year][month].units += units;
                 
                 // FI3 Level (Detalle) - Solo si hay código FI3
                 const fi3Display = fi3Key || 'General';
@@ -885,6 +909,8 @@ router.get('/matrix', async (req, res) => {
                         name: fi3Names[fi3Key] ? `${fi3Key} - ${fi3Names[fi3Key]}` : (fi3Display === 'General' ? 'General' : fi3Display),
                         level: 3,
                         totalSales: 0, totalCost: 0, totalUnits: 0,
+                        prevYearSales: 0, prevYearCost: 0, prevYearUnits: 0,
+                        monthlyData: {},
                         children: new Map()
                     });
                 }
@@ -893,7 +919,17 @@ router.get('/matrix', async (req, res) => {
                     fi3Level.totalSales += sales;
                     fi3Level.totalCost += cost;
                     fi3Level.totalUnits += units;
+                } else if (isPrevYear(year)) {
+                    fi3Level.prevYearSales += sales;
+                    fi3Level.prevYearCost += cost;
+                    fi3Level.prevYearUnits += units;
                 }
+                // Monthly data for FI3
+                if (!fi3Level.monthlyData[year]) fi3Level.monthlyData[year] = {};
+                if (!fi3Level.monthlyData[year][month]) fi3Level.monthlyData[year][month] = { sales: 0, cost: 0, units: 0 };
+                fi3Level.monthlyData[year][month].sales += sales;
+                fi3Level.monthlyData[year][month].cost += cost;
+                fi3Level.monthlyData[year][month].units += units;
                 
                 // FI4 Level (Especial) - Solo si hay código FI4
                 const fi4Display = fi4Key || 'General';
@@ -903,6 +939,8 @@ router.get('/matrix', async (req, res) => {
                         name: fi4Names[fi4Key] ? `${fi4Key} - ${fi4Names[fi4Key]}` : (fi4Display === 'General' ? 'General' : fi4Display),
                         level: 4,
                         totalSales: 0, totalCost: 0, totalUnits: 0,
+                        prevYearSales: 0, prevYearCost: 0, prevYearUnits: 0,
+                        monthlyData: {},
                         products: new Map()
                     });
                 }
@@ -911,7 +949,17 @@ router.get('/matrix', async (req, res) => {
                     fi4Level.totalSales += sales;
                     fi4Level.totalCost += cost;
                     fi4Level.totalUnits += units;
+                } else if (isPrevYear(year)) {
+                    fi4Level.prevYearSales += sales;
+                    fi4Level.prevYearCost += cost;
+                    fi4Level.prevYearUnits += units;
                 }
+                // Monthly data for FI4
+                if (!fi4Level.monthlyData[year]) fi4Level.monthlyData[year] = {};
+                if (!fi4Level.monthlyData[year][month]) fi4Level.monthlyData[year][month] = { sales: 0, cost: 0, units: 0 };
+                fi4Level.monthlyData[year][month].sales += sales;
+                fi4Level.monthlyData[year][month].cost += cost;
+                fi4Level.monthlyData[year][month].units += units;
                 
                 // Product level within FI4
                 if (!fi4Level.products.has(prodCode)) {
@@ -1086,16 +1134,69 @@ router.get('/matrix', async (req, res) => {
         }).sort((a, b) => b.totalSales - a.totalSales);
 
         // ===== FINALIZE 5-LEVEL FI HIERARCHY =====
+        // Helper to format monthly data for FI levels
+        const formatLevelMonthly = (monthlyData) => {
+            const flatMonthly = {};
+            for (let m = 1; m <= 12; m++) {
+                flatMonthly[m.toString()] = { selectedSales: 0, selectedUnits: 0, selectedCost: 0, prevSales: 0, prevUnits: 0, prevCost: 0 };
+            }
+            Object.keys(monthlyData).forEach(yearStr => {
+                const y = parseInt(yearStr);
+                const mData = monthlyData[yearStr];
+                Object.keys(mData).forEach(mStr => {
+                    if (isSelectedYear(y)) {
+                        flatMonthly[mStr].selectedSales += mData[mStr].sales || 0;
+                        flatMonthly[mStr].selectedUnits += mData[mStr].units || 0;
+                        flatMonthly[mStr].selectedCost += mData[mStr].cost || 0;
+                    } else if (isPrevYear(y)) {
+                        flatMonthly[mStr].prevSales += mData[mStr].sales || 0;
+                        flatMonthly[mStr].prevUnits += mData[mStr].units || 0;
+                        flatMonthly[mStr].prevCost += mData[mStr].cost || 0;
+                    }
+                });
+            });
+            const output = {};
+            Object.keys(flatMonthly).forEach(mStr => {
+                const d = flatMonthly[mStr];
+                let mTrend = 'neutral';
+                let mVar = 0;
+                if (d.prevSales > 0) {
+                    mVar = ((d.selectedSales - d.prevSales) / d.prevSales) * 100;
+                    if (mVar > 5) mTrend = 'up'; else if (mVar < -5) mTrend = 'down';
+                } else if (d.selectedSales > 0) {
+                    mTrend = 'new'; // New sales this year
+                }
+                output[mStr] = {
+                    sales: parseFloat(d.selectedSales.toFixed(2)),
+                    cost: parseFloat(d.selectedCost.toFixed(2)),
+                    units: parseFloat(d.selectedUnits.toFixed(2)),
+                    prevSales: parseFloat(d.prevSales.toFixed(2)),
+                    prevCost: parseFloat(d.prevCost.toFixed(2)),
+                    yoyTrend: mTrend,
+                    yoyVariation: parseFloat(mVar.toFixed(1))
+                };
+            });
+            return output;
+        };
+
         // Helper to format FI product with calculations
         const formatFiProduct = (p) => {
             const margin = p.totalSales - p.totalCost;
             const marginPercent = p.totalSales > 0 ? (margin / p.totalSales) * 100 : 0;
+            const prevMargin = p.prevYearSales - p.prevYearCost;
+            const prevMarginPercent = p.prevYearSales > 0 ? (prevMargin / p.prevYearSales) * 100 : 0;
             const avgPrice = p.totalUnits > 0 ? p.totalSales / p.totalUnits : 0;
+            const avgCost = p.totalUnits > 0 ? p.totalCost / p.totalUnits : 0;
             const prevAvgPrice = p.prevYearUnits > 0 ? p.prevYearSales / p.prevYearUnits : 0;
+            const prevAvgCost = p.prevYearUnits > 0 ? p.prevYearCost / p.prevYearUnits : 0;
             const variation = p.prevYearSales > 0 ? ((p.totalSales - p.prevYearSales) / p.prevYearSales) * 100 : 0;
             let yoyTrend = 'neutral';
-            if (variation > 5) yoyTrend = 'up';
-            if (variation < -5) yoyTrend = 'down';
+            if (p.prevYearSales === 0 && p.totalSales > 0) yoyTrend = 'new';
+            else if (variation > 5) yoyTrend = 'up';
+            else if (variation < -5) yoyTrend = 'down';
+            
+            // Format product monthly data
+            const productMonthly = formatLevelMonthly(p.monthlyData || {});
             
             return {
                 code: p.code,
@@ -1106,13 +1207,22 @@ router.get('/matrix', async (req, res) => {
                 totalSales: parseFloat(p.totalSales.toFixed(2)),
                 totalUnits: parseFloat(p.totalUnits.toFixed(2)),
                 totalCost: parseFloat(p.totalCost.toFixed(2)),
+                totalMargin: parseFloat(margin.toFixed(2)),
                 totalMarginPercent: parseFloat(marginPercent.toFixed(1)),
                 avgUnitPrice: parseFloat(avgPrice.toFixed(2)),
+                avgUnitCost: parseFloat(avgCost.toFixed(2)),
                 prevYearSales: parseFloat(p.prevYearSales.toFixed(2)),
                 prevYearUnits: parseFloat(p.prevYearUnits.toFixed(2)),
+                prevYearCost: parseFloat(p.prevYearCost.toFixed(2)),
+                prevYearMargin: parseFloat(prevMargin.toFixed(2)),
+                prevYearMarginPercent: parseFloat(prevMarginPercent.toFixed(1)),
                 prevYearAvgPrice: parseFloat(prevAvgPrice.toFixed(2)),
+                prevYearAvgCost: parseFloat(prevAvgCost.toFixed(2)),
                 hasDiscount: p.hasDiscount,
                 hasSpecialPrice: p.hasSpecialPrice,
+                avgDiscountPct: p.avgDiscountPct || 0,
+                avgDiscountEur: p.avgDiscountEur || 0,
+                monthlyData: productMonthly,
                 yoyTrend,
                 yoyVariation: parseFloat(variation.toFixed(1))
             };
@@ -1126,14 +1236,33 @@ router.get('/matrix', async (req, res) => {
             const children1 = Array.from(fi1.children.values()).map(fi2 => {
                 const margin2 = fi2.totalSales - fi2.totalCost;
                 const marginPercent2 = fi2.totalSales > 0 ? (margin2 / fi2.totalSales) * 100 : 0;
+                const prevMargin2 = fi2.prevYearSales - fi2.prevYearCost;
+                const variation2 = fi2.prevYearSales > 0 ? ((fi2.totalSales - fi2.prevYearSales) / fi2.prevYearSales) * 100 : 0;
+                let yoy2 = 'neutral';
+                if (fi2.prevYearSales === 0 && fi2.totalSales > 0) yoy2 = 'new';
+                else if (variation2 > 5) yoy2 = 'up';
+                else if (variation2 < -5) yoy2 = 'down';
                 
                 const children2 = Array.from(fi2.children.values()).map(fi3 => {
                     const margin3 = fi3.totalSales - fi3.totalCost;
                     const marginPercent3 = fi3.totalSales > 0 ? (margin3 / fi3.totalSales) * 100 : 0;
+                    const prevMargin3 = fi3.prevYearSales - fi3.prevYearCost;
+                    const variation3 = fi3.prevYearSales > 0 ? ((fi3.totalSales - fi3.prevYearSales) / fi3.prevYearSales) * 100 : 0;
+                    let yoy3 = 'neutral';
+                    if (fi3.prevYearSales === 0 && fi3.totalSales > 0) yoy3 = 'new';
+                    else if (variation3 > 5) yoy3 = 'up';
+                    else if (variation3 < -5) yoy3 = 'down';
                     
                     const children3 = Array.from(fi3.children.values()).map(fi4 => {
                         const margin4 = fi4.totalSales - fi4.totalCost;
                         const marginPercent4 = fi4.totalSales > 0 ? (margin4 / fi4.totalSales) * 100 : 0;
+                        const prevMargin4 = fi4.prevYearSales - fi4.prevYearCost;
+                        const variation4 = fi4.prevYearSales > 0 ? ((fi4.totalSales - fi4.prevYearSales) / fi4.prevYearSales) * 100 : 0;
+                        let yoy4 = 'neutral';
+                        if (fi4.prevYearSales === 0 && fi4.totalSales > 0) yoy4 = 'new';
+                        else if (variation4 > 5) yoy4 = 'up';
+                        else if (variation4 < -5) yoy4 = 'down';
+                        
                         const products = Array.from(fi4.products.values())
                             .map(formatFiProduct)
                             .sort((a, b) => b.totalSales - a.totalSales);
@@ -1144,7 +1273,16 @@ router.get('/matrix', async (req, res) => {
                             level: 4,
                             totalSales: parseFloat(fi4.totalSales.toFixed(2)),
                             totalUnits: parseFloat(fi4.totalUnits.toFixed(2)),
+                            totalCost: parseFloat(fi4.totalCost.toFixed(2)),
+                            totalMargin: parseFloat(margin4.toFixed(2)),
                             totalMarginPercent: parseFloat(marginPercent4.toFixed(1)),
+                            prevYearSales: parseFloat(fi4.prevYearSales.toFixed(2)),
+                            prevYearUnits: parseFloat(fi4.prevYearUnits.toFixed(2)),
+                            prevYearCost: parseFloat(fi4.prevYearCost.toFixed(2)),
+                            prevYearMargin: parseFloat(prevMargin4.toFixed(2)),
+                            yoyTrend: yoy4,
+                            yoyVariation: parseFloat(variation4.toFixed(1)),
+                            monthlyData: formatLevelMonthly(fi4.monthlyData || {}),
                             productCount: products.length,
                             products
                         };
@@ -1156,7 +1294,16 @@ router.get('/matrix', async (req, res) => {
                         level: 3,
                         totalSales: parseFloat(fi3.totalSales.toFixed(2)),
                         totalUnits: parseFloat(fi3.totalUnits.toFixed(2)),
+                        totalCost: parseFloat(fi3.totalCost.toFixed(2)),
+                        totalMargin: parseFloat(margin3.toFixed(2)),
                         totalMarginPercent: parseFloat(marginPercent3.toFixed(1)),
+                        prevYearSales: parseFloat(fi3.prevYearSales.toFixed(2)),
+                        prevYearUnits: parseFloat(fi3.prevYearUnits.toFixed(2)),
+                        prevYearCost: parseFloat(fi3.prevYearCost.toFixed(2)),
+                        prevYearMargin: parseFloat(prevMargin3.toFixed(2)),
+                        yoyTrend: yoy3,
+                        yoyVariation: parseFloat(variation3.toFixed(1)),
+                        monthlyData: formatLevelMonthly(fi3.monthlyData || {}),
                         childCount: children3.length,
                         children: children3
                     };
@@ -1168,11 +1315,27 @@ router.get('/matrix', async (req, res) => {
                     level: 2,
                     totalSales: parseFloat(fi2.totalSales.toFixed(2)),
                     totalUnits: parseFloat(fi2.totalUnits.toFixed(2)),
+                    totalCost: parseFloat(fi2.totalCost.toFixed(2)),
+                    totalMargin: parseFloat(margin2.toFixed(2)),
                     totalMarginPercent: parseFloat(marginPercent2.toFixed(1)),
+                    prevYearSales: parseFloat(fi2.prevYearSales.toFixed(2)),
+                    prevYearUnits: parseFloat(fi2.prevYearUnits.toFixed(2)),
+                    prevYearCost: parseFloat(fi2.prevYearCost.toFixed(2)),
+                    prevYearMargin: parseFloat(prevMargin2.toFixed(2)),
+                    yoyTrend: yoy2,
+                    yoyVariation: parseFloat(variation2.toFixed(1)),
+                    monthlyData: formatLevelMonthly(fi2.monthlyData || {}),
                     childCount: children2.length,
                     children: children2
                 };
             }).filter(f => f.totalSales > 0 || f.childCount > 0).sort((a, b) => b.totalSales - a.totalSales);
+            
+            const prevMargin1 = fi1.prevYearSales - fi1.prevYearCost;
+            const variation1 = fi1.prevYearSales > 0 ? ((fi1.totalSales - fi1.prevYearSales) / fi1.prevYearSales) * 100 : 0;
+            let yoy1 = 'neutral';
+            if (fi1.prevYearSales === 0 && fi1.totalSales > 0) yoy1 = 'new';
+            else if (variation1 > 5) yoy1 = 'up';
+            else if (variation1 < -5) yoy1 = 'down';
             
             return {
                 code: fi1.code,
@@ -1180,7 +1343,16 @@ router.get('/matrix', async (req, res) => {
                 level: 1,
                 totalSales: parseFloat(fi1.totalSales.toFixed(2)),
                 totalUnits: parseFloat(fi1.totalUnits.toFixed(2)),
+                totalCost: parseFloat(fi1.totalCost.toFixed(2)),
+                totalMargin: parseFloat((fi1.totalSales - fi1.totalCost).toFixed(2)),
                 totalMarginPercent: parseFloat(marginPercent1.toFixed(1)),
+                prevYearSales: parseFloat(fi1.prevYearSales.toFixed(2)),
+                prevYearUnits: parseFloat(fi1.prevYearUnits.toFixed(2)),
+                prevYearCost: parseFloat(fi1.prevYearCost.toFixed(2)),
+                prevYearMargin: parseFloat(prevMargin1.toFixed(2)),
+                yoyTrend: yoy1,
+                yoyVariation: parseFloat(variation1.toFixed(1)),
+                monthlyData: formatLevelMonthly(fi1.monthlyData || {}),
                 childCount: children1.length,
                 children: children1
             };

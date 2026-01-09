@@ -59,6 +59,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   FiFilterState _fiFilters = const FiFilterState();
   FiFilterOptions? _fiOptions;
   
+  // Depth level selector (1-5, default 5 = all levels including products)
+  int _maxDepthLevel = 5;
+  
+  // Show monthly breakdown (can be toggled)
+  bool _showMonthlyBreakdown = false;
+  
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   
@@ -445,6 +451,46 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               ),
             ),
             const SizedBox(height: 8),
+            // Depth level selector and monthly toggle
+            Row(
+              children: [
+                // Depth selector
+                const Text('Niveles: ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.darkBase,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.grey.shade700),
+                  ),
+                  child: DropdownButton<int>(
+                    value: _maxDepthLevel,
+                    isDense: true,
+                    underline: const SizedBox(),
+                    style: const TextStyle(fontSize: 10, color: Colors.white),
+                    dropdownColor: AppTheme.surfaceColor,
+                    items: [
+                      DropdownMenuItem(value: 1, child: Text('FI1')),
+                      DropdownMenuItem(value: 2, child: Text('FI1-FI2')),
+                      DropdownMenuItem(value: 3, child: Text('FI1-FI3')),
+                      DropdownMenuItem(value: 4, child: Text('FI1-FI4')),
+                      DropdownMenuItem(value: 5, child: Text('Todos (+ Productos)')),
+                    ],
+                    onChanged: (v) => setState(() => _maxDepthLevel = v ?? 5),
+                  ),
+                ),
+                const Spacer(),
+                // Monthly toggle
+                const Text('Meses: ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                Switch(
+                  value: _showMonthlyBreakdown,
+                  onChanged: (v) => setState(() => _showMonthlyBreakdown = v),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  activeColor: AppTheme.neonBlue,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             // APPLY BUTTON
             Center(
               child: ElevatedButton.icon(
@@ -659,8 +705,17 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
     final sales = (fi1['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (fi1['totalUnits'] as num?)?.toDouble() ?? 0;
+    final cost = (fi1['totalCost'] as num?)?.toDouble() ?? 0;
     final margin = (fi1['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final totalMargin = (fi1['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
+    final prevYearSales = (fi1['prevYearSales'] as num?)?.toDouble() ?? 0;
+    final yoyVariation = (fi1['yoyVariation'] as num?)?.toDouble() ?? 0;
+    final yoyTrend = fi1['yoyTrend'] as String? ?? 'neutral';
+    final monthlyData = fi1['monthlyData'] as Map<String, dynamic>?;
     final childCount = (fi1['childCount'] as num?)?.toInt() ?? children.length;
+    
+    // Hide expand arrow if max depth reached
+    final canExpand = _maxDepthLevel > 1 && children.isNotEmpty;
 
     return Card(
       color: AppTheme.surfaceColor,
@@ -668,48 +723,58 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       child: Column(
         children: [
           InkWell(
-            onTap: () => setState(() { 
+            onTap: canExpand ? () => setState(() { 
               if (expanded) _expandedFiNodes.remove(nodeKey); 
               else _expandedFiNodes.add(nodeKey); 
-            }),
+            }) : null,
             child: Padding(
               padding: const EdgeInsets.all(10),
-              child: Row(
+              child: Column(
                 children: [
-                  // Expand icon
-                  Icon(
-                    expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                    color: AppTheme.neonPurple,
-                    size: 20,
+                  Row(
+                    children: [
+                      // Expand icon
+                      if (canExpand)
+                        Icon(
+                          expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                          color: AppTheme.neonPurple,
+                          size: 20,
+                        )
+                      else
+                        const SizedBox(width: 20),
+                      const SizedBox(width: 6),
+                      // Level badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonPurple.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text('FI1', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+                      ),
+                      const SizedBox(width: 8),
+                      // Name - "Código - Descripción"
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('$childCount subcategorías', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+                          ],
+                        ),
+                      ),
+                      // Stats with YoY
+                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.neonPurple),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  // Level badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonPurple.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text('FI1', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
-                  ),
-                  const SizedBox(width: 8),
-                  // Name - "Código - Descripción"
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text('$childCount subcategorías', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
-                      ],
-                    ),
-                  ),
-                  // Stats
-                  _buildLevelStats(sales, units, margin, AppTheme.neonPurple),
+                  // Monthly breakdown if enabled
+                  if (_showMonthlyBreakdown && monthlyData != null)
+                    _buildMonthlyBreakdownRow(monthlyData),
                 ],
               ),
             ),
           ),
-          if (expanded) 
+          if (expanded && canExpand) 
             Padding(
               padding: const EdgeInsets.only(left: 12, bottom: 4),
               child: Column(children: children.map((fi2) => _buildFi2Card(fi2, code)).toList()),
@@ -729,8 +794,16 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
     final sales = (fi2['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (fi2['totalUnits'] as num?)?.toDouble() ?? 0;
+    final cost = (fi2['totalCost'] as num?)?.toDouble() ?? 0;
     final margin = (fi2['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final totalMargin = (fi2['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
+    final prevYearSales = (fi2['prevYearSales'] as num?)?.toDouble() ?? 0;
+    final yoyVariation = (fi2['yoyVariation'] as num?)?.toDouble() ?? 0;
+    final yoyTrend = fi2['yoyTrend'] as String? ?? 'neutral';
+    final monthlyData = fi2['monthlyData'] as Map<String, dynamic>?;
     final childCount = (fi2['childCount'] as num?)?.toInt() ?? children.length;
+    
+    final canExpand = _maxDepthLevel > 2 && children.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 2),
@@ -742,44 +815,53 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       child: Column(
         children: [
           InkWell(
-            onTap: () => setState(() { 
+            onTap: canExpand ? () => setState(() { 
               if (expanded) _expandedFiNodes.remove(nodeKey); 
               else _expandedFiNodes.add(nodeKey); 
-            }),
+            }) : null,
             child: Padding(
               padding: const EdgeInsets.all(8),
-              child: Row(
+              child: Column(
                 children: [
-                  Icon(
-                    expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                    color: AppTheme.neonBlue,
-                    size: 18,
+                  Row(
+                    children: [
+                      if (canExpand)
+                        Icon(
+                          expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                          color: AppTheme.neonBlue,
+                          size: 18,
+                        )
+                      else
+                        const SizedBox(width: 18),
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonBlue.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text('FI2', style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('$childCount grupos', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+                          ],
+                        ),
+                      ),
+                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.neonBlue, compact: true),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: const Text('FI2', style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text('$childCount grupos', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
-                      ],
-                    ),
-                  ),
-                  _buildLevelStats(sales, units, margin, AppTheme.neonBlue),
+                  if (_showMonthlyBreakdown && monthlyData != null)
+                    _buildMonthlyBreakdownRow(monthlyData, compact: true),
                 ],
               ),
             ),
           ),
-          if (expanded) 
+          if (expanded && canExpand) 
             Padding(
               padding: const EdgeInsets.only(left: 12, bottom: 4),
               child: Column(children: children.map((fi3) => _buildFi3Card(fi3, nodeKey)).toList()),
@@ -799,8 +881,16 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
     final sales = (fi3['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (fi3['totalUnits'] as num?)?.toDouble() ?? 0;
+    final cost = (fi3['totalCost'] as num?)?.toDouble() ?? 0;
     final margin = (fi3['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final totalMargin = (fi3['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
+    final prevYearSales = (fi3['prevYearSales'] as num?)?.toDouble() ?? 0;
+    final yoyVariation = (fi3['yoyVariation'] as num?)?.toDouble() ?? 0;
+    final yoyTrend = fi3['yoyTrend'] as String? ?? 'neutral';
+    final monthlyData = fi3['monthlyData'] as Map<String, dynamic>?;
     final childCount = (fi3['childCount'] as num?)?.toInt() ?? children.length;
+    
+    final canExpand = _maxDepthLevel > 3 && children.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 2),
@@ -812,44 +902,53 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       child: Column(
         children: [
           InkWell(
-            onTap: () => setState(() { 
+            onTap: canExpand ? () => setState(() { 
               if (expanded) _expandedFiNodes.remove(nodeKey); 
               else _expandedFiNodes.add(nodeKey); 
-            }),
+            }) : null,
             child: Padding(
               padding: const EdgeInsets.all(7),
-              child: Row(
+              child: Column(
                 children: [
-                  Icon(
-                    expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                    color: AppTheme.neonGreen,
-                    size: 16,
+                  Row(
+                    children: [
+                      if (canExpand)
+                        Icon(
+                          expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                          color: AppTheme.neonGreen,
+                          size: 16,
+                        )
+                      else
+                        const SizedBox(width: 16),
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonGreen.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text('FI3', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('$childCount líneas', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                          ],
+                        ),
+                      ),
+                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.neonGreen, compact: true),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonGreen.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: const Text('FI3', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text('$childCount líneas', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                      ],
-                    ),
-                  ),
-                  _buildLevelStats(sales, units, margin, AppTheme.neonGreen, compact: true),
+                  if (_showMonthlyBreakdown && monthlyData != null)
+                    _buildMonthlyBreakdownRow(monthlyData, compact: true),
                 ],
               ),
             ),
           ),
-          if (expanded) 
+          if (expanded && canExpand) 
             Padding(
               padding: const EdgeInsets.only(left: 12, bottom: 4),
               child: Column(children: children.map((fi4) => _buildFi4Card(fi4, nodeKey)).toList()),
@@ -869,8 +968,16 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
     final sales = (fi4['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (fi4['totalUnits'] as num?)?.toDouble() ?? 0;
+    final cost = (fi4['totalCost'] as num?)?.toDouble() ?? 0;
     final margin = (fi4['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final totalMargin = (fi4['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
+    final prevYearSales = (fi4['prevYearSales'] as num?)?.toDouble() ?? 0;
+    final yoyVariation = (fi4['yoyVariation'] as num?)?.toDouble() ?? 0;
+    final yoyTrend = fi4['yoyTrend'] as String? ?? 'neutral';
+    final monthlyData = fi4['monthlyData'] as Map<String, dynamic>?;
     final productCount = (fi4['productCount'] as num?)?.toInt() ?? products.length;
+    
+    final canExpand = _maxDepthLevel > 4 && products.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 2),
@@ -882,44 +989,53 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       child: Column(
         children: [
           InkWell(
-            onTap: () => setState(() { 
+            onTap: canExpand ? () => setState(() { 
               if (expanded) _expandedFiNodes.remove(nodeKey); 
               else _expandedFiNodes.add(nodeKey); 
-            }),
+            }) : null,
             child: Padding(
               padding: const EdgeInsets.all(6),
-              child: Row(
+              child: Column(
                 children: [
-                  Icon(
-                    expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                    color: AppTheme.warning,
-                    size: 14,
+                  Row(
+                    children: [
+                      if (canExpand)
+                        Icon(
+                          expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                          color: AppTheme.warning,
+                          size: 14,
+                        )
+                      else
+                        const SizedBox(width: 14),
+                      const SizedBox(width: 3),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text('FI4', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: AppTheme.warning)),
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('$productCount productos', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                          ],
+                        ),
+                      ),
+                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.warning, compact: true),
+                    ],
                   ),
-                  const SizedBox(width: 3),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppTheme.warning.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: const Text('FI4', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: AppTheme.warning)),
-                  ),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text('$productCount productos', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                      ],
-                    ),
-                  ),
-                  _buildLevelStats(sales, units, margin, AppTheme.warning, compact: true),
+                  if (_showMonthlyBreakdown && monthlyData != null)
+                    _buildMonthlyBreakdownRow(monthlyData, compact: true),
                 ],
               ),
             ),
           ),
-          if (expanded) 
+          if (expanded && canExpand) 
             Padding(
               padding: const EdgeInsets.only(left: 8, right: 4, bottom: 4),
               child: Column(children: products.map((p) => _buildFiProduct(p)).toList()),
@@ -963,6 +1079,132 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
+  /// Enhanced stats with YoY comparison
+  Widget _buildLevelStatsWithYoY(double sales, double units, double marginPercent, double totalMargin, double prevSales, double yoyVariation, String yoyTrend, Color color, {bool compact = false}) {
+    Color trendColor = AppTheme.textSecondary;
+    IconData trendIcon = Icons.remove;
+    if (yoyTrend == 'up') {
+      trendColor = AppTheme.success;
+      trendIcon = Icons.trending_up;
+    } else if (yoyTrend == 'down') {
+      trendColor = AppTheme.error;
+      trendIcon = Icons.trending_down;
+    } else if (yoyTrend == 'new') {
+      trendColor = AppTheme.neonBlue;
+      trendIcon = Icons.fiber_new;
+    }
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Sales + YoY trend
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_formatCurrency(sales), style: TextStyle(fontSize: compact ? 10 : 12, fontWeight: FontWeight.bold, color: color)),
+                const SizedBox(width: 4),
+                Icon(trendIcon, size: compact ? 10 : 12, color: trendColor),
+              ],
+            ),
+            if (prevSales > 0)
+              Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% vs ${_formatCompact(prevSales)}', 
+                style: TextStyle(fontSize: compact ? 7 : 8, color: trendColor, fontWeight: FontWeight.w500)),
+            Text('${units.toStringAsFixed(0)} uds', style: TextStyle(fontSize: compact ? 7 : 9, color: AppTheme.textSecondary)),
+          ],
+        ),
+        // Margin (Jefe Ventas only)
+        if (widget.isJefeVentas) ...[
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 6, vertical: compact ? 2 : 3),
+                decoration: BoxDecoration(
+                  color: marginPercent >= 0 ? AppTheme.success.withOpacity(0.15) : AppTheme.error.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${marginPercent.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontSize: compact ? 9 : 10,
+                    fontWeight: FontWeight.bold,
+                    color: marginPercent >= 0 ? AppTheme.success : AppTheme.error,
+                  ),
+                ),
+              ),
+              Text(_formatCurrency(totalMargin), style: TextStyle(fontSize: compact ? 7 : 8, color: AppTheme.textSecondary)),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Monthly breakdown row - compact horizontal scrolling
+  Widget _buildMonthlyBreakdownRow(Map<String, dynamic>? monthlyData, {bool compact = false}) {
+    if (monthlyData == null || monthlyData.isEmpty) return const SizedBox.shrink();
+    
+    return Container(
+      margin: EdgeInsets.only(top: compact ? 4 : 6),
+      height: compact ? 38 : 48,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: 12,
+        itemBuilder: (context, index) {
+          final monthNum = (index + 1).toString();
+          final mData = monthlyData[monthNum] as Map<String, dynamic>?;
+          final sales = (mData?['sales'] as num?)?.toDouble() ?? 0;
+          final prevSales = (mData?['prevSales'] as num?)?.toDouble() ?? 0;
+          final trend = mData?['yoyTrend'] as String? ?? 'neutral';
+          
+          Color bgColor = AppTheme.darkCard;
+          Color textColor = Colors.white;
+          if (trend == 'up') {
+            bgColor = AppTheme.success.withOpacity(0.2);
+            textColor = AppTheme.success;
+          } else if (trend == 'down') {
+            bgColor = AppTheme.error.withOpacity(0.2);
+            textColor = AppTheme.error;
+          } else if (trend == 'new') {
+            bgColor = AppTheme.neonBlue.withOpacity(0.2);
+            textColor = AppTheme.neonBlue;
+          }
+          
+          return Container(
+            width: compact ? 48 : 58,
+            margin: const EdgeInsets.only(right: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: textColor.withOpacity(0.3), width: 0.5),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(_mNames[index], style: TextStyle(fontSize: compact ? 7 : 8, fontWeight: FontWeight.bold, color: textColor)),
+                const SizedBox(height: 1),
+                Text(
+                  _formatCompact(sales),
+                  style: TextStyle(fontSize: compact ? 8 : 10, fontWeight: FontWeight.bold, color: textColor),
+                ),
+                if (prevSales > 0 && !compact)
+                  Text(
+                    '(${_formatCompact(prevSales)})',
+                    style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildFiProduct(Map<String, dynamic> p) {
     final code = p['code'] as String? ?? '';
     final name = p['name'] as String? ?? code;
@@ -970,21 +1212,26 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final sales = (p['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (p['totalUnits'] as num?)?.toDouble() ?? 0;
     final cost = (p['totalCost'] as num?)?.toDouble() ?? 0;
+    final totalMargin = (p['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
     final marginPercent = (p['totalMarginPercent'] as num?)?.toDouble() ?? 0;
     final avgPrice = (p['avgUnitPrice'] as num?)?.toDouble() ?? 0;
+    final avgCost = (p['avgUnitCost'] as num?)?.toDouble() ?? 0;
     final prevYearSales = (p['prevYearSales'] as num?)?.toDouble() ?? 0;
     final prevYearUnits = (p['prevYearUnits'] as num?)?.toDouble() ?? 0;
+    final prevYearCost = (p['prevYearCost'] as num?)?.toDouble() ?? 0;
+    final prevYearMargin = (p['prevYearMargin'] as num?)?.toDouble() ?? 0;
     final prevYearAvgPrice = (p['prevYearAvgPrice'] as num?)?.toDouble() ?? 0;
-    final yoyTrend = p['yoyTrend'] as String? ?? '';
+    final prevYearAvgCost = (p['prevYearAvgCost'] as num?)?.toDouble() ?? 0;
+    final yoyTrend = p['yoyTrend'] as String? ?? 'neutral';
     final yoyVariation = (p['yoyVariation'] as num?)?.toDouble() ?? 0;
     final hasDiscount = p['hasDiscount'] as bool? ?? false;
+    final avgDiscountPct = (p['avgDiscountPct'] as num?)?.toDouble() ?? 0;
+    final avgDiscountEur = (p['avgDiscountEur'] as num?)?.toDouble() ?? 0;
+    final monthlyData = p['monthlyData'] as Map<String, dynamic>?;
     
-    // Calculate cost per unit
+    // Calculate per unit
     final costPerUnit = units > 0 ? cost / units : 0.0;
     final marginPerUnit = avgPrice - costPerUnit;
-    
-    // Sales variation
-    final salesVar = prevYearSales > 0 ? ((sales - prevYearSales) / prevYearSales) * 100 : 0.0;
     
     // Unit label
     String unitLabel;
@@ -998,6 +1245,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     Color borderColor = AppTheme.surfaceColor;
     if (yoyTrend == 'up') borderColor = AppTheme.success;
     else if (yoyTrend == 'down') borderColor = AppTheme.error;
+    else if (yoyTrend == 'new') borderColor = AppTheme.neonBlue;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
@@ -1010,7 +1258,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Product header: Code + Name
+          // Product header: Code + Name + Discount badge
           Row(
             children: [
               Container(
@@ -1018,13 +1266,24 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
                 child: Text(code, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
               ),
-              if (hasDiscount)
+              if (hasDiscount) ...[
+                const SizedBox(width: 4),
                 Container(
-                  margin: const EdgeInsets.only(left: 4),
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(3)),
-                  child: const Text('DTO', style: TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: Colors.orange)),
+                  child: Text(avgDiscountPct > 0 ? '-${avgDiscountPct.toStringAsFixed(0)}%' : 'DTO', 
+                    style: const TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: Colors.orange)),
                 ),
+              ],
+              // YoY trend badge
+              if (yoyTrend != 'neutral') ...[
+                const SizedBox(width: 4),
+                Icon(
+                  yoyTrend == 'up' ? Icons.trending_up : yoyTrend == 'down' ? Icons.trending_down : Icons.fiber_new,
+                  size: 12,
+                  color: borderColor,
+                ),
+              ],
               const SizedBox(width: 6),
               Expanded(
                 child: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -1059,7 +1318,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     child: Column(
                       children: [
                         Text('Coste/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                        Text(_formatCurrency(costPerUnit), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                        Text(_formatCurrency(avgCost > 0 ? avgCost : costPerUnit), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                        if (prevYearAvgCost > 0)
+                          Text('(${_formatCurrency(prevYearAvgCost)})', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                       ],
                     ),
                   ),
@@ -1099,39 +1360,46 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                // Total ventas
+                // Total ventas + YoY
                 Column(
                   children: [
-                    Text('Total ${_selectedYears.length == 1 ? _selectedYears.first : ""}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_formatCurrency(sales), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: borderColor == AppTheme.surfaceColor ? AppTheme.neonBlue : borderColor)),
-                        if (prevYearSales > 0)
-                          Text(' (${_formatCurrency(prevYearSales)})', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
-                      ],
-                    ),
+                    Text('Ventas ${_selectedYears.length == 1 ? _selectedYears.first : ""}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                    Text(_formatCurrency(sales), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: borderColor == AppTheme.surfaceColor ? AppTheme.neonBlue : borderColor)),
                     if (prevYearSales > 0)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(salesVar >= 0 ? Icons.trending_up : Icons.trending_down, size: 10, color: salesVar >= 0 ? AppTheme.success : AppTheme.error),
-                          Text(' ${salesVar >= 0 ? "+" : ""}${salesVar.toStringAsFixed(0)}%', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: salesVar >= 0 ? AppTheme.success : AppTheme.error)),
-                        ],
-                      ),
+                      Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% (${_formatCompact(prevYearSales)})', 
+                        style: TextStyle(fontSize: 8, fontWeight: FontWeight.w500, color: yoyVariation >= 0 ? AppTheme.success : AppTheme.error)),
                   ],
                 ),
-                // Margen % (Jefe Ventas)
+                // Total Coste (Jefe Ventas)
+                if (widget.isJefeVentas)
+                  Column(
+                    children: [
+                      Text('Coste', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      Text(_formatCurrency(cost), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                      if (prevYearCost > 0)
+                        Builder(builder: (context) {
+                          final costVar = ((cost - prevYearCost) / prevYearCost) * 100;
+                          return Text('${costVar >= 0 ? "+" : ""}${costVar.toStringAsFixed(0)}%', 
+                            style: TextStyle(fontSize: 7, color: costVar <= 0 ? AppTheme.success : AppTheme.error));
+                        }),
+                    ],
+                  ),
+                // Margen € + % (Jefe Ventas)
                 if (widget.isJefeVentas)
                   Column(
                     children: [
                       Text('Margen', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                      Text('${marginPercent.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: marginPercent >= 0 ? AppTheme.success : AppTheme.error)),
+                      Text(_formatCurrency(totalMargin), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: totalMargin >= 0 ? AppTheme.success : AppTheme.error)),
+                      Text('${marginPercent.toStringAsFixed(1)}%', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w500, color: marginPercent >= 0 ? AppTheme.success : AppTheme.error)),
                     ],
                   ),
               ],
             ),
           ),
+          
+          // Monthly breakdown if enabled
+          if (_showMonthlyBreakdown && monthlyData != null)
+            _buildMonthlyBreakdownRow(monthlyData, compact: true),
         ],
       ),
     );
