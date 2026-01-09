@@ -318,6 +318,34 @@ function getCachedVendorCodes() {
     return Object.keys(laclaeCache);
 }
 
+/**
+ * Obtiene el día actual de un cliente para un vendedor
+ * Primero busca en RUTERO_CONFIG (override), si no existe, usa LACLAE (días naturales)
+ * @returns {string|null} El día en minúsculas o null si no está asignado
+ */
+function getClientCurrentDay(vendedor, clientCode) {
+    if (!laclaeCacheReady) return null;
+    
+    const vendedorStr = String(vendedor).trim();
+    const clientStr = String(clientCode).trim();
+    
+    // 1. Buscar override en RUTERO_CONFIG
+    const configClients = ruteroConfigCache[vendedorStr] || {};
+    if (configClients[clientStr]) {
+        return configClients[clientStr].day || null;
+    }
+    
+    // 2. Buscar días naturales en LACLAE
+    const vendorClients = laclaeCache[vendedorStr] || {};
+    const clientData = vendorClients[clientStr];
+    if (clientData && clientData.visitDays && clientData.visitDays.length > 0) {
+        // Devolver el primer día de visita natural
+        return clientData.visitDays[0];
+    }
+    
+    return null;
+}
+
 module.exports = {
     loadLaclaeCache,
     getClientsForDay,
@@ -327,5 +355,6 @@ module.exports = {
     getVendorActiveDaysFromCache,
     getVendorDeliveryDaysFromCache,
     getCachedVendorCodes,
-    reloadRuteroConfig
+    reloadRuteroConfig,
+    getClientCurrentDay
 };

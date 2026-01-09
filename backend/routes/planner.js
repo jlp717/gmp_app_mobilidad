@@ -16,7 +16,8 @@ const {
     getTotalClientsFromCache,
     getClientsForDay,
     getVendedoresFromCache,
-    reloadRuteroConfig
+    reloadRuteroConfig,
+    getClientCurrentDay
 } = require('../services/laclae');
 const { sendAuditEmail, sendAuditEmailNow } = require('../services/emailService');
 
@@ -231,23 +232,26 @@ router.post('/rutero/move_clients', async (req, res) => {
             const clientTrimmed = client.trim();
 
             // 0. Capturar día y posición anterior antes de eliminar
-            let previousDay = null;
+            // Primero buscar en caché (LACLAE + RUTERO_CONFIG)
+            let previousDay = getClientCurrentDay(vendedor, clientTrimmed);
             let previousOrder = null;
+            
+            // Si hay override en RUTERO_CONFIG, obtener también la posición
             try {
                 const prevRes = await conn.query(`
                     SELECT TRIM(DIA) as DIA, ORDEN FROM JAVIER.RUTERO_CONFIG 
                     WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'
                 `);
                 if (prevRes && prevRes.length > 0) {
-                    previousDay = prevRes[0].DIA?.trim() || null;
+                    // El día del override tiene prioridad
+                    previousDay = prevRes[0].DIA?.trim() || previousDay;
                     previousOrder = prevRes[0].ORDEN;
-                    logger.info(`📋 Move: Cliente ${clientTrimmed} estaba en día "${previousDay}" orden ${previousOrder}`);
-                } else {
-                    logger.info(`📋 Move: Cliente ${clientTrimmed} no tenía día asignado previamente`);
                 }
             } catch (e) { 
-                logger.warn(`Could not get previous day: ${e.message}`);
+                logger.warn(`Could not get previous config: ${e.message}`);
             }
+            
+            logger.info(`📋 Move: Cliente ${clientTrimmed} estaba en día "${previousDay || 'ninguno'}" (override orden: ${previousOrder ?? 'N/A'})`);
 
             // 1. Remove from any previous assignment
             await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'`);
