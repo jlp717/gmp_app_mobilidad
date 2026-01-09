@@ -757,7 +757,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       margin: const EdgeInsets.only(left: 16, right: 4, bottom: 2),
       decoration: BoxDecoration(
-        color: AppTheme.cardColor,
+        color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
       ),
@@ -804,7 +804,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       margin: const EdgeInsets.only(left: 24, right: 4, bottom: 2),
       decoration: BoxDecoration(
-        color: AppTheme.backgroundColor,
+        color: AppTheme.darkBase,
         borderRadius: BorderRadius.circular(5),
         border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
       ),
@@ -906,7 +906,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       margin: const EdgeInsets.only(bottom: 3),
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: AppTheme.cardColor,
+        color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: borderColor.withOpacity(0.5)),
       ),
