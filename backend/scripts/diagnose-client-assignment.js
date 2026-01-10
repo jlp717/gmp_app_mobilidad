@@ -15,7 +15,7 @@ async function diagnoseClientAssignment() {
     console.log('DIAGNÓSTICO: Asignación Cliente-Vendedor');
     console.log('='.repeat(60));
 
-    const searchName = 'ESQUINICA'; // Buscar por nombre
+    const exactClientCode = '4300008335'; // Código exacto del cliente
 
     try {
         // 1. Buscar el cliente en CLI
@@ -30,7 +30,7 @@ async function diagnoseClientAssignment() {
                 CODIGOREPARTIDOR as REPART_CLI,
                 POBLACION as CITY
             FROM DSEDAC.CLI
-            WHERE UPPER(NOMBRECLIENTE) LIKE '%${searchName}%'
+            WHERE CODIGOCLIENTE = '${exactClientCode}'
             FETCH FIRST 5 ROWS ONLY
         `;
 

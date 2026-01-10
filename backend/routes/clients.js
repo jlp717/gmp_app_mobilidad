@@ -9,6 +9,7 @@ const {
   MIN_YEAR,
   LACLAE_SALES_FILTER
 } = require('../utils/common');
+const { getClientDays } = require('../services/laclae');
 
 
 // =============================================================================
@@ -288,7 +289,11 @@ router.get('/:code', async (req, res) => {
     if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
     if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
 
-    logger.info(`[CLIENT ${clientCode}] phones: ${JSON.stringify(phones)}, editableNotes: ${JSON.stringify(editableNotes)}`);
+    // Get visit/delivery days from LACLAE cache
+    const vendorCode = vendedorCodes ? vendedorCodes.split(',')[0]?.trim() : null;
+    const clientDays = getClientDays(vendorCode, clientCode);
+
+    logger.info(`[CLIENT ${clientCode}] phones: ${JSON.stringify(phones)}, editableNotes: ${JSON.stringify(editableNotes)}, days: ${JSON.stringify(clientDays)}`);
 
     res.json({
       client: {
@@ -304,10 +309,16 @@ router.get('/:code', async (req, res) => {
         email: c.EMAIL?.trim(),
         phones: phones, // Array for WhatsApp selector
         route: c.ROUTE?.trim(),
+        routeDescription: c.ROUTE?.trim() ? `Ruta ${c.ROUTE.trim()}` : null, // Will be enhanced if table exists
         contactPerson: c.CONTACTPERSON?.trim(),
         notes: c.NOTES?.trim(), // Original read-only notes from CLI
         editableNotes: editableNotes, // Editable notes from our table
         yearCreated: c.YEARCREATED,
+        // NEW: Visit and Delivery days
+        visitDays: clientDays?.visitDays || [],
+        visitDaysShort: clientDays?.visitDaysShort || '',
+        deliveryDays: clientDays?.deliveryDays || [],
+        deliveryDaysShort: clientDays?.deliveryDaysShort || '',
         salesStats: {
           totalSales: formatCurrency(s.TOTALSALES),
           totalMargin: formatCurrency(s.TOTALMARGIN),

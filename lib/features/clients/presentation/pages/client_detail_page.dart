@@ -303,10 +303,94 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   ),
                 ),
               ],
-            ),
           ],
+          // Route and Days Section
+          const SizedBox(height: 8),
+          _buildRouteDaysRow(client),
         ],
       ),
+    );
+  }
+
+  Widget _buildRouteDaysRow(Map<String, dynamic> client) {
+    final route = client['route'] ?? '';
+    final routeDesc = client['routeDescription'] ?? '';
+    final visitDays = client['visitDaysShort'] ?? '';
+    final deliveryDays = client['deliveryDaysShort'] ?? '';
+    
+    if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return Row(
+      children: [
+        const SizedBox(width: 52), // Align with avatar
+        // Route Badge
+        if (route.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppTheme.neonPurple.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
+                const SizedBox(width: 4),
+                Text(
+                  routeDesc.isNotEmpty ? routeDesc : 'Ruta $route',
+                  style: TextStyle(fontSize: 11, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        // Visit Days Badge
+        if (visitDays.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppTheme.neonBlue.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.calendar_today, size: 12, color: AppTheme.neonBlue),
+                const SizedBox(width: 4),
+                Text(
+                  'Visita: $visitDays',
+                  style: TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        // Delivery Days Badge
+        if (deliveryDays.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppTheme.neonGreen.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.local_shipping, size: 12, color: AppTheme.neonGreen),
+                const SizedBox(width: 4),
+                Text(
+                  'Reparto: $deliveryDays',
+                  style: TextStyle(fontSize: 11, color: AppTheme.neonGreen, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 

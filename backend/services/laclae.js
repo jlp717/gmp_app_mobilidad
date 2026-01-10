@@ -370,6 +370,53 @@ function getClientCurrentDay(vendedor, clientCode) {
     return null;
 }
 
+/**
+ * Get visit and delivery days for a specific client
+ * @param {string} vendorCode - Vendor code (optional, will search all if not provided)
+ * @param {string} clientCode - Client code
+ * @returns { visitDays: string[], deliveryDays: string[] } or null
+ */
+function getClientDays(vendorCode, clientCode) {
+    if (!laclaeCacheReady || !clientCode) return null;
+
+    const dayLabels = {
+        'lunes': 'L', 'martes': 'M', 'miercoles': 'X',
+        'jueves': 'J', 'viernes': 'V', 'sabado': 'S', 'domingo': 'D'
+    };
+
+    const trimmedClient = clientCode.trim();
+
+    // If vendor specified, search only there
+    if (vendorCode) {
+        const vendorData = laclaeCache[vendorCode.trim()];
+        if (vendorData && vendorData[trimmedClient]) {
+            const data = vendorData[trimmedClient];
+            return {
+                visitDays: data.visitDays || [],
+                deliveryDays: data.deliveryDays || [],
+                visitDaysShort: (data.visitDays || []).map(d => dayLabels[d] || d).join(''),
+                deliveryDaysShort: (data.deliveryDays || []).map(d => dayLabels[d] || d).join('')
+            };
+        }
+    }
+
+    // Search all vendors
+    for (const [vCode, vendorData] of Object.entries(laclaeCache)) {
+        if (vendorData[trimmedClient]) {
+            const data = vendorData[trimmedClient];
+            return {
+                visitDays: data.visitDays || [],
+                deliveryDays: data.deliveryDays || [],
+                visitDaysShort: (data.visitDays || []).map(d => dayLabels[d] || d).join(''),
+                deliveryDaysShort: (data.deliveryDays || []).map(d => dayLabels[d] || d).join(''),
+                foundVendor: vCode
+            };
+        }
+    }
+
+    return null;
+}
+
 module.exports = {
     loadLaclaeCache,
     getClientsForDay,
@@ -381,5 +428,6 @@ module.exports = {
     getVendorDeliveryDaysFromCache,
     getCachedVendorCodes,
     reloadRuteroConfig,
-    getClientCurrentDay
+    getClientCurrentDay,
+    getClientDays
 };
