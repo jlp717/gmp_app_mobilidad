@@ -36,8 +36,17 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   bool _isLoadingClients = false;
   String? _error;
   String _searchQuery = '';
+  String _sortMode = 'custom'; // 'sales_desc', 'sales_asc', 'route', 'custom'
   DateTime? _lastFetchTime; // Track last sync
   final TextEditingController _searchController = TextEditingController();
+  
+  // Sort mode options
+  static const Map<String, String> _sortModeLabels = {
+    'sales_desc': '💰 Mayor Acumulado',
+    'sales_asc': '📉 Menor Acumulado', 
+    'route': '🗺️ Orden Ruta Original',
+    'custom': '✏️ Orden Personalizado',
+  };
   
   // Selection state
   String _selectedRole = 'comercial'; // 'comercial' (visita) or 'repartidor' (reparto)
@@ -298,6 +307,9 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             // Search Bar (dense)
             _buildSearchBar(isSmallScreen: isSmallScreen),
             
+            // Sort Selector
+            _buildSortSelector(),
+            
             // List Area
             Expanded(child: _buildClientList()),
           ],
@@ -541,6 +553,49 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     );
   }
 
+  Widget _buildSortSelector() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
+          const SizedBox(width: 8),
+          Text('Ordenar:', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _sortMode,
+                  isExpanded: true,
+                  icon: Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.textSecondary),
+                  dropdownColor: AppTheme.surfaceColor,
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                  items: _sortModeLabels.entries.map((e) => DropdownMenuItem(
+                    value: e.key,
+                    child: Text(e.value, style: const TextStyle(fontSize: 12)),
+                  )).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _sortMode = value);
+                    }
+                  },
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   Widget _buildClientList() {
     if (_isLoadingWeek || _isLoadingClients) {
@@ -589,13 +644,44 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     }
 
     // Filter clients based on search query
-    final filteredClients = _searchQuery.isEmpty
-        ? _dayClients
+    List<Map<String, dynamic>> filteredClients = _searchQuery.isEmpty
+        ? List.from(_dayClients)
         : _dayClients.where((client) {
             final code = (client['code'] as String? ?? '').toLowerCase();
             final name = (client['name'] as String? ?? '').toLowerCase();
             return code.contains(_searchQuery) || name.contains(_searchQuery);
           }).toList();
+
+    // Apply sorting based on _sortMode
+    switch (_sortMode) {
+      case 'sales_desc':
+        filteredClients.sort((a, b) {
+          final salesA = (a['status']?['ytdSales'] as num?)?.toDouble() ?? 0;
+          final salesB = (b['status']?['ytdSales'] as num?)?.toDouble() ?? 0;
+          return salesB.compareTo(salesA); // Descending
+        });
+        break;
+      case 'sales_asc':
+        filteredClients.sort((a, b) {
+          final salesA = (a['status']?['ytdSales'] as num?)?.toDouble() ?? 0;
+          final salesB = (b['status']?['ytdSales'] as num?)?.toDouble() ?? 0;
+          return salesA.compareTo(salesB); // Ascending  
+        });
+        break;
+      case 'route':
+        // Original route order (no user customizations) - use original API order
+        // Already sorted by API default order (no-op)
+        break;
+      case 'custom':
+      default:
+        // Custom order - use 'order' field set by user
+        filteredClients.sort((a, b) {
+          final orderA = (a['order'] as int?) ?? 9999;
+          final orderB = (b['order'] as int?) ?? 9999;
+          return orderA.compareTo(orderB);
+        });
+        break;
+    }
 
     if (filteredClients.isEmpty && _searchQuery.isNotEmpty) {
       return Center(
