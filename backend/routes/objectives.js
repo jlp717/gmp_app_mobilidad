@@ -1480,39 +1480,59 @@ router.get('/by-client', async (req, res) => {
         const mainYear = Math.max(...yearsArray);
         const prevYear = mainYear - 1;
 
-        // Query 0: Get TOTAL COUNT (ignoring limit) - Using LACLAE for consistency
+        // Build vendor filter for R1_T8CDVD (rutero assignment)
+        let r1VendorFilter = '';
+        if (vendedorCodes && vendedorCodes !== 'ALL') {
+            const codeList = vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',');
+            r1VendorFilter = `AND R.R1_T8CDVD IN (${codeList})`;
+        }
+
+        // Query 0: Get TOTAL COUNT of clients assigned to vendor in rutero (not just those with sales)
         const countResult = await query(`
-            SELECT COUNT(DISTINCT L.LCCDCL) as TOTAL
-            FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
-            WHERE L.LCAADC IN(${yearsFilter})
-                AND L.LCMMDC IN(${monthsFilter})
-                AND ${LACLAE_SALES_FILTER}
-                ${vendedorFilter}
+            SELECT COUNT(DISTINCT R.LCCDCL) as TOTAL
+            FROM (
+                SELECT DISTINCT LCCDCL, R1_T8CDVD
+                FROM DSED.LACLAE
+                WHERE R1_T8CDVD IS NOT NULL AND LCCDCL IS NOT NULL
+                ${r1VendorFilter.replace(/R\./g, '')}
+            ) R
+            LEFT JOIN DSEDAC.CLI C ON R.LCCDCL = C.CODIGOCLIENTE
+            WHERE C.ANOBAJA = 0
                 ${extraFilters}
         `, false);
 
         const totalClientsCount = countResult[0] ? parseInt(countResult[0].TOTAL) : 0;
 
-        // Query 1: Get current period client data (WITH LIMIT) - Using LACLAE
+        // Query 1: Get all clients assigned to vendor in rutero (R1_T8CDVD) with their sales data
+        // This ensures we show ALL clients from rutero, even those with 0 sales
         const currentRows = await query(`
       SELECT 
-        L.LCCDCL as CODE,
+        R.LCCDCL as CODE,
         COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
         MIN(C.DIRECCION) as ADDRESS,
         MIN(C.CODIGOPOSTAL) as POSTALCODE,
         MIN(C.POBLACION) as CITY,
-        SUM(L.LCIMVT) as SALES,
-        SUM(L.LCIMCT) as COST
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
-      WHERE L.LCAADC IN(${yearsFilter})
-        AND L.LCMMDC IN(${monthsFilter})
-        AND ${LACLAE_SALES_FILTER}
-        ${vendedorFilter}
+        COALESCE(S.SALES, 0) as SALES,
+        COALESCE(S.COST, 0) as COST
+      FROM (
+        SELECT DISTINCT LCCDCL, R1_T8CDVD
+        FROM DSED.LACLAE
+        WHERE R1_T8CDVD IS NOT NULL AND LCCDCL IS NOT NULL
+        ${r1VendorFilter.replace(/R\./g, '')}
+      ) R
+      LEFT JOIN DSEDAC.CLI C ON R.LCCDCL = C.CODIGOCLIENTE
+      LEFT JOIN (
+        SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
+        FROM DSED.LACLAE
+        WHERE LCAADC IN(${yearsFilter})
+          AND LCMMDC IN(${monthsFilter})
+          AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
+        GROUP BY LCCDCL
+      ) S ON R.LCCDCL = S.LCCDCL
+      WHERE C.ANOBAJA = 0
         ${extraFilters}
-      GROUP BY L.LCCDCL
-      ORDER BY SALES DESC
+      GROUP BY R.LCCDCL, S.SALES, S.COST
+      ORDER BY COALESCE(S.SALES, 0) DESC
       FETCH FIRST ${rowsLimit} ROWS ONLY
     `);
 
