@@ -16,7 +16,8 @@ const {
     getTotalClientsFromCache,
     getClientsForDay,
     reloadRuteroConfig,
-    getClientCurrentDay
+    getClientCurrentDay,
+    getClientVisitInfo
 } = require('../services/laclae');
 const { sendAuditEmail, sendAuditEmailNow } = require('../services/emailService');
 
@@ -565,14 +566,30 @@ router.get('/rutero/day/:day', async (req, res) => {
         const previousYear = currentYear - 1;
 
         const today = new Date(now);
+        const dayOfWeek = today.getDay();
+        const diffToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;
+        const lastSundayDate = new Date(today);
+        lastSundayDate.setDate(today.getDate() - diffToLastSunday);
 
-        // Switch to Real-Time YTD (Up to Today) to include current week's sales
-        const endMonthCurrent = today.getMonth() + 1;
-        const endDayCurrent = today.getDate();
+        let endMonthCurrent, endDayCurrent;
+        let endMonthPrevious, endDayPrevious;
 
-        // Previous year strictly aligned to same day (Apple-to-Apple)
-        const endMonthPrevious = endMonthCurrent;
-        const endDayPrevious = endDayCurrent;
+        // Enforce "Completed Weeks" logic: Compare Jan 1 -> Last Sunday for both years
+        if (lastSundayDate.getFullYear() < currentYear) {
+            // First week of year is incomplete, show 0 or YTD? User asked for "completed weeks"
+            // If strict, 0. If lenient, YTD? Strict interpretation of "semana completa" = 0.
+            endMonthCurrent = 0;
+            endDayCurrent = 0;
+            endMonthPrevious = 0;
+            endDayPrevious = 0;
+        } else {
+            endMonthCurrent = lastSundayDate.getMonth() + 1;
+            endDayCurrent = lastSundayDate.getDate();
+
+            // Align previous year exactly to same day/month for fair Apple-to-Apple comparison
+            endMonthPrevious = endMonthCurrent;
+            endDayPrevious = endDayCurrent;
+        }
 
         if (DAY_NAMES.indexOf(day.toLowerCase()) === -1) {
             return res.status(400).json({ error: 'Día inválido', day });
@@ -617,53 +634,56 @@ router.get('/rutero/day/:day', async (req, res) => {
         `;
         const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:v2:${clientsHash}`, TTL.LONG);
 
-        // B. Current Sales (Heavy)
+        // B. Current Sales - Using LINDTO (daily invoices) for accurate weekly data
+        const startDateCurrent = `${currentYear}0101`;
+        const endDateCurrent = `${currentYear}${String(endMonthCurrent).padStart(2, '0')}${String(endDayCurrent).padStart(2, '0')}`;
+
         const currentSalesSql = `
             SELECT 
-                L.LCCDCL as CODE,
-                SUM(L.LCIMVT) as SALES,
-                SUM(L.LCIMCT) as COST
-            FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
-              AND L.LCAADC = ${currentYear}
-              AND ${LACLAE_SALES_FILTER}
-              AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
-            GROUP BY L.LCCDCL
+                TRIM(L.CODIGOCLIENTEALBARAN) as CODE,
+                SUM(L.IMPORTEVENTA) as SALES
+            FROM DSEDAC.LINDTO L
+            WHERE TRIM(L.CODIGOCLIENTEALBARAN) IN (${safeClientFilter})
+              AND L.ANODOCUMENTO = ${currentYear}
+              AND (L.MESDOCUMENTO < ${endMonthCurrent} OR (L.MESDOCUMENTO = ${endMonthCurrent} AND L.DIADOCUMENTO <= ${endDayCurrent}))
+              AND L.TIPOVENTA IN ('CC', 'VC')
+              AND L.TIPOLINEA IN ('AB', 'VT')
+              AND L.SERIEALBARAN NOT IN ('N', 'Z')
+            GROUP BY L.CODIGOCLIENTEALBARAN
         `;
-        const currentSalesRows = await cachedQuery(query, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL);
+        const currentSalesRows = await cachedQuery(query, currentSalesSql, `rutero:sales:v3:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL);
 
         // Map Sales Data
         const currentSalesMap = new Map();
         currentSalesRows.forEach(r => {
-            currentSalesMap.set(r.CODE.trim(), {
-                sales: parseFloat(r.SALES) || 0,
-                cost: parseFloat(r.COST) || 0
+            currentSalesMap.set(r.CODE?.trim() || r.CODE, {
+                sales: parseFloat(r.SALES) || 0
             });
         });
 
-        // C. Prev Sales (Heavy)
+        // C. Prev Sales - Using LINDTO (daily invoices)
         let prevYearRows = [];
         if (endMonthPrevious > 0) {
             const prevSalesSql = `
                 SELECT 
-                    L.LCCDCL as CODE,
-                    SUM(L.LCIMVT) as SALES,
-                    SUM(L.LCIMCT) as COST
-                FROM DSED.LACLAE L
-                WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
-                  AND L.LCAADC = ${previousYear}
-                  AND ${LACLAE_SALES_FILTER}
-                  AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
-                GROUP BY L.LCCDCL
+                    TRIM(L.CODIGOCLIENTEALBARAN) as CODE,
+                    SUM(L.IMPORTEVENTA) as SALES
+                FROM DSEDAC.LINDTO L
+                WHERE TRIM(L.CODIGOCLIENTEALBARAN) IN (${safeClientFilter})
+                  AND L.ANODOCUMENTO = ${previousYear}
+                  AND (L.MESDOCUMENTO < ${endMonthPrevious} OR (L.MESDOCUMENTO = ${endMonthPrevious} AND L.DIADOCUMENTO <= ${endDayPrevious}))
+                  AND L.TIPOVENTA IN ('CC', 'VC')
+                  AND L.TIPOLINEA IN ('AB', 'VT')
+                  AND L.SERIEALBARAN NOT IN ('N', 'Z')
+                GROUP BY L.CODIGOCLIENTEALBARAN
             `;
-            prevYearRows = await cachedQuery(query, prevSalesSql, `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL);
+            prevYearRows = await cachedQuery(query, prevSalesSql, `rutero:sales:v3:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL);
         }
 
         const prevYearMap = new Map();
         prevYearRows.forEach(r => {
-            prevYearMap.set(r.CODE.trim(), {
-                sales: parseFloat(r.SALES) || 0,
-                cost: parseFloat(r.COST) || 0
+            prevYearMap.set(r.CODE?.trim() || r.CODE, {
+                sales: parseFloat(r.SALES) || 0
             });
         });
 
@@ -730,9 +750,12 @@ router.get('/rutero/day/:day', async (req, res) => {
 
         const clients = currentYearRows.map(r => {
             const code = r.CODE?.trim() || '';
-            const prevSales = prevYearMap.get(code) || { sales: 0, cost: 0 };
+            const prevSales = prevYearMap.get(code) || { sales: 0 };
             const gps = gpsMap.get(code) || { lat: null, lon: null };
             const note = notesMap.get(code);
+
+            // Get visit/delivery days from cache
+            const visitInfo = getClientVisitInfo(primaryVendor, code);
 
             const salesCurrent = r.SALES || 0;
             const salesPrev = prevSales.sales || 0;
@@ -764,6 +787,9 @@ router.get('/rutero/day/:day', async (req, res) => {
                     yoyVariation: parseFloat(growth.toFixed(1)),
                     isPositive: growth >= 0
                 },
+                // Visit and delivery days for this client
+                visitDays: visitInfo?.visitDays || [],
+                deliveryDays: visitInfo?.deliveryDays || [],
                 lat: gps.lat,
                 lon: gps.lon,
                 observation: note ? note.text : null,
@@ -785,7 +811,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             year: currentYear,
             compareYear: previousYear,
             period: {
-                weeks: Math.ceil(((today - new Date(currentYear, 0, 1)) / 86400000 + 1) / 7), // Weekly progress based on today
+                weeks: Math.ceil(((lastSundayDate - new Date(currentYear, 0, 1)) / 86400000 + 1) / 7), // Valid Week of Year calculation
                 current: `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}`,
                 previous: endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Semana cerrada'
             }
