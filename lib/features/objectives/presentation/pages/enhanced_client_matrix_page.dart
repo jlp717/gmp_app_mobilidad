@@ -699,7 +699,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final margin = (fi1['totalMarginPercent'] as num?)?.toDouble() ?? 0;
     final totalMargin = (fi1['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
     final prevYearSales = (fi1['prevYearSales'] as num?)?.toDouble() ?? 0;
-    final prevYearUnits = (fi1['prevYearUnits'] as num?)?.toDouble() ?? 0;
     final yoyVariation = (fi1['yoyVariation'] as num?)?.toDouble() ?? 0;
     final yoyTrend = fi1['yoyTrend'] as String? ?? 'neutral';
     final monthlyData = fi1['monthlyData'] as Map<String, dynamic>?;
@@ -759,7 +758,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         ),
                       ),
                       // Stats with YoY
-                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, prevYearUnits, yoyVariation, yoyTrend, AppTheme.neonPurple),
+                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.neonPurple),
                     ],
                   ),
                   // Monthly breakdown if enabled
@@ -793,7 +792,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final margin = (fi2['totalMarginPercent'] as num?)?.toDouble() ?? 0;
     final totalMargin = (fi2['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
     final prevYearSales = (fi2['prevYearSales'] as num?)?.toDouble() ?? 0;
-    final prevYearUnits = (fi2['prevYearUnits'] as num?)?.toDouble() ?? 0;
     final yoyVariation = (fi2['yoyVariation'] as num?)?.toDouble() ?? 0;
     final yoyTrend = fi2['yoyTrend'] as String? ?? 'neutral';
     final monthlyData = fi2['monthlyData'] as Map<String, dynamic>?;
@@ -848,7 +846,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           ],
                         ),
                       ),
-                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, prevYearUnits, yoyVariation, yoyTrend, AppTheme.neonBlue, compact: true),
+                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.neonBlue, compact: true),
                     ],
                   ),
                   if (monthlyData != null)
@@ -881,7 +879,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final margin = (fi3['totalMarginPercent'] as num?)?.toDouble() ?? 0;
     final totalMargin = (fi3['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
     final prevYearSales = (fi3['prevYearSales'] as num?)?.toDouble() ?? 0;
-    final prevYearUnits = (fi3['prevYearUnits'] as num?)?.toDouble() ?? 0;
     final yoyVariation = (fi3['yoyVariation'] as num?)?.toDouble() ?? 0;
     final yoyTrend = fi3['yoyTrend'] as String? ?? 'neutral';
     final monthlyData = fi3['monthlyData'] as Map<String, dynamic>?;
@@ -936,7 +933,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           ],
                         ),
                       ),
-                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, prevYearUnits, yoyVariation, yoyTrend, AppTheme.neonGreen, compact: true),
+                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.neonGreen, compact: true),
                     ],
                   ),
                   if (monthlyData != null)
@@ -969,7 +966,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final margin = (fi4['totalMarginPercent'] as num?)?.toDouble() ?? 0;
     final totalMargin = (fi4['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
     final prevYearSales = (fi4['prevYearSales'] as num?)?.toDouble() ?? 0;
-    final prevYearUnits = (fi4['prevYearUnits'] as num?)?.toDouble() ?? 0;
     final yoyVariation = (fi4['yoyVariation'] as num?)?.toDouble() ?? 0;
     final yoyTrend = fi4['yoyTrend'] as String? ?? 'neutral';
     final monthlyData = fi4['monthlyData'] as Map<String, dynamic>?;
@@ -1024,7 +1020,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           ],
                         ),
                       ),
-                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, prevYearUnits, yoyVariation, yoyTrend, AppTheme.warning, compact: true),
+                      _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.warning, compact: true),
                     ],
                   ),
                   if (monthlyData != null)
@@ -1078,7 +1074,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   /// Enhanced stats with YoY comparison
-  Widget _buildLevelStatsWithYoY(double sales, double units, double marginPercent, double totalMargin, double prevSales, double prevUnits, double yoyVariation, String yoyTrend, Color color, {bool compact = false}) {
+  Widget _buildLevelStatsWithYoY(double sales, double units, double marginPercent, double totalMargin, double prevSales, double yoyVariation, String yoyTrend, Color color, {bool compact = false}) {
     Color trendColor = AppTheme.textSecondary;
     IconData trendIcon = Icons.remove;
     if (yoyTrend == 'up') {
@@ -1108,9 +1104,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               ],
             ),
             if (prevSales > 0)
-              Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% vs ${_formatCompact(prevSales)}€', 
+              Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% vs ${_formatCompact(prevSales)}', 
                 style: TextStyle(fontSize: compact ? 7 : 8, color: trendColor, fontWeight: FontWeight.w500)),
-            Text('${units.toStringAsFixed(0)} uds${prevUnits > 0 ? " (${prevUnits.toStringAsFixed(0)})" : ""}', style: TextStyle(fontSize: compact ? 7 : 9, color: AppTheme.textSecondary)),
+            Text('${units.toStringAsFixed(0)} uds', style: TextStyle(fontSize: compact ? 7 : 9, color: AppTheme.textSecondary)),
           ],
         ),
         // Margin (Jefe Ventas only)
