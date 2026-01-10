@@ -772,12 +772,14 @@ router.get('/rutero/day/:day', async (req, res) => {
                 city: r.CITY?.trim(),
                 phone: r.PHONE?.trim(),
                 phone2: r.PHONE2?.trim(),
-                phones, // Added for UI compatibility
-                sales: formatCurrency(salesCurrent),
-                cost: formatCurrency(r.COST || 0),
-                prevYearSales: formatCurrency(salesPrev),
-                prevYearCost: formatCurrency(prevSales.cost || 0),
-                growth: parseFloat(growth.toFixed(1)),
+                phones,
+                // Frontend expects 'status' object with raw numbers
+                status: {
+                    ytdSales: salesCurrent,
+                    ytdPrevYear: salesPrev,
+                    yoyVariation: parseFloat(growth.toFixed(1)),
+                    isPositive: growth >= 0
+                },
                 lat: gps.lat,
                 lon: gps.lon,
                 observation: note ? note.text : null,
