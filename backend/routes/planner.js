@@ -829,4 +829,156 @@ router.get('/rutero/day/:day', async (req, res) => {
     }
 });
 
+// =============================================================================
+// DIAGNOSTIC: Client-Vendor Assignment
+// =============================================================================
+router.get('/diagnose/client/:code', async (req, res) => {
+    try {
+        const clientCode = req.params.code.trim();
+        logger.info(`[DIAGNOSE] Investigating client: ${clientCode}`);
+
+        const results = {
+            clientCode,
+            timestamp: new Date().toISOString(),
+            clientInfo: null,
+            laclaeHistory: [],
+            ruteroConfig: null,
+            vendorInfo: null,
+            analysis: []
+        };
+
+        // 1. Get client info from DSEDAC.CLI
+        try {
+            const clientData = await query(`
+                SELECT 
+                    TRIM(CODIGOCLIENTE) as CODE,
+                    TRIM(COALESCE(NOMBREALTERNATIVO, NOMBRECLIENTE)) as NAME,
+                    TRIM(CODIGOVENDEDOR) as VENDOR_CLI,
+                    TRIM(CODIGOREPARTIDOR) as REPARTIDOR_CLI,
+                    TRIM(POBLACION) as CITY,
+                    TRIM(CODIGORUTA) as ROUTE
+                FROM DSEDAC.CLI
+                WHERE CODIGOCLIENTE = '${clientCode}'
+                FETCH FIRST 1 ROWS ONLY
+            `);
+            if (clientData.length > 0) {
+                results.clientInfo = clientData[0];
+                results.analysis.push(`✓ Cliente encontrado en CLI: ${clientData[0].NAME}`);
+                results.analysis.push(`  Vendedor asignado en CLI: ${clientData[0].VENDOR_CLI || 'N/A'}`);
+                results.analysis.push(`  Repartidor asignado en CLI: ${clientData[0].REPARTIDOR_CLI || 'N/A'}`);
+            } else {
+                results.analysis.push(`✗ Cliente NO encontrado en DSEDAC.CLI`);
+            }
+        } catch (e) {
+            results.analysis.push(`✗ Error consultando CLI: ${e.message}`);
+        }
+
+        // 2. Get sales history from DSED.LACLAE to see which vendors have sold to this client
+        try {
+            const laclaeData = await query(`
+                SELECT DISTINCT
+                    TRIM(L.R1_T8CDVD) as VENDOR_LACLAE,
+                    L.LCAADC as YEAR,
+                    L.R1_T8DIVL as VIS_L, L.R1_T8DIVM as VIS_M, L.R1_T8DIVX as VIS_X,
+                    L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S
+                FROM DSED.LACLAE L
+                WHERE TRIM(L.LCCDCL) = '${clientCode}'
+                ORDER BY L.LCAADC DESC
+                FETCH FIRST 10 ROWS ONLY
+            `);
+            results.laclaeHistory = laclaeData;
+
+            const vendors = [...new Set(laclaeData.map(r => r.VENDOR_LACLAE))];
+            results.analysis.push(`✓ Vendedores en LACLAE (por ventas): ${vendors.join(', ') || 'Ninguno'}`);
+
+            laclaeData.forEach(r => {
+                const visitDays = [
+                    r.VIS_L === 'S' ? 'L' : '',
+                    r.VIS_M === 'S' ? 'M' : '',
+                    r.VIS_X === 'S' ? 'X' : '',
+                    r.VIS_J === 'S' ? 'J' : '',
+                    r.VIS_V === 'S' ? 'V' : '',
+                    r.VIS_S === 'S' ? 'S' : ''
+                ].filter(d => d).join('');
+                results.analysis.push(`  ${r.YEAR}: Vendedor ${r.VENDOR_LACLAE}, Visita: ${visitDays || 'N/A'}`);
+            });
+        } catch (e) {
+            results.analysis.push(`✗ Error consultando LACLAE: ${e.message}`);
+        }
+
+        // 3. Check RUTERO_CONFIG for overrides
+        try {
+            const configData = await query(`
+                SELECT TRIM(VENDEDOR) as VENDEDOR, TRIM(DIA) as DIA, ORDEN
+                FROM JAVIER.RUTERO_CONFIG
+                WHERE TRIM(CLIENTE) = '${clientCode}'
+                FETCH FIRST 10 ROWS ONLY
+            `);
+            if (configData.length > 0) {
+                results.ruteroConfig = configData;
+                results.analysis.push(`⚠ OVERRIDE en RUTERO_CONFIG:`);
+                configData.forEach(c => {
+                    results.analysis.push(`  Vendedor: ${c.VENDEDOR}, Día: ${c.DIA}, Orden: ${c.ORDEN}`);
+                });
+            } else {
+                results.analysis.push(`✓ Sin overrides en RUTERO_CONFIG`);
+            }
+        } catch (e) {
+            results.analysis.push(`✓ RUTERO_CONFIG no accesible (normal si no hay tabla)`);
+        }
+
+        // 4. Get vendor info for CLI vendor
+        if (results.clientInfo?.VENDOR_CLI) {
+            try {
+                const vendorData = await query(`
+                    SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME
+                    FROM DSEDAC.VDD
+                    WHERE CODIGOVENDEDOR = '${results.clientInfo.VENDOR_CLI}'
+                    FETCH FIRST 1 ROWS ONLY
+                `);
+                if (vendorData.length > 0) {
+                    results.vendorInfo = vendorData[0];
+                    results.analysis.push(`✓ Vendedor CLI: ${vendorData[0].CODE} - ${vendorData[0].NAME}`);
+                }
+            } catch (e) {
+                results.analysis.push(`✗ Error consultando VDD: ${e.message}`);
+            }
+        }
+
+        // 5. Check for "ZZ" vendor
+        try {
+            const zzVendors = await query(`
+                SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME
+                FROM DSEDAC.VDD
+                WHERE CODIGOVENDEDOR LIKE 'ZZ%' OR NOMBREVENDEDOR LIKE '%CAYETANO%'
+                FETCH FIRST 5 ROWS ONLY
+            `);
+            if (zzVendors.length > 0) {
+                results.analysis.push(`\n📋 Vendedores ZZ/CAYETANO encontrados:`);
+                zzVendors.forEach(v => {
+                    results.analysis.push(`  ${v.CODE}: ${v.NAME}`);
+                });
+            }
+        } catch (e) {
+            // Ignore
+        }
+
+        // Summary
+        results.analysis.push(`\n🔍 RESUMEN:`);
+        if (results.clientInfo?.VENDOR_CLI === '20' || results.laclaeHistory.some(l => l.VENDOR_LACLAE === '20')) {
+            results.analysis.push(`→ El cliente tiene el código "20" asociado (CAYETANO MONTIEL)`);
+            results.analysis.push(`→ Esto puede ser el vendedor histórico o actual en la BD`);
+        }
+        if (results.ruteroConfig && results.ruteroConfig.length > 0) {
+            results.analysis.push(`→ Hay overrides en RUTERO_CONFIG que pueden afectar la asignación`);
+        }
+
+        res.json(results);
+
+    } catch (error) {
+        logger.error(`Diagnose Error: ${error.message}`);
+        res.status(500).json({ error: 'Error en diagnóstico', details: error.message });
+    }
+});
+
 module.exports = router;
