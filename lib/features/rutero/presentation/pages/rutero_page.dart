@@ -40,12 +40,12 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   DateTime? _lastFetchTime; // Track last sync
   final TextEditingController _searchController = TextEditingController();
   
-  // Sort mode options
+  // Sort mode options - Professional labels
   static const Map<String, String> _sortModeLabels = {
-    'sales_desc': '💰 Mayor Acumulado',
-    'sales_asc': '📉 Menor Acumulado', 
-    'route': '🗺️ Orden Ruta Original',
-    'custom': '✏️ Orden Personalizado',
+    'sales_desc': 'Mayor Acumulado',
+    'sales_asc': 'Menor Acumulado', 
+    'route': 'Ruta Original',
+    'custom': 'Orden Personalizado',
   };
   
   // Selection state
