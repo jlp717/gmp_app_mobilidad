@@ -20,7 +20,7 @@ async function applyOptimizations() {
         const statements = sqlContent
             .split(';')
             .map(s => s.trim())
-            .filter(s => s.length > 10 && !s.startsWith('--'));
+            .filter(s => s.length > 5); // Just filter empties
 
         console.log(`Found ${statements.length} statements to execute.`);
 

@@ -640,7 +640,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL IN (${safeClientFilter})
+            WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
               AND L.LCAADC = ${currentYear}
               AND ${LACLAE_SALES_FILTER}
               AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
@@ -666,7 +666,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                     SUM(L.LCIMVT) as SALES,
                     SUM(L.LCIMCT) as COST
                 FROM DSED.LACLAE L
-                WHERE L.LCCDCL IN (${safeClientFilter})
+                WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
                   AND L.LCAADC = ${previousYear}
                   AND ${LACLAE_SALES_FILTER}
                   AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
