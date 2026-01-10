@@ -8,6 +8,7 @@
     "api": "ts-node src/api-server.ts",
     "build": "tsc",
     "start": "node server.js",
+    "db:optimize": "node scripts/apply-db-optimizations.js",
     "start:pm2": "pm2 start ecosystem.config.js",
     "start:cluster": "pm2 start ecosystem.config.js -i max",
     "stop": "pm2 stop ecosystem.config.js",
