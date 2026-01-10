@@ -71,7 +71,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   // Expansion state for FI hierarchy (keyed by level-code)
   final Set<String> _expandedFiNodes = {};
   
-  static const _mNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  static const _mNames = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
   static List<int> get _years => ApiConfig.availableYears;
 
   @override
@@ -708,8 +708,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final canExpand = _maxDepthLevel > 1 && children.isNotEmpty;
 
     return Card(
-      color: AppTheme.surfaceColor,
+      color: AppTheme.neonPurple.withOpacity(0.08),
       margin: const EdgeInsets.only(bottom: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: AppTheme.neonPurple.withOpacity(0.4), width: 2),
+      ),
       child: Column(
         children: [
           InkWell(
@@ -796,11 +800,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final canExpand = _maxDepthLevel > 2 && children.isNotEmpty;
 
     return Container(
-      margin: const EdgeInsets.only(right: 4, bottom: 2),
+      margin: const EdgeInsets.only(right: 4, bottom: 4),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
+        color: AppTheme.neonBlue.withOpacity(0.08),
         borderRadius: BorderRadius.circular(6),
-        border: Border(left: BorderSide(color: AppTheme.neonBlue, width: 3)),
+        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.4), width: 1.5),
       ),
       child: Column(
         children: [
@@ -885,9 +889,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 2),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase,
+        color: AppTheme.neonGreen.withOpacity(0.06),
         borderRadius: BorderRadius.circular(5),
-        border: Border(left: BorderSide(color: AppTheme.neonGreen, width: 3)),
+        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.35), width: 1),
       ),
       child: Column(
         children: [
@@ -972,9 +976,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 2),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withOpacity(0.5),
+        color: AppTheme.warning.withOpacity(0.06),
         borderRadius: BorderRadius.circular(4),
-        border: Border(left: BorderSide(color: AppTheme.warning, width: 3)),
+        border: Border.all(color: AppTheme.warning.withOpacity(0.35), width: 1),
       ),
       child: Column(
         children: [
@@ -1150,10 +1154,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           final sales = (mData?['sales'] as num?)?.toDouble() ?? 0;
           final prevSales = (mData?['prevSales'] as num?)?.toDouble() ?? 0;
           
-          // Skip months with no sales - show greyed out
+          // Sin ventas ni este año ni el anterior - gris
           if (sales == 0 && prevSales == 0) {
             return Container(
-              width: compact ? 42 : 50,
+              width: compact ? 50 : 58,
               margin: const EdgeInsets.only(right: 4),
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               decoration: BoxDecoration(
@@ -1171,14 +1175,21 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             );
           }
           
-          // Calculate YoY percentage
+          // Calculate YoY percentage and determine color
           double yoyPct = 0;
           String yoySign = '';
-          Color yoyColor = AppTheme.textSecondary;
-          Color bgColor = AppTheme.darkCard;
+          Color yoyColor;
+          Color bgColor;
           bool isNew = false;
+          bool isLost = false; // Vendió el año pasado pero no este año
           
-          if (prevSales > 0 && sales > 0) {
+          if (sales == 0 && prevSales > 0) {
+            // Perdió ventas - este año 0, año pasado vendió
+            isLost = true;
+            yoyPct = -100;
+            yoyColor = AppTheme.error;
+            bgColor = AppTheme.error.withOpacity(0.15);
+          } else if (prevSales > 0 && sales > 0) {
             yoyPct = ((sales - prevSales) / prevSales) * 100;
             yoySign = yoyPct >= 0 ? '+' : '';
             yoyColor = yoyPct >= 0 ? AppTheme.success : AppTheme.error;
@@ -1187,16 +1198,19 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             isNew = true;
             yoyColor = AppTheme.neonBlue;
             bgColor = AppTheme.neonBlue.withOpacity(0.12);
+          } else {
+            yoyColor = AppTheme.textSecondary;
+            bgColor = AppTheme.darkCard;
           }
           
           return Container(
-            width: compact ? 48 : 56,
+            width: compact ? 58 : 66,
             margin: const EdgeInsets.only(right: 5),
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             decoration: BoxDecoration(
               color: bgColor,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: yoyColor.withOpacity(0.4), width: 1),
+              border: Border.all(color: yoyColor.withOpacity(0.5), width: 1),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1211,21 +1225,30 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   ),
                 ),
                 const SizedBox(height: 2),
-                // Sales amount
+                // Sales amount (- si es 0 pero había ventas antes)
                 Text(
-                  '${_formatCompact(sales)}€',
+                  isLost ? '-' : '${_formatCompact(sales)} €',
                   style: TextStyle(
-                    fontSize: compact ? 10 : 11,
+                    fontSize: compact ? 9 : 10,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: isLost ? AppTheme.error : Colors.white,
                   ),
                 ),
-                // YoY percentage or NEW badge
-                if (prevSales > 0)
+                // YoY percentage, NEW badge, or LOST indicator
+                if (isLost)
+                  Text(
+                    '-100%',
+                    style: TextStyle(
+                      fontSize: compact ? 8 : 9,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.error,
+                    ),
+                  )
+                else if (prevSales > 0)
                   Text(
                     '$yoySign${yoyPct.toStringAsFixed(0)}%',
                     style: TextStyle(
-                      fontSize: compact ? 9 : 10,
+                      fontSize: compact ? 8 : 9,
                       fontWeight: FontWeight.bold,
                       color: yoyColor,
                     ),
@@ -1336,7 +1359,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           ),
           const SizedBox(height: 6),
           
-          // === COMERCIAL: PVP, UDS, VENTAS, (Descuento si tiene) ===
+          // === COMERCIAL: PVP, UDS, VENTAS con año pasado ===
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
             decoration: BoxDecoration(
@@ -1345,25 +1368,29 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             ),
             child: Row(
               children: [
-                // PVP por unidad
+                // PVP por unidad (actual + año pasado)
                 Expanded(
                   child: Column(
                     children: [
                       Text('PVP/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                       Text(_formatCurrency(avgPrice), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+                      if (prevYearAvgPrice > 0)
+                        Text('(${_formatCurrency(prevYearAvgPrice)})', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                     ],
                   ),
                 ),
-                // Unidades
+                // Unidades (actual + año pasado)
                 Expanded(
                   child: Column(
                     children: [
                       Text(unitLabel, style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                       Text(units >= 100 ? units.toStringAsFixed(0) : units.toStringAsFixed(2), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.neonBlue)),
+                      if (prevYearUnits > 0)
+                        Text('(${prevYearUnits >= 100 ? prevYearUnits.toStringAsFixed(0) : prevYearUnits.toStringAsFixed(2)})', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                     ],
                   ),
                 ),
-                // Ventas totales
+                // Ventas totales (actual + año pasado entre paréntesis)
                 Expanded(
                   flex: 2,
                   child: Column(
@@ -1371,8 +1398,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       Text('Ventas', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                       Text(_formatCurrency(sales), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: borderColor == AppTheme.surfaceColor ? Colors.white : borderColor)),
                       if (prevYearSales > 0)
-                        Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% vs ${_formatCurrency(prevYearSales)}', 
-                          style: TextStyle(fontSize: 7, fontWeight: FontWeight.w500, color: yoyVariation >= 0 ? AppTheme.success : AppTheme.error)),
+                        Text('(${_formatCurrency(prevYearSales)})', style: TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
                     ],
                   ),
                 ),
@@ -1450,10 +1476,21 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
+  /// Format number with Spanish locale: 8.120,30 (no € symbol, use _formatCurrency for that)
   String _formatCompact(double v) {
-    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
-    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
-    return v.toStringAsFixed(0);
+    // Formato español: miles con punto, decimales con coma
+    final parts = v.toStringAsFixed(2).split('.');
+    final intPart = parts[0];
+    final decPart = parts.length > 1 ? parts[1] : '00';
+    // Add thousand separators
+    String formatted = '';
+    int count = 0;
+    for (int i = intPart.length - 1; i >= 0; i--) {
+      if (count > 0 && count % 3 == 0 && intPart[i] != '-') formatted = '.$formatted';
+      formatted = intPart[i] + formatted;
+      count++;
+    }
+    return '$formatted,$decPart';
   }
 
   Widget _buildFamilyList() {
