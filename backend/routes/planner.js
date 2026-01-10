@@ -631,7 +631,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             FROM DSEDAC.CLI
             WHERE CODIGOCLIENTE IN (${safeClientFilter})
         `;
-        const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:${clientsHash}`, TTL.LONG);
+        const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:v2:${clientsHash}`, TTL.LONG);
 
         // B. Current Sales (Heavy)
         const currentSalesSql = `
@@ -646,7 +646,7 @@ router.get('/rutero/day/:day', async (req, res) => {
               AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
             GROUP BY L.LCCDCL
         `;
-        const currentSalesRows = await cachedQuery(query, currentSalesSql, `rutero:sales:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL);
+        const currentSalesRows = await cachedQuery(query, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL);
 
         // Map Sales Data
         const currentSalesMap = new Map();
@@ -672,7 +672,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                   AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
                 GROUP BY L.LCCDCL
             `;
-            prevYearRows = await cachedQuery(query, prevSalesSql, `rutero:sales:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL);
+            prevYearRows = await cachedQuery(query, prevSalesSql, `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL);
         }
 
         const prevYearMap = new Map();
@@ -703,7 +703,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 WHERE CODIGO IN (${safeClientFilter})
                   AND LATITUD IS NOT NULL AND LATITUD <> 0
             `;
-            const gpsResult = await cachedQuery(query, gpsSql, `rutero:gps:${clientsHash}`, TTL.LONG);
+            const gpsResult = await cachedQuery(query, gpsSql, `rutero:gps:v2:${clientsHash}`, TTL.LONG);
             gpsResult.forEach(g => {
                 gpsMap.set(g.CODIGO?.trim() || '', {
                     lat: parseFloat(g.LATITUD) || null,
@@ -740,7 +740,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SELECT CLIENTE, ORDEN 
                 FROM JAVIER.RUTERO_CONFIG 
                 WHERE VENDEDOR = '${primaryVendor}' AND DIA = '${day.toLowerCase()}'
-             `, `rutero:config:${primaryVendor}:${day.toLowerCase()}`, TTL.SHORT);
+             `, `rutero:config:v2:${primaryVendor}:${day.toLowerCase()}`, TTL.SHORT);
             configRows.forEach(r => orderMap.set(r.CLIENTE.trim(), r.ORDEN));
         }
 
@@ -799,7 +799,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             year: currentYear,
             compareYear: previousYear,
             period: {
-                weeks: Math.ceil(endDayCurrent / 7), // Approximate completed weeks (Jan 4 = 1 week)
+                weeks: Math.ceil(((lastSundayDate - new Date(currentYear, 0, 1)) / 86400000 + 1) / 7), // Valid Week of Year calculation
                 current: `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}`,
                 previous: endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Semana cerrada'
             }
