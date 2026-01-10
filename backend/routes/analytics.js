@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
 const { query } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const {
     getCurrentDate,
     buildVendedorFilter,
@@ -24,16 +26,18 @@ router.get('/yoy-comparison', async (req, res) => {
 
         // Optional month filter
         const monthFilter = month ? `AND L.LCMMDC = ${month}` : '';
+        const cacheKeyBase = `analytics:yoy:${currentYear}:${month || 'all'}:${vendedorCodes}`;
 
         const getData = async (yr) => {
-            const result = await query(`
+            const sql = `
           SELECT 
             SUM(L.LCIMVT) as sales, 
             SUM(L.LCIMVT - L.LCIMCT) as margin,
             COUNT(DISTINCT L.LCCDCL) as clients
           FROM DSED.LACLAE L 
           WHERE L.LCAADC = ${yr} AND ${LACLAE_SALES_FILTER} ${monthFilter} ${vendedorFilter}
-        `);
+        `;
+            const result = await cachedQuery(query, sql, `${cacheKeyBase}:${yr}`, TTL.LONG);
             return result[0] || {};
         };
 
@@ -89,7 +93,7 @@ router.get('/top-clients', async (req, res) => {
         if (year) dateFilter += ` AND L.LCAADC = ${year}`;
         if (month) dateFilter += ` AND L.LCMMDC = ${month}`;
 
-        const topClients = await query(`
+        const sql = `
       SELECT 
         L.LCCDCL as code,
         SUM(L.LCIMVT) as totalSales,
@@ -99,22 +103,39 @@ router.get('/top-clients', async (req, res) => {
       GROUP BY L.LCCDCL
       ORDER BY totalSales DESC
       FETCH FIRST ${limit} ROWS ONLY
-    `);
+    `;
 
-        // Get client names from CLI table
-        const enhancedClients = await Promise.all(topClients.map(async (c) => {
-            const info = await query(`SELECT NOMBRECLIENTE, POBLACION FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${c.CODE}' FETCH FIRST 1 ROWS ONLY`);
+        const cacheKey = `analytics:top_clients:${year || 'current'}:${month || 'all'}:${vendedorCodes}:${limit}`;
+        const topClients = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM);
+
+        // Get client names from CLI table (cached separately usually, but here we specific queries)
+        // We can cache individual client details or the whole enriched list
+        // Let's enrich and leverage CLI table efficiency
+
+        if (topClients.length === 0) return res.json({ clients: [] });
+
+        const clientCodes = topClients.map(c => `'${c.CODE}'`).join(',');
+        const namesMsg = `
+            SELECT CODIGOCLIENTE as C, NOMBRECLIENTE as N, POBLACION as P 
+            FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${clientCodes})
+        `;
+        // Cache detailed names lookup for a long time
+        const clientDetails = await cachedQuery(query, namesMsg, `clients:details:${topClients.length}:${topClients[0].CODE}`, TTL.LONG);
+        const detailsMap = {};
+        clientDetails.forEach(d => detailsMap[d.C.trim()] = { name: d.N, city: d.P });
+
+        const enhancedClients = topClients.map(c => {
+            const info = detailsMap[c.CODE.trim()] || {};
             return {
                 code: c.CODE?.trim(),
-                name: info[0]?.NOMBRECLIENTE?.trim() || `Cliente ${c.CODE}`,
-                city: info[0]?.POBLACION?.trim() || '',
+                name: info.name?.trim() || `Cliente ${c.CODE}`,
+                city: info.city?.trim() || '',
                 totalSales: formatCurrency(c.TOTALSALES),
                 year: year || new Date().getFullYear()
             };
-        }));
+        });
 
         res.json({ clients: enhancedClients });
-
 
     } catch (error) {
         logger.error(`Top clients error: ${error.message}`);
@@ -131,15 +152,15 @@ router.get('/trends', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         // Get last 6 months from LACLAE
-        const history = await query(`
+        const sql = `
       SELECT L.LCAADC as year, L.LCMMDC as month, SUM(L.LCIMVT) as sales
       FROM DSED.LACLAE L
       WHERE L.LCAADC >= ${MIN_YEAR} AND ${LACLAE_SALES_FILTER} ${vendedorFilter}
       GROUP BY L.LCAADC, L.LCMMDC
       ORDER BY L.LCAADC DESC, L.LCMMDC DESC
       FETCH FIRST 6 ROWS ONLY
-    `);
-
+    `;
+        const history = await cachedQuery(query, sql, `analytics:trends:${vendedorCodes}`, TTL.LONG);
 
         // Simple prediction logic
         let trend = 'stable';
@@ -175,7 +196,7 @@ router.get('/top-products', async (req, res) => {
         const year = parseInt(req.query.year) || now.getFullYear();
         const vendedorFilter = buildVendedorFilter(vendedorCodes);
 
-        const products = await query(`
+        const sql = `
       SELECT L.CODIGOARTICULO as code,
   COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION), 'Producto ' || TRIM(L.CODIGOARTICULO)) as name,
   A.CODIGOMARCA as brand,
@@ -191,7 +212,9 @@ router.get('/top-products', async (req, res) => {
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOMARCA, A.CODIGOFAMILIA
       ORDER BY totalSales DESC
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `);
+    `;
+
+        const products = await cachedQuery(query, sql, `analytics:top_products:${year}:${vendedorCodes}:${limit}`, TTL.MEDIUM);
 
         res.json({
             year,
@@ -224,8 +247,10 @@ router.get('/margins', async (req, res) => {
         const year = parseInt(req.query.year) || now.getFullYear();
         const vendedorFilter = buildVendedorFilter(vendedorCodes);
 
+        const cacheKey = `analytics:margins:${year}:${vendedorCodes}`;
+
         // Monthly margin evolution
-        const monthlyMargins = await query(`
+        const monthlySql = `
       SELECT MESDOCUMENTO as month,
   SUM(IMPORTEVENTA) as sales,
   SUM(IMPORTEMARGENREAL) as margin
@@ -233,10 +258,11 @@ router.get('/margins', async (req, res) => {
       WHERE ANODOCUMENTO = ${year} ${vendedorFilter}
       GROUP BY MESDOCUMENTO
       ORDER BY MESDOCUMENTO
-  `);
+  `;
+        const monthlyMargins = await cachedQuery(query, monthlySql, `${cacheKey}:monthly`, TTL.MEDIUM);
 
         // Margin by product family
-        const familyMargins = await query(`
+        const familySql = `
       SELECT COALESCE(A.CODIGOFAMILIA, 'SIN FAM') as family,
   SUM(L.IMPORTEVENTA) as sales,
   SUM(L.IMPORTEMARGENREAL) as margin
@@ -246,7 +272,8 @@ router.get('/margins', async (req, res) => {
       GROUP BY A.CODIGOFAMILIA
       ORDER BY sales DESC
       FETCH FIRST 10 ROWS ONLY
-    `);
+    `;
+        const familyMargins = await cachedQuery(query, familySql, `${cacheKey}:family`, TTL.MEDIUM);
 
         res.json({
             year,
@@ -323,8 +350,7 @@ router.get('/sales-history', async (req, res) => {
         }
 
         // Use parameterized query helper
-        // Note: queryWithParams might need 'await' wrapper if db.js doesn't handle it (it does)
-        const { queryWithParams } = require('../config/db'); // Require locally if not top-level
+        const { queryWithParams } = require('../config/db');
 
         // Construct query
         const querySql = `
@@ -348,6 +374,7 @@ router.get('/sales-history', async (req, res) => {
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
     `;
 
+        // Detailed history is usually NOT cached due to high filter variability
         const rows = await queryWithParams(querySql, queryParams);
 
         // Format for frontend
@@ -392,22 +419,16 @@ router.get('/sales-history/summary', async (req, res) => {
 
         // Helper to query logic
         const getStats = async (start, end) => {
-            // Convert 'YYYY-MM-DD' to integer YYYYMMDD for comparision
             const sDate = parseInt(start.replace(/-/g, ''));
             const eDate = parseInt(end.replace(/-/g, ''));
-
-            // Ensure we are selecting from LAC and joining ARTICULOS if needed for search
             const joinArt = productSearch ? 'LEFT JOIN DSEDAC.ARTICULOS ART ON L.CODIGOARTICULO = ART.CODIGOARTICULO' : '';
-
-            // Construct Date Filter using FECHADOCUMENTO (YYYYMMDD decimal)
-            // LAC often stores dates as YYYYMMDD in FECHADOCUMENTO
             const dateQuery = `AND L.FECHADOCUMENTO BETWEEN ${sDate} AND ${eDate}`;
 
             const queryStr = `
                 SELECT 
                     SUM(L.IMPORTEVENTA) as sales,
                     SUM(L.IMPORTEVENTA - L.IMPORTECOSTO) as margin,
-                    SUM(L.UNIDADES) as units, -- Or CAJAS if available, usually UNIDADES serves
+                    SUM(L.UNIDADES) as units,
                     SUM(CASE WHEN L.UNIDADES >= 0 THEN L.UNIDADES ELSE 0 END) as positive_units
                 FROM DSEDAC.LAC L
                 ${joinArt}
@@ -417,7 +438,9 @@ router.get('/sales-history/summary', async (req, res) => {
                 ${clientFilter} 
                 ${searchFilter}
             `;
-            const result = await query(queryStr);
+            // Cache this since it's summary data
+            const cacheKey = `history:summary:${sDate}:${eDate}:${vendedorCodes}:${clientCode}:${productSearch}`;
+            const result = await cachedQuery(query, queryStr, cacheKey, TTL.SHORT);
             return result[0] || {};
         };
 
@@ -444,21 +467,18 @@ router.get('/sales-history/summary', async (req, res) => {
                 GROUP BY L.ANODOCUMENTO
                 ORDER BY L.ANODOCUMENTO DESC
             `;
-            const results = await query(queryStr);
-            return results;
+            return await cachedQuery(query, queryStr, `history:breakdown:${sDate}:${eDate}:${vendedorCodes}:${clientCode}:${productSearch}`, TTL.SHORT);
         };
 
         // --- 1. Current Period ---
-        // If dates not provided, default to Current Year
         const now = new Date();
         const sDate = startDate || `${now.getFullYear()}0101`;
         const eDate = endDate || `${now.getFullYear()}1231`;
 
         // --- 2. Previous Period ---
-        // Calculate same dates but -1 Year
         const sYear = parseInt(sDate.substring(0, 4));
         const eYear = parseInt(eDate.substring(0, 4));
-        const sPrevOriginal = (sYear - 1) + sDate.substring(4); // e.g. 2024-01-01 -> 2023-01-01
+        const sPrevOriginal = (sYear - 1) + sDate.substring(4);
         const ePrevOriginal = (eYear - 1) + eDate.substring(4);
 
         // Execute parallel queries

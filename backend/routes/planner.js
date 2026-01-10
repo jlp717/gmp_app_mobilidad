@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query, queryWithParams, getPool } = require('../config/db');
+const { query, getPool } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const {
     getCurrentDate,
     buildVendedorFilter,
-    buildVendedorFilterLACLAE,
     formatCurrency,
-    LAC_SALES_FILTER,
     LACLAE_SALES_FILTER
 } = require('../utils/common');
 
@@ -15,7 +15,6 @@ const {
     getWeekCountsFromCache,
     getTotalClientsFromCache,
     getClientsForDay,
-    getVendedoresFromCache,
     reloadRuteroConfig,
     getClientCurrentDay
 } = require('../services/laclae');
@@ -34,7 +33,7 @@ router.get('/router/calendar', async (req, res) => {
         const month = parseInt(req.query.month) || (now.getMonth() + 1);
         const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
 
-        const activities = await query(`
+        const sql = `
 SELECT
 L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
   L.CODIGOCLIENTEALBARAN as clientCode, C.NOMBRECLIENTE as clientName,
@@ -55,7 +54,11 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
   L.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, C.DIRECCION, C.POBLACION,
   C.TELEFONO1, L.CODIGOVENDEDOR
       ORDER BY L.DIADOCUMENTO DESC, totalSale DESC
-    `);
+    `;
+
+        // Cache calendar for 15 minutes
+        const cacheKey = `calendar:${year}:${month}:${vendedorCodes}`;
+        const activities = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM);
 
         // Group by day
         const dayMap = {};
@@ -146,12 +149,10 @@ router.get('/rutero/week', async (req, res) => {
 // =============================================================================
 router.get('/rutero/vendedores', async (req, res) => {
     try {
-        // MOVED TO LACLAE SOURCE but OPTIMIZED
-        // Scan only recent years (2025, 2026) to avoid full table scan
         const currentYear = new Date().getFullYear();
         const prevYear = currentYear - 1;
 
-        const vendedores = await query(`
+        const sql = `
             WITH ActiveVendors AS (
                 SELECT DISTINCT TRIM(R1_T8CDVD) as CODE
                 FROM DSED.LACLAE
@@ -165,10 +166,11 @@ router.get('/rutero/vendedores', async (req, res) => {
             FROM ActiveVendors AV
             LEFT JOIN DSEDAC.VDD D ON AV.CODE = TRIM(D.CODIGOVENDEDOR)
             ORDER BY AV.CODE
-        `);
+        `;
 
         // Cache 1 hour
-        res.set('Cache-Control', 'public, max-age=3600');
+        const cacheKey = `vendedores:active:${currentYear}`;
+        const vendedores = await cachedQuery(query, sql, cacheKey, TTL.LONG);
 
         res.json({
             vendedores: vendedores.map(v => ({
@@ -183,33 +185,30 @@ router.get('/rutero/vendedores', async (req, res) => {
 });
 
 // =============================================================================
-// RUTERO MOVE CLIENTS (Change Day) - CON VALIDACIÓN DE DOMINGO
+// RUTERO MOVE CLIENTS
 // =============================================================================
 router.post('/rutero/move_clients', async (req, res) => {
     let conn;
     try {
-        const { vendedor, moves, targetPosition } = req.body; 
-        // moves: [{ client, toDay, clientName, position? }]
-        // targetPosition: 'end' | 'start' | number (optional, default 'end')
+        const { vendedor, moves, targetPosition } = req.body;
 
         if (!vendedor || !moves || !Array.isArray(moves)) {
             return res.status(400).json({ error: 'Datos inválidos. Se requiere vendedor y array de movimientos.' });
         }
 
-        // ⚠️ VALIDACIÓN: Nunca permitir Domingo como día destino
         const DIAS_PROHIBIDOS = ['domingo'];
         const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
-        
+
         for (const move of moves) {
             const dayLower = (move.toDay || '').toLowerCase();
             if (DIAS_PROHIBIDOS.includes(dayLower)) {
-                return res.status(400).json({ 
+                return res.status(400).json({
                     error: 'No se permite mover clientes al Domingo',
                     invalidDay: move.toDay
                 });
             }
             if (!DIAS_VALIDOS.includes(dayLower)) {
-                return res.status(400).json({ 
+                return res.status(400).json({
                     error: `Día inválido: ${move.toDay}`,
                     validDays: DIAS_VALIDOS
                 });
@@ -231,37 +230,30 @@ router.post('/rutero/move_clients', async (req, res) => {
             const dayLower = toDay.toLowerCase();
             const clientTrimmed = client.trim();
 
-            // 0. Capturar día y posición anterior antes de eliminar
-            // Primero buscar en caché (LACLAE + RUTERO_CONFIG)
             let previousDay = getClientCurrentDay(vendedor, clientTrimmed);
             let previousOrder = null;
-            
-            // Si hay override en RUTERO_CONFIG, obtener también la posición
+
             try {
                 const prevRes = await conn.query(`
                     SELECT TRIM(DIA) as DIA, ORDEN FROM JAVIER.RUTERO_CONFIG 
                     WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'
                 `);
                 if (prevRes && prevRes.length > 0) {
-                    // El día del override tiene prioridad
                     previousDay = prevRes[0].DIA?.trim() || previousDay;
                     previousOrder = prevRes[0].ORDEN;
                 }
-            } catch (e) { 
+            } catch (e) {
                 logger.warn(`Could not get previous config: ${e.message}`);
             }
-            
-            logger.info(`📋 Move: Cliente ${clientTrimmed} estaba en día "${previousDay || 'ninguno'}" (override orden: ${previousOrder ?? 'N/A'})`);
 
-            // 1. Remove from any previous assignment
+            logger.info(`📋 Move: Cliente ${clientTrimmed} estaba en día "${previousDay || 'ninguno'}"`);
+
             await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'`);
 
-            // 2. Determine position based on parameter
             let targetOrder;
             const effectivePosition = position ?? targetPosition ?? 'end';
-            
+
             if (effectivePosition === 'start' || effectivePosition === 0) {
-                // Shift all existing clients down and insert at position 0
                 await conn.query(`
                     UPDATE JAVIER.RUTERO_CONFIG 
                     SET ORDEN = ORDEN + 10 
@@ -269,7 +261,6 @@ router.post('/rutero/move_clients', async (req, res) => {
                 `);
                 targetOrder = 0;
             } else if (typeof effectivePosition === 'number' && effectivePosition > 0) {
-                // Insert at specific position, shifting others if needed
                 targetOrder = effectivePosition * 10;
                 await conn.query(`
                     UPDATE JAVIER.RUTERO_CONFIG 
@@ -277,7 +268,6 @@ router.post('/rutero/move_clients', async (req, res) => {
                     WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= ${targetOrder}
                 `);
             } else {
-                // Default: Append to end
                 const maxOrderRes = await conn.query(`
                     SELECT MAX(ORDEN) as MAX_ORD 
                     FROM JAVIER.RUTERO_CONFIG 
@@ -286,7 +276,6 @@ router.post('/rutero/move_clients', async (req, res) => {
                 targetOrder = (maxOrderRes[0]?.MAX_ORD || 0) + 10;
             }
 
-            // 3. Insert at calculated position
             await conn.query(`
                 INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
                 VALUES ('${vendedor}', '${dayLower}', '${clientTrimmed}', ${targetOrder})
@@ -303,10 +292,7 @@ router.post('/rutero/move_clients', async (req, res) => {
         }
 
         await conn.commit();
-        
-        // ═══════════════════════════════════════════════════════════════
-        // REGISTRAR EN LOG DE CAMBIOS (JAVIER.RUTERO_LOG)
-        // ═══════════════════════════════════════════════════════════════
+
         try {
             for (const moved of movedClientsInfo) {
                 await conn.query(`
@@ -321,13 +307,12 @@ router.post('/rutero/move_clients', async (req, res) => {
         } catch (logErr) {
             logger.warn(`Log insert failed (non-blocking): ${logErr.message}`);
         }
-        
+
         await reloadRuteroConfig();
 
-        // Get updated counts for the affected days
         const affectedDays = [...new Set(moves.map(m => m.toDay.toLowerCase()))];
         const updatedCounts = {};
-        
+
         for (const day of affectedDays) {
             const countRes = await conn.query(`
                 SELECT COUNT(*) as CNT FROM JAVIER.RUTERO_CONFIG 
@@ -336,7 +321,6 @@ router.post('/rutero/move_clients', async (req, res) => {
             updatedCounts[day] = countRes[0]?.CNT || 0;
         }
 
-        // Audit Email con información detallada
         try {
             sendAuditEmail(vendedor, 'Cambio de Día (Movimiento)', {
                 action: 'Move Clients',
@@ -352,8 +336,8 @@ router.post('/rutero/move_clients', async (req, res) => {
             });
         } catch (e) { /* ignore email errors */ }
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Clientes movidos correctamente',
             movedClients: movedClientsInfo,
             updatedCounts
@@ -380,16 +364,12 @@ router.post('/rutero/config', async (req, res) => {
             return res.status(400).json({ error: 'Datos inválidos. Se requiere vendedor, dia y array de orden.' });
         }
 
-        // Connect manually for transaction support using pool
         const pool = getPool();
         if (!pool) throw new Error("Database pool not initialized");
 
         conn = await pool.connect();
         await conn.beginTransaction();
 
-        // ═══════════════════════════════════════════════════════════════
-        // CAPTURAR POSICIONES ANTERIORES ANTES DE BORRAR
-        // ═══════════════════════════════════════════════════════════════
         let previousPositions = {};
         try {
             const prevRows = await conn.query(`
@@ -399,24 +379,16 @@ router.post('/rutero/config', async (req, res) => {
             prevRows.forEach(row => {
                 previousPositions[row.CLIENTE?.trim()] = row.ORDEN;
             });
-        } catch (e) { 
+        } catch (e) {
             logger.warn(`Could not fetch previous positions: ${e.message}`);
         }
 
-        // 1. Delete existing config for this vendor/day AND for these specific clients anywhere
-        // Why? If moving a client from Monday to Tuesday, we must remove them from Monday (if overridden)
-        // AND remove them from any previous Tuesday config to avoid duplicates before inserting.
-
-        // A. Clear current day overrides entirely (overwrite logic for this day)
         await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}'`);
 
-        // B. Ensure clients being saved are removed from ANY other day overrides
         if (orden.length > 0) {
             const clientCodes = orden.map(o => `'${o.cliente}'`).join(',');
-            // This deletes them from ANY day (incl. current, which is redundant but safe)
             await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND CLIENTE IN (${clientCodes})`);
 
-            // 2. Insert new order
             for (const item of orden) {
                 if (item.cliente) {
                     await conn.query(`
@@ -429,9 +401,6 @@ router.post('/rutero/config', async (req, res) => {
 
         await conn.commit();
 
-        // ═══════════════════════════════════════════════════════════════
-        // REGISTRAR EN LOG DE CAMBIOS (JAVIER.RUTERO_LOG)
-        // ═══════════════════════════════════════════════════════════════
         try {
             for (const item of orden) {
                 if (item.cliente) {
@@ -448,12 +417,9 @@ router.post('/rutero/config', async (req, res) => {
             logger.warn(`Log insert failed (non-blocking): ${logErr.message}`);
         }
 
-        // Reload cache immediately so other calls see changes
         await reloadRuteroConfig();
 
-        // 3. Send Audit Email (Best Effort)
         try {
-            // Fetch names for nicer email
             let clientNamesMap = {};
             if (orden.length > 0) {
                 const clientCodes = orden.map(o => `'${o.cliente}'`).join(',');
@@ -461,17 +427,14 @@ router.post('/rutero/config', async (req, res) => {
                 names.forEach(n => clientNamesMap[n.C.trim()] = n.N.trim());
             }
 
-            // Calcular clientes que realmente cambiaron de posición
-            // Ahora usamos posicionOriginal que viene de la app
             const clientesConCambio = orden.map(o => {
                 const clienteId = o.cliente?.trim();
                 const posNueva = parseInt(o.posicion) || 0;
-                // Usar posicionOriginal de la app, o buscar en previousPositions (RUTERO_CONFIG), o asumir sin cambio
                 let posAnterior = o.posicionOriginal !== undefined ? parseInt(o.posicionOriginal) : previousPositions[clienteId];
-                if (posAnterior === undefined) posAnterior = posNueva; // Sin info anterior = sin cambio
-                
+                if (posAnterior === undefined) posAnterior = posNueva;
+
                 const hayCambio = posAnterior !== posNueva;
-                
+
                 return {
                     codigo: o.cliente,
                     nombre: clientNamesMap[o.cliente] || 'Desconocido',
@@ -482,7 +445,7 @@ router.post('/rutero/config', async (req, res) => {
             });
 
             const clientesCambiados = clientesConCambio.filter(c => c.hayCambio);
-            
+
             logger.info(`📊 Reorder: ${clientesCambiados.length} de ${orden.length} clientes cambiaron de posición`);
 
             const auditDetails = {
@@ -493,8 +456,6 @@ router.post('/rutero/config', async (req, res) => {
                 clientesAfectados: clientesConCambio
             };
 
-            // ENVIAR EMAIL AHORA - Este es el "GUARDAR CAMBIOS" del modal
-            // Acumula este cambio Y envía todos los pendientes (incluidos move_clients anteriores)
             sendAuditEmailNow(vendedor, `Modificación Rutero (${dia})`, auditDetails);
         } catch (emailErr) {
             logger.warn(`Email audit skipped: ${emailErr.message}`);
@@ -535,26 +496,23 @@ router.get('/rutero/config', async (req, res) => {
 });
 
 // =============================================================================
-// RUTERO DAY COUNTS - Obtener contadores actualizados de cada día
+// RUTERO DAY COUNTS
 // =============================================================================
 router.get('/rutero/counts', async (req, res) => {
     try {
         const { vendedorCodes, role } = req.query;
-        
-        // Usar caché actualizada que ya considera overrides
         const counts = getWeekCountsFromCache(vendedorCodes, role || 'comercial');
-        
+
         if (!counts) {
-            return res.json({ 
+            return res.json({
                 counts: { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 },
                 cacheStatus: 'loading'
             });
         }
-        
-        // También obtener total único de clientes
+
         const totalClients = getTotalClientsFromCache(vendedorCodes, role || 'comercial');
-        
-        res.json({ 
+
+        res.json({
             counts,
             totalUniqueClients: totalClients,
             cacheStatus: 'ready'
@@ -566,26 +524,25 @@ router.get('/rutero/counts', async (req, res) => {
 });
 
 // =============================================================================
-// RUTERO AVAILABLE POSITIONS - Para selector de posición
+// RUTERO AVAILABLE POSITIONS
 // =============================================================================
 router.get('/rutero/positions/:day', async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, role } = req.query;
-        
-        // Get clients for that day
+
         const dayClients = getClientsForDay(vendedorCodes, day, role || 'comercial');
-        
+
         if (!dayClients) {
             return res.json({ positions: [], count: 0, cacheStatus: 'loading' });
         }
-        
+
         res.json({
-            positions: dayClients.length > 0 
+            positions: dayClients.length > 0
                 ? Array.from({ length: dayClients.length + 1 }, (_, i) => ({
                     value: i,
                     label: i === 0 ? 'Al inicio' : (i === dayClients.length ? 'Al final' : `Posición ${i}`)
-                  }))
+                }))
                 : [{ value: 0, label: 'Primera posición' }],
             count: dayClients.length,
             cacheStatus: 'ready'
@@ -597,7 +554,7 @@ router.get('/rutero/positions/:day', async (req, res) => {
 });
 
 // =============================================================================
-// RUTERO DAY
+// RUTERO DAY (OPTIMIZED WITH CACHING)
 // =============================================================================
 router.get('/rutero/day/:day', async (req, res) => {
     try {
@@ -606,36 +563,19 @@ router.get('/rutero/day/:day', async (req, res) => {
         const now = getCurrentDate();
         const currentYear = parseInt(year) || now.getFullYear();
         const previousYear = currentYear - 1;
-        const isVisit = role !== 'repartidor';
 
-        // End date for current year: Today (include real-time sales)
         const endMonthCurrent = now.getMonth() + 1;
         const endDayCurrent = now.getDate();
 
-        // End date for PREVIOUS year: "Closed Week" logic (Week - 1)
-        // We need to calculate the date of the LAST SUNDAY.
-        // If current week is Week 1, this date might be in the previous year (resulting in 0 sales for this year), which is desired.
         const today = new Date(now);
-        const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
-        // Calculate days to subtract to get to previous Sunday.
-        // If Sun(0) -> 7 days ago. If Mon(1) -> 1 day ago.
+        const dayOfWeek = today.getDay();
         const diffToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;
-
         const lastSundayDate = new Date(today);
         lastSundayDate.setDate(today.getDate() - diffToLastSunday);
-
-        // Now map this date to the Previous Year. 
-        // We want the same RELATIVE date (e.g., if last Sunday was Jan 5th, we want Jan 5th of Prev Year)
-        // OR better: The user wants "Accumulated until Week - 1".
-        // If we are in Week 2, we want Week 1 of Prev Year.
-        // Week 1 of Prev Year ends approx same date.
-        // Let's use the Date of Last Sunday.
-        // If Last Sunday was Dec 28 (Prev Year Context), then we query until Dec 28.
 
         let endMonthPrevious, endDayPrevious;
 
         if (lastSundayDate.getFullYear() < currentYear) {
-            // We are in Week 1, so "Week - 1" is in previous year -> 0 sales for this year context
             endMonthPrevious = 0;
             endDayPrevious = 0;
         } else {
@@ -643,28 +583,11 @@ router.get('/rutero/day/:day', async (req, res) => {
             endDayPrevious = lastSundayDate.getDate();
         }
 
-        // Validate day
         if (DAY_NAMES.indexOf(day.toLowerCase()) === -1) {
             return res.status(400).json({ error: 'Día inválido', day });
         }
 
-        // Fetch custom order
-        let orderMap = new Map();
-        try {
-            const primaryVendor = vendedorCodes ? vendedorCodes.split(',')[0].trim() : '';
-            if (primaryVendor) {
-                const configRows = await query(`
-          SELECT CLIENTE, ORDEN 
-          FROM JAVIER.RUTERO_CONFIG 
-          WHERE VENDEDOR = '${primaryVendor}' AND DIA = '${day.toLowerCase()}'
-        `);
-                configRows.forEach(r => orderMap.set(r.CLIENTE.trim(), r.ORDEN));
-            }
-        } catch (e) {
-            logger.warn(`Order config error: ${e.message}`);
-        }
-
-        // Get client codes for the selected day from CACHE
+        // 1. Get client codes for the selected day from CACHE (Fast)
         let dayClientCodes = getClientsForDay(vendedorCodes, day, role || 'comercial');
 
         if (!dayClientCodes) {
@@ -678,12 +601,19 @@ router.get('/rutero/day/:day', async (req, res) => {
             });
         }
 
-        // Build client filter
+        // Limit clients for safety
         const batchSize = 200;
         const clientBatch = dayClientCodes.slice(0, batchSize);
         const safeClientFilter = clientBatch.map(c => `'${c.replace(/'/g, "''")}'`).join(',');
-        // 1. Get Client Details (Names, Addresses, Phones) - Guaranteed for all planned clients
-        const clientDetailsRows = await query(`
+
+        // --- 2. Heavy Queries with Caching ---
+
+        // Cache Key Components
+        const clientsHash = safeClientFilter.length > 50 ? safeClientFilter.substring(0, 50) + clientBatch.length : safeClientFilter;
+        const cacheTTL = TTL.MEDIUM; // 5 minutes
+
+        // A. Client Details
+        const detailsSql = `
             SELECT 
                 CODIGOCLIENTE as CODE,
                 COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
@@ -693,10 +623,11 @@ router.get('/rutero/day/:day', async (req, res) => {
                 TELEFONO2 as PHONE2
             FROM DSEDAC.CLI
             WHERE CODIGOCLIENTE IN (${safeClientFilter})
-        `);
+        `;
+        const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:${clientsHash}`, TTL.LONG);
 
-        // 2. Get Sales Data (Current Year) - Using LACLAE with LCIMVT for sales without VAT
-        const currentSalesRows = await query(`
+        // B. Current Sales (Heavy)
+        const currentSalesSql = `
             SELECT 
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as SALES,
@@ -707,8 +638,8 @@ router.get('/rutero/day/:day', async (req, res) => {
               AND ${LACLAE_SALES_FILTER}
               AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
             GROUP BY L.LCCDCL
-        `);
-
+        `;
+        const currentSalesRows = await cachedQuery(query, currentSalesSql, `rutero:sales:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL);
 
         // Map Sales Data
         const currentSalesMap = new Map();
@@ -719,11 +650,10 @@ router.get('/rutero/day/:day', async (req, res) => {
             });
         });
 
-        // 3. Get Sales Data (Previous Year) - Using LACLAE with LCIMVT
-        // If endMonthPrevious is 0, it means we are in Week 1, so no previous year sales to compare yet against closed weeks.
+        // C. Prev Sales (Heavy)
         let prevYearRows = [];
         if (endMonthPrevious > 0) {
-            prevYearRows = await query(`
+            const prevSalesSql = `
                 SELECT 
                     L.LCCDCL as CODE,
                     SUM(L.LCIMVT) as SALES,
@@ -734,9 +664,9 @@ router.get('/rutero/day/:day', async (req, res) => {
                   AND ${LACLAE_SALES_FILTER}
                   AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
                 GROUP BY L.LCCDCL
-            `);
+            `;
+            prevYearRows = await cachedQuery(query, prevSalesSql, `rutero:sales:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL);
         }
-
 
         const prevYearMap = new Map();
         prevYearRows.forEach(r => {
@@ -746,7 +676,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             });
         });
 
-        // 4. Merge Data
+        // Merge Data
         const currentYearRows = clientDetailsRows.map(r => {
             const code = r.CODE.trim();
             const salesData = currentSalesMap.get(code) || { sales: 0, cost: 0 };
@@ -757,15 +687,16 @@ router.get('/rutero/day/:day', async (req, res) => {
             };
         });
 
-        // Get GPS coordinates
+        // D. GPS (Cacheable)
         let gpsMap = new Map();
         try {
-            const gpsResult = await query(`
-        SELECT CODIGO, LATITUD, LONGITUD
-        FROM DSEMOVIL.CLIENTES
-        WHERE CODIGO IN (${clientBatch.map(c => `'${c}'`).join(',')})
-          AND LATITUD IS NOT NULL AND LATITUD <> 0
-      `);
+            const gpsSql = `
+                SELECT CODIGO, LATITUD, LONGITUD
+                FROM DSEMOVIL.CLIENTES
+                WHERE CODIGO IN (${safeClientFilter})
+                  AND LATITUD IS NOT NULL AND LATITUD <> 0
+            `;
+            const gpsResult = await cachedQuery(query, gpsSql, `rutero:gps:${clientsHash}`, TTL.LONG);
             gpsResult.forEach(g => {
                 gpsMap.set(g.CODIGO?.trim() || '', {
                     lat: parseFloat(g.LATITUD) || null,
@@ -776,7 +707,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             logger.warn(`Could not load GPS data: ${e.message}`);
         }
 
-        // 5. Get Editable Observations from JAVIER.CLIENT_NOTES
+        // E. Client Notes (No Cache - Realtime)
         let notesMap = new Map();
         try {
             const notesRows = await query(`
@@ -792,405 +723,78 @@ router.get('/rutero/day/:day', async (req, res) => {
             });
         } catch (e) {
             // Table may not exist yet
-            logger.debug(`CLIENT_NOTES not found: ${e.message}`);
         }
 
-        // Build response
+        // Retrieve custom order from cache if possible, or query
+        const primaryVendor = vendedorCodes ? vendedorCodes.split(',')[0].trim() : '';
+        let orderMap = new Map();
+        if (primaryVendor) {
+            const configRows = await cachedQuery(query, `
+                SELECT CLIENTE, ORDEN 
+                FROM JAVIER.RUTERO_CONFIG 
+                WHERE VENDEDOR = '${primaryVendor}' AND DIA = '${day.toLowerCase()}'
+             `, `rutero:config:${primaryVendor}:${day.toLowerCase()}`, TTL.SHORT);
+            configRows.forEach(r => orderMap.set(r.CLIENTE.trim(), r.ORDEN));
+        }
+
         const clients = currentYearRows.map(r => {
             const code = r.CODE?.trim() || '';
-            const ytdSales = parseFloat(r.SALES) || 0;
-            const ytdCost = parseFloat(r.COST) || 0;
-            const ytdMargin = ytdSales > 0 ? ((ytdSales - ytdCost) / ytdSales * 100) : 0;
-
-            const prevData = prevYearMap.get(code) || { sales: 0, cost: 0 };
-            const prevSales = prevData.sales;
-
-            const yoyVariation = prevSales > 0
-                ? ((ytdSales - prevSales) / prevSales * 100)
-                : (ytdSales > 0 ? 100 : 0);
-            const isPositive = ytdSales >= prevSales;
+            const prevSales = prevYearMap.get(code) || { sales: 0, cost: 0 };
             const gps = gpsMap.get(code) || { lat: null, lon: null };
-            const notes = notesMap.get(code) || null;
+            const note = notesMap.get(code);
 
-            // Build phones array for WhatsApp selector
-            const phones = [];
-            if (r.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: r.PHONE.trim() });
-            if (r.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: r.PHONE2.trim() });
+            const salesCurrent = r.SALES || 0;
+            const salesPrev = prevSales.sales || 0;
+
+            // Calculate Growth
+            let growth = 0;
+            if (salesPrev > 0) {
+                growth = ((salesCurrent - salesPrev) / salesPrev) * 100;
+            } else if (salesCurrent > 0) {
+                growth = 100;
+            }
 
             return {
                 code,
-                name: r.NAME?.trim() || 'Sin nombre',
-                address: r.ADDRESS?.trim() || '',
-                city: r.CITY?.trim() || '',
-                phone: r.PHONE?.trim() || '',
-                phones: phones, // Array for WhatsApp selector
-                observaciones: notes, // Editable notes
-                latitude: gps.lat,
-                longitude: gps.lon,
-                status: {
-                    isPositive,
-                    ytdSales: Math.round(ytdSales * 100) / 100,
-                    ytdPrevYear: Math.round(prevSales * 100) / 100,
-                    yoyVariation: Math.round(yoyVariation * 10) / 10,
-                    margin: Math.round(ytdMargin * 10) / 10,
-                    currentMonthSales: ytdSales,
-                    prevMonthSales: prevSales,
-                    variation: yoyVariation
-                }
+                name: r.NAME?.trim(),
+                address: r.ADDRESS?.trim(),
+                city: r.CITY?.trim(),
+                phone: r.PHONE?.trim(),
+                phone2: r.PHONE2?.trim(),
+                sales: formatCurrency(salesCurrent),
+                cost: formatCurrency(r.COST || 0),
+                prevYearSales: formatCurrency(salesPrev),
+                prevYearCost: formatCurrency(prevSales.cost || 0),
+                growth: parseFloat(growth.toFixed(1)),
+                lat: gps.lat,
+                lon: gps.lon,
+                observation: note ? note.text : null,
+                observationBy: note ? note.modifiedBy : null,
+                order: orderMap.has(code) ? orderMap.get(code) : 9999
             };
-        }).sort((a, b) => {
-            const orderA = orderMap.has(a.code) ? orderMap.get(a.code) : 999999;
-            const orderB = orderMap.has(b.code) ? orderMap.get(b.code) : 999999;
-            if (orderA !== orderB) return orderA - orderB;
-            return b.status.ytdSales - a.status.ytdSales;
+        });
+
+        // Sort by custom order, then sales
+        clients.sort((a, b) => {
+            if (a.order !== b.order) return a.order - b.order;
+            return b.sales - a.sales;
         });
 
         res.json({
             clients,
             count: clients.length,
-            totalDayClients: dayClientCodes.length,
             day,
             year: currentYear,
-            compareYear: previousYear
+            compareYear: previousYear,
+            period: {
+                current: `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}`,
+                previous: endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Semana cerrada'
+            }
         });
 
     } catch (error) {
-        logger.error(`Rutero day error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo rutero del día', details: error.message });
-    }
-});
-
-// =============================================================================
-// RUTERO CLIENT STATUS (YoY Comparison)
-// =============================================================================
-router.get('/rutero/client/:code/status', async (req, res) => {
-    try {
-        const { code } = req.params;
-        const clientCode = code.trim();
-        const now = getCurrentDate();
-        const currentYear = now.getFullYear();
-
-        // Ventas por mes del año actual - usando LACLAE con LCIMVT (sin IVA)
-        const currentYearData = await queryWithParams(`
-      SELECT LCMMDC as month, SUM(LCIMVT) as sales, SUM(LCIMVT - LCIMCT) as margin
-      FROM DSED.LACLAE L
-      WHERE LCCDCL = ? AND LCAADC = ${currentYear}
-        AND TPDC = 'LAC' AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT') AND LCSRAB NOT IN ('N', 'Z')
-      GROUP BY LCMMDC
-      ORDER BY LCMMDC
-    `, [clientCode]);
-
-        // Ventas por mes del año anterior - usando LACLAE con LCIMVT
-        const lastYearData = await queryWithParams(`
-      SELECT LCMMDC as month, SUM(LCIMVT) as sales, SUM(LCIMVT - LCIMCT) as margin
-      FROM DSED.LACLAE L
-      WHERE LCCDCL = ? AND LCAADC = ${currentYear - 1}
-        AND TPDC = 'LAC' AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT') AND LCSRAB NOT IN ('N', 'Z')
-      GROUP BY LCMMDC
-      ORDER BY LCMMDC
-    `, [clientCode]);
-
-
-        // Crear mapa de comparación
-        const comparison = [];
-        for (let m = 1; m <= 12; m++) {
-            const curr = currentYearData.find(d => d.MONTH === m);
-            const last = lastYearData.find(d => d.MONTH === m);
-            const currSales = parseFloat(curr?.SALES) || 0;
-            const lastSales = parseFloat(last?.SALES) || 0;
-            const variation = lastSales > 0 ? ((currSales - lastSales) / lastSales) * 100 : (currSales > 0 ? 100 : 0);
-
-            comparison.push({
-                month: m,
-                currentYear: currSales,
-                lastYear: lastSales,
-                variation: Math.round(variation * 10) / 10,
-                isPositive: variation >= 0
-            });
-        }
-
-        res.json(comparison);
-
-    } catch (error) {
-        logger.error(`Rutero client status error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo estado del cliente', details: error.message });
-    }
-});
-
-// =============================================================================
-// RUTERO CLIENT DETAIL (Comprehensive View)
-// =============================================================================
-router.get('/rutero/client/:code/detail', async (req, res) => {
-    try {
-        const { code } = req.params;
-        const { year, filterMonth } = req.query;
-        const clientCode = code.trim();
-        const now = getCurrentDate();
-        const targetYear = parseInt(year) || now.getFullYear();
-
-        // 1. Client Info with Razón Social - parameterized
-        const clientInfo = await queryWithParams(`
-      SELECT 
-        CODIGOCLIENTE as code,
-        COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as razonSocial,
-        NOMBRECLIENTE as nombreCompleto,
-        NIF, DIRECCION, POBLACION, PROVINCIA, CODIGOPOSTAL,
-        TELEFONO1, TELEFONO2, PERSONACONTACTO, CODIGORUTA
-      FROM DSEDAC.CLI
-      WHERE CODIGOCLIENTE = ?
-      FETCH FIRST 1 ROWS ONLY
-    `, [clientCode]);
-
-        if (clientInfo.length === 0) {
-            return res.status(404).json({ error: 'Cliente no encontrado' });
-        }
-
-        // 2. Monthly Sales Breakdown (Current + Last Year)
-        let salesByMonth = [];
-        try {
-            salesByMonth = await queryWithParams(`
-        SELECT 
-          L.ANODOCUMENTO as year,
-          L.MESDOCUMENTO as month,
-          SUM(L.IMPORTEVENTA) as sales,
-          SUM(L.IMPORTEMARGENREAL) as margin,
-          COUNT(DISTINCT L.NUMERODOCUMENTO) as invoices,
-          COUNT(DISTINCT L.CODIGOARTICULO) as products
-        FROM DSEDAC.LAC L
-        LEFT JOIN DSEDAC.CAC C ON C.CCSBAB = L.LCSBAB 
-          AND C.CCYEAB = L.LCYEAB 
-          AND C.CCSRAB = L.LCSRAB 
-          AND C.CCTRAB = L.LCTRAB 
-          AND C.CCNRAB = L.LCNRAB
-        WHERE L.CODIGOCLIENTEALBARAN = ?
-          AND L.ANODOCUMENTO IN (${targetYear}, ${targetYear - 1})
-           AND L.LCTPVT IN ('CC', 'VC')
-           AND L.LCCLLN IN ('AB', 'VT')
-           AND L.LCSRAB NOT IN ('N', 'Z')
-           AND COALESCE(C.CCSNSD, '') <> 'E'
-        GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO
-        ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC
-      `, [clientCode]);
-        } catch (e) {
-            // Fallback without margin
-            salesByMonth = await queryWithParams(`
-        SELECT 
-          ANODOCUMENTO as year,
-          MESDOCUMENTO as month,
-          SUM(IMPORTEVENTA) as sales,
-          0 as margin,
-          COUNT(DISTINCT NUMERODOCUMENTO) as invoices,
-          COUNT(DISTINCT CODIGOARTICULO) as products
-        FROM DSEDAC.LAC L
-        WHERE CODIGOCLIENTEALBARAN = ?
-          AND ANODOCUMENTO IN (${targetYear}, ${targetYear - 1})
-        GROUP BY ANODOCUMENTO, MESDOCUMENTO
-        ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
-      `, [clientCode]);
-        }
-
-        // 3. Product Purchases with Dates - Parameterized to fix safeCode bug
-        let productFilter = '';
-        if (filterMonth) {
-            productFilter = `AND MESDOCUMENTO = ${parseInt(filterMonth)}`;
-        }
-
-        let productPurchases = [];
-        try {
-            productPurchases = await queryWithParams(`
-        SELECT 
-          L.CODIGOARTICULO as productCode,
-          L.DESCRIPCION as productName,
-          L.ANODOCUMENTO as year,
-          L.MESDOCUMENTO as month,
-          L.DIADOCUMENTO as day,
-          L.PRECIOVENTA as price,
-          L.CANTIDADUNIDADES as quantity,
-          L.IMPORTEVENTA as total,
-          L.CODIGOLOTE as lote,
-          L.REFERENCIADOCUMENTO as ref,
-          L.NUMERODOCUMENTO as invoice
-        FROM DSEDAC.LAC L
-        LEFT JOIN DSEDAC.CAC C ON C.CCSBAB = L.LCSBAB 
-          AND C.CCYEAB = L.LCYEAB 
-          AND C.CCSRAB = L.LCSRAB 
-          AND C.CCTRAB = L.LCTRAB 
-          AND C.CCNRAB = L.LCNRAB
-        WHERE L.CODIGOCLIENTEALBARAN = ?
-          AND L.ANODOCUMENTO = ${targetYear}
-          AND L.LCTPVT IN ('CC', 'VC')
-          AND L.LCCLLN IN ('AB', 'VT')
-          AND L.LCSRAB NOT IN ('N', 'Z')
-          AND COALESCE(C.CCSNSD, '') <> 'E'
-          ${productFilter}
-        ORDER BY L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
-        FETCH FIRST 300 ROWS ONLY
-      `, [clientCode]);
-        } catch (e) {
-            logger.warn(`Product purchases query failed: ${e.message}`);
-        }
-
-        // 4. Yearly Totals (last 3 years) - Parameterized
-        let yearlyTotals = [];
-        try {
-            yearlyTotals = await queryWithParams(`
-        SELECT 
-          L.ANODOCUMENTO as year,
-          SUM(L.IMPORTEVENTA) as totalSales,
-          SUM(L.IMPORTEMARGENREAL) as totalMargin
-        FROM DSEDAC.LAC L
-        WHERE L.CODIGOCLIENTEALBARAN = ?
-          AND L.ANODOCUMENTO >= ${targetYear - 2}
-        GROUP BY L.ANODOCUMENTO
-        ORDER BY L.ANODOCUMENTO DESC
-      `, [clientCode]);
-        } catch (e) { }
-
-        // 5. Top Products - Parameterized
-        let topProducts = [];
-        try {
-            topProducts = await queryWithParams(`
-        SELECT 
-          L.CODIGOARTICULO as code,
-          MAX(L.DESCRIPCION) as name,
-          SUM(L.IMPORTEVENTA) as totalSales,
-          SUM(L.CANTIDADUNIDADES) as totalUnits,
-          COUNT(*) as purchases
-        FROM DSEDAC.LAC L
-        LEFT JOIN DSEDAC.CAC C ON C.CCSBAB = L.LCSBAB 
-          AND C.CCYEAB = L.LCYEAB 
-          AND C.CCSRAB = L.LCSRAB 
-          AND C.CCTRAB = L.LCTRAB 
-          AND C.CCNRAB = L.LCNRAB
-        WHERE L.CODIGOCLIENTEALBARAN = ?
-          AND L.ANODOCUMENTO = ${targetYear}
-          AND L.LCTPVT IN ('CC', 'VC')
-          AND L.LCCLLN IN ('AB', 'VT')
-          AND L.LCSRAB NOT IN ('N', 'Z')
-          AND COALESCE(C.CCSNSD, '') <> 'E'
-        GROUP BY L.CODIGOARTICULO
-        ORDER BY SUM(L.IMPORTEVENTA) DESC
-        FETCH FIRST 20 ROWS ONLY
-      `, [clientCode]);
-        } catch (e) { }
-
-        // 6. Purchase frequency - Parameterized
-        let purchaseFreq = [];
-        try {
-            purchaseFreq = await queryWithParams(`
-        SELECT 
-          COUNT(DISTINCT DIADOCUMENTO || MESDOCUMENTO || ANODOCUMENTO) as purchaseDays,
-          MIN(MESDOCUMENTO) as firstMonth,
-          MAX(MESDOCUMENTO) as lastMonth
-        FROM DSEDAC.LAC L
-        WHERE CODIGOCLIENTEALBARAN = ?
-          AND ANODOCUMENTO = ${targetYear}
-      `, [clientCode]);
-        } catch (e) { }
-
-        // Build response
-        const c = clientInfo[0];
-
-        const monthlyData = [];
-        for (let m = 1; m <= 12; m++) {
-            const currRow = salesByMonth.find(r => r.YEAR === targetYear && r.MONTH === m);
-            const lastRow = salesByMonth.find(r => r.YEAR === targetYear - 1 && r.MONTH === m);
-
-            const currSales = parseFloat(currRow?.SALES) || 0;
-            const lastSales = parseFloat(lastRow?.SALES) || 0;
-            const variation = lastSales > 0 ? ((currSales - lastSales) / lastSales) * 100 : (currSales > 0 ? 100 : 0);
-
-            monthlyData.push({
-                month: m,
-                monthName: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][m - 1],
-                currentYear: currSales,
-                currentYearFormatted: formatCurrency(currSales),
-                lastYear: lastSales,
-                lastYearFormatted: formatCurrency(lastSales),
-                variation: Math.round(variation * 10) / 10,
-                isPositive: variation >= 0,
-                margin: parseFloat(currRow?.MARGIN) || 0,
-                invoices: parseInt(currRow?.INVOICES) || 0,
-                products: parseInt(currRow?.PRODUCTS) || 0
-            });
-        }
-
-        // Calculate Totals for Summary Card
-        const totalSalesCurrent = monthlyData.reduce((sum, m) => sum + m.currentYear, 0);
-        const totalSalesLast = monthlyData.reduce((sum, m) => sum + m.lastYear, 0);
-        const totalVariation = totalSalesLast > 0 ? ((totalSalesCurrent - totalSalesLast) / totalSalesLast) * 100 : 0;
-        const avgMonthly = totalSalesCurrent / 12;
-
-        const totals = {
-            currentYear: totalSalesCurrent,
-            currentYearFormatted: formatCurrency(totalSalesCurrent),
-            lastYear: totalSalesLast,
-            lastYearFormatted: formatCurrency(totalSalesLast),
-            variation: Math.round(totalVariation * 10) / 10,
-            isPositive: totalVariation >= 0,
-            monthlyAverage: avgMonthly,
-            monthlyAverageFormatted: formatCurrency(avgMonthly)
-        };
-
-        const freq = purchaseFreq[0] || {};
-        const purchaseDays = parseInt(freq.PURCHASEDAYS) || 0;
-        const monthsActive = (parseInt(freq.LASTMONTH) || 1) - (parseInt(freq.FIRSTMONTH) || 1) + 1;
-        const avgPurchasesPerMonth = monthsActive > 0 ? purchaseDays / monthsActive : 0;
-
-        res.json({
-            client: {
-                code: c.CODE?.trim(),
-                razonSocial: c.RAZONSOCIAL?.trim() || c.NOMBRECOMPLETO?.trim(),
-                nombreCompleto: c.NOMBRECOMPLETO?.trim(),
-                nif: c.NIF?.trim(),
-                address: c.DIRECCION?.trim(),
-                city: c.POBLACION?.trim(),
-                province: c.PROVINCIA?.trim(),
-                postalCode: c.CODIGOPOSTAL?.trim(),
-                phone: c.TELEFONO1?.trim(),
-                phone2: c.TELEFONO2?.trim(),
-                contact: c.PERSONACONTACTO?.trim(),
-                route: c.CODIGORUTA?.trim()
-            },
-            purchaseFrequency: {
-                avgPurchasesPerMonth: Math.round(avgPurchasesPerMonth * 10) / 10,
-                totalPurchaseDays: purchaseDays,
-                isFrequentBuyer: purchaseDays > 12 // Arbitrary threshold
-            },
-            totals,
-            monthlyData,
-            topProducts: topProducts.map(p => ({
-                code: p.CODE?.trim(),
-                name: p.NAME?.trim(),
-                totalSalesFormatted: formatCurrency(p.TOTALSALES),
-                totalSales: parseFloat(p.TOTALSALES), // Added raw value
-                totalUnits: parseInt(p.TOTALUNITS) || 0,
-                purchases: parseInt(p.PURCHASES) || 0
-            })),
-            productPurchases: productPurchases.map(p => ({
-                productCode: p.PRODUCTCODE?.trim(),
-                productName: p.PRODUCTNAME?.trim(),
-                date: `${String(p.DAY).padStart(2, '0')}/${String(p.MONTH).padStart(2, '0')}/${p.YEAR}`,
-                quantity: parseInt(p.QUANTITY) || 0,
-                price: formatCurrency(p.PRICE),
-                totalFormatted: formatCurrency(p.TOTAL), // Match Flutter expected key
-                total: parseFloat(p.TOTAL),
-                invoice: p.INVOICE,
-                lote: p.LOTE
-            })),
-            yearlyTotals: yearlyTotals.map(y => ({
-                year: y.YEAR,
-                totalSalesFormatted: formatCurrency(y.TOTALSALES),
-                totalSales: parseFloat(y.TOTALSALES),
-                totalMargin: parseFloat(y.TOTALMARGIN),
-                monthlyAverageFormatted: formatCurrency(parseFloat(y.TOTALSALES) / 12),
-                activeMonths: 12 // Simplify
-            }))
-        });
-
-    } catch (error) {
-        logger.error(`Rutero detail error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo detalle', details: error.message });
+        logger.error(`Rutero Day Error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo rutero diario', details: error.message });
     }
 });
 

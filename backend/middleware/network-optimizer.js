@@ -95,6 +95,9 @@ function networkOptimizer(req, res, next) {
     // Log slow responses on finish (can't set headers here, response already sent)
     res.on('finish', () => {
         const duration = Date.now() - startTime;
+        // res.setHeader('X-Response-Time', `${duration}ms`); // REMOVED: Cannot set items after send
+
+        // Log slow responses
         if (duration > 1000) {
             logger.warn(`[NetworkOptimizer] Slow response: ${req.method} ${req.path} took ${duration}ms`);
         }

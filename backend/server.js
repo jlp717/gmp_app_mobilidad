@@ -194,3 +194,26 @@ app.get('/api/optimization/query-stats', verifyToken, (req, res) => {
 
 startServer();
 
+// ==================== GLOBAL ERROR HANDLERS ====================
+// Prevent crashes from unhandled exceptions (like header errors)
+process.on('uncaughtException', (err) => {
+  logger.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, { stack: err.stack });
+  // Keep alive if possible, but PM2 will restart if we exit. 
+  // For header errors, we can usually continue.
+  if (err.code !== 'ERR_HTTP_HEADERS_SENT') {
+    // process.exit(1); // Let PM2 restart for critical state corruption
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error(`🔥 UNHANDLED REJECTION: ${reason}`);
+});
+
+// Global Error Middleware (Last resort)
+app.use((err, req, res, next) => {
+  logger.error(`❌ Global Middleware Error: ${err.message}`);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal Server Error', id: Date.now() });
+  }
+});
+
