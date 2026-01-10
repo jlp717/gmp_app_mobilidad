@@ -1108,16 +1108,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               ],
             ),
             if (prevSales > 0)
-              Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% vs ${_formatCurrency(prevSales)}', 
+              Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% vs ${_formatCompact(prevSales)}€', 
                 style: TextStyle(fontSize: compact ? 7 : 8, color: trendColor, fontWeight: FontWeight.w500)),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('${units.toStringAsFixed(0)} uds', style: TextStyle(fontSize: compact ? 7 : 9, color: AppTheme.textSecondary)),
-                if (prevUnits > 0)
-                  Text(' (${prevUnits.toStringAsFixed(0)})', style: TextStyle(fontSize: compact ? 6 : 7, color: AppTheme.textSecondary.withOpacity(0.7))),
-              ],
-            ),
+            Text('${units.toStringAsFixed(0)} uds${prevUnits > 0 ? " (${prevUnits.toStringAsFixed(0)})" : ""}', style: TextStyle(fontSize: compact ? 7 : 9, color: AppTheme.textSecondary)),
           ],
         ),
         // Margin (Jefe Ventas only)
