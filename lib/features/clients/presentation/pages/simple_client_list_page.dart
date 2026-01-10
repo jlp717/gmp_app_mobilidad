@@ -578,9 +578,9 @@ class _ClientCard extends StatelessWidget {
 }
 
 Widget _buildRouteDaysRow() {
-final route = client['route'] ?? '';
-final visitDays = client['visitDaysShort'] as String? ?? '';
-final deliveryDays = client['deliveryDaysShort'] as String? ?? '';
+final String route = client['route'] as String? ?? '';
+final String visitDays = client['visitDaysShort'] as String? ?? '';
+final String deliveryDays = client['deliveryDaysShort'] as String? ?? '';
 
 if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
   return const SizedBox.shrink();
@@ -657,4 +657,5 @@ return Padding(
     ],
   ),
 );
+}
 }
