@@ -574,9 +574,9 @@ router.get('/rutero/day/:day', async (req, res) => {
         let endMonthPrevious, endDayPrevious;
 
         // Enforce "Completed Weeks" logic: Compare Jan 1 -> Last Sunday for both years
+        // Calculate the Nth week of current year, then find the same week's Sunday in previous year
         if (lastSundayDate.getFullYear() < currentYear) {
-            // First week of year is incomplete, show 0 or YTD? User asked for "completed weeks"
-            // If strict, 0. If lenient, YTD? Strict interpretation of "semana completa" = 0.
+            // First week of year is incomplete (last Sunday was in December)
             endMonthCurrent = 0;
             endDayCurrent = 0;
             endMonthPrevious = 0;
@@ -585,9 +585,25 @@ router.get('/rutero/day/:day', async (req, res) => {
             endMonthCurrent = lastSundayDate.getMonth() + 1;
             endDayCurrent = lastSundayDate.getDate();
 
-            // Align previous year exactly to same day/month for fair Apple-to-Apple comparison
-            endMonthPrevious = endMonthCurrent;
-            endDayPrevious = endDayCurrent;
+            // Calculate the week number for current year
+            const startOfCurrentYear = new Date(currentYear, 0, 1);
+            const daysSinceStart = Math.floor((lastSundayDate - startOfCurrentYear) / 86400000);
+            const weekNumber = Math.floor(daysSinceStart / 7) + 1;
+
+            // Find the equivalent Sunday (same week number) in previous year
+            const startOfPreviousYear = new Date(previousYear, 0, 1);
+            const firstSundayOffsetPrev = (7 - startOfPreviousYear.getDay()) % 7; // Days until first Sunday
+            const equivalentSundayPrev = new Date(previousYear, 0, 1 + firstSundayOffsetPrev + (weekNumber - 1) * 7);
+
+            // If the equivalent Sunday goes into February or beyond, cap at actual comparable date
+            if (equivalentSundayPrev.getFullYear() === previousYear) {
+                endMonthPrevious = equivalentSundayPrev.getMonth() + 1;
+                endDayPrevious = equivalentSundayPrev.getDate();
+            } else {
+                // Fallback: use same day/month as current year
+                endMonthPrevious = endMonthCurrent;
+                endDayPrevious = endDayCurrent;
+            }
         }
 
         if (DAY_NAMES.indexOf(day.toLowerCase()) === -1) {

@@ -1416,36 +1416,59 @@ class _ClientCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                    const SizedBox(height: 8),
-                    // Sales and comparison row
-                    // Sales and comparison row
-                    Row(
+                    // Sales and comparison row with clear year labels
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Acumulado (Sem $completedWeeks): ', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                        Text(
-                          formatCurrency(ytdSales),
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        Text('Acumulado Sem $completedWeeks:', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            // Current Year
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonBlue.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text('$selectedYear', style: TextStyle(fontSize: 10, color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              formatCurrency(ytdSales),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 12),
+                            // Previous Year
+                            if (ytdPrevYear > 0) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade700,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text('${selectedYear - 1}', style: TextStyle(fontSize: 10, color: Colors.grey.shade300, fontWeight: FontWeight.bold)),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                formatCurrency(ytdPrevYear),
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                              ),
+                            ] else if (selectedYear == DateTime.now().year && DateTime.now().day <= 7 && DateTime.now().month == 1) ...[
+                               const SizedBox(width: 4),
+                               Tooltip(
+                                 triggerMode: TooltipTriggerMode.tap,
+                                 showDuration: const Duration(seconds: 4),
+                                 margin: const EdgeInsets.symmetric(horizontal: 20),
+                                 padding: const EdgeInsets.all(12),
+                                 decoration: BoxDecoration(color: AppTheme.darkBase, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade700)),
+                                 textStyle: const TextStyle(color: Colors.white, fontSize: 13),
+                                 message: 'El acumulado del año anterior aparecerá a partir de la 2ª semana.',
+                                 child: Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
+                               ),
+                            ],
+                          ],
                         ),
-                        if (ytdPrevYear > 0) ...[
-                          Text(' / ', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                          Text(
-                            formatCurrency(ytdPrevYear),
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                          ),
-                        ] else if (selectedYear == DateTime.now().year && DateTime.now().day <= 7 && DateTime.now().month == 1) ...[
-                           // Week 1 Logic Explanation Tooltip
-                           const SizedBox(width: 4),
-                           Tooltip(
-                             triggerMode: TooltipTriggerMode.tap,
-                             showDuration: const Duration(seconds: 4),
-                             margin: const EdgeInsets.symmetric(horizontal: 20),
-                             padding: const EdgeInsets.all(12),
-                             decoration: BoxDecoration(color: AppTheme.darkBase, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade700)),
-                             textStyle: const TextStyle(color: Colors.white, fontSize: 13),
-                             message: 'El acumulado del año anterior aparecerá a partir de la 2ª semana, comparando semanas cerradas.',
-                             child: Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
-                           ),
-                        ],
                       ],
                     ),
                   ],
