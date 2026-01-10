@@ -124,11 +124,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         _contactInfo = response['contactInfo'] ?? {};
         
         // Parse FI options from availableFilters
+        // Solo FI1 y FI5 precargadas, FI2/FI3/FI4 se cargan en cascada desde API
         _fiOptions = FiFilterOptions(
           fi1: _parseFiOptions(_availableFilters['fi1']),
-          fi2: _parseFiOptions(_availableFilters['fi2']),
-          fi3: _parseFiOptions(_availableFilters['fi3']),
-          fi4: _parseFiOptions(_availableFilters['fi4']),
+          fi2: [], // Se cargan dinámicamente al seleccionar FI1
+          fi3: [], // Se cargan dinámicamente al seleccionar FI1/FI2
+          fi4: [], // Se cargan dinámicamente al seleccionar FI1/FI2/FI3
           fi5: _parseFiOptions(_availableFilters['fi5']),
         );
         
@@ -1261,6 +1262,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     // Calculate per unit
     final costPerUnit = units > 0 ? cost / units : 0.0;
     final marginPerUnit = avgPrice - costPerUnit;
+    final prevMarginPerUnit = prevYearUnits > 0 ? (prevYearSales - prevYearCost) / prevYearUnits : 0.0;
+    final prevMarginPct = prevYearSales > 0 ? ((prevYearSales - prevYearCost) / prevYearSales) * 100 : 0.0;
     
     // Unit label
     String unitLabel;
@@ -1321,7 +1324,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           ),
           const SizedBox(height: 6),
           
-          // Pricing row: PVP, Coste, Margen, UDS
+          // === COMERCIAL: PVP, UDS, VENTAS, (Descuento si tiene) ===
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
             decoration: BoxDecoration(
@@ -1336,95 +1339,96 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     children: [
                       Text('PVP/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                       Text(_formatCurrency(avgPrice), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
-                      if (prevYearAvgPrice > 0)
-                        Text('(${_formatCurrency(prevYearAvgPrice)})', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                     ],
                   ),
                 ),
-                // Coste (solo Jefe Ventas)
-                if (widget.isJefeVentas)
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text('Coste/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                        Text(_formatCurrency(avgCost > 0 ? avgCost : costPerUnit), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
-                        if (prevYearAvgCost > 0)
-                          Text('(${_formatCurrency(prevYearAvgCost)})', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                      ],
-                    ),
-                  ),
-                // Margen por unidad (solo Jefe Ventas)
-                if (widget.isJefeVentas)
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text('Margen/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                        Text(_formatCurrency(marginPerUnit), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: marginPerUnit >= 0 ? AppTheme.success : AppTheme.error)),
-                      ],
-                    ),
-                  ),
                 // Unidades
                 Expanded(
                   child: Column(
                     children: [
                       Text(unitLabel, style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                       Text(units >= 100 ? units.toStringAsFixed(0) : units.toStringAsFixed(2), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.neonBlue)),
-                      if (prevYearUnits > 0)
-                        Text('(${prevYearUnits >= 100 ? prevYearUnits.toStringAsFixed(0) : prevYearUnits.toStringAsFixed(2)})', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
                     ],
                   ),
                 ),
+                // Ventas totales
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    children: [
+                      Text('Ventas', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      Text(_formatCurrency(sales), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: borderColor == AppTheme.surfaceColor ? Colors.white : borderColor)),
+                      if (prevYearSales > 0)
+                        Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% vs ${_formatCurrency(prevYearSales)}', 
+                          style: TextStyle(fontSize: 7, fontWeight: FontWeight.w500, color: yoyVariation >= 0 ? AppTheme.success : AppTheme.error)),
+                    ],
+                  ),
+                ),
+                // Descuento (si tiene)
+                if (hasDiscount)
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text('Dto', style: TextStyle(fontSize: 7, color: Colors.orange)),
+                        Text('-${avgDiscountPct.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange)),
+                        if (avgDiscountEur > 0)
+                          Text('-${_formatCurrency(avgDiscountEur)}', style: TextStyle(fontSize: 7, color: Colors.orange.withOpacity(0.7))),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
-          const SizedBox(height: 6),
           
-          // Totals row with YoY comparison
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: AppTheme.darkBase,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                // Total ventas + YoY
-                Column(
-                  children: [
-                    Text('Ventas ${_selectedYears.length == 1 ? _selectedYears.first : ""}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                    Text(_formatCurrency(sales), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: borderColor == AppTheme.surfaceColor ? AppTheme.neonBlue : borderColor)),
-                    if (prevYearSales > 0)
-                      Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% (${_formatCompact(prevYearSales)})', 
-                        style: TextStyle(fontSize: 8, fontWeight: FontWeight.w500, color: yoyVariation >= 0 ? AppTheme.success : AppTheme.error)),
-                  ],
-                ),
-                // Total Coste (Jefe Ventas)
-                if (widget.isJefeVentas)
-                  Column(
-                    children: [
-                      Text('Coste', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                      Text(_formatCurrency(cost), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
-                      if (prevYearCost > 0)
-                        Builder(builder: (context) {
-                          final costVar = ((cost - prevYearCost) / prevYearCost) * 100;
-                          return Text('${costVar >= 0 ? "+" : ""}${costVar.toStringAsFixed(0)}%', 
-                            style: TextStyle(fontSize: 7, color: costVar <= 0 ? AppTheme.success : AppTheme.error));
-                        }),
-                    ],
+          // === JEFE VENTAS: Coste, Margen (con año anterior) ===
+          if (widget.isJefeVentas) ...[
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppTheme.darkBase,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                children: [
+                  // Coste por unidad + coste total
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text('Coste/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                        Text(_formatCurrency(avgCost > 0 ? avgCost : costPerUnit), style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+                        Text('Total: ${_formatCurrency(cost)}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      ],
+                    ),
                   ),
-                // Margen € + % (Jefe Ventas)
-                if (widget.isJefeVentas)
-                  Column(
-                    children: [
-                      Text('Margen', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
-                      Text(_formatCurrency(totalMargin), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: totalMargin >= 0 ? AppTheme.success : AppTheme.error)),
-                      Text('${marginPercent.toStringAsFixed(1)}%', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w500, color: marginPercent >= 0 ? AppTheme.success : AppTheme.error)),
-                    ],
+                  // Margen por unidad actual
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text('Margen/$unitLabel', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                        Text(_formatCurrency(marginPerUnit), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: marginPerUnit >= 0 ? AppTheme.success : AppTheme.error)),
+                        if (prevMarginPerUnit != 0)
+                          Text('Ant: ${_formatCurrency(prevMarginPerUnit)}', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      ],
+                    ),
                   ),
-              ],
+                  // Margen total + % actual
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text('Margen Total', style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                        Text('${_formatCurrency(totalMargin)} (${marginPercent.toStringAsFixed(1)}%)', 
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: marginPercent >= 0 ? AppTheme.success : AppTheme.error)),
+                        if (prevYearMargin != 0 || prevMarginPct != 0)
+                          Text('Ant: ${_formatCurrency(prevYearMargin)} (${prevMarginPct.toStringAsFixed(1)}%)', 
+                            style: TextStyle(fontSize: 7, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
           
           // Monthly breakdown
           if (monthlyData != null)

@@ -461,8 +461,9 @@ router.get('/matrix', async (req, res) => {
         // --- NEW: Client Contact & Observations ---
         let contactInfo = { phone: '', phone2: '', email: '', phones: [] };
         let editableNotes = null;
+        
+        // Get phones (separate try-catch to not break if one fails)
         try {
-            // Get phones (EMAIL no existe en DSEDAC.CLI)
             const contactRows = await query(`
                 SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2 
                 FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
@@ -476,12 +477,16 @@ router.get('/matrix', async (req, res) => {
                 contactInfo = {
                     phone: c.PHONE?.trim() || '',
                     phone2: c.PHONE2?.trim() || '',
-                    email: c.EMAIL?.trim() || '',
+                    email: '',
                     phones: phones
                 };
             }
-
-            // Get editable notes
+        } catch (e) {
+            logger.warn(`Could not load contact info: ${e.message}`);
+        }
+        
+        // Get editable notes (separate try-catch - table may not exist)
+        try {
             const notesRows = await query(`
                 SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES 
                 WHERE CLIENT_CODE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
@@ -493,7 +498,8 @@ router.get('/matrix', async (req, res) => {
                 };
             }
         } catch (e) {
-            logger.warn(`Could not load client details for matrix: ${e.message}`);
+            // Table may not exist - this is OK, just skip notes
+            logger.debug(`Notes table not available: ${e.message}`);
         }
         // -------------------------------------------
 
