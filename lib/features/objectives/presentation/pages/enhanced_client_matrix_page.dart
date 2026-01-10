@@ -62,9 +62,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   // Depth level selector (1-5, default 5 = all levels including products)
   int _maxDepthLevel = 5;
   
-  // Show monthly breakdown (can be toggled)
-  bool _showMonthlyBreakdown = false;
-  
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   
@@ -480,14 +477,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   ),
                 ),
                 const Spacer(),
-                // Monthly toggle
-                const Text('Meses: ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                Switch(
-                  value: _showMonthlyBreakdown,
-                  onChanged: (v) => setState(() => _showMonthlyBreakdown = v),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  activeColor: AppTheme.neonBlue,
-                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -768,7 +757,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     ],
                   ),
                   // Monthly breakdown if enabled
-                  if (_showMonthlyBreakdown && monthlyData != null)
+                  if (monthlyData != null)
                     _buildMonthlyBreakdownRow(monthlyData),
                 ],
               ),
@@ -855,7 +844,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.neonBlue, compact: true),
                     ],
                   ),
-                  if (_showMonthlyBreakdown && monthlyData != null)
+                  if (monthlyData != null)
                     _buildMonthlyBreakdownRow(monthlyData, compact: true),
                 ],
               ),
@@ -942,7 +931,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.neonGreen, compact: true),
                     ],
                   ),
-                  if (_showMonthlyBreakdown && monthlyData != null)
+                  if (monthlyData != null)
                     _buildMonthlyBreakdownRow(monthlyData, compact: true),
                 ],
               ),
@@ -1029,7 +1018,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       _buildLevelStatsWithYoY(sales, units, margin, totalMargin, prevYearSales, yoyVariation, yoyTrend, AppTheme.warning, compact: true),
                     ],
                   ),
-                  if (_showMonthlyBreakdown && monthlyData != null)
+                  if (monthlyData != null)
                     _buildMonthlyBreakdownRow(monthlyData, compact: true),
                 ],
               ),
@@ -1144,13 +1133,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
-  /// Monthly breakdown row - compact horizontal scrolling
+  /// Monthly breakdown row - compact horizontal scrolling with format: ENE X€ ±X%
   Widget _buildMonthlyBreakdownRow(Map<String, dynamic>? monthlyData, {bool compact = false}) {
     if (monthlyData == null || monthlyData.isEmpty) return const SizedBox.shrink();
     
     return Container(
       margin: EdgeInsets.only(top: compact ? 4 : 6),
-      height: compact ? 38 : 48,
+      height: compact ? 22 : 28,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: 12,
@@ -1159,44 +1148,84 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           final mData = monthlyData[monthNum] as Map<String, dynamic>?;
           final sales = (mData?['sales'] as num?)?.toDouble() ?? 0;
           final prevSales = (mData?['prevSales'] as num?)?.toDouble() ?? 0;
-          final trend = mData?['yoyTrend'] as String? ?? 'neutral';
           
-          Color bgColor = AppTheme.darkCard;
-          Color textColor = Colors.white;
-          if (trend == 'up') {
-            bgColor = AppTheme.success.withOpacity(0.2);
-            textColor = AppTheme.success;
-          } else if (trend == 'down') {
-            bgColor = AppTheme.error.withOpacity(0.2);
-            textColor = AppTheme.error;
-          } else if (trend == 'new') {
-            bgColor = AppTheme.neonBlue.withOpacity(0.2);
-            textColor = AppTheme.neonBlue;
+          // Skip months with no sales
+          if (sales == 0 && prevSales == 0) {
+            return Container(
+              margin: const EdgeInsets.only(right: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                '${_mNames[index]} -',
+                style: TextStyle(fontSize: compact ? 8 : 9, color: AppTheme.textSecondary),
+              ),
+            );
+          }
+          
+          // Calculate YoY percentage
+          double yoyPct = 0;
+          String yoySign = '';
+          Color yoyColor = AppTheme.textSecondary;
+          
+          if (prevSales > 0 && sales > 0) {
+            yoyPct = ((sales - prevSales) / prevSales) * 100;
+            yoySign = yoyPct >= 0 ? '+' : '';
+            yoyColor = yoyPct >= 0 ? AppTheme.success : AppTheme.error;
+          } else if (sales > 0 && prevSales == 0) {
+            // New - no previous year data
+            yoyColor = AppTheme.neonBlue;
           }
           
           return Container(
-            width: compact ? 48 : 58,
-            margin: const EdgeInsets.only(right: 3),
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+            margin: const EdgeInsets.only(right: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             decoration: BoxDecoration(
-              color: bgColor,
+              color: yoyColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: textColor.withOpacity(0.3), width: 0.5),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_mNames[index], style: TextStyle(fontSize: compact ? 7 : 8, fontWeight: FontWeight.bold, color: textColor)),
-                const SizedBox(height: 1),
+                // Month name
                 Text(
-                  _formatCompact(sales),
-                  style: TextStyle(fontSize: compact ? 8 : 10, fontWeight: FontWeight.bold, color: textColor),
-                ),
-                if (prevSales > 0 && !compact)
-                  Text(
-                    '(${_formatCompact(prevSales)})',
-                    style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                  _mNames[index],
+                  style: TextStyle(
+                    fontSize: compact ? 8 : 9,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
+                ),
+                const SizedBox(width: 3),
+                // Sales amount with € symbol
+                Text(
+                  '${_formatCompact(sales)}€',
+                  style: TextStyle(
+                    fontSize: compact ? 8 : 9,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                // YoY percentage (if has previous year data)
+                if (prevSales > 0) ...[
+                  const SizedBox(width: 3),
+                  Text(
+                    '$yoySign${yoyPct.toStringAsFixed(0)}%',
+                    style: TextStyle(
+                      fontSize: compact ? 7 : 8,
+                      fontWeight: FontWeight.w600,
+                      color: yoyColor,
+                    ),
+                  ),
+                ] else if (sales > 0) ...[
+                  const SizedBox(width: 3),
+                  Text(
+                    'NUEVO',
+                    style: TextStyle(
+                      fontSize: compact ? 6 : 7,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.neonBlue,
+                    ),
+                  ),
+                ],
               ],
             ),
           );
@@ -1397,8 +1426,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             ),
           ),
           
-          // Monthly breakdown if enabled
-          if (_showMonthlyBreakdown && monthlyData != null)
+          // Monthly breakdown
+          if (monthlyData != null)
             _buildMonthlyBreakdownRow(monthlyData, compact: true),
         ],
       ),
