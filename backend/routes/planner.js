@@ -564,23 +564,30 @@ router.get('/rutero/day/:day', async (req, res) => {
         const currentYear = parseInt(year) || now.getFullYear();
         const previousYear = currentYear - 1;
 
-        const endMonthCurrent = now.getMonth() + 1;
-        const endDayCurrent = now.getDate();
-
         const today = new Date(now);
         const dayOfWeek = today.getDay();
         const diffToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;
         const lastSundayDate = new Date(today);
         lastSundayDate.setDate(today.getDate() - diffToLastSunday);
 
+        let endMonthCurrent, endDayCurrent;
         let endMonthPrevious, endDayPrevious;
 
+        // Enforce "Completed Weeks" logic: Compare Jan 1 -> Last Sunday for both years
         if (lastSundayDate.getFullYear() < currentYear) {
+            // First week of year is incomplete, show 0 or YTD? User asked for "completed weeks"
+            // If strict, 0. If lenient, YTD? Strict interpretation of "semana completa" = 0.
+            endMonthCurrent = 0;
+            endDayCurrent = 0;
             endMonthPrevious = 0;
             endDayPrevious = 0;
         } else {
-            endMonthPrevious = lastSundayDate.getMonth() + 1;
-            endDayPrevious = lastSundayDate.getDate();
+            endMonthCurrent = lastSundayDate.getMonth() + 1;
+            endDayCurrent = lastSundayDate.getDate();
+
+            // Align previous year exactly to same day/month for fair Apple-to-Apple comparison
+            endMonthPrevious = endMonthCurrent;
+            endDayPrevious = endDayCurrent;
         }
 
         if (DAY_NAMES.indexOf(day.toLowerCase()) === -1) {
@@ -754,6 +761,10 @@ router.get('/rutero/day/:day', async (req, res) => {
                 growth = 100;
             }
 
+            const phones = [];
+            if (r.PHONE?.trim()) phones.push({ type: 'Teléfono', number: r.PHONE.trim() });
+            if (r.PHONE2?.trim()) phones.push({ type: 'Móvil', number: r.PHONE2.trim() });
+
             return {
                 code,
                 name: r.NAME?.trim(),
@@ -761,6 +772,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 city: r.CITY?.trim(),
                 phone: r.PHONE?.trim(),
                 phone2: r.PHONE2?.trim(),
+                phones, // Added for UI compatibility
                 sales: formatCurrency(salesCurrent),
                 cost: formatCurrency(r.COST || 0),
                 prevYearSales: formatCurrency(salesPrev),

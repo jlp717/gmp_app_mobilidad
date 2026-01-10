@@ -1381,22 +1381,28 @@ class _ClientCard extends StatelessWidget {
                       padding: const EdgeInsets.all(4),
                       constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                     ),
-                  if (phones.isNotEmpty && onWhatsAppTap != null)
-                    IconButton(
-                      onPressed: onWhatsAppTap,
-                      icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 26),
-                      tooltip: 'WhatsApp',
-                      splashRadius: 24,
-                      padding: const EdgeInsets.all(4),
-                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                    ),
-                  IconButton(
-                    onPressed: onCallTap,
-                    icon: Icon(Icons.phone, color: AppTheme.neonBlue, size: 26),
-                    tooltip: 'Llamar',
-                    splashRadius: 24,
-                    padding: const EdgeInsets.all(4),
-                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                  // Compact Contact Row
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                        if (phones.isNotEmpty && onWhatsAppTap != null)
+                            IconButton(
+                              onPressed: onWhatsAppTap,
+                              icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 26),
+                              tooltip: 'WhatsApp',
+                              splashRadius: 24,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                            ),
+                        IconButton(
+                            onPressed: onCallTap,
+                            icon: Icon(Icons.phone, color: AppTheme.neonBlue, size: 26),
+                            tooltip: 'Llamar',
+                            splashRadius: 24,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                        ),
+                    ],
                   ),
                 ],
               ),

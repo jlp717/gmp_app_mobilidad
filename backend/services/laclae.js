@@ -66,6 +66,10 @@ async function loadLaclaeCache() {
         const conn = await dbPool.connect();
         try {
             // Load base LACLAE data
+            // Load base LACLAE data (Optimized: Current + Previous Year only)
+            const currentYear = new Date().getFullYear();
+            const startYear = currentYear - 1;
+
             const rows = await conn.query(`
         SELECT DISTINCT
           R1_T8CDVD as VENDEDOR,
@@ -75,7 +79,9 @@ async function loadLaclaeCache() {
           R1_T8DIRL as DEL_L, R1_T8DIRM as DEL_M, R1_T8DIRX as DEL_X,
           R1_T8DIRJ as DEL_J, R1_T8DIRV as DEL_V, R1_T8DIRS as DEL_S, R1_T8DIRD as DEL_D
         FROM DSED.LACLAE
-        WHERE R1_T8CDVD IS NOT NULL AND LCCDCL IS NOT NULL
+        WHERE R1_T8CDVD IS NOT NULL 
+          AND LCCDCL IS NOT NULL
+          AND LCAADC >= ${startYear}
       `);
 
             // Build the cache
@@ -195,16 +201,16 @@ function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
     vendedors.forEach(vendedor => {
         const vendorClients = laclaeCache[vendedor] || {};
         const configClients = ruteroConfigCache[vendedor] || {};
-        
+
         // Set of clients that have been moved via RUTERO_CONFIG
         const movedClients = new Set(Object.keys(configClients));
-        
+
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
             const days = isDelivery ? data.deliveryDays : data.visitDays;
-            
+
             // Check if this client has an override
             const override = configClients[clientCode];
-            
+
             if (override) {
                 // Client has override - only count on override day
                 const overrideDay = override.day;
@@ -220,7 +226,7 @@ function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
                 });
             }
         });
-        
+
         // Also add clients that exist ONLY in RuteroConfig (orphan overrides)
         Object.entries(configClients).forEach(([clientCode, cfg]) => {
             if (counts.hasOwnProperty(cfg.day)) {
@@ -343,16 +349,16 @@ function getCachedVendorCodes() {
  */
 function getClientCurrentDay(vendedor, clientCode) {
     if (!laclaeCacheReady) return null;
-    
+
     const vendedorStr = String(vendedor).trim();
     const clientStr = String(clientCode).trim();
-    
+
     // 1. Buscar override en RUTERO_CONFIG
     const configClients = ruteroConfigCache[vendedorStr] || {};
     if (configClients[clientStr]) {
         return configClients[clientStr].day || null;
     }
-    
+
     // 2. Buscar días naturales en LACLAE
     const vendorClients = laclaeCache[vendedorStr] || {};
     const clientData = vendorClients[clientStr];
@@ -360,7 +366,7 @@ function getClientCurrentDay(vendedor, clientCode) {
         // Devolver el primer día de visita natural
         return clientData.visitDays[0];
     }
-    
+
     return null;
 }
 

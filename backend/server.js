@@ -12,8 +12,8 @@ const logger = require('./middleware/logger');
 const verifyToken = require('./middleware/auth');
 const { initDb, query } = require('./config/db');
 const { globalLimiter } = require('./middleware/security');
-const { loadLaclaeCache } = require('./services/laclae');
 const { loadMetadataCache } = require('./services/metadataCache');
+const { preloadCache } = require('./services/cache-preloader');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
 
 // ==================== OPTIMIZATION IMPORTS ====================
@@ -154,8 +154,8 @@ async function startServer() {
     logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
     logger.info('═'.repeat(60));
 
-    // Load caches in background
-    loadLaclaeCache().catch(err => logger.warn(`LACLAE cache error: ${err.message}`));
+    // Start System Preload (Cache Warmup)
+    preloadCache(PORT).catch(err => logger.warn(`Preload error: ${err.message}`));
     loadMetadataCache().catch(err => logger.warn(`Metadata cache error: ${err.message}`));
   });
 }
