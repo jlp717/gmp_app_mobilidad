@@ -47,20 +47,42 @@ const getClientsHandler = async (req, res) => {
         MAX(TRIM(V.NOMBREVENDEDOR)) as vendorName
       FROM DSEDAC.CLI C
       LEFT JOIN(
-        SELECT LCCDCL as CODIGOCLIENTEALBARAN,
-        MAX(LCCDVD) as LAST_VENDOR,
-        SUM(LCIMVT) as TOTAL_PURCHASES,
-        SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
-        COUNT(DISTINCT LCAADC || '-' || LCMMDC || '-' || LCDDDC) as NUM_ORDERS,
-        MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
-        FROM DSED.LACLAE 
-        WHERE LCAADC >= ${MIN_YEAR}
-          AND TPDC = 'LAC'
-          AND LCTPVT IN ('CC', 'VC')
-          AND LCCLLN IN ('AB', 'VT')
-          AND LCSRAB NOT IN ('N', 'Z')
-          ${vendedorFilter.replace(/L\./g, '')}
-        GROUP BY LCCDCL
+        SELECT 
+            Stats.LCCDCL as CODIGOCLIENTEALBARAN,
+            LastV.LCCDVD as LAST_VENDOR,
+            Stats.TOTAL_PURCHASES,
+            Stats.TOTAL_MARGIN,
+            Stats.NUM_ORDERS,
+            Stats.LAST_PURCHASE_DATE
+        FROM (
+            SELECT LCCDCL,
+                SUM(LCIMVT) as TOTAL_PURCHASES,
+                SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
+                COUNT(DISTINCT LCAADC || '-' || LCMMDC || '-' || LCDDDC) as NUM_ORDERS,
+                MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
+            FROM DSED.LACLAE 
+            WHERE LCAADC >= ${MIN_YEAR}
+              AND TPDC = 'LAC'
+              AND LCTPVT IN ('CC', 'VC')
+              AND LCCLLN IN ('AB', 'VT')
+              AND LCSRAB NOT IN ('N', 'Z')
+              ${vendedorFilter.replace(/L\./g, '')}
+            GROUP BY LCCDCL
+        ) Stats
+        LEFT JOIN (
+            SELECT LCCDCL, LCCDVD
+            FROM (
+                SELECT LCCDCL, LCCDVD,
+                    ROW_NUMBER() OVER(PARTITION BY LCCDCL ORDER BY (LCAADC * 10000 + LCMMDC * 100 + LCDDDC) DESC, LCCDVD ASC) as RN
+                FROM DSED.LACLAE
+                WHERE LCAADC >= ${MIN_YEAR}
+                  AND TPDC = 'LAC'
+                  AND LCTPVT IN ('CC', 'VC')
+                  AND LCCLLN IN ('AB', 'VT')
+                  AND LCSRAB NOT IN ('N', 'Z')
+                  ${vendedorFilter.replace(/L\./g, '')}
+            ) T WHERE RN = 1
+        ) LastV ON Stats.LCCDCL = LastV.LCCDCL
       ) S ON C.CODIGOCLIENTE = S.CODIGOCLIENTEALBARAN
       LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
