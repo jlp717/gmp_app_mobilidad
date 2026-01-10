@@ -434,157 +434,227 @@ class _ClientCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Avatar
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                  style: const TextStyle(
-                    color: AppTheme.neonGreen,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-
-              // Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                      style: const TextStyle(
+                        color: AppTheme.neonGreen,
                         fontWeight: FontWeight.bold,
+                        fontSize: 20,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Row(
+                  ),
+                  const SizedBox(width: 16),
+
+                  // Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.location_on, size: 14, color: AppTheme.textSecondary),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            city.isNotEmpty ? city : 'Sin ciudad',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textSecondary,
+                        Text(
+                          name,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.location_on, size: 14, color: AppTheme.textSecondary),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                city.isNotEmpty ? city : 'Sin ciudad',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          ],
+                        ),
+                        if (phone.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                          children: [
+                              Icon(Icons.phone, size: 14, color: AppTheme.textSecondary),
+                              const SizedBox(width: 4),
+                              Text(
+                                phone,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (isJefeVentas && client['vendorName'] != null) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.person_outline, size: 14, color: AppTheme.neonPurple),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  'Rep: ${client['vendorName']}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.neonPurple,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  // Stats
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        CurrencyFormatter.formatWhole(totalPurchases),
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.success,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$numOrders pedidos',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      if (lastPurchase.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Última: $lastPurchase',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppTheme.textTertiary,
                           ),
                         ),
                       ],
-                    ),
-                    if (phone.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                      children: [
-                          Icon(Icons.phone, size: 14, color: AppTheme.textSecondary),
-                          const SizedBox(width: 4),
-                          Text(
-                            phone,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
-                    if (isJefeVentas && client['vendorName'] != null) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                           const Icon(Icons.person_outline, size: 14, color: AppTheme.neonPurple),
-                           const SizedBox(width: 4),
-                           Expanded(
-                             child: Text(
-                               'Rep: ${client['vendorName']}',
-                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                 color: AppTheme.neonPurple,
-                                 fontWeight: FontWeight.bold,
-                               ),
-                               maxLines: 1,
-                               overflow: TextOverflow.ellipsis,
-                             ),
-                           ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+                  ),
 
-              // Stats
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    CurrencyFormatter.formatWhole(totalPurchases),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.success,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$numOrders pedidos',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                  if (lastPurchase.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      'Última: $lastPurchase',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppTheme.textTertiary,
-                      ),
+                  // WhatsApp button
+                  if (phone.isNotEmpty && onWhatsAppTap != null) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: onWhatsAppTap,
+                      icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 24),
+                      tooltip: 'WhatsApp',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                     ),
                   ],
                 ],
               ),
-
-              // WhatsApp button
-              if (phone.isNotEmpty && onWhatsAppTap != null) ...[
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: onWhatsAppTap,
-                  icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 24),
-                  tooltip: 'WhatsApp',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                ),
-              ],
-
-              // Route badge
-              if (route.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.neonPurple.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    route,
-                    style: const TextStyle(
-                      color: AppTheme.neonPurple,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
+              
+              // Route & Days Badges
+              _buildRouteDaysRow(),
             ],
           ),
         ),
       ),
     );
-  }
+}
+
+Widget _buildRouteDaysRow() {
+final route = client['route'] ?? '';
+final visitDays = client['visitDaysShort'] as String? ?? '';
+final deliveryDays = client['deliveryDaysShort'] as String? ?? '';
+
+if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
+  return const SizedBox.shrink();
+}
+
+return Padding(
+  padding: const EdgeInsets.only(top: 8),
+  child: Wrap(
+    spacing: 8,
+    runSpacing: 4,
+    children: [
+      // Route Badge
+      if (route.isNotEmpty)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppTheme.neonPurple.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
+              const SizedBox(width: 4),
+              Text(
+                'Ruta $route', 
+                style: TextStyle(fontSize: 11, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      
+      // Visit Days Badge
+      if (visitDays.isNotEmpty)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppTheme.neonBlue.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.calendar_today, size: 12, color: AppTheme.neonBlue),
+              const SizedBox(width: 4),
+              Text(
+                'Visita: $visitDays',
+                style: TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      
+      // Delivery Days Badge
+      if (deliveryDays.isNotEmpty)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppTheme.neonGreen.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.local_shipping, size: 12, color: AppTheme.neonGreen),
+              const SizedBox(width: 4),
+              Text(
+                'Reparto: $deliveryDays',
+                style: TextStyle(fontSize: 11, color: AppTheme.neonGreen, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+    ],
+  ),
+);
 }

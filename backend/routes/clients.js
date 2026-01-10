@@ -111,6 +111,8 @@ const getClientsHandler = async (req, res) => {
         if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
         if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
 
+        const clientDays = getClientDays(null, c.CODE?.trim());
+
         return {
           code: c.CODE?.trim(),
           name: c.NAME?.trim() || 'Sin nombre',
@@ -121,14 +123,20 @@ const getClientsHandler = async (req, res) => {
           postalCode: c.POSTALCODE?.trim(),
           phone: c.PHONE?.trim(),
           phone2: c.PHONE2?.trim(),
-          phones: phones, // Array for WhatsApp selector
+          phones: phones,
           route: c.ROUTE?.trim(),
           contactPerson: c.CONTACTPERSON?.trim(),
           totalPurchases: formatCurrency(c.TOTALPURCHASES),
           totalMargin: formatCurrency(c.TOTALMARGIN),
           numOrders: parseInt(c.NUMORDERS) || 0,
           lastPurchase: formatDateFromInt(c.LASTDATEINT),
-          vendorName: c.VENDORNAME?.trim()
+          vendorName: c.VENDORNAME?.trim(),
+
+          // Visit & Delivery Days
+          visitDays: clientDays?.visitDays || [],
+          visitDaysShort: clientDays?.visitDaysShort || '',
+          deliveryDays: clientDays?.deliveryDays || [],
+          deliveryDaysShort: clientDays?.deliveryDaysShort || ''
         };
       }),
       hasMore: clients.length === parseInt(limit)

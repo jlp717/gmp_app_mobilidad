@@ -920,6 +920,26 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                       ),
                       const SizedBox(height: 12),
                       
+                      // Sort Dropdown (New)
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(
+                          labelText: 'Ordenar por',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          isDense: true,
+                          prefixIcon: Icon(Icons.sort, size: 18),
+                        ),
+                        value: _currentSort,
+                        items: const [
+                          DropdownMenuItem(value: 'objective_desc', child: Text('Mayor Objetivo')),
+                          DropdownMenuItem(value: 'sales_desc', child: Text('Mayor Recaudado')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _currentSort = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      const SizedBox(height: 12),
+                      
                       // Code & NIF Row
                       Row(
                         children: [
@@ -2008,6 +2028,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
   }
 
   String _clientSearchQuery = '';
+  String _currentSort = 'objective_desc'; // Default sort
 
   Widget _buildClientTab() {
     if (_clientsObjectives.isEmpty) {
@@ -2035,6 +2056,22 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
       final code = c['code']?.toString().toLowerCase() ?? '';
       return name.contains(_clientSearchQuery.toLowerCase()) || code.contains(_clientSearchQuery.toLowerCase());
     }).toList();
+
+    // Sort Logic
+    filteredClients.sort((a, b) {
+      final double objA = (a['objective'] as num?)?.toDouble() ?? 0;
+      final double objB = (b['objective'] as num?)?.toDouble() ?? 0;
+      final double salesA = (a['current'] as num?)?.toDouble() ?? 0;
+      final double salesB = (b['current'] as num?)?.toDouble() ?? 0;
+      
+      switch (_currentSort) {
+        case 'sales_desc':
+          return salesB.compareTo(salesA); // Mayor recaudado b - a
+        case 'objective_desc':
+        default:
+          return objB.compareTo(objA); // Mayor objetivo b - a
+      }
+    });
 
     // Count by status
     final statusCounts = {

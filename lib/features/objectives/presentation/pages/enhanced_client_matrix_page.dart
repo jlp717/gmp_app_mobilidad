@@ -1226,12 +1226,15 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 ),
                 const SizedBox(height: 2),
                 // Sales amount (- si es 0 pero había ventas antes)
-                Text(
-                  isLost ? '-' : '${_formatCompact(sales)} €',
-                  style: TextStyle(
-                    fontSize: compact ? 9 : 10,
-                    fontWeight: FontWeight.bold,
-                    color: isLost ? AppTheme.error : Colors.white,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    isLost ? '-' : '${_formatCompact(sales)} €',
+                    style: TextStyle(
+                      fontSize: compact ? 9 : 10,
+                      fontWeight: FontWeight.bold,
+                      color: isLost ? AppTheme.error : Colors.white,
+                    ),
                   ),
                 ),
                 // YoY percentage, NEW badge, or LOST indicator
