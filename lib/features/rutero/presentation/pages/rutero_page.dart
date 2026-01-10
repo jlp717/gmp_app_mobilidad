@@ -30,6 +30,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   // Data state
   Map<String, int> _weekData = {};
   int _totalUniqueClients = 0; // Total de clientes únicos (no suma duplicada por días)
+  int _completedWeeks = 0; // NEW: Track completed weeks for YoY label
   List<Map<String, dynamic>> _dayClients = [];
   bool _isLoadingWeek = true;
   bool _isLoadingClients = false;
@@ -235,6 +236,10 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       setState(() {
         final rawList = response['clients'] ?? [];
         _dayClients = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        // Parse completed weeks from metadata
+        if (response['period'] != null) {
+           _completedWeeks = (response['period']['weeks'] as num?)?.toInt() ?? 0;
+        }
         _isLoadingClients = false;
       });
     } catch (e) {
@@ -637,6 +642,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             onNotesTap: () => _openNotesDialog(client),
             showMargin: widget.isJefeVentas,
             selectedYear: _selectedYear,
+            completedWeeks: _completedWeeks, // Pass to widget
           );
         },
       ),
@@ -1125,6 +1131,7 @@ class _ClientCard extends StatelessWidget {
   final VoidCallback? onNotesTap;
   final bool showMargin;
   final int selectedYear;
+  final int completedWeeks; // NEW
 
   const _ClientCard({
     required this.client,
@@ -1137,6 +1144,7 @@ class _ClientCard extends StatelessWidget {
     this.onNotesTap, // NEW
     this.showMargin = false,
     required this.selectedYear,
+    this.completedWeeks = 0, // NEW field
   });
 
   @override
@@ -1324,9 +1332,10 @@ class _ClientCard extends StatelessWidget {
                       ),
                     const SizedBox(height: 8),
                     // Sales and comparison row
+                    // Sales and comparison row
                     Row(
                       children: [
-                        Text('Acumulado: ', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                        Text('Acumulado (Sem $completedWeeks): ', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                         Text(
                           formatCurrency(ytdSales),
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
