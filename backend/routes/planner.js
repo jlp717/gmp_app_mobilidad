@@ -565,30 +565,14 @@ router.get('/rutero/day/:day', async (req, res) => {
         const previousYear = currentYear - 1;
 
         const today = new Date(now);
-        const dayOfWeek = today.getDay();
-        const diffToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;
-        const lastSundayDate = new Date(today);
-        lastSundayDate.setDate(today.getDate() - diffToLastSunday);
 
-        let endMonthCurrent, endDayCurrent;
-        let endMonthPrevious, endDayPrevious;
+        // Switch to Real-Time YTD (Up to Today) to include current week's sales
+        const endMonthCurrent = today.getMonth() + 1;
+        const endDayCurrent = today.getDate();
 
-        // Enforce "Completed Weeks" logic: Compare Jan 1 -> Last Sunday for both years
-        if (lastSundayDate.getFullYear() < currentYear) {
-            // First week of year is incomplete, show 0 or YTD? User asked for "completed weeks"
-            // If strict, 0. If lenient, YTD? Strict interpretation of "semana completa" = 0.
-            endMonthCurrent = 0;
-            endDayCurrent = 0;
-            endMonthPrevious = 0;
-            endDayPrevious = 0;
-        } else {
-            endMonthCurrent = lastSundayDate.getMonth() + 1;
-            endDayCurrent = lastSundayDate.getDate();
-
-            // Align previous year exactly to same day/month for fair Apple-to-Apple comparison
-            endMonthPrevious = endMonthCurrent;
-            endDayPrevious = endDayCurrent;
-        }
+        // Previous year strictly aligned to same day (Apple-to-Apple)
+        const endMonthPrevious = endMonthCurrent;
+        const endDayPrevious = endDayCurrent;
 
         if (DAY_NAMES.indexOf(day.toLowerCase()) === -1) {
             return res.status(400).json({ error: 'Día inválido', day });
@@ -801,7 +785,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             year: currentYear,
             compareYear: previousYear,
             period: {
-                weeks: Math.ceil(((lastSundayDate - new Date(currentYear, 0, 1)) / 86400000 + 1) / 7), // Valid Week of Year calculation
+                weeks: Math.ceil(((today - new Date(currentYear, 0, 1)) / 86400000 + 1) / 7), // Weekly progress based on today
                 current: `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}`,
                 previous: endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Semana cerrada'
             }
