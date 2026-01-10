@@ -1,5 +1,8 @@
 /**
  * GMP SALES APP - MODULAR SERVER (Work provided by Antigravity)
+ * =============================================================
+ * Enhanced with: Multi-layer caching (Redis), Network optimization,
+ * Query optimization, and Performance monitoring
  */
 const express = require('express');
 const cors = require('cors');
@@ -12,6 +15,11 @@ const { globalLimiter } = require('./middleware/security');
 const { loadLaclaeCache } = require('./services/laclae');
 const { loadMetadataCache } = require('./services/metadataCache');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
+
+// ==================== OPTIMIZATION IMPORTS ====================
+const { initCache, getCacheStats } = require('./services/redis-cache');
+const { networkOptimizer, responseCoalescing } = require('./middleware/network-optimizer');
+const { createOptimizedQuery } = require('./services/query-optimizer');
 
 // Import Routes
 const authRoutes = require('./routes/auth');
@@ -35,6 +43,10 @@ app.use(cors());
 app.use(helmet());
 app.use(compression());
 app.use(express.json({ limit: '10kb' }));
+
+// ==================== OPTIMIZATION MIDDLEWARE ====================
+app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers
+app.use(responseCoalescing); // Combine identical concurrent requests
 
 // Logging
 app.use((req, res, next) => {
@@ -127,13 +139,19 @@ app.use('/api/filters', filtersRoutes);
 async function startServer() {
   await initDb();
 
+  // Initialize Redis cache (non-blocking - works without Redis too)
+  initCache()
+    .then(() => logger.info('✅ Redis cache initialized'))
+    .catch(err => logger.warn(`⚠️ Redis unavailable (using L1 only): ${err.message}`));
+
   // Start server first so it's responsive
   app.listen(PORT, '0.0.0.0', () => {
     logger.info('═'.repeat(60));
     logger.info(`  GMP Sales Analytics Server - http://192.168.1.238:${PORT}`);
     logger.info(`  Listening on ALL interfaces (0.0.0.0:${PORT})`);
     logger.info(`  Connected to DB2 via ODBC - Real Data`);
-    logger.info(`  Security: TOKEN AUTH ENTFORCED 🔒`);
+    logger.info(`  Security: TOKEN AUTH ENFORCED 🔒`);
+    logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
     logger.info('═'.repeat(60));
 
     // Load caches in background
@@ -142,4 +160,37 @@ async function startServer() {
   });
 }
 
+// ==================== OPTIMIZATION MONITORING ENDPOINTS ====================
+// Cache statistics endpoint (protected)
+app.get('/api/optimization/cache-stats', verifyToken, (req, res) => {
+  try {
+    const stats = getCacheStats();
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      cacheStats: stats,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Query optimization stats (protected)
+app.get('/api/optimization/query-stats', verifyToken, (req, res) => {
+  try {
+    const { createOptimizedQuery } = require('./services/query-optimizer');
+    const optimizedQuery = createOptimizedQuery(query);
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      slowQueries: optimizedQuery.getSlowQueries(500),
+      queryStats: optimizedQuery.getStats().slice(0, 20),
+      indexSuggestions: optimizedQuery.suggestIndexes(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 startServer();
+
