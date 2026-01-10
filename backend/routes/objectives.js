@@ -1459,11 +1459,13 @@ router.get('/by-client', async (req, res) => {
         // Parse years and months - default to full year
         const yearsArray = years ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR) : [now.getFullYear()];
         const monthsArray = months ? months.split(',').map(m => parseInt(m.trim())).filter(m => m >= 1 && m <= 12) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-        const rowsLimit = limit ? parseInt(limit) : 1000; // Default limit 1000 if not specified to prevent overload
+        const rowsLimit = limit ? parseInt(limit) : 1000;
 
         const yearsFilter = yearsArray.join(',');
         const monthsFilter = monthsArray.join(',');
-        const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
+        
+        // Use LACLAE with R1_T8CDVD (route vendor) for consistency with client list and rutero
+        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes, 'L');
 
         let extraFilters = '';
         if (city && city.trim()) extraFilters += ` AND UPPER(C.POBLACION) = '${city.trim().toUpperCase()}'`;
@@ -1478,48 +1480,38 @@ router.get('/by-client', async (req, res) => {
         const mainYear = Math.max(...yearsArray);
         const prevYear = mainYear - 1;
 
-        // Query 0: Get TOTAL COUNT (ignoring limit)
+        // Query 0: Get TOTAL COUNT (ignoring limit) - Using LACLAE for consistency
         const countResult = await query(`
-            SELECT COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) as TOTAL
-            FROM DSEDAC.LAC L
-            LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-            WHERE L.ANODOCUMENTO IN(${yearsFilter})
-                AND L.MESDOCUMENTO IN(${monthsFilter})
-                AND ${LAC_SALES_FILTER}
+            SELECT COUNT(DISTINCT L.LCCDCL) as TOTAL
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
+            WHERE L.LCAADC IN(${yearsFilter})
+                AND L.LCMMDC IN(${monthsFilter})
+                AND ${LACLAE_SALES_FILTER}
                 ${vendedorFilter}
                 ${extraFilters}
-        `, false); // false = simple query mode if needed, or stick to default
+        `, false);
 
         const totalClientsCount = countResult[0] ? parseInt(countResult[0].TOTAL) : 0;
 
-        // Query 1: Get current period client data (WITH LIMIT)
+        // Query 1: Get current period client data (WITH LIMIT) - Using LACLAE
         const currentRows = await query(`
       SELECT 
-        L.CODIGOCLIENTEALBARAN as CODE,
+        L.LCCDCL as CODE,
         COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
         MIN(C.DIRECCION) as ADDRESS,
         MIN(C.CODIGOPOSTAL) as POSTALCODE,
         MIN(C.POBLACION) as CITY,
-        SUM(L.IMPORTEVENTA) as SALES,
-        SUM(L.IMPORTECOSTO) as COST
-      FROM DSEDAC.LAC L
-      LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      LEFT JOIN DSEDAC.CAC CA ON CA.CCSBAB = L.LCSBAB 
-        AND CA.CCYEAB = L.LCYEAB 
-        AND CA.CCSRAB = L.LCSRAB 
-        AND CA.CCTRAB = L.LCTRAB 
-        AND CA.CCNRAB = L.LCNRAB
-      WHERE L.ANODOCUMENTO IN(${yearsFilter})
-        AND L.MESDOCUMENTO IN(${monthsFilter})
-        -- Matrix cleanup filters
-        -- Golden Filters
-        AND L.LCTPVT IN ('CC', 'VC')
-        AND L.LCCLLN IN ('AB', 'VT')
-        AND L.LCSRAB NOT IN ('N', 'Z')
-        AND COALESCE(CA.CCSNSD, '') <> 'E'
+        SUM(L.LCIMVT) as SALES,
+        SUM(L.LCIMCT) as COST
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
+      WHERE L.LCAADC IN(${yearsFilter})
+        AND L.LCMMDC IN(${monthsFilter})
+        AND ${LACLAE_SALES_FILTER}
         ${vendedorFilter}
         ${extraFilters}
-      GROUP BY L.CODIGOCLIENTEALBARAN
+      GROUP BY L.LCCDCL
       ORDER BY SALES DESC
       FETCH FIRST ${rowsLimit} ROWS ONLY
     `);
@@ -1534,22 +1526,14 @@ router.get('/by-client', async (req, res) => {
         if (retrievedCodes.length > 0) {
             const prevRows = await query(`
               SELECT 
-                L.CODIGOCLIENTEALBARAN as CODE,
-                SUM(L.IMPORTEVENTA) as PREV_SALES
-              FROM DSEDAC.LAC L
-              LEFT JOIN DSEDAC.CAC CA ON CA.CCSBAB = L.LCSBAB 
-                AND CA.CCYEAB = L.LCYEAB 
-                AND CA.CCSRAB = L.LCSRAB 
-                AND CA.CCTRAB = L.LCTRAB 
-                AND CA.CCNRAB = L.LCNRAB
-              WHERE L.ANODOCUMENTO = ${prevYear}
-                AND L.MESDOCUMENTO IN(${monthsFilter})
-                AND L.LCTPVT IN ('CC', 'VC')
-                AND L.LCCLLN IN ('AB', 'VT')
-                AND L.LCSRAB NOT IN ('N', 'Z')
-                AND COALESCE(CA.CCSNSD, '') <> 'E'
-                AND L.CODIGOCLIENTEALBARAN IN (${retrievedCodes})
-              GROUP BY L.CODIGOCLIENTEALBARAN
+                L.LCCDCL as CODE,
+                SUM(L.LCIMVT) as PREV_SALES
+              FROM DSED.LACLAE L
+              WHERE L.LCAADC = ${prevYear}
+                AND L.LCMMDC IN(${monthsFilter})
+                AND ${LACLAE_SALES_FILTER}
+                AND L.LCCDCL IN (${retrievedCodes})
+              GROUP BY L.LCCDCL
             `);
 
             prevRows.forEach(r => {

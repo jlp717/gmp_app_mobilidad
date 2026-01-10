@@ -1134,13 +1134,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
-  /// Monthly breakdown row - compact horizontal scrolling with format: ENE X€ ±X%
+  /// Monthly breakdown row - vertical cards with ENE / 820€ / -73% format
   Widget _buildMonthlyBreakdownRow(Map<String, dynamic>? monthlyData, {bool compact = false}) {
     if (monthlyData == null || monthlyData.isEmpty) return const SizedBox.shrink();
     
     return Container(
-      margin: EdgeInsets.only(top: compact ? 4 : 6),
-      height: compact ? 22 : 28,
+      margin: EdgeInsets.only(top: compact ? 6 : 8),
+      height: compact ? 52 : 60,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: 12,
@@ -1150,14 +1150,23 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           final sales = (mData?['sales'] as num?)?.toDouble() ?? 0;
           final prevSales = (mData?['prevSales'] as num?)?.toDouble() ?? 0;
           
-          // Skip months with no sales
+          // Skip months with no sales - show greyed out
           if (sales == 0 && prevSales == 0) {
             return Container(
+              width: compact ? 42 : 50,
               margin: const EdgeInsets.only(right: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              child: Text(
-                '${_mNames[index]} -',
-                style: TextStyle(fontSize: compact ? 8 : 9, color: AppTheme.textSecondary),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.darkCard.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(_mNames[index], style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                  Text('-', style: TextStyle(fontSize: compact ? 10 : 11, color: AppTheme.textSecondary)),
+                ],
               ),
             );
           }
@@ -1166,67 +1175,70 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           double yoyPct = 0;
           String yoySign = '';
           Color yoyColor = AppTheme.textSecondary;
+          Color bgColor = AppTheme.darkCard;
+          bool isNew = false;
           
           if (prevSales > 0 && sales > 0) {
             yoyPct = ((sales - prevSales) / prevSales) * 100;
             yoySign = yoyPct >= 0 ? '+' : '';
             yoyColor = yoyPct >= 0 ? AppTheme.success : AppTheme.error;
+            bgColor = yoyColor.withOpacity(0.12);
           } else if (sales > 0 && prevSales == 0) {
-            // New - no previous year data
+            isNew = true;
             yoyColor = AppTheme.neonBlue;
+            bgColor = AppTheme.neonBlue.withOpacity(0.12);
           }
           
           return Container(
-            margin: const EdgeInsets.only(right: 6),
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            width: compact ? 48 : 56,
+            margin: const EdgeInsets.only(right: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             decoration: BoxDecoration(
-              color: yoyColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4),
+              color: bgColor,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: yoyColor.withOpacity(0.4), width: 1),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Month name
                 Text(
                   _mNames[index],
                   style: TextStyle(
-                    fontSize: compact ? 8 : 9,
+                    fontSize: compact ? 9 : 10,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(width: 3),
-                // Sales amount with € symbol
+                const SizedBox(height: 2),
+                // Sales amount
                 Text(
                   '${_formatCompact(sales)}€',
                   style: TextStyle(
-                    fontSize: compact ? 8 : 9,
+                    fontSize: compact ? 10 : 11,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-                // YoY percentage (if has previous year data)
-                if (prevSales > 0) ...[
-                  const SizedBox(width: 3),
+                // YoY percentage or NEW badge
+                if (prevSales > 0)
                   Text(
                     '$yoySign${yoyPct.toStringAsFixed(0)}%',
                     style: TextStyle(
-                      fontSize: compact ? 7 : 8,
-                      fontWeight: FontWeight.w600,
+                      fontSize: compact ? 9 : 10,
+                      fontWeight: FontWeight.bold,
                       color: yoyColor,
                     ),
-                  ),
-                ] else if (sales > 0) ...[
-                  const SizedBox(width: 3),
+                  )
+                else if (isNew)
                   Text(
                     'NUEVO',
                     style: TextStyle(
-                      fontSize: compact ? 6 : 7,
-                      fontWeight: FontWeight.w600,
+                      fontSize: compact ? 7 : 8,
+                      fontWeight: FontWeight.bold,
                       color: AppTheme.neonBlue,
                     ),
                   ),
-                ],
               ],
             ),
           );
