@@ -258,6 +258,24 @@ function getTotalClientsFromCache(vendedorCodes, role = 'comercial') {
     return allClients.size;
 }
 
+// Get client codes from cache (for optimization)
+function getClientCodesFromCache(vendedorCodes) {
+    if (!laclaeCacheReady) return null;
+
+    const allClients = new Set();
+
+    const vendedors = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : Object.keys(laclaeCache);
+
+    vendedors.forEach(vendedor => {
+        const vendorClients = laclaeCache[vendedor] || {};
+        Object.keys(vendorClients).forEach(clientCode => {
+            allClients.add(clientCode);
+        });
+    });
+
+    return Array.from(allClients);
+}
+
 // Get list of vendedores from cache
 function getVendedoresFromCache() {
     if (!laclaeCacheReady) return null;
@@ -351,6 +369,7 @@ module.exports = {
     getClientsForDay,
     getWeekCountsFromCache,
     getTotalClientsFromCache,
+    getClientCodesFromCache,
     getVendedoresFromCache,
     getVendorActiveDaysFromCache,
     getVendorDeliveryDaysFromCache,

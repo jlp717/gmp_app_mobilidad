@@ -10,6 +10,16 @@ const {
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER
 } = require('../utils/common');
+const { getClientCodesFromCache } = require('../services/laclae');
+const {
+    getCachedFamilyNames,
+    getCachedFi1Names,
+    getCachedFi2Names,
+    getCachedFi3Names,
+    getCachedFi4Names,
+    getCachedFi5Names,
+    isCacheReady: isMetadataCacheReady
+} = require('../services/metadataCache');
 
 
 // =============================================================================
@@ -604,51 +614,61 @@ router.get('/matrix', async (req, res) => {
         const availableFi4Map = new Map();
         const availableFi5Map = new Map();
 
-        // Load FI descriptions for all levels
+        // Load FI descriptions for all levels (from cache or fallback to query)
         let fi1Names = {}, fi2Names = {}, fi3Names = {}, fi4Names = {}, fi5Names = {};
-        try {
-            // 1. Load Name Maps
-            const famRows = await query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM DSEDAC.FAM`);
-            famRows.forEach(r => { familyNames[r.CODIGOFAMILIA?.trim()] = r.DESCRIPCIONFAMILIA?.trim() || r.CODIGOFAMILIA?.trim(); });
-            
-            // Load FI names for all 5 levels
-            const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false);
-            fi1Rows.forEach(r => { 
-                const code = (r.CODIGOFILTRO || '').toString().trim();
-                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                if (code) fi1Names[code] = name;
-            });
-            
-            const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false);
-            fi2Rows.forEach(r => { 
-                const code = (r.CODIGOFILTRO || '').toString().trim();
-                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                if (code) fi2Names[code] = name;
-            });
-            
-            const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false);
-            fi3Rows.forEach(r => { 
-                const code = (r.CODIGOFILTRO || '').toString().trim();
-                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                if (code) fi3Names[code] = name;
-            });
-            
-            const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false);
-            fi4Rows.forEach(r => { 
-                const code = (r.CODIGOFILTRO || '').toString().trim();
-                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                if (code) fi4Names[code] = name;
-            });
-            
-            const fi5Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI5`, false, false);
-            fi5Rows.forEach(r => { 
-                const code = (r.CODIGOFILTRO || '').toString().trim();
-                const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                if (code) fi5Names[code] = name;
-            });
+        
+        if (isMetadataCacheReady()) {
+            // Use cached data (instant)
+            Object.assign(familyNames, getCachedFamilyNames() || {});
+            fi1Names = getCachedFi1Names() || {};
+            fi2Names = getCachedFi2Names() || {};
+            fi3Names = getCachedFi3Names() || {};
+            fi4Names = getCachedFi4Names() || {};
+            fi5Names = getCachedFi5Names() || {};
+        } else {
+            // Fallback: load from database (slower)
+            try {
+                const famRows = await query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM DSEDAC.FAM`, false, false);
+                famRows.forEach(r => { familyNames[r.CODIGOFAMILIA?.trim()] = r.DESCRIPCIONFAMILIA?.trim() || r.CODIGOFAMILIA?.trim(); });
+                
+                const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false);
+                fi1Rows.forEach(r => { 
+                    const code = (r.CODIGOFILTRO || '').toString().trim();
+                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                    if (code) fi1Names[code] = name;
+                });
+                
+                const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false);
+                fi2Rows.forEach(r => { 
+                    const code = (r.CODIGOFILTRO || '').toString().trim();
+                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                    if (code) fi2Names[code] = name;
+                });
+                
+                const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false);
+                fi3Rows.forEach(r => { 
+                    const code = (r.CODIGOFILTRO || '').toString().trim();
+                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                    if (code) fi3Names[code] = name;
+                });
+                
+                const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false);
+                fi4Rows.forEach(r => { 
+                    const code = (r.CODIGOFILTRO || '').toString().trim();
+                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                    if (code) fi4Names[code] = name;
+                });
+                
+                const fi5Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI5`, false, false);
+                fi5Rows.forEach(r => { 
+                    const code = (r.CODIGOFILTRO || '').toString().trim();
+                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
+                    if (code) fi5Names[code] = name;
+                });
 
-        } catch (e) {
-            logger.warn(`Could not load family/FI names: ${e.message}`);
+            } catch (e) {
+                logger.warn(`Could not load family/FI names: ${e.message}`);
+            }
         }
 
         // Build hierarchy: Family -> Subfamily -> Product (legacy)
@@ -1480,61 +1500,82 @@ router.get('/by-client', async (req, res) => {
         const mainYear = Math.max(...yearsArray);
         const prevYear = mainYear - 1;
 
-        // Build vendor filter for R1_T8CDVD (rutero assignment)
-        let r1VendorFilter = '';
-        if (vendedorCodes && vendedorCodes !== 'ALL') {
-            const codeList = vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',');
-            r1VendorFilter = `AND R.R1_T8CDVD IN (${codeList})`;
-        }
+        // OPTIMIZATION: Get client codes from cache instead of heavy subquery
+        const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
+        
+        let totalClientsCount = 0;
+        let currentRows = [];
 
-        // Query 0: Get TOTAL COUNT of clients assigned to vendor in rutero (not just those with sales)
-        const countResult = await query(`
-            SELECT COUNT(DISTINCT R.LCCDCL) as TOTAL
-            FROM (
-                SELECT DISTINCT LCCDCL, R1_T8CDVD
+        if (cachedClientCodes && cachedClientCodes.length > 0) {
+            // Use cached client codes for fast filtering
+            const clientCodesFilter = cachedClientCodes.map(c => `'${c}'`).join(',');
+            
+            // Query 0: Count clients from cache (filtered by extra filters if any)
+            if (extraFilters) {
+                const countResult = await query(`
+                    SELECT COUNT(*) as TOTAL
+                    FROM DSEDAC.CLI C
+                    WHERE C.CODIGOCLIENTE IN (${clientCodesFilter})
+                      AND C.ANOBAJA = 0
+                      ${extraFilters}
+                `, false);
+                totalClientsCount = countResult[0] ? parseInt(countResult[0].TOTAL) : 0;
+            } else {
+                totalClientsCount = cachedClientCodes.length;
+            }
+
+            // Query 1: Get client info + sales data (optimized with IN clause)
+            currentRows = await query(`
+              SELECT 
+                C.CODIGOCLIENTE as CODE,
+                COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                C.DIRECCION as ADDRESS,
+                C.CODIGOPOSTAL as POSTALCODE,
+                C.POBLACION as CITY,
+                COALESCE(S.SALES, 0) as SALES,
+                COALESCE(S.COST, 0) as COST
+              FROM DSEDAC.CLI C
+              LEFT JOIN (
+                SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
                 FROM DSED.LACLAE
-                WHERE R1_T8CDVD IS NOT NULL AND LCCDCL IS NOT NULL
-                ${r1VendorFilter.replace(/R\./g, '')}
-            ) R
-            LEFT JOIN DSEDAC.CLI C ON R.LCCDCL = C.CODIGOCLIENTE
-            WHERE C.ANOBAJA = 0
+                WHERE LCAADC IN(${yearsFilter})
+                  AND LCMMDC IN(${monthsFilter})
+                  AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
+                  AND LCCDCL IN (${clientCodesFilter})
+                GROUP BY LCCDCL
+              ) S ON C.CODIGOCLIENTE = S.LCCDCL
+              WHERE C.CODIGOCLIENTE IN (${clientCodesFilter})
+                AND C.ANOBAJA = 0
                 ${extraFilters}
-        `, false);
-
-        const totalClientsCount = countResult[0] ? parseInt(countResult[0].TOTAL) : 0;
-
-        // Query 1: Get all clients assigned to vendor in rutero (R1_T8CDVD) with their sales data
-        // This ensures we show ALL clients from rutero, even those with 0 sales
-        const currentRows = await query(`
-      SELECT 
-        R.LCCDCL as CODE,
-        COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
-        MIN(C.DIRECCION) as ADDRESS,
-        MIN(C.CODIGOPOSTAL) as POSTALCODE,
-        MIN(C.POBLACION) as CITY,
-        COALESCE(S.SALES, 0) as SALES,
-        COALESCE(S.COST, 0) as COST
-      FROM (
-        SELECT DISTINCT LCCDCL, R1_T8CDVD
-        FROM DSED.LACLAE
-        WHERE R1_T8CDVD IS NOT NULL AND LCCDCL IS NOT NULL
-        ${r1VendorFilter.replace(/R\./g, '')}
-      ) R
-      LEFT JOIN DSEDAC.CLI C ON R.LCCDCL = C.CODIGOCLIENTE
-      LEFT JOIN (
-        SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
-        FROM DSED.LACLAE
-        WHERE LCAADC IN(${yearsFilter})
-          AND LCMMDC IN(${monthsFilter})
-          AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
-        GROUP BY LCCDCL
-      ) S ON R.LCCDCL = S.LCCDCL
-      WHERE C.ANOBAJA = 0
-        ${extraFilters}
-      GROUP BY R.LCCDCL, S.SALES, S.COST
-      ORDER BY COALESCE(S.SALES, 0) DESC
-      FETCH FIRST ${rowsLimit} ROWS ONLY
-    `);
+              ORDER BY COALESCE(S.SALES, 0) DESC
+              FETCH FIRST ${rowsLimit} ROWS ONLY
+            `);
+        } else {
+            // Fallback: Use original query with vendedor filter if cache not available
+            const vendedorFilterSales = buildVendedorFilterLACLAE(vendedorCodes, 'L');
+            
+            currentRows = await query(`
+              SELECT 
+                L.LCCDCL as CODE,
+                COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
+                MIN(C.DIRECCION) as ADDRESS,
+                MIN(C.CODIGOPOSTAL) as POSTALCODE,
+                MIN(C.POBLACION) as CITY,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST
+              FROM DSED.LACLAE L
+              LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
+              WHERE L.LCAADC IN(${yearsFilter})
+                AND L.LCMMDC IN(${monthsFilter})
+                AND ${LACLAE_SALES_FILTER}
+                ${vendedorFilterSales}
+                ${extraFilters}
+              GROUP BY L.LCCDCL
+              ORDER BY SALES DESC
+              FETCH FIRST ${rowsLimit} ROWS ONLY
+            `);
+            totalClientsCount = currentRows.length;
+        }
 
         // Query 2: Get previous year data for same period (for objective calculation)
         // Optimization: Only fetch previous data for the clients we actually retrieved in currentRows

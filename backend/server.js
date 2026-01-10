@@ -10,6 +10,7 @@ const verifyToken = require('./middleware/auth');
 const { initDb, query } = require('./config/db');
 const { globalLimiter } = require('./middleware/security');
 const { loadLaclaeCache } = require('./services/laclae');
+const { loadMetadataCache } = require('./services/metadataCache');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
 
 // Import Routes
@@ -135,8 +136,9 @@ async function startServer() {
     logger.info(`  Security: TOKEN AUTH ENTFORCED 🔒`);
     logger.info('═'.repeat(60));
 
-    // Load cache in background
+    // Load caches in background
     loadLaclaeCache().catch(err => logger.warn(`LACLAE cache error: ${err.message}`));
+    loadMetadataCache().catch(err => logger.warn(`Metadata cache error: ${err.message}`));
   });
 }
 
