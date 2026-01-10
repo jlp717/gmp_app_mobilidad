@@ -318,14 +318,12 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                child: Row(
                  children: [
-                   // Only show back arrow if there's a page to go back to
-                   if (Navigator.canPop(context))
-                     IconButton(
-                       onPressed: () => Navigator.pop(context),
-                       icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-                       padding: EdgeInsets.zero,
-                       constraints: const BoxConstraints(),
-                     ),
+                   IconButton(
+                     onPressed: () => Navigator.pop(context),
+                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                     padding: EdgeInsets.zero,
+                     constraints: const BoxConstraints(),
+                   ),
                    const SizedBox(width: 8),
                    // Title + Role Switcher in one row
                    Expanded(
@@ -1316,21 +1314,6 @@ class _ClientCard extends StatelessWidget {
                           style: TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
                         ),
                       ),
-                    // Visit and Delivery Days Row
-                    if ((client['visitDays'] as List?)?.isNotEmpty == true || (client['deliveryDays'] as List?)?.isNotEmpty == true)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: [
-                            if ((client['visitDays'] as List?)?.isNotEmpty == true)
-                              _buildDayChip(Icons.directions_walk, 'Vis', client['visitDays'] as List, AppTheme.neonPink),
-                            if ((client['deliveryDays'] as List?)?.isNotEmpty == true)
-                              _buildDayChip(Icons.local_shipping, 'Rep', client['deliveryDays'] as List, AppTheme.neonBlue),
-                          ],
-                        ),
-                      ),
                     const SizedBox(height: 6),
                     if (address.isNotEmpty || city.isNotEmpty)
                       Row(
@@ -1437,32 +1420,6 @@ class _ClientCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // Helper method to build compact day chips
-  Widget _buildDayChip(IconData icon, String label, List days, Color color) {
-    const dayAbbrev = {
-      'lunes': 'L', 'martes': 'M', 'miercoles': 'X',
-      'jueves': 'J', 'viernes': 'V', 'sabado': 'S', 'domingo': 'D',
-    };
-    final dayLetters = days.map((d) => dayAbbrev[d.toString().toLowerCase()] ?? '?').join('');
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3), width: 0.5),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 10, color: color),
-          const SizedBox(width: 3),
-          Text('$label: $dayLetters', style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w500)),
-        ],
       ),
     );
   }

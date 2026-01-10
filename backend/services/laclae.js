@@ -370,22 +370,6 @@ function getClientCurrentDay(vendedor, clientCode) {
     return null;
 }
 
-// Get visit and delivery days for a specific client
-function getClientVisitInfo(vendedorCode, clientCode) {
-    if (!laclaeCacheReady || !vendedorCode || !clientCode) return null;
-
-    const vendorClients = laclaeCache[vendedorCode.trim()];
-    if (!vendorClients) return null;
-
-    const clientData = vendorClients[clientCode.trim()];
-    if (!clientData) return null;
-
-    return {
-        visitDays: clientData.visitDays || [],
-        deliveryDays: clientData.deliveryDays || []
-    };
-}
-
 module.exports = {
     loadLaclaeCache,
     getClientsForDay,
@@ -397,6 +381,5 @@ module.exports = {
     getVendorDeliveryDaysFromCache,
     getCachedVendorCodes,
     reloadRuteroConfig,
-    getClientCurrentDay,
-    getClientVisitInfo
+    getClientCurrentDay
 };
