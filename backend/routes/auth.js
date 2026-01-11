@@ -150,14 +150,40 @@ router.post('/login', loginLimiter, async (req, res) => {
         }
 
         // ===================================================================
+        // NEW: Check for REPARTIDOR Role (Vehicle assigned)
+        // ===================================================================
+        let isRepartidor = false;
+        let codigoConductor = null;
+        let matriculaVehiculo = null;
+
+        try {
+            const vehCheck = await query(`
+                SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA 
+                FROM DSEDAC.VEH 
+                WHERE TRIM(CODIGOVENDEDOR) = '${vendedorCode}' 
+                FETCH FIRST 1 ROWS ONLY
+            `, false);
+
+            if (vehCheck.length > 0) {
+                isRepartidor = true;
+                matriculaVehiculo = vehCheck[0].MATRICULA;
+                codigoConductor = vendedorCode;
+                logger.info(`[${requestId}] 🚚 Detected Repartidor Role for ${vendedorCode} (Vehicle: ${matriculaVehiculo})`);
+            }
+        } catch (vehError) {
+            logger.warn(`[${requestId}] Error checking vehicle: ${vehError.message}`);
+        }
+
+        // ===================================================================
         // STEP 4: Success! Build response
         // ===================================================================
         logger.info(`[${requestId}] 🔐 Login successful for ${vendedorName} (${vendedorCode})`);
         failedLoginAttempts.delete(safeUser); // Clear failed attempts on success
 
-        // NOTE: JEFE status is now determined only by JEFEVENTASSN field from DB
-        // Previously we forced JEFE for codes 93, 01, 95 but this is removed
-        // to respect actual DB roles
+        // Determine final role
+        let finalRole = 'COMERCIAL';
+        if (isJefeVentas) finalRole = 'JEFE_VENTAS';
+        else if (isRepartidor) finalRole = 'REPARTIDOR';
 
         // Fetch all vendor codes for Jefe/Admin view
         let vendedorCodes = [vendedorCode];
@@ -184,8 +210,14 @@ router.post('/login', loginLimiter, async (req, res) => {
                 vendedorCode: vendedorCode,
                 isJefeVentas: isJefeVentas,
                 tipoVendedor: tipoVendedor || '-',
-                role: isJefeVentas ? 'JEFE_VENTAS' : 'COMERCIAL'
+                role: finalRole,
+                // Add Repartidor specific fields
+                isRepartidor: isRepartidor,
+                codigoConductor: codigoConductor,
+                matricula: matriculaVehiculo
             },
+            role: finalRole, // Root level role for easier access
+            isRepartidor: isRepartidor, // Root level flag
             vendedorCodes: vendedorCodes,
             token: token
         };
