@@ -9,6 +9,7 @@ import '../../../rutero/presentation/pages/rutero_page.dart';
 import '../../../objectives/presentation/pages/objectives_page.dart';
 import '../../../chatbot/presentation/pages/chatbot_page.dart';
 import '../../../commissions/presentation/pages/commissions_page.dart';
+import '../../../cobros/presentation/pages/cobros_page.dart';
 import '../../../settings/presentation/pages/network_settings_page.dart';
 import 'dashboard_content.dart';
 
@@ -123,6 +124,14 @@ class _MainShellState extends State<MainShell> {
         color: AppTheme.neonGreen,
       ));
     }
+    
+    // Cobros - visible for all
+    items.add(_NavItem(
+      icon: Icons.receipt_long_outlined,
+      selectedIcon: Icons.receipt_long,
+      label: 'Cobros',
+      color: Colors.teal,
+    ));
     
     // Chat IA - visible for all
     items.add(_NavItem(
@@ -467,8 +476,8 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildCurrentPage(List<String> vendedorCodes, bool isJefeVentas) {
-    // For Jefe de Ventas: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Chat
-    // For non-Jefe: 0=Clientes, 1=Ruta, 2=Obj, 3=Chat
+    // For Jefe de Ventas: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Cobros, 6=Chat
+    // For non-Jefe: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Cobros, 5=Chat
     
     if (isJefeVentas) {
       switch (_currentIndex) {
@@ -490,6 +499,8 @@ class _MainShellState extends State<MainShell> {
         case 4:
           return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
         case 5:
+          return CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
+        case 6:
           return ChatbotPage(vendedorCodes: vendedorCodes);
         default:
           return const Center(child: Text('Página no encontrada'));
@@ -506,6 +517,8 @@ class _MainShellState extends State<MainShell> {
         case 3:
           return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
         case 4:
+          return CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+        case 5:
           return ChatbotPage(vendedorCodes: vendedorCodes);
         default:
           return const Center(child: Text('Página no encontrada'));
