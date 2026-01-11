@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 
 // Ensure directories exist
@@ -60,15 +60,15 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               CAC.DIADOCUMENTO, CAC.MESDOCUMENTO, CAC.ANODOCUMENTO,
               TRIM(CAC.CODIGORUTA) as RUTA
             FROM DSEDAC.CAC
-            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE CAC.CODIGOVENDEDORCONDUCTOR = ${repartidorId}
-              AND CAC.ANODOCUMENTO = ${ano}
-              AND CAC.MESDOCUMENTO = ${mes}
-              AND CAC.DIADOCUMENTO = ${dia}
+            LEFT JOIN DSEDAC.CLI AS CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
+            WHERE CAC.CODIGOVENDEDORCONDUCTOR = ?
+              AND CAC.ANODOCUMENTO = ?
+              AND CAC.MESDOCUMENTO = ?
+              AND CAC.DIADOCUMENTO = ?
             ORDER BY CAC.NUMEROALBARAN
         `;
 
-        const rows = await query(sql, false);
+        const rows = await queryWithParams(sql, [repartidorId, ano, mes, dia], false);
 
         // Process rows
         const albaranes = rows.map(row => {
