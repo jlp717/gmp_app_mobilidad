@@ -359,6 +359,23 @@ class _MainShellState extends State<MainShell> {
               ),
             ),
           )
+        else if (user.isRepartidor)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              color: Colors.orange.withOpacity(0.2),
+            ),
+            child: const Text(
+              'REPARTIDOR',
+              style: TextStyle(
+                fontSize: 8,
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          )
         else
           Container(
             margin: const EdgeInsets.only(top: 4),

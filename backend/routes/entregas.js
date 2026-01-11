@@ -31,10 +31,16 @@ const upload = multer({ storage: storage });
 router.get('/pendientes/:repartidorId', async (req, res) => {
     try {
         const { repartidorId } = req.params;
-        const hoy = new Date();
-        const dia = hoy.getDate();
-        const mes = hoy.getMonth() + 1;
-        const ano = hoy.getFullYear();
+        const { date } = req.query; // Support ?date=YYYY-MM-DD
+
+        let targetDate = new Date();
+        if (date) {
+            targetDate = new Date(date);
+        }
+
+        const dia = targetDate.getDate();
+        const mes = targetDate.getMonth() + 1;
+        const ano = targetDate.getFullYear();
 
         logger.info(`[ENTREGAS] Getting pending deliveries for ${repartidorId} (${dia}/${mes}/${ano})`);
 
@@ -55,7 +61,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               TRIM(CAC.CODIGORUTA) as RUTA
             FROM DSEDAC.CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE TRIM(CAC.CODIGOVENDEDORCONDUCTOR) = '${repartidorId}'
+            WHERE CAC.CODIGOVENDEDORCONDUCTOR = ${repartidorId}
               AND CAC.ANODOCUMENTO = ${ano}
               AND CAC.MESDOCUMENTO = ${mes}
               AND CAC.DIADOCUMENTO = ${dia}

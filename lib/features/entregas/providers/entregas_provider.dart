@@ -229,12 +229,14 @@ class EntregasProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   String _repartidorId = '';
+  DateTime _fechaSeleccionada = DateTime.now();
 
   // Getters
   List<AlbaranEntrega> get albaranes => _albaranes;
   AlbaranEntrega? get albaranSeleccionado => _albaranSeleccionado;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  DateTime get fechaSeleccionada => _fechaSeleccionada;
   
   List<AlbaranEntrega> get albaranesPendientes =>
       _albaranes.where((a) => a.estado == EstadoEntrega.pendiente).toList();
@@ -260,6 +262,12 @@ class EntregasProvider extends ChangeNotifier {
     _repartidorId = repartidorId;
   }
 
+  /// Cambiar fecha seleccionada
+  void seleccionarFecha(DateTime fecha) {
+    _fechaSeleccionada = fecha;
+    cargarAlbaranesPendientes();
+  }
+
   /// Cargar albaranes pendientes del día
   Future<void> cargarAlbaranesPendientes() async {
     if (_repartidorId.isEmpty) return;
@@ -269,8 +277,9 @@ class EntregasProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final formattedDate = '${_fechaSeleccionada.year}-${_fechaSeleccionada.month.toString().padLeft(2, '0')}-${_fechaSeleccionada.day.toString().padLeft(2, '0')}';
       final response = await ApiClient.get(
-        '${ApiConfig.baseUrl}/api/entregas/pendientes/$_repartidorId',
+        '${ApiConfig.baseUrl}/api/entregas/pendientes/$_repartidorId?date=$formattedDate',
       );
 
       if (response['success'] == true) {

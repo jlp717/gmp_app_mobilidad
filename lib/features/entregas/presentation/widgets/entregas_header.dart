@@ -29,30 +29,64 @@ class EntregasHeader extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Título
+              // Título con Selector de Fecha
               Row(
                 children: [
                   const Icon(Icons.local_shipping, 
                              color: Colors.white, size: 28),
                   const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Entregas del Día',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Entregas del Día',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      Text(
-                        _formatFecha(DateTime.now()),
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
+                        InkWell(
+                          onTap: () async {
+                            final fecha = await showDatePicker(
+                              context: context,
+                              initialDate: provider.fechaSeleccionada,
+                              firstDate: DateTime(2024),
+                              lastDate: DateTime(2030),
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: ColorScheme.light(
+                                      primary: Theme.of(context).primaryColor,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (fecha != null) {
+                              provider.seleccionarFecha(fecha);
+                            }
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _formatFecha(provider.fechaSeleccionada),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: Colors.white54,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.calendar_today, color: Colors.white, size: 14),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
