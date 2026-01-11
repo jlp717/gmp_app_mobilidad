@@ -68,6 +68,7 @@ class RolesService {
         // 3. Verificar si es Repartidor (tiene vehículo asignado en VEH)
         // VEH.CODIGOVENDEDOR contiene los códigos de conductores con vehículo
         try {
+            logger.info(`[ROLES] Verificando si usuario ${codigo} tiene vehículo en DSEDAC.VEH`);
             const tieneVehiculo = await odbcPool.query<Record<string, unknown>[]>(`
         SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA
         FROM DSEDAC.VEH
@@ -75,13 +76,15 @@ class RolesService {
         FETCH FIRST 1 ROWS ONLY
       `, [codigo]);
 
+            logger.info(`[ROLES] Resultado vehículo para ${codigo}: ${tieneVehiculo.length} filas`);
+
             if (tieneVehiculo.length > 0) {
                 const matricula = String(tieneVehiculo[0].MATRICULA || '').trim();
                 logger.info(`[ROLES] Usuario ${codigo} → REPARTIDOR (vehículo: ${matricula})`);
                 return 'REPARTIDOR';
             }
         } catch (error) {
-            logger.debug('[ROLES] Error verificando vehículo:', error);
+            logger.error('[ROLES] Error verificando vehículo:', error);
         }
 
         // 4. Por defecto: COMERCIAL
