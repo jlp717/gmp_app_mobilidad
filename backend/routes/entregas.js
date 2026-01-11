@@ -44,6 +44,9 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 
         logger.info(`[ENTREGAS] Getting pending deliveries for ${repartidorId} (${dia}/${mes}/${ano})`);
 
+        // Handle multiple IDs (comma separated) case
+        const ids = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+
         const sql = `
             SELECT 
               CAC.SUBEMPRESAALBARAN,
@@ -61,7 +64,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               TRIM(CAC.CODIGORUTA) as RUTA
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE TRIM(CAC.CODIGOVENDEDORCONDUCTOR) = '${repartidorId}'
+            WHERE TRIM(CAC.CODIGOVENDEDORCONDUCTOR) IN (${ids})
               AND CAC.ANODOCUMENTO = ${ano}
               AND CAC.MESDOCUMENTO = ${mes}
               AND CAC.DIADOCUMENTO = ${dia}
