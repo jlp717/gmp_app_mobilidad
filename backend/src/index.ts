@@ -27,6 +27,11 @@ import ventasRoutes from './routes/ventas.routes';
 import ruteroRoutes from './routes/rutero.routes';
 import pedidosRoutes from './routes/pedidos.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import entregasRoutes from './routes/entregas.routes';
+
+// Cron Jobs
+import { iniciarJobsCobros } from './cron/transferencias.job';
+
 
 // ============================================
 // CONFIGURACIÓN DE LA APLICACIÓN
@@ -61,7 +66,7 @@ app.use(helmet({
 const corsOptions: cors.CorsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     const allowedOrigins = config.cors.origins;
-    
+
     // Permitir requests sin origin (mobile apps, Postman, etc)
     if (!origin) {
       return callback(null, true);
@@ -143,6 +148,8 @@ app.use(`${API_PREFIX}/ventas`, ventasRoutes);
 app.use(`${API_PREFIX}/rutero`, ruteroRoutes);
 app.use(`${API_PREFIX}/pedidos`, pedidosRoutes);
 app.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
+app.use(`${API_PREFIX}/entregas`, entregasRoutes);
+
 
 // ============================================
 // MANEJO DE ERRORES
@@ -164,6 +171,11 @@ async function startServer(): Promise<void> {
     logger.info('Inicializando conexión a base de datos...');
     await initDatabase();
     logger.info('Base de datos conectada correctamente');
+
+    // Iniciar jobs cron de cobros
+    iniciarJobsCobros();
+    logger.info('Jobs cron de cobros iniciados');
+
 
     // Iniciar servidor HTTP
     const server = app.listen(config.port, () => {
