@@ -4,6 +4,7 @@ import '../../providers/entregas_provider.dart';
 import '../widgets/entrega_card.dart';
 import '../widgets/entregas_header.dart';
 import 'albaran_detail_page.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Página principal de entregas para el repartidor
 class EntregasPage extends StatefulWidget {
