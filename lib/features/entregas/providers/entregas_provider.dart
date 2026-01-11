@@ -222,7 +222,7 @@ class AlbaranEntrega {
 
 /// Provider de entregas para repartidor
 class EntregasProvider extends ChangeNotifier {
-  final ApiClient _api = ApiClient();
+
   
   List<AlbaranEntrega> _albaranes = [];
   AlbaranEntrega? _albaranSeleccionado;
@@ -269,7 +269,7 @@ class EntregasProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _api.get(
+      final response = await ApiClient.get(
         '${ApiConfig.baseUrl}/api/entregas/pendientes/$_repartidorId',
       );
 
@@ -290,7 +290,7 @@ class EntregasProvider extends ChangeNotifier {
   /// Obtener detalle de un albarán
   Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio) async {
     try {
-      final response = await _api.get(
+      final response = await ApiClient.get(
         '${ApiConfig.baseUrl}/api/entregas/albaran/$numero/$ejercicio',
       );
 
@@ -367,7 +367,7 @@ class EntregasProvider extends ChangeNotifier {
     double? longitud,
   }) async {
     try {
-      final response = await _api.post(
+      final response = await ApiClient.post(
         '${ApiConfig.baseUrl}/api/entregas/update',
         {
           'itemId': itemId,
