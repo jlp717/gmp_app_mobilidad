@@ -1,0 +1,1699 @@
+{
+  "tablas_COND": [
+    {
+      "TABLE_SCHEMA": "DSEMOVIL",
+      "TABLE_NAME": "CLIENCONDI",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "DSTMOVIL",
+      "TABLE_NAME": "CLIENCONDI",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMO_BK2",
+      "TABLE_NAME": "CLIENCONDI",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMOVIL",
+      "TABLE_NAME": "CLIENCONDI",
+      "TABLE_TYPE": "V"
+    }
+  ],
+  "tablas_REPAR": [
+    {
+      "TABLE_SCHEMA": "DIEGO",
+      "TABLE_NAME": "REPARTOS",
+      "TABLE_TYPE": "P"
+    },
+    {
+      "TABLE_SCHEMA": "DIEGO",
+      "TABLE_NAME": "REPARTOSEN",
+      "TABLE_TYPE": "P"
+    },
+    {
+      "TABLE_SCHEMA": "DSEMOVIL",
+      "TABLE_NAME": "REPARTOS",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "DSTMOVIL",
+      "TABLE_NAME": "REPARTOS",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "V_FACT_PREPARACION_PEDIDOS",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMO_BK2",
+      "TABLE_NAME": "REPARTOS",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMOVIL",
+      "TABLE_NAME": "REPARTOS",
+      "TABLE_TYPE": "V"
+    }
+  ],
+  "tablas_TRANSP": [
+    {
+      "TABLE_SCHEMA": "DSEMOVIL",
+      "TABLE_NAME": "TRANSPORTI",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "DSTMOVIL",
+      "TABLE_NAME": "TRANSPORTI",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMO_BK2",
+      "TABLE_NAME": "TRANSPORTI",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMOVIL",
+      "TABLE_NAME": "TRANSPORTI",
+      "TABLE_TYPE": "V"
+    }
+  ],
+  "tablas_CAMION": [
+    {
+      "TABLE_SCHEMA": "DIEGO",
+      "TABLE_NAME": "CAMIONES",
+      "TABLE_TYPE": "P"
+    }
+  ],
+  "tablas_VEHIC": [
+    {
+      "TABLE_SCHEMA": "DSEMOVIL",
+      "TABLE_NAME": "STOCKVEHIC",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "V_DIM_TIPO_VEHICULO",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "V_DIM_VEHICULO",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "V_VEHICULO_COMBUSTIBLE",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMO_BK2",
+      "TABLE_NAME": "STOCKVEHIC",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMOVIL",
+      "TABLE_NAME": "STOCKVEHIC",
+      "TABLE_TYPE": "V"
+    }
+  ],
+  "tablas_EMP": [
+    {
+      "TABLE_SCHEMA": "CONTRO_BK2",
+      "TABLE_NAME": "EMPLEADOS",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "CONTROLAPP",
+      "TABLE_NAME": "EMPLEA_OLD",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "CONTROLAPP",
+      "TABLE_NAME": "EMPLEADOS",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "EMP",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "EMPL1",
+      "TABLE_TYPE": "L"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAZ",
+      "TABLE_NAME": "EMP",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAZ",
+      "TABLE_NAME": "EMPL1",
+      "TABLE_TYPE": "L"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDUT",
+      "TABLE_NAME": "EMP",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDUT",
+      "TABLE_NAME": "EMPL1",
+      "TABLE_TYPE": "L"
+    },
+    {
+      "TABLE_SCHEMA": "DSEF",
+      "TABLE_NAME": "EMP",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "DSEF",
+      "TABLE_NAME": "EMPL1",
+      "TABLE_TYPE": "L"
+    },
+    {
+      "TABLE_SCHEMA": "DSEF251230",
+      "TABLE_NAME": "EMP",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "DSEF251230",
+      "TABLE_NAME": "EMPL1",
+      "TABLE_TYPE": "L"
+    },
+    {
+      "TABLE_SCHEMA": "DSEMOVIL",
+      "TABLE_NAME": "EMPLEADOS",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "DSEMOVIL",
+      "TABLE_NAME": "SUBEMPRESA",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "DSTMOVIL",
+      "TABLE_NAME": "SUBEMPRESA",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "GIOVA",
+      "TABLE_NAME": "EMPLEA_OLD",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "GIOVA",
+      "TABLE_NAME": "EMPLEADOS",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "LOGIN_ATTEMPTS",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMO_BK2",
+      "TABLE_NAME": "EMPLEADOS",
+      "TABLE_TYPE": "V"
+    }
+  ],
+  "tablas_RUTA": [
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "RUTAS",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAZ",
+      "TABLE_NAME": "RUTAS",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDUT",
+      "TABLE_NAME": "RUTAS",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "DSEMOVIL",
+      "TABLE_NAME": "RUTAS",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "DSTMOVIL",
+      "TABLE_NAME": "RUTAS",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "V_DIM_RUTA",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "VW_DIM_RUTA",
+      "TABLE_TYPE": "V"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMO_BK2",
+      "TABLE_NAME": "RUTAS",
+      "TABLE_TYPE": "T"
+    },
+    {
+      "TABLE_SCHEMA": "TESTMOVIL",
+      "TABLE_NAME": "RUTAS",
+      "TABLE_TYPE": "T"
+    }
+  ],
+  "columnas_conductor": [
+    {
+      "TABLE_SCHEMA": "CONTRO_BK2",
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INDEX_HAS_SEARCH_CONDITION"
+    },
+    {
+      "TABLE_SCHEMA": "CONTRO_BK2",
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SEARCH_CONDITION_HAS_UDF"
+    },
+    {
+      "TABLE_SCHEMA": "CONTRO_BK2",
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SEARCH_CONDITION"
+    },
+    {
+      "TABLE_SCHEMA": "CONTRO_BK2",
+      "TABLE_NAME": "SYSTRIGGERS",
+      "COLUMN_NAME": "ACTION_CONDITION"
+    },
+    {
+      "TABLE_SCHEMA": "CONTRO_BK2",
+      "TABLE_NAME": "SYSTRIGGERS",
+      "COLUMN_NAME": "TRIGGER_UPDATE_CONDITION"
+    },
+    {
+      "TABLE_SCHEMA": "CONTROLAPP",
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INDEX_HAS_SEARCH_CONDITION"
+    },
+    {
+      "TABLE_SCHEMA": "CONTROLAPP",
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SEARCH_CONDITION_HAS_UDF"
+    },
+    {
+      "TABLE_SCHEMA": "CONTROLAPP",
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SEARCH_CONDITION"
+    },
+    {
+      "TABLE_SCHEMA": "CONTROLAPP",
+      "TABLE_NAME": "SYSTRIGGERS",
+      "COLUMN_NAME": "ACTION_CONDITION"
+    },
+    {
+      "TABLE_SCHEMA": "CONTROLAPP",
+      "TABLE_NAME": "SYSTRIGGERS",
+      "COLUMN_NAME": "TRIGGER_UPDATE_CONDITION"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "ATR",
+      "COLUMN_NAME": "NUEVACONDICIONVENTASN"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "ATR_240618",
+      "COLUMN_NAME": "NUEVACONDICIONVENTASN"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "ATRL1",
+      "COLUMN_NAME": "NUEVACONDICIONVENTASN"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "ATRL2",
+      "COLUMN_NAME": "NUEVACONDICIONVENTASN"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC",
+      "COLUMN_NAME": "CODIGOVENDEDORREPARTORUTERO"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC",
+      "COLUMN_NAME": "CODIGOVENDEDORCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC_TEST",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC_TEST",
+      "COLUMN_NAME": "CODIGOVENDEDORREPARTORUTERO"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC_TEST",
+      "COLUMN_NAME": "CODIGOVENDEDORCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC_250930",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC_250930",
+      "COLUMN_NAME": "CODIGOVENDEDORREPARTORUTERO"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC_250930",
+      "COLUMN_NAME": "CODIGOVENDEDORCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC_251013",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC_251013",
+      "COLUMN_NAME": "CODIGOVENDEDORREPARTORUTERO"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAC_251013",
+      "COLUMN_NAME": "CODIGOVENDEDORCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACC",
+      "COLUMN_NAME": "CODIGOREPARTIDOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACCL1",
+      "COLUMN_NAME": "CODIGOREPARTIDOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL1",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL1",
+      "COLUMN_NAME": "CODIGOVENDEDORREPARTORUTERO"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL1",
+      "COLUMN_NAME": "CODIGOVENDEDORCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL2",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL2",
+      "COLUMN_NAME": "CODIGOVENDEDORREPARTORUTERO"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL2",
+      "COLUMN_NAME": "CODIGOVENDEDORCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL3",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL3",
+      "COLUMN_NAME": "CODIGOVENDEDORREPARTORUTERO"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL3",
+      "COLUMN_NAME": "CODIGOVENDEDORCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL4",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL4",
+      "COLUMN_NAME": "CODIGOVENDEDORREPARTORUTERO"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CACL4",
+      "COLUMN_NAME": "CODIGOVENDEDORCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAP",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAPC",
+      "COLUMN_NAME": "CODIGOREPARTIDOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAPCL1",
+      "COLUMN_NAME": "CODIGOREPARTIDOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAPL1",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAT",
+      "COLUMN_NAME": "CODIGOPREPARADOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CAT",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CATL1",
+      "COLUMN_NAME": "CODIGOPREPARADOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CATL1",
+      "COLUMN_NAME": "CODIGOCONDUCTOR"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CDLO",
+      "COLUMN_NAME": "DIAREPARTOLUNESSN"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "CDLO",
+      "COLUMN_NAME": "DIAREPARTOMARTESSN"
+    }
+  ],
+  "esquemas": [
+    {
+      "TABLE_SCHEMA": "DSEF",
+      "NUM_TABLAS": 2092
+    },
+    {
+      "TABLE_SCHEMA": "DSEF251230",
+      "NUM_TABLAS": 2086
+    },
+    {
+      "TABLE_SCHEMA": "DSTF",
+      "NUM_TABLAS": 1985
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "NUM_TABLAS": 1529
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAZ",
+      "NUM_TABLAS": 1439
+    },
+    {
+      "TABLE_SCHEMA": "DSEDUT",
+      "NUM_TABLAS": 1408
+    },
+    {
+      "TABLE_SCHEMA": "WTAF",
+      "NUM_TABLAS": 1149
+    },
+    {
+      "TABLE_SCHEMA": "WTAD01",
+      "NUM_TABLAS": 1082
+    },
+    {
+      "TABLE_SCHEMA": "DSTM02",
+      "NUM_TABLAS": 1035
+    },
+    {
+      "TABLE_SCHEMA": "DSTMXX",
+      "NUM_TABLAS": 1027
+    },
+    {
+      "TABLE_SCHEMA": "DSTM09",
+      "NUM_TABLAS": 1003
+    },
+    {
+      "TABLE_SCHEMA": "WTAD02",
+      "NUM_TABLAS": 787
+    },
+    {
+      "TABLE_SCHEMA": "DSTO",
+      "NUM_TABLAS": 777
+    },
+    {
+      "TABLE_SCHEMA": "TRS",
+      "NUM_TABLAS": 698
+    },
+    {
+      "TABLE_SCHEMA": "DSTD02",
+      "NUM_TABLAS": 469
+    },
+    {
+      "TABLE_SCHEMA": "DSTDXX",
+      "NUM_TABLAS": 453
+    },
+    {
+      "TABLE_SCHEMA": "DSTD09",
+      "NUM_TABLAS": 340
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "NUM_TABLAS": 110
+    },
+    {
+      "TABLE_SCHEMA": "TESTMOVIL",
+      "NUM_TABLAS": 108
+    },
+    {
+      "TABLE_SCHEMA": "MARTIN",
+      "NUM_TABLAS": 102
+    },
+    {
+      "TABLE_SCHEMA": "TESTMO_BK2",
+      "NUM_TABLAS": 99
+    },
+    {
+      "TABLE_SCHEMA": "DSEMOVIL",
+      "NUM_TABLAS": 77
+    },
+    {
+      "TABLE_SCHEMA": "DSEO",
+      "NUM_TABLAS": 72
+    },
+    {
+      "TABLE_SCHEMA": "DIEGO",
+      "NUM_TABLAS": 71
+    },
+    {
+      "TABLE_SCHEMA": "DSTMOVIL",
+      "NUM_TABLAS": 71
+    },
+    {
+      "TABLE_SCHEMA": "DSEO251217",
+      "NUM_TABLAS": 60
+    },
+    {
+      "TABLE_SCHEMA": "WTAO",
+      "NUM_TABLAS": 49
+    },
+    {
+      "TABLE_SCHEMA": "DST$DLT",
+      "NUM_TABLAS": 48
+    },
+    {
+      "TABLE_SCHEMA": "GMPOLAP",
+      "NUM_TABLAS": 34
+    },
+    {
+      "TABLE_SCHEMA": "DSEOLAP",
+      "NUM_TABLAS": 34
+    }
+  ],
+  "dsedac_relevantes": [
+    {
+      "TABLE_NAME": "ALM"
+    },
+    {
+      "TABLE_NAME": "ALML1"
+    },
+    {
+      "TABLE_NAME": "APLICACIONPERMISOSDISPONIBLES"
+    },
+    {
+      "TABLE_NAME": "APLICACIONPERMISOSGRUPO"
+    },
+    {
+      "TABLE_NAME": "APPGRUPOSPERMISOS"
+    },
+    {
+      "TABLE_NAME": "APPPERMISOS"
+    },
+    {
+      "TABLE_NAME": "APPUSUARIOSPERMISOS"
+    },
+    {
+      "TABLE_NAME": "CCON"
+    },
+    {
+      "TABLE_NAME": "CCONL1"
+    },
+    {
+      "TABLE_NAME": "CCVEH"
+    },
+    {
+      "TABLE_NAME": "CCVEHL1"
+    },
+    {
+      "TABLE_NAME": "CHO"
+    },
+    {
+      "TABLE_NAME": "CHOL1"
+    },
+    {
+      "TABLE_NAME": "COMM_CONFIG"
+    },
+    {
+      "TABLE_NAME": "CRUT"
+    },
+    {
+      "TABLE_NAME": "CRUTL1"
+    },
+    {
+      "TABLE_NAME": "EMP"
+    },
+    {
+      "TABLE_NAME": "EMPL1"
+    },
+    {
+      "TABLE_NAME": "HRUT"
+    },
+    {
+      "TABLE_NAME": "HRUTL1"
+    },
+    {
+      "TABLE_NAME": "LCON"
+    },
+    {
+      "TABLE_NAME": "LCONL1"
+    },
+    {
+      "TABLE_NAME": "OPE"
+    },
+    {
+      "TABLE_NAME": "OPEA"
+    },
+    {
+      "TABLE_NAME": "OPEAL1"
+    },
+    {
+      "TABLE_NAME": "OPEL1"
+    },
+    {
+      "TABLE_NAME": "OPER"
+    },
+    {
+      "TABLE_NAME": "OPERL1"
+    },
+    {
+      "TABLE_NAME": "RUT"
+    },
+    {
+      "TABLE_NAME": "RUTAS"
+    },
+    {
+      "TABLE_NAME": "RUTL1"
+    },
+    {
+      "TABLE_NAME": "TRA"
+    },
+    {
+      "TABLE_NAME": "TRAL1"
+    },
+    {
+      "TABLE_NAME": "VEH"
+    },
+    {
+      "TABLE_NAME": "VEHL1"
+    }
+  ],
+  "vdd_todos": [
+    {
+      "CODIGOVENDEDOR": "AL",
+      "NOMBRE": "ALMACEN ALMERIA PROD.SECO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "A1",
+      "NOMBRE": "ZZ A1 JUAN ANTONIO CANO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "A2",
+      "NOMBRE": "A2 JAVIER LACAL",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "TT DVENGAD = 3M/14                                          "
+    },
+    {
+      "CODIGOVENDEDOR": "A3",
+      "NOMBRE": "A3 ASENSIO JAEN FRANCO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "CC",
+      "NOMBRE": "ZZ DEUDAS CREDITO Y CAUCION",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "CD",
+      "NOMBRE": "ZZ DEUDAS ABOGADO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "E1",
+      "NOMBRE": "00 E N C A R G O S",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "IC",
+      "NOMBRE": "DEUDAS INCOBRABLES CYC",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "COBRADAS AL 80 %                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "I1",
+      "NOMBRE": "Z IMPORTACION TOPGEL",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "T1",
+      "NOMBRE": "VENTA TIENDA",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "V1",
+      "NOMBRE": "V1 JUAN SOLER",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "V2",
+      "NOMBRE": "TIENDA POLIGONO V2",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZB",
+      "NOMBRE": "DEUDAS INCOBRABLES 13 BAYONAS",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZD",
+      "NOMBRE": "DEUDAS INCOBRABLES 08 DAMIAN",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZE",
+      "NOMBRE": "DEUDAS INCOBRABLES 10 EDGAR",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZJ",
+      "NOMBRE": "DEUDAS INCOBRABLES 49 JOSE ANGEL",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZL",
+      "NOMBRE": "DEUDAS INCOBRABLES 80 JUAN LUIS",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZM",
+      "NOMBRE": "DEUDAS INCOBRABLES 21 MONTEJANO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZN",
+      "NOMBRE": "DEUDAS INCOBRABLES V20 CAYETANO MONTIEL",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZO",
+      "NOMBRE": "DEUDAS INCOBRABLES 44 ROMERA",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZP",
+      "NOMBRE": "DEUDAS INCOBRABLES 16 ASENSIO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZQ",
+      "NOMBRE": "DEUDAS INCOBRABLES 02 QUI�ONERO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZR",
+      "NOMBRE": "DEUDAS INCOBRABLES 05 RODRIGUEZ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZS",
+      "NOMBRE": "DEUDAS INCOBRABLES 33 DGINER",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "050421, LE ASIGNO ESTE CODIGO A DGINER                      "
+    },
+    {
+      "CODIGOVENDEDOR": "ZT",
+      "NOMBRE": "DEUDAS INCOBRABLES 03 MARTIN",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZW",
+      "NOMBRE": "DEUDAS INCOBRABLES MIGUEL Y JOSE ANTONIO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZX",
+      "NOMBRE": "DEUDAS INCOBRABLES MU�OZ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "ZY",
+      "NOMBRE": "DEUDAS INCOBRABLES MIRALLES",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "Z1",
+      "NOMBRE": "DEUDAS INCOBRABLES VARIAS",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "Z2",
+      "NOMBRE": "DEUDAS INCOBRABLES 81 ANDRES",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "Z3",
+      "NOMBRE": "DEUDAS INCOBRABLES V80 JUAN LUIS",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "Z4",
+      "NOMBRE": "DEUDAS INCOBRABLES V72 ACACIO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "Z5",
+      "NOMBRE": "DEUDAS INCOBRABLES V73 ANDUJAR",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "Z6",
+      "NOMBRE": "DEUDAS INCOBRABLES 86 JOSE ANTONIO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "Z7",
+      "NOMBRE": "DEUDAS INCOBRABLES 87 JUAN MARTINEZ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "Z8",
+      "NOMBRE": "DEUDAS INCOBRABLES V82",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "Z9",
+      "NOMBRE": "DEUDAS INCOBRABLES 83 JOSE ANTONIO SOLER",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "00",
+      "NOMBRE": "E N C A R G O S",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "DEUDAS PENDIENTES DE ACLARAR                                "
+    },
+    {
+      "CODIGOVENDEDOR": "01",
+      "NOMBRE": "01 GOYO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "FRANCISCO GREGORIO MU�OZ NAVARRO 05-12-1986                 "
+    },
+    {
+      "CODIGOVENDEDOR": "02",
+      "NOMBRE": "02 BARTOLO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "03",
+      "NOMBRE": "03 MARTIN MANCHON RUIZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "3003ABCDEF*.                                                "
+    },
+    {
+      "CODIGOVENDEDOR": "04",
+      "NOMBRE": "ZZ 04 JUAN BAUTISTA",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "DESDE 1-3-09=CRISTOBAL.DESDE 1-10-09=JUAN BAUTISTA/ANTES FCO"
+    },
+    {
+      "CODIGOVENDEDOR": "05",
+      "NOMBRE": "05 RODRIGUEZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "EL 11/01/2017, PASA A PREVENTA\r\n27/03/18, LAPIZ Y FUNDA     "
+    },
+    {
+      "CODIGOVENDEDOR": "06",
+      "NOMBRE": "RUTA COMP.(2006)05",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "07",
+      "NOMBRE": "ZZ 07 MIGUEL ANGEL (BOLLERIA)",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "08",
+      "NOMBRE": "08 DAMIAN",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "10",
+      "NOMBRE": "10 EDGAR",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "EDGAR 07/12/1978   EDGAR@MARI-PEPA.COM                      "
+    },
+    {
+      "CODIGOVENDEDOR": "12",
+      "NOMBRE": "DEUDAS CANO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "13",
+      "NOMBRE": "13 BAYONAS",
+      "CLAVE1": "P     ",
+      "CLAVE2": "AUTO  ",
+      "OBSERVACIONES": "EL 02/02/15, PASA A PREVENTA                                "
+    },
+    {
+      "CODIGOVENDEDOR": "14",
+      "NOMBRE": "14 QUI�ONERO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "15",
+      "NOMBRE": "15 ALFONSO SALAS",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "TT DVG = 17/14 ??                                           "
+    },
+    {
+      "CODIGOVENDEDOR": "16",
+      "NOMBRE": "16 FRANCISCO ASENSIO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "\r\n27/03/18, LE DOY UN LAPIZ  Y UNA FUNDA                    "
+    },
+    {
+      "CODIGOVENDEDOR": "17",
+      "NOMBRE": "ZZ RUTA COMP.(ANTES MECA)",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "PASA A FCO A�O 2011, ANTES MECA                             "
+    },
+    {
+      "CODIGOVENDEDOR": "18",
+      "NOMBRE": "18 JUAN SOLER",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "19",
+      "NOMBRE": "19 CESAR NICOLAS",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "660821948 PARTICULAR                                        "
+    },
+    {
+      "CODIGOVENDEDOR": "20",
+      "NOMBRE": "ZZ 20 CAYETANO MONTIEL",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "21",
+      "NOMBRE": "21 ANTONIO MONTEJANO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "3021                                                        "
+    },
+    {
+      "CODIGOVENDEDOR": "22",
+      "NOMBRE": "22 DIEGO ALCAZAR",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ALTA 010424                                                 "
+    },
+    {
+      "CODIGOVENDEDOR": "23",
+      "NOMBRE": "23 JUAN JOSE LOPEZ MARTINEZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "24",
+      "NOMBRE": "ZZ 24 MARIO PADILLA PONCE",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "25",
+      "NOMBRE": "25 DIEGO JIMENEZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "26",
+      "NOMBRE": "26 ADRIAN ORTEGA LOPEZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ALTA 07/06/2024                                             "
+    },
+    {
+      "CODIGOVENDEDOR": "27",
+      "NOMBRE": "27 ANTONIO RUIZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "28",
+      "NOMBRE": "28 ZZ JAVIER MARTINEZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "29",
+      "NOMBRE": "29 JOSE CARLOS PEREZ CARRILLO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "02/05/25                                                    "
+    },
+    {
+      "CODIGOVENDEDOR": "30",
+      "NOMBRE": "30 CARLOS",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "EMPIEZA CON ALEJANDRO EL 01/11/2020                         "
+    },
+    {
+      "CODIGOVENDEDOR": "31",
+      "NOMBRE": "ZZ PACO MIRALLES",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "32",
+      "NOMBRE": "ZZ 32 PEDRO MIGUEL (NO CAMBIAR)",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "DESDE 01/10/15 PASA A TELEVENTA Y BAYONAS                   "
+    },
+    {
+      "CODIGOVENDEDOR": "33",
+      "NOMBRE": "33 DOMINGO GINER",
+      "CLAVE1": "P     ",
+      "CLAVE2": "AUTO  ",
+      "OBSERVACIONES": "INICIO 16012012, 14012019 EMPIEZA BARTOLO 01/09/20 EMPZ 96  "
+    },
+    {
+      "CODIGOVENDEDOR": "34",
+      "NOMBRE": "ZZ 34 JUAN ANTONIO ALCAZAR",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "26/06/23                                                    "
+    },
+    {
+      "CODIGOVENDEDOR": "35",
+      "NOMBRE": "35 RAUL MARTINEZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "16/08/2019                                                  "
+    },
+    {
+      "CODIGOVENDEDOR": "36",
+      "NOMBRE": "ZZ 36 PEDRO CRISTIAN",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ENTRA EL 26/5/25;                                           "
+    },
+    {
+      "CODIGOVENDEDOR": "37",
+      "NOMBRE": "37 ADRIAN CANO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "12/03/2018 al 11/06/2018\r\n12/06/18 al 30/09/18              "
+    },
+    {
+      "CODIGOVENDEDOR": "38",
+      "NOMBRE": "ZZ 38 ADRIAN CLEMENTE",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "39",
+      "NOMBRE": "39 ANTONIO JOSE SANCHEZ GARCIA",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "26/03/2018 al 25/06/18                                      "
+    },
+    {
+      "CODIGOVENDEDOR": "40",
+      "NOMBRE": "ZZ 40 MECA",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "41",
+      "NOMBRE": "41 ALFONSO LOPEZ RUBIO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "AUTO  ",
+      "OBSERVACIONES": "190421,LE DOY LLAVE                                         "
+    },
+    {
+      "CODIGOVENDEDOR": "42",
+      "NOMBRE": "ZZ 42 PACO JIMENEZ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "PACOGMP42@GMAIL.COM 3042ABCDEF*.PUNTA                       "
+    },
+    {
+      "CODIGOVENDEDOR": "43",
+      "NOMBRE": "43 JAIME",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "44",
+      "NOMBRE": "44 ROMERA",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "45",
+      "NOMBRE": "ZZ 45 ALEJANDRO LOPEZ HERNANDEZ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "30/05/22  ; SERGIOSANCHEZ01780@GMAIL.COM                    "
+    },
+    {
+      "CODIGOVENDEDOR": "46",
+      "NOMBRE": "46 FRANCISCO ANDRES SANCHEZ POVEDA",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "47",
+      "NOMBRE": "ZZ 47 DANIEL NAVARRO PEREZ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "19/12/2022                                                  "
+    },
+    {
+      "CODIGOVENDEDOR": "48",
+      "NOMBRE": "48 RAMON PIERNAS",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "49",
+      "NOMBRE": "49 JOSE ANGEL",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "50",
+      "NOMBRE": "50 MARIANO MI�ARRO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "3050                                                        "
+    },
+    {
+      "CODIGOVENDEDOR": "51",
+      "NOMBRE": "ZZ 51 MIGUEL ANGEL GONZALEZ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "52",
+      "NOMBRE": "ZZ 52 JAVIER MI�ARRO MENA",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "53",
+      "NOMBRE": "53 JUAN JOSE MARIN MARTINEZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "54",
+      "NOMBRE": "ZZ 54 ALAN ANTONIO VARGAS CABRERA",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "3054                                                        "
+    },
+    {
+      "CODIGOVENDEDOR": "55",
+      "NOMBRE": "ZZ 55 MARIO HIDALGO ROS",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "22062022 / 3055                                             "
+    },
+    {
+      "CODIGOVENDEDOR": "56",
+      "NOMBRE": "56 JOSE ANTONIO SANCHEZ PADILLA",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "EL 010209 CAMB.LLAMAS EL 250411 CAMB.A MIGU 100511 A J.A.   "
+    },
+    {
+      "CODIGOVENDEDOR": "57",
+      "NOMBRE": "57 DAVID MU�OZ RODRIGUEZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ALTA 24/08/25                                               "
+    },
+    {
+      "CODIGOVENDEDOR": "58",
+      "NOMBRE": "ZZ 58 JUAN MARTINEZ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "59",
+      "NOMBRE": "59 BRYAN DARIO ALVERCA DIAZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "3059                                                        "
+    },
+    {
+      "CODIGOVENDEDOR": "60",
+      "NOMBRE": "Z CREDYCO DEUDAS",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "RECUPERADO DEUDAS VIEJAS POR OFICIAL                        "
+    },
+    {
+      "CODIGOVENDEDOR": "61",
+      "NOMBRE": "ZZ NESTLE",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "62",
+      "NOMBRE": "62 MARILOLA",
+      "CLAVE1": "     P",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "63",
+      "NOMBRE": "63 PEDRO MARTINEZ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "64",
+      "NOMBRE": "64 JOSE MARIA GARCIA ROMERO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "65",
+      "NOMBRE": "65 MARISOL",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "3065AB                                                      "
+    },
+    {
+      "CODIGOVENDEDOR": "66",
+      "NOMBRE": "66 ANTONIO SANCHEZ TEJEDOR",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ALTA EL 161023 270924, PERDIDA DEL TELEFONO                 "
+    },
+    {
+      "CODIGOVENDEDOR": "67",
+      "NOMBRE": "67 ANDREI FARCAS",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "15/05/2023                                                  "
+    },
+    {
+      "CODIGOVENDEDOR": "68",
+      "NOMBRE": "68 CARMEN MARIA MARTINEZ MARTNEZ",
+      "CLAVE1": "1065  ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "16/09/1987                                                  "
+    },
+    {
+      "CODIGOVENDEDOR": "69",
+      "NOMBRE": "ZZ 69 MIGUEL SALAS",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ALTA 02/11/23  3069                                         "
+    },
+    {
+      "CODIGOVENDEDOR": "70",
+      "NOMBRE": "70 CASIANO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "71",
+      "NOMBRE": "ZZ ALBERTO",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "72",
+      "NOMBRE": "72 JOSE MIGUEL ACACIO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "FOCA                                                        "
+    },
+    {
+      "CODIGOVENDEDOR": "73",
+      "NOMBRE": "73 JOSE MIGUEL ANDUJAR",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "74",
+      "NOMBRE": "74 SOLIS RAMOS JULIO ANSELMO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "75",
+      "NOMBRE": "75 ANGELO",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ALTA GABRIEL 190623 PASA A ANGELO 2024                      "
+    },
+    {
+      "CODIGOVENDEDOR": "76",
+      "NOMBRE": "ZZ 76 JOSE MIGUEL GAZQUEZ MORALES",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ALTA EL 01/10/2019                                          "
+    },
+    {
+      "CODIGOVENDEDOR": "77",
+      "NOMBRE": "ZZ 77 JUAN MANUEL DIAZ REQUENA",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "3077                                                        "
+    },
+    {
+      "CODIGOVENDEDOR": "78",
+      "NOMBRE": "ZZ 78 EMILIO GOMEZ DEL AGUILA",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "79",
+      "NOMBRE": "79 FRANCISCO JAVIER (AL)",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "02/07/2019 ALTA  JAVY_G_ALMERIA@HOTMAIL.COM                 "
+    },
+    {
+      "CODIGOVENDEDOR": "80",
+      "NOMBRE": "80 JUAN LUIS GALLEGO (AL)",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "81",
+      "NOMBRE": "81 ANDRES MARIA CRUZ MARTOS",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ANDRESCRUZ.AC810@GMAIL.COM\r\n02/04/18, FUNDA                 "
+    },
+    {
+      "CODIGOVENDEDOR": "82",
+      "NOMBRE": "82 LUIS",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "83",
+      "NOMBRE": "83 JOSE ANTONIO SOLER FERRE (AL)",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "JOSEANTONIOGMP@GMAIL.COM                                    "
+    },
+    {
+      "CODIGOVENDEDOR": "84",
+      "NOMBRE": "84 MANUEL SILVA(AL)",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "MANUEL SILVA MARTINEZ                                       "
+    },
+    {
+      "CODIGOVENDEDOR": "85",
+      "NOMBRE": "85 RAMON REQUENA (ALM)",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "161260                                                      "
+    },
+    {
+      "CODIGOVENDEDOR": "86",
+      "NOMBRE": "ZZ 86 JOSE ANT.GOMEZ (ALM)",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "87",
+      "NOMBRE": "87 JOSE MARIA ARANA SANCHEZ",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "88",
+      "NOMBRE": "ZZ 88 DAVID MU�OZ DAMIEL",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "MECANICO                                                    "
+    },
+    {
+      "CODIGOVENDEDOR": "89",
+      "NOMBRE": "89 MIGUEL ANGEL TITO FRIAS",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "ANTES ANTONIO LORENZO ANTES PACO CHACON ANTES INVERNON      "
+    },
+    {
+      "CODIGOVENDEDOR": "90",
+      "NOMBRE": "90 ALBERTO GIL",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "91",
+      "NOMBRE": "ZZ 91 JUAN FRANCISCO (MECANICO)",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "92",
+      "NOMBRE": "92 VANESA",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "93",
+      "NOMBRE": "93 MARI CARMEN (TLV)",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "EMPIEZA EL 02/05/2016                                       "
+    },
+    {
+      "CODIGOVENDEDOR": "94",
+      "NOMBRE": "94 JUAN JOSE GARCIA LORCA",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "95",
+      "NOMBRE": "95 DOMINGO GARCIA",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "96",
+      "NOMBRE": "96 NIKITA",
+      "CLAVE1": "P     ",
+      "CLAVE2": "AUTO  ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "97",
+      "NOMBRE": "97 VENTA CENTRAL",
+      "CLAVE1": "P     ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    },
+    {
+      "CODIGOVENDEDOR": "98",
+      "NOMBRE": "98 DIEGO (98)",
+      "CLAVE1": "P     ",
+      "CLAVE2": "AUTO  ",
+      "OBSERVACIONES": "<20= ROJO, 20 A 26= AMARILLO, > 26 VERDE                    "
+    },
+    {
+      "CODIGOVENDEDOR": "99",
+      "NOMBRE": "ZZ RAPPEL NESTLE",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "OBSERVACIONES": "                                                            "
+    }
+  ]
+}

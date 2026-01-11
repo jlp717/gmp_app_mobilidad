@@ -1,0 +1,409 @@
+import 'package:flutter/material.dart';
+import '../../../../core/services/api_client.dart';
+import '../../../../core/config/api_config.dart';
+
+/// Estados posibles de una entrega
+enum EstadoEntrega {
+  pendiente,
+  enRuta,
+  entregado,
+  parcial,
+  noEntregado,
+  rechazado,
+}
+
+extension EstadoEntregaExtension on EstadoEntrega {
+  String get value {
+    switch (this) {
+      case EstadoEntrega.pendiente:
+        return 'PENDIENTE';
+      case EstadoEntrega.enRuta:
+        return 'EN_RUTA';
+      case EstadoEntrega.entregado:
+        return 'ENTREGADO';
+      case EstadoEntrega.parcial:
+        return 'PARCIAL';
+      case EstadoEntrega.noEntregado:
+        return 'NO_ENTREGADO';
+      case EstadoEntrega.rechazado:
+        return 'RECHAZADO';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case EstadoEntrega.pendiente:
+        return 'Pendiente';
+      case EstadoEntrega.enRuta:
+        return 'En Ruta';
+      case EstadoEntrega.entregado:
+        return 'Entregado';
+      case EstadoEntrega.parcial:
+        return 'Parcial';
+      case EstadoEntrega.noEntregado:
+        return 'No Entregado';
+      case EstadoEntrega.rechazado:
+        return 'Rechazado';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case EstadoEntrega.pendiente:
+        return Colors.orange;
+      case EstadoEntrega.enRuta:
+        return Colors.blue;
+      case EstadoEntrega.entregado:
+        return Colors.green;
+      case EstadoEntrega.parcial:
+        return Colors.amber;
+      case EstadoEntrega.noEntregado:
+        return Colors.red;
+      case EstadoEntrega.rechazado:
+        return Colors.red.shade900;
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case EstadoEntrega.pendiente:
+        return Icons.schedule;
+      case EstadoEntrega.enRuta:
+        return Icons.local_shipping;
+      case EstadoEntrega.entregado:
+        return Icons.check_circle;
+      case EstadoEntrega.parcial:
+        return Icons.pie_chart;
+      case EstadoEntrega.noEntregado:
+        return Icons.cancel;
+      case EstadoEntrega.rechazado:
+        return Icons.block;
+    }
+  }
+
+  static EstadoEntrega fromString(String value) {
+    switch (value.toUpperCase()) {
+      case 'PENDIENTE':
+        return EstadoEntrega.pendiente;
+      case 'EN_RUTA':
+        return EstadoEntrega.enRuta;
+      case 'ENTREGADO':
+        return EstadoEntrega.entregado;
+      case 'PARCIAL':
+        return EstadoEntrega.parcial;
+      case 'NO_ENTREGADO':
+        return EstadoEntrega.noEntregado;
+      case 'RECHAZADO':
+        return EstadoEntrega.rechazado;
+      default:
+        return EstadoEntrega.pendiente;
+    }
+  }
+}
+
+/// Item de un albarán (línea de producto)
+class EntregaItem {
+  final String itemId;
+  final String codigoArticulo;
+  final String descripcion;
+  final double cantidadPedida;
+  double cantidadEntregada;
+  EstadoEntrega estado;
+
+  EntregaItem({
+    required this.itemId,
+    required this.codigoArticulo,
+    required this.descripcion,
+    required this.cantidadPedida,
+    this.cantidadEntregada = 0,
+    this.estado = EstadoEntrega.pendiente,
+  });
+
+  factory EntregaItem.fromJson(Map<String, dynamic> json) {
+    return EntregaItem(
+      itemId: json['itemId']?.toString() ?? '',
+      codigoArticulo: json['codigoArticulo']?.toString() ?? '',
+      descripcion: json['descripcion']?.toString() ?? '',
+      cantidadPedida: (json['cantidadPedida'] ?? 0).toDouble(),
+      cantidadEntregada: (json['cantidadEntregada'] ?? 0).toDouble(),
+      estado: EstadoEntregaExtension.fromString(json['estado'] ?? 'PENDIENTE'),
+    );
+  }
+
+  bool get entregadoCompleto => cantidadEntregada >= cantidadPedida;
+}
+
+/// Albarán completo para entrega
+class AlbaranEntrega {
+  final String id;
+  final int numeroAlbaran;
+  final int ejercicio;
+  final String serie;
+  final String codigoCliente;
+  final String nombreCliente;
+  final String direccion;
+  final String poblacion;
+  final String telefono;
+  final String fecha;
+  final double importeTotal;
+  final String formaPago;
+  final bool esCTR;
+  final String ruta;
+  final String codigoVendedor;
+  final String nombreVendedor;
+  EstadoEntrega estado;
+  List<EntregaItem> items;
+  String? observaciones;
+  List<String> fotos;
+  String? firma;
+  DateTime? horaEntrega;
+
+  AlbaranEntrega({
+    required this.id,
+    required this.numeroAlbaran,
+    required this.ejercicio,
+    this.serie = '',
+    required this.codigoCliente,
+    required this.nombreCliente,
+    this.direccion = '',
+    this.poblacion = '',
+    this.telefono = '',
+    required this.fecha,
+    required this.importeTotal,
+    this.formaPago = '',
+    this.esCTR = false,
+    this.ruta = '',
+    this.codigoVendedor = '',
+    this.nombreVendedor = '',
+    this.estado = EstadoEntrega.pendiente,
+    this.items = const [],
+    this.observaciones,
+    this.fotos = const [],
+    this.firma,
+    this.horaEntrega,
+  });
+
+  factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
+    return AlbaranEntrega(
+      id: json['id']?.toString() ?? '',
+      numeroAlbaran: json['numeroAlbaran'] ?? json['numero'] ?? 0,
+      ejercicio: json['ejercicio'] ?? DateTime.now().year,
+      serie: json['serie']?.toString() ?? '',
+      codigoCliente: json['codigoCliente']?.toString() ?? '',
+      nombreCliente: json['nombreCliente']?.toString() ?? 'Cliente',
+      direccion: json['direccion']?.toString() ?? '',
+      poblacion: json['poblacion']?.toString() ?? '',
+      telefono: json['telefono']?.toString() ?? '',
+      fecha: json['fecha']?.toString() ?? '',
+      importeTotal: (json['importe'] ?? json['importeTotal'] ?? 0).toDouble(),
+      formaPago: json['formaPago']?.toString() ?? '',
+      esCTR: json['esCTR'] == true,
+      ruta: json['ruta']?.toString() ?? '',
+      codigoVendedor: json['codigoVendedor']?.toString() ?? '',
+      nombreVendedor: json['nombreVendedor']?.toString() ?? '',
+      estado: EstadoEntregaExtension.fromString(json['estado'] ?? 'PENDIENTE'),
+      items: (json['items'] as List<dynamic>?)
+              ?.map((e) => EntregaItem.fromJson(e))
+              .toList() ??
+          [],
+      observaciones: json['observaciones'],
+      fotos: (json['fotos'] as List<dynamic>?)?.cast<String>() ?? [],
+      firma: json['firma'],
+    );
+  }
+
+  int get totalItems => items.length;
+  int get itemsEntregados =>
+      items.where((i) => i.estado == EstadoEntrega.entregado).length;
+  double get progreso =>
+      totalItems > 0 ? itemsEntregados / totalItems : 0;
+  bool get requiereCobro => esCTR && estado != EstadoEntrega.entregado;
+}
+
+/// Provider de entregas para repartidor
+class EntregasProvider extends ChangeNotifier {
+  final ApiClient _api = ApiClient();
+  
+  List<AlbaranEntrega> _albaranes = [];
+  AlbaranEntrega? _albaranSeleccionado;
+  bool _isLoading = false;
+  String? _error;
+  String _repartidorId = '';
+
+  // Getters
+  List<AlbaranEntrega> get albaranes => _albaranes;
+  AlbaranEntrega? get albaranSeleccionado => _albaranSeleccionado;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+  
+  List<AlbaranEntrega> get albaranesPendientes =>
+      _albaranes.where((a) => a.estado == EstadoEntrega.pendiente).toList();
+  
+  List<AlbaranEntrega> get albaranesEnRuta =>
+      _albaranes.where((a) => a.estado == EstadoEntrega.enRuta).toList();
+  
+  List<AlbaranEntrega> get albaranesEntregados =>
+      _albaranes.where((a) => a.estado == EstadoEntrega.entregado || 
+                              a.estado == EstadoEntrega.parcial).toList();
+
+  int get totalPendientes => albaranesPendientes.length;
+  int get totalEntregados => albaranesEntregados.length;
+  double get progresoTotal => 
+      _albaranes.isNotEmpty ? totalEntregados / _albaranes.length : 0;
+
+  double get importeTotalCTR => _albaranes
+      .where((a) => a.esCTR && a.estado != EstadoEntrega.entregado)
+      .fold(0, (sum, a) => sum + a.importeTotal);
+
+  /// Inicializar con ID del repartidor
+  void setRepartidor(String repartidorId) {
+    _repartidorId = repartidorId;
+  }
+
+  /// Cargar albaranes pendientes del día
+  Future<void> cargarAlbaranesPendientes() async {
+    if (_repartidorId.isEmpty) return;
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await _api.get(
+        '${ApiConfig.baseUrl}/api/entregas/pendientes/$_repartidorId',
+      );
+
+      if (response['success'] == true) {
+        final lista = response['albaranes'] as List<dynamic>? ?? [];
+        _albaranes = lista.map((e) => AlbaranEntrega.fromJson(e)).toList();
+      } else {
+        _error = response['error'] ?? 'Error cargando entregas';
+      }
+    } catch (e) {
+      _error = 'Error de conexión: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Obtener detalle de un albarán
+  Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio) async {
+    try {
+      final response = await _api.get(
+        '${ApiConfig.baseUrl}/api/entregas/albaran/$numero/$ejercicio',
+      );
+
+      if (response['success'] == true && response['albaran'] != null) {
+        _albaranSeleccionado = AlbaranEntrega.fromJson(response['albaran']);
+        notifyListeners();
+        return _albaranSeleccionado;
+      }
+    } catch (e) {
+      _error = 'Error obteniendo detalle: $e';
+      notifyListeners();
+    }
+    return null;
+  }
+
+  /// Marcar albarán como entregado
+  Future<bool> marcarEntregado({
+    required String albaranId,
+    String? observaciones,
+    String? firma,
+    List<String>? fotos,
+    double? latitud,
+    double? longitud,
+  }) async {
+    return await _actualizarEstado(
+      itemId: albaranId,
+      estado: EstadoEntrega.entregado,
+      observaciones: observaciones,
+      firma: firma,
+      fotos: fotos,
+      latitud: latitud,
+      longitud: longitud,
+    );
+  }
+
+  /// Marcar albarán como parcial
+  Future<bool> marcarParcial({
+    required String albaranId,
+    required String observaciones,
+    String? firma,
+    List<String>? fotos,
+  }) async {
+    return await _actualizarEstado(
+      itemId: albaranId,
+      estado: EstadoEntrega.parcial,
+      observaciones: observaciones,
+      firma: firma,
+      fotos: fotos,
+    );
+  }
+
+  /// Marcar albarán como no entregado
+  Future<bool> marcarNoEntregado({
+    required String albaranId,
+    required String observaciones,
+    List<String>? fotos,
+  }) async {
+    return await _actualizarEstado(
+      itemId: albaranId,
+      estado: EstadoEntrega.noEntregado,
+      observaciones: observaciones,
+      fotos: fotos,
+    );
+  }
+
+  /// Actualizar estado interno
+  Future<bool> _actualizarEstado({
+    required String itemId,
+    required EstadoEntrega estado,
+    String? observaciones,
+    String? firma,
+    List<String>? fotos,
+    double? latitud,
+    double? longitud,
+  }) async {
+    try {
+      final response = await _api.post(
+        '${ApiConfig.baseUrl}/api/entregas/update',
+        {
+          'itemId': itemId,
+          'status': estado.value,
+          'repartidorId': _repartidorId,
+          'observaciones': observaciones,
+          'firma': firma,
+          'fotos': fotos,
+          'latitud': latitud,
+          'longitud': longitud,
+        },
+      );
+
+      if (response['success'] == true) {
+        // Actualizar estado local
+        final idx = _albaranes.indexWhere((a) => a.id == itemId);
+        if (idx != -1) {
+          _albaranes[idx].estado = estado;
+          _albaranes[idx].observaciones = observaciones;
+          _albaranes[idx].horaEntrega = DateTime.now();
+          if (firma != null) _albaranes[idx].firma = firma;
+          if (fotos != null) _albaranes[idx].fotos = fotos;
+        }
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      _error = 'Error actualizando: $e';
+      notifyListeners();
+    }
+    return false;
+  }
+
+  /// Limpiar selección
+  void limpiarSeleccion() {
+    _albaranSeleccionado = null;
+    notifyListeners();
+  }
+}

@@ -5,15 +5,14 @@
 
 import { Request, Response } from 'express';
 import { authService } from '../services/auth.service';
+import { rolesService } from '../services/roles.service';
 import { logger, createRequestLogger } from '../utils/logger';
 import { asyncHandler } from '../middleware/error.middleware';
 
 /**
  * POST /api/auth/login
  * Login de vendedor/comercial (código o nombre + PIN)
- * Ejemplos:
- *   - usuario: "02", password: "0397" (BARTOLO)
- *   - usuario: "BARTOLO", password: "0397"
+ * Detecta automáticamente el rol: JEFE, COMERCIAL o REPARTIDOR
  */
 export const login = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const requestId = req.requestId || '';
@@ -54,16 +53,47 @@ export const login = asyncHandler(async (req: Request, res: Response): Promise<v
   // Generar tokens con datos del vendedor
   const tokens = authService.generarTokens(resultado.vendedor!);
 
-  log.info('Login exitoso', { 
+  // ============================================
+  // DETECCIÓN AUTOMÁTICA DE ROL
+  // ============================================
+  // El rolesService.detectarRol() se encarga de todo:
+  // 1. Consulta JAVIER.APP_USERS
+  // 2. Verifica código '01' (GOYO) como JEFE
+  // 3. Verifica CAC.CODIGOCONDUCTOR para REPARTIDOR
+  // 4. Default: COMERCIAL
+  const codigoVendedor = resultado.vendedor!.codigoVendedor;
+  const rol = await rolesService.detectarRol(codigoVendedor);
+  const codigoConductor = rol === 'REPARTIDOR' ? codigoVendedor : undefined;
+
+  log.info('Login exitoso', {
     codigoVendedor: resultado.vendedor!.codigoVendedor,
-    nombreVendedor: resultado.vendedor!.nombreVendedor 
+    nombreVendedor: resultado.vendedor!.nombreVendedor,
+    rol,
   });
 
   res.json({
     success: true,
     mensaje: 'Login exitoso',
     vendedor: resultado.vendedor,
-    // También enviar como "usuario" y "cliente" para compatibilidad con el frontend
+    // Objeto user con toda la info para Flutter
+    user: {
+      id: resultado.vendedor!.codigoVendedor,
+      code: resultado.vendedor!.codigoVendedor,
+      name: resultado.vendedor!.nombreVendedor,
+      company: 'GMP',
+      delegation: null,
+      vendedorCode: resultado.vendedor!.codigoVendedor,
+      isJefeVentas: rol === 'JEFE',
+      tipoVendedor: rol,
+      role: rol, // JEFE, COMERCIAL, REPARTIDOR
+      codigoConductor,
+    },
+    // También enviar rol a nivel raíz para fácil acceso
+    role: rol,
+    isJefeVentas: rol === 'JEFE',
+    isRepartidor: rol === 'REPARTIDOR',
+    codigoConductor,
+    // Compatibilidad anterior
     usuario: {
       codigoUsuario: resultado.vendedor!.codigoVendedor,
       nombreUsuario: resultado.vendedor!.nombreVendedor,

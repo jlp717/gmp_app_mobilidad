@@ -11,6 +11,8 @@ import '../../../chatbot/presentation/pages/chatbot_page.dart';
 import '../../../commissions/presentation/pages/commissions_page.dart';
 import '../../../cobros/presentation/pages/cobros_page.dart';
 import '../../../settings/presentation/pages/network_settings_page.dart';
+import '../../../entregas/presentation/pages/entregas_page.dart';
+import '../../../entregas/providers/entregas_provider.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -72,8 +74,41 @@ class _MainShellState extends State<MainShell> {
   }
 
   // Get navigation destinations based on user role
+  // JEFE: Panel, Clientes, Ruta, Objetivos, Comisiones, Cobros, Chat
+  // COMERCIAL: Clientes, Ruta, Objetivos, Comisiones, Cobros, Chat
+  // REPARTIDOR: Entregas, Cobros (solo)
   List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
     final items = <_NavItem>[];
+    
+    // Obtener el rol del usuario
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.currentUser;
+    final isRepartidor = user?.isRepartidor ?? false;
+    
+    // ===============================================
+    // REPARTIDOR: Solo ve Entregas + Cobros
+    // ===============================================
+    if (isRepartidor) {
+      items.add(_NavItem(
+        icon: Icons.local_shipping_outlined,
+        selectedIcon: Icons.local_shipping,
+        label: 'Entregas',
+        color: AppTheme.neonBlue,
+      ));
+      
+      items.add(_NavItem(
+        icon: Icons.payments_outlined,
+        selectedIcon: Icons.payments,
+        label: 'Cobros',
+        color: Colors.teal,
+      ));
+      
+      return items;
+    }
+    
+    // ===============================================
+    // JEFE y COMERCIAL
+    // ===============================================
     
     // Panel de Control - ONLY for Jefe de Ventas
     if (isJefeVentas) {
@@ -85,7 +120,7 @@ class _MainShellState extends State<MainShell> {
       ));
     }
     
-    // Clientes - visible for all
+    // Clientes - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.people_outline,
       selectedIcon: Icons.people,
@@ -93,7 +128,7 @@ class _MainShellState extends State<MainShell> {
       color: AppTheme.neonGreen,
     ));
     
-    // Ruta - visible for all
+    // Ruta - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.route_outlined,
       selectedIcon: Icons.route,
@@ -101,7 +136,7 @@ class _MainShellState extends State<MainShell> {
       color: AppTheme.neonPurple,
     ));
     
-    // Objetivos - visible for all
+    // Objetivos - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.track_changes_outlined,
       selectedIcon: Icons.track_changes,
@@ -110,9 +145,6 @@ class _MainShellState extends State<MainShell> {
     ));
     
     // Comisiones - visible for all EXCEPT specific commercials (80, 13, 3)
-    // Filter logic: if user has ONLY one of these codes and is NOT jefe, hide it.
-    // Or if ANY of their codes match? Usually 1 user = 1 code.
-    // The user said "Los comerciales 80,13 y 3".
     final restrictedCodes = ['80', '13', '3'];
     final shouldHideCommissions = !isJefeVentas && vendorCodes.any((c) => restrictedCodes.contains(c.trim()));
     
@@ -125,7 +157,7 @@ class _MainShellState extends State<MainShell> {
       ));
     }
     
-    // Cobros - visible for all
+    // Cobros - visible for Jefe y Comercial (cada uno ve su versión)
     items.add(_NavItem(
       icon: Icons.receipt_long_outlined,
       selectedIcon: Icons.receipt_long,
@@ -133,7 +165,7 @@ class _MainShellState extends State<MainShell> {
       color: Colors.teal,
     ));
     
-    // Chat IA - visible for all
+    // Chat IA - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.smart_toy_outlined,
       selectedIcon: Icons.smart_toy,
@@ -476,9 +508,34 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildCurrentPage(List<String> vendedorCodes, bool isJefeVentas) {
-    // For Jefe de Ventas: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Cobros, 6=Chat
-    // For non-Jefe: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Cobros, 5=Chat
+    // Obtener el rol del usuario
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.currentUser;
+    final isRepartidor = user?.isRepartidor ?? false;
     
+    // ===============================================
+    // REPARTIDOR: 0=Entregas, 1=Cobros
+    // ===============================================
+    if (isRepartidor) {
+      final codigoConductor = user?.codigoConductor ?? vendedorCodes.join(',');
+      switch (_currentIndex) {
+        case 0:
+          // Entregas del día
+          return ChangeNotifierProvider(
+            create: (_) => EntregasProvider()..setRepartidor(codigoConductor),
+            child: const EntregasPage(),
+          );
+        case 1:
+          // Cobros CTR
+          return CobrosPage(employeeCode: codigoConductor, isJefeVentas: false);
+        default:
+          return CobrosPage(employeeCode: codigoConductor, isJefeVentas: false);
+      }
+    }
+    
+    // ===============================================
+    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Cobros, 6=Chat
+    // ===============================================
     if (isJefeVentas) {
       switch (_currentIndex) {
         case 0:
@@ -505,24 +562,26 @@ class _MainShellState extends State<MainShell> {
         default:
           return const Center(child: Text('Página no encontrada'));
       }
-    } else {
-      // Non-Jefe de Ventas - no Panel de Control
-      switch (_currentIndex) {
-        case 0:
-          return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-        case 1:
-          return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-        case 2:
-          return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-        case 3:
-          return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-        case 4:
-          return CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-        case 5:
-          return ChatbotPage(vendedorCodes: vendedorCodes);
-        default:
-          return const Center(child: Text('Página no encontrada'));
-      }
+    }
+    
+    // ===============================================
+    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Cobros, 5=Chat
+    // ===============================================
+    switch (_currentIndex) {
+      case 0:
+        return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+      case 1:
+        return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+      case 2:
+        return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+      case 3:
+        return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+      case 4:
+        return CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+      case 5:
+        return ChatbotPage(vendedorCodes: vendedorCodes);
+      default:
+        return const Center(child: Text('Página no encontrada'));
     }
   }
 }

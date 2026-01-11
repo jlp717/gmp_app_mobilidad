@@ -1,0 +1,124 @@
+{
+  "vdd_columnas": [
+    {
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "COLUMN_NAME": "NOMBREVENDEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 60
+    },
+    {
+      "COLUMN_NAME": "DIRECCION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 60
+    },
+    {
+      "COLUMN_NAME": "CODIGOPOSTAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 5
+    },
+    {
+      "COLUMN_NAME": "SECUENCIACODIGOPOSTAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4
+    },
+    {
+      "COLUMN_NAME": "POBLACION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 25
+    },
+    {
+      "COLUMN_NAME": "PROVINCIA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 34
+    },
+    {
+      "COLUMN_NAME": "APARTADOCORREOS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 6
+    },
+    {
+      "COLUMN_NAME": "NIF",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20
+    },
+    {
+      "COLUMN_NAME": "TELEFONO1",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 12
+    },
+    {
+      "COLUMN_NAME": "TELEFONO2",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 12
+    },
+    {
+      "COLUMN_NAME": "TELEFONOFAX",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 12
+    },
+    {
+      "COLUMN_NAME": "OBSERVACIONES",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 60
+    },
+    {
+      "COLUMN_NAME": "CLAVE1",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 6
+    },
+    {
+      "COLUMN_NAME": "CLAVE2",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 6
+    },
+    {
+      "COLUMN_NAME": "CODIGOREFERENCIAVENDEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 8
+    },
+    {
+      "COLUMN_NAME": "IMPRIMIRETIQUETASN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4
+    },
+    {
+      "COLUMN_NAME": "MARCAACTUALIZACION",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 50
+    }
+  ],
+  "goyo": [
+    {
+      "CODIGOVENDEDOR": "01",
+      "NOMBREVENDEDOR": "01 GOYO                                                     ",
+      "DIRECCION": "                                                            ",
+      "CODIGOPOSTAL": "     ",
+      "SECUENCIACODIGOPOSTAL": "    ",
+      "POBLACION": "                         ",
+      "PROVINCIA": "                                  ",
+      "APARTADOCORREOS": "      ",
+      "NIF": "23289584Z           ",
+      "TELEFONO1": "689102501   ",
+      "TELEFONO2": "3105        ",
+      "TELEFONOFAX": "            ",
+      "OBSERVACIONES": "FRANCISCO GREGORIO MU�OZ NAVARRO 05-12-1986                 ",
+      "CLAVE1": "      ",
+      "CLAVE2": "      ",
+      "CODIGOREFERENCIAVENDEDOR": "        ",
+      "IMPRIMIRETIQUETASN": "S",
+      "ID": 290940,
+      "MARCAACTUALIZACION": " "
+    }
+  ],
+  "conductores": [],
+  "empleados": []
+}
