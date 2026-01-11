@@ -39,6 +39,7 @@ dependencies:
   url_launcher: ^6.2.4
 
   # UI Components
+  image_picker: ^1.0.7
   google_fonts: ^6.1.0
   flutter_animate: ^4.5.0
 

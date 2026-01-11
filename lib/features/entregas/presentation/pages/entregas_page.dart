@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/entregas_provider.dart';
+import '../../providers/entregas_provider.dart';
 import '../widgets/entrega_card.dart';
 import '../widgets/entregas_header.dart';
 import 'albaran_detail_page.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../core/services/api_client.dart';
-import '../../../../core/config/api_config.dart';
+import '../../../core/api/api_client.dart';
+import '../../../core/api/api_config.dart';
 
 /// Estados posibles de una entrega
 enum EstadoEntrega {
