@@ -59,16 +59,16 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               TRIM(CAC.CODIGOFORMAPAGO) as FORMA_PAGO,
               CAC.DIADOCUMENTO, CAC.MESDOCUMENTO, CAC.ANODOCUMENTO,
               TRIM(CAC.CODIGORUTA) as RUTA
-            FROM DSEDAC.CAC
-            LEFT JOIN DSEDAC.CLI AS CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE CAC.CODIGOVENDEDORCONDUCTOR = ?
-              AND CAC.ANODOCUMENTO = ?
-              AND CAC.MESDOCUMENTO = ?
-              AND CAC.DIADOCUMENTO = ?
+            FROM DSEDAC.CAC CAC
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
+            WHERE TRIM(CAC.CODIGOVENDEDORCONDUCTOR) = '${repartidorId}'
+              AND CAC.ANODOCUMENTO = ${ano}
+              AND CAC.MESDOCUMENTO = ${mes}
+              AND CAC.DIADOCUMENTO = ${dia}
             ORDER BY CAC.NUMEROALBARAN
         `;
 
-        const rows = await queryWithParams(sql, [repartidorId, ano, mes, dia], false);
+        const rows = await query(sql, false);
 
         // Process rows
         const albaranes = rows.map(row => {
