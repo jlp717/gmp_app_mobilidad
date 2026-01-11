@@ -102,6 +102,13 @@ class _MainShellState extends State<MainShell> {
         label: 'Cobros',
         color: Colors.teal,
       ));
+
+      items.add(_NavItem(
+        icon: Icons.route_outlined,
+        selectedIcon: Icons.route,
+        label: 'Ruta',
+        color: AppTheme.neonPurple,
+      ));
       
       return items;
     }
@@ -528,6 +535,9 @@ class _MainShellState extends State<MainShell> {
         case 1:
           // Cobros CTR
           return CobrosPage(employeeCode: codigoConductor, isJefeVentas: false);
+        case 2:
+           // Ruta
+           return RuteroPage(employeeCode: codigoConductor, isJefeVentas: false);
         default:
           return CobrosPage(employeeCode: codigoConductor, isJefeVentas: false);
       }

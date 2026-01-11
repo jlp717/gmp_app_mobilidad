@@ -37,7 +37,7 @@ class _EntregasPageState extends State<EntregasPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppTheme.surfaceColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -46,7 +46,7 @@ class _EntregasPageState extends State<EntregasPage>
             
             // Tabs
             Container(
-              color: Colors.white,
+              color: AppTheme.surfaceColor,
               child: TabBar(
                 controller: _tabController,
                 labelColor: Theme.of(context).primaryColor,

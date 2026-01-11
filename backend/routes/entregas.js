@@ -54,8 +54,8 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               CAC.DIADOCUMENTO, CAC.MESDOCUMENTO, CAC.ANODOCUMENTO,
               TRIM(CAC.CODIGORUTA) as RUTA
             FROM DSEDAC.CAC
-            LEFT JOIN DSEDAC.CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE TRIM(CAC.CODIGOCONDUCTOR) = '${repartidorId}'
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
+            WHERE TRIM(CAC.CODIGOVENDEDORCONDUCTOR) = '${repartidorId}'
               AND CAC.ANODOCUMENTO = ${ano}
               AND CAC.MESDOCUMENTO = ${mes}
               AND CAC.DIADOCUMENTO = ${dia}
