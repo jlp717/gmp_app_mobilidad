@@ -415,4 +415,311 @@ router.get('/config', (req, res) => {
     });
 });
 
+// =============================================================================
+// POST /entregas
+// Crear o actualizar una entrega
+// =============================================================================
+router.post('/entregas', async (req, res) => {
+    try {
+        const {
+            numeroAlbaran,
+            ejercicioAlbaran,
+            serieAlbaran = 'A',
+            codigoCliente,
+            nombreCliente,
+            codigoRepartidor,
+            codigoConductor,
+            estado = 'PENDIENTE',
+            fechaPrevista,
+            importeTotal,
+            esCTR = false,
+            observaciones
+        } = req.body;
+
+        logger.info(`[REPARTIDOR] Creating/updating entrega for albaran ${numeroAlbaran}`);
+
+        // Check if delivery already exists
+        const checkSql = `
+            SELECT ID FROM JAVIER.REPARTIDOR_ENTREGAS 
+            WHERE NUMERO_ALBARAN = ${numeroAlbaran} 
+              AND EJERCICIO_ALBARAN = ${ejercicioAlbaran} 
+              AND SERIE_ALBARAN = '${serieAlbaran}'
+        `;
+        const existing = await query(checkSql, false);
+
+        let entregaId;
+
+        if (existing.length > 0) {
+            // Update existing
+            entregaId = existing[0].ID;
+            const updateSql = `
+                UPDATE JAVIER.REPARTIDOR_ENTREGAS SET
+                    ESTADO = '${estado}',
+                    FECHA_ENTREGA = ${estado === 'ENTREGADO' ? 'CURRENT_TIMESTAMP' : 'NULL'},
+                    OBSERVACIONES = ${observaciones ? `'${observaciones.replace(/'/g, "''")}'` : 'NULL'}
+                WHERE ID = ${entregaId}
+            `;
+            await query(updateSql, false);
+        } else {
+            // Insert new
+            const insertSql = `
+                INSERT INTO JAVIER.REPARTIDOR_ENTREGAS (
+                    NUMERO_ALBARAN, EJERCICIO_ALBARAN, SERIE_ALBARAN,
+                    CODIGO_CLIENTE, NOMBRE_CLIENTE,
+                    CODIGO_REPARTIDOR, CODIGO_CONDUCTOR,
+                    ESTADO, FECHA_PREVISTA, IMPORTE_TOTAL, ES_CTR, OBSERVACIONES
+                ) VALUES (
+                    ${numeroAlbaran}, ${ejercicioAlbaran}, '${serieAlbaran}',
+                    '${codigoCliente}', ${nombreCliente ? `'${nombreCliente.replace(/'/g, "''")}'` : 'NULL'},
+                    '${codigoRepartidor}', ${codigoConductor ? `'${codigoConductor}'` : 'NULL'},
+                    '${estado}', ${fechaPrevista ? `'${fechaPrevista}'` : 'CURRENT_DATE'},
+                    ${importeTotal || 0}, '${esCTR ? 'S' : 'N'}',
+                    ${observaciones ? `'${observaciones.replace(/'/g, "''")}'` : 'NULL'}
+                )
+            `;
+            await query(insertSql, false);
+
+            // Get the new ID
+            const newIdResult = await query(checkSql, false);
+            entregaId = newIdResult[0]?.ID;
+        }
+
+        res.json({
+            success: true,
+            entregaId,
+            message: existing.length > 0 ? 'Entrega actualizada' : 'Entrega creada'
+        });
+
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in POST /entregas: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// POST /entregas/:entregaId/firma
+// Guardar firma digital de una entrega
+// =============================================================================
+router.post('/entregas/:entregaId/firma', async (req, res) => {
+    try {
+        const { entregaId } = req.params;
+        const {
+            firmaBase64,
+            firmaNombre,
+            firmaDNI,
+            dispositivo,
+            latitud,
+            longitud
+        } = req.body;
+
+        logger.info(`[REPARTIDOR] Saving signature for entrega ${entregaId}`);
+
+        if (!firmaBase64) {
+            return res.status(400).json({ success: false, error: 'Firma base64 requerida' });
+        }
+
+        // Delete existing signature if any
+        await query(`DELETE FROM JAVIER.REPARTIDOR_FIRMAS WHERE ENTREGA_ID = ${entregaId}`, false);
+
+        // Insert new signature
+        const insertSql = `
+            INSERT INTO JAVIER.REPARTIDOR_FIRMAS (
+                ENTREGA_ID, FIRMA_BASE64, FIRMANTE_NOMBRE, FIRMANTE_DNI,
+                DISPOSITIVO, LATITUD, LONGITUD
+            ) VALUES (
+                ${entregaId},
+                '${firmaBase64.substring(0, 1000000)}',
+                ${firmaNombre ? `'${firmaNombre.replace(/'/g, "''")}'` : 'NULL'},
+                ${firmaDNI ? `'${firmaDNI}'` : 'NULL'},
+                ${dispositivo ? `'${dispositivo}'` : 'NULL'},
+                ${latitud || 'NULL'},
+                ${longitud || 'NULL'}
+            )
+        `;
+
+        await query(insertSql, false);
+
+        // Update entrega status to delivered
+        await query(`
+            UPDATE JAVIER.REPARTIDOR_ENTREGAS SET 
+                ESTADO = 'ENTREGADO', 
+                FECHA_ENTREGA = CURRENT_TIMESTAMP 
+            WHERE ID = ${entregaId}
+        `, false);
+
+        res.json({
+            success: true,
+            message: 'Firma guardada y entrega completada'
+        });
+
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in POST /entregas/:id/firma: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// POST /entregas/:entregaId/lineas
+// Guardar estado de líneas de artículos
+// =============================================================================
+router.post('/entregas/:entregaId/lineas', async (req, res) => {
+    try {
+        const { entregaId } = req.params;
+        const { lineas } = req.body;
+
+        logger.info(`[REPARTIDOR] Saving ${lineas?.length || 0} lines for entrega ${entregaId}`);
+
+        if (!Array.isArray(lineas)) {
+            return res.status(400).json({ success: false, error: 'Lineas array requerido' });
+        }
+
+        // Delete existing lines
+        await query(`DELETE FROM JAVIER.REPARTIDOR_ENTREGA_LINEAS WHERE ENTREGA_ID = ${entregaId}`, false);
+
+        // Insert new lines
+        for (const linea of lineas) {
+            const insertSql = `
+                INSERT INTO JAVIER.REPARTIDOR_ENTREGA_LINEAS (
+                    ENTREGA_ID, LINEA_ALBARAN, CODIGO_ARTICULO, DESCRIPCION_ARTICULO,
+                    CANTIDAD_PEDIDA, CANTIDAD_ENTREGADA, CANTIDAD_RECHAZADA,
+                    ESTADO, OBSERVACIONES, MOTIVO_NO_ENTREGA
+                ) VALUES (
+                    ${entregaId},
+                    ${linea.lineaAlbaran || 0},
+                    '${linea.codigoArticulo || ''}',
+                    ${linea.descripcion ? `'${linea.descripcion.replace(/'/g, "''").substring(0, 200)}'` : 'NULL'},
+                    ${linea.cantidadPedida || 0},
+                    ${linea.cantidadEntregada || 0},
+                    ${linea.cantidadRechazada || 0},
+                    '${linea.estado || 'PENDIENTE'}',
+                    ${linea.observaciones ? `'${linea.observaciones.replace(/'/g, "''")}'` : 'NULL'},
+                    ${linea.motivoNoEntrega ? `'${linea.motivoNoEntrega}'` : 'NULL'}
+                )
+            `;
+            await query(insertSql, false);
+        }
+
+        // Determine overall delivery status
+        const allDelivered = lineas.every(l => l.estado === 'ENTREGADO');
+        const noneDelivered = lineas.every(l => l.estado === 'NO_ENTREGADO');
+        const overallStatus = allDelivered ? 'ENTREGADO' : (noneDelivered ? 'NO_ENTREGADO' : 'PARCIAL');
+
+        await query(`
+            UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADO = '${overallStatus}' WHERE ID = ${entregaId}
+        `, false);
+
+        res.json({
+            success: true,
+            lineasGuardadas: lineas.length,
+            estadoEntrega: overallStatus
+        });
+
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in POST /entregas/:id/lineas: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// POST /cobros
+// Registrar un cobro realizado
+// =============================================================================
+router.post('/cobros', async (req, res) => {
+    try {
+        const {
+            entregaId,
+            codigoCliente,
+            nombreCliente,
+            codigoRepartidor,
+            tipoDocumento,
+            numeroDocumento,
+            ejercicioDocumento,
+            importeCobrado,
+            importePendiente = 0,
+            formaPago,
+            notas
+        } = req.body;
+
+        logger.info(`[REPARTIDOR] Recording cobro for ${tipoDocumento} ${numeroDocumento}`);
+
+        const insertSql = `
+            INSERT INTO JAVIER.REPARTIDOR_COBROS (
+                ENTREGA_ID, CODIGO_CLIENTE, NOMBRE_CLIENTE,
+                CODIGO_REPARTIDOR, TIPO_DOCUMENTO, NUMERO_DOCUMENTO, EJERCICIO_DOCUMENTO,
+                IMPORTE_COBRADO, IMPORTE_PENDIENTE, FORMA_PAGO, NOTAS
+            ) VALUES (
+                ${entregaId || 'NULL'},
+                '${codigoCliente}',
+                ${nombreCliente ? `'${nombreCliente.replace(/'/g, "''")}'` : 'NULL'},
+                '${codigoRepartidor}',
+                '${tipoDocumento}',
+                ${numeroDocumento},
+                ${ejercicioDocumento},
+                ${importeCobrado},
+                ${importePendiente},
+                ${formaPago ? `'${formaPago}'` : 'NULL'},
+                ${notas ? `'${notas.replace(/'/g, "''")}'` : 'NULL'}
+            )
+        `;
+
+        await query(insertSql, false);
+
+        // Update CTR status if applicable
+        if (entregaId) {
+            await query(`
+                UPDATE JAVIER.REPARTIDOR_ENTREGAS SET 
+                    CTR_COBRADO = 'S',
+                    IMPORTE_COBRADO = IMPORTE_COBRADO + ${importeCobrado}
+                WHERE ID = ${entregaId} AND ES_CTR = 'S'
+            `, false);
+        }
+
+        res.json({
+            success: true,
+            message: 'Cobro registrado correctamente'
+        });
+
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in POST /cobros: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// GET /entregas/:entregaId/firma
+// Obtener firma de una entrega
+// =============================================================================
+router.get('/entregas/:entregaId/firma', async (req, res) => {
+    try {
+        const { entregaId } = req.params;
+
+        const sql = `
+            SELECT FIRMA_BASE64, FIRMANTE_NOMBRE, FECHA_FIRMA
+            FROM JAVIER.REPARTIDOR_FIRMAS 
+            WHERE ENTREGA_ID = ${entregaId}
+            FETCH FIRST 1 ROW ONLY
+        `;
+
+        const rows = await query(sql, false);
+
+        if (rows.length === 0) {
+            return res.json({ success: true, hasSignature: false });
+        }
+
+        res.json({
+            success: true,
+            hasSignature: true,
+            signature: {
+                base64: rows[0].FIRMA_BASE64,
+                firmante: rows[0].FIRMANTE_NOMBRE,
+                fecha: rows[0].FECHA_FIRMA
+            }
+        });
+
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in GET /entregas/:id/firma: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 module.exports = router;
