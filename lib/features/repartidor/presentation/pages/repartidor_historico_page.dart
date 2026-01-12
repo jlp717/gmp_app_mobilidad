@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../data/repartidor_data_service.dart';
 
 /// Página de histórico para repartidores
 /// Búsqueda por cliente, visualización de documentos y firmas
@@ -41,19 +42,26 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     super.dispose();
   }
 
-  Future<void> _loadClients() async {
+  Future<void> _loadClients([String? search]) async {
     setState(() => _isLoading = true);
     
-    // Mock data - in production, fetch from backend
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    _clients = [
-      ClientSummary(id: '9900', name: 'BAR EL RINCÓN', address: 'C/ Mayor, 15', totalDocuments: 12),
-      ClientSummary(id: '8801', name: 'RESTAURANTE LA PLAZA', address: 'Plaza España, 3', totalDocuments: 8),
-      ClientSummary(id: '7755', name: 'CAFETERÍA CENTRAL', address: 'Av. Libertad, 42', totalDocuments: 15),
-      ClientSummary(id: '6644', name: 'HOSTAL LOS PINOS', address: 'Ctra. Nacional, km 5', totalDocuments: 6),
-      ClientSummary(id: '5533', name: 'BAR DEPORTIVO', address: 'C/ Estadio, 8', totalDocuments: 9),
-    ];
+    try {
+      // Fetch real data from backend API
+      final clients = await RepartidorDataService.getHistoryClients(
+        repartidorId: widget.repartidorId,
+        search: search,
+      );
+      
+      _clients = clients.map((c) => ClientSummary(
+        id: c.id,
+        name: c.name,
+        address: c.address,
+        totalDocuments: c.totalDocuments,
+      )).toList();
+    } catch (e) {
+      // On error, show empty list
+      _clients = [];
+    }
 
     if (mounted) {
       setState(() => _isLoading = false);
@@ -66,67 +74,54 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       _selectedClientId = clientId;
     });
 
-    // Mock data
-    await Future.delayed(const Duration(milliseconds: 400));
+    try {
+      // Fetch documents from backend
+      final docs = await RepartidorDataService.getClientDocuments(
+        clientId: clientId,
+        repartidorId: widget.repartidorId,
+      );
+      
+      _documents = docs.map((d) {
+        DeliveryStatus status;
+        switch (d.status) {
+          case 'delivered':
+            status = DeliveryStatus.delivered;
+            break;
+          case 'partial':
+            status = DeliveryStatus.partial;
+            break;
+          default:
+            status = DeliveryStatus.notDelivered;
+        }
+        
+        return DocumentHistory(
+          id: d.id,
+          type: d.type == 'factura' ? DocumentType.factura : DocumentType.albaran,
+          number: d.number,
+          date: DateTime.tryParse(d.date) ?? DateTime.now(),
+          amount: d.amount,
+          status: status,
+          hasSignature: d.hasSignature,
+          observations: d.pending > 0 ? 'Pendiente: ${CurrencyFormatter.format(d.pending)}' : null,
+        );
+      }).toList();
 
-    _documents = [
-      DocumentHistory(
-        id: 'ALB-2026-1234',
-        type: DocumentType.albaran,
-        number: 1234,
-        date: DateTime.now().subtract(const Duration(days: 1)),
-        amount: 245.80,
-        status: DeliveryStatus.delivered,
-        hasSignature: true,
-        observations: null,
-      ),
-      DocumentHistory(
-        id: 'ALB-2026-1210',
-        type: DocumentType.albaran,
-        number: 1210,
-        date: DateTime.now().subtract(const Duration(days: 5)),
-        amount: 189.50,
-        status: DeliveryStatus.delivered,
-        hasSignature: true,
-        observations: null,
-      ),
-      DocumentHistory(
-        id: 'ALB-2026-1180',
-        type: DocumentType.albaran,
-        number: 1180,
-        date: DateTime.now().subtract(const Duration(days: 12)),
-        amount: 320.00,
-        status: DeliveryStatus.partial,
-        hasSignature: true,
-        observations: 'Faltaron 2 cajas de refrescos - sin stock',
-      ),
-      DocumentHistory(
-        id: 'FAC-2026-0456',
-        type: DocumentType.factura,
-        number: 456,
-        date: DateTime.now().subtract(const Duration(days: 15)),
-        amount: 756.30,
-        status: DeliveryStatus.delivered,
-        hasSignature: true,
-        observations: null,
-      ),
-      DocumentHistory(
-        id: 'ALB-2026-1100',
-        type: DocumentType.albaran,
-        number: 1100,
-        date: DateTime.now().subtract(const Duration(days: 20)),
-        amount: 98.20,
-        status: DeliveryStatus.notDelivered,
-        hasSignature: false,
-        observations: 'Cliente cerrado - vacaciones',
-      ),
-    ];
-
-    _objectives = [
-      MonthlyObjective(month: 'Enero 2026', collectable: 2500, collected: 1800, percentage: 72),
-      MonthlyObjective(month: 'Diciembre 2025', collectable: 2200, collected: 1950, percentage: 88.6),
-      MonthlyObjective(month: 'Noviembre 2025', collectable: 2100, collected: 2100, percentage: 100),
-    ];
+      // Fetch objectives
+      final objectives = await RepartidorDataService.getMonthlyObjectives(
+        repartidorId: widget.repartidorId,
+        clientId: clientId,
+      );
+      
+      _objectives = objectives.map((o) => MonthlyObjective(
+        month: o.month,
+        collectable: o.collectable,
+        collected: o.collected,
+        percentage: o.percentage,
+      )).toList();
+    } catch (e) {
+      _documents = [];
+      _objectives = [];
+    }
 
     if (mounted) {
       setState(() => _isLoading = false);

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/repartidor_commission_service.dart';
+import '../../data/repartidor_data_service.dart';
 
 /// Página de comisiones para repartidores
 /// Muestra el progreso hacia el umbral del 30% y las comisiones por tramos
@@ -27,10 +28,12 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
   String? _error;
   DateTime? _lastFetchTime;
   
-  // Data
+  // Data from API
   double _totalCollectable = 0;
   double _totalCollected = 0;
   double _totalCommission = 0;
+  double _overallPercentage = 0;
+  bool _thresholdMet = false;
   List<ClientCommissionData> _clientData = [];
   List<DailyAccumulated> _dailyData = [];
 
@@ -51,60 +54,57 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
     });
 
     try {
-      // For now, use mock data since backend endpoints may not exist yet
-      // In production, this would call RepartidorCommissionService
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Fetch real data from backend API
+      final summary = await RepartidorDataService.getCollectionsSummary(
+        repartidorId: widget.repartidorId,
+        year: _selectedYear,
+        month: _selectedMonth,
+      );
       
-      // Mock data for demonstration
-      _clientData = [
-        ClientCommissionData(
-          clientId: '9900',
-          clientName: 'BAR EL RINCÓN',
-          collectable: 1500.0,
-          collected: 600.0, // 40% - threshold met
-          paymentType: 'Contado',
-        ),
-        ClientCommissionData(
-          clientId: '8801',
-          clientName: 'RESTAURANTE LA PLAZA',
-          collectable: 2000.0,
-          collected: 400.0, // 20% - threshold NOT met
-          paymentType: 'Reposición',
-        ),
-        ClientCommissionData(
-          clientId: '7755',
-          clientName: 'CAFETERÍA CENTRAL',
-          collectable: 800.0,
-          collected: 850.0, // 106% - tier 2!
-          paymentType: 'Mensual',
-        ),
-      ];
-
-      // Calculate totals
-      _totalCollectable = _clientData.fold(0, (sum, c) => sum + c.collectable);
-      _totalCollected = _clientData.fold(0, (sum, c) => sum + c.collected);
+      // Map API response to local models with commission calculation
+      _totalCollectable = summary.totalCollectable;
+      _totalCollected = summary.totalCollected;
+      _totalCommission = summary.totalCommission;
+      _overallPercentage = summary.overallPercentage;
+      _thresholdMet = summary.thresholdMet;
       
-      // Calculate commission for each client
-      double totalComm = 0;
-      for (final client in _clientData) {
-        final result = RepartidorCommissionService.calculateCommission(
-          collectable: client.collectable,
-          collected: client.collected,
+      // Map clients from API response
+      _clientData = summary.clients.map((c) {
+        final client = ClientCommissionData(
+          clientId: c.clientId,
+          clientName: c.clientName,
+          collectable: c.collectable,
+          collected: c.collected,
+          paymentType: c.paymentType,
         );
-        client.commissionResult = result;
-        totalComm += result.commissionEarned;
-      }
-      _totalCommission = totalComm;
+        
+        // Calculate commission result for UI display
+        client.commissionResult = CommissionResult(
+          collectable: c.collectable,
+          collected: c.collected,
+          percentageCollected: c.percentage,
+          thresholdMet: c.thresholdMet,
+          thresholdProgress: c.thresholdProgress,
+          currentTier: c.tier,
+          commissionEarned: c.commission,
+          tierLabel: c.tier > 0 ? 'Franja ${c.tier}' : '',
+        );
+        
+        return client;
+      }).toList();
 
-      // Mock daily data
-      _dailyData = List.generate(10, (i) {
-        final date = DateTime.now().subtract(Duration(days: 9 - i));
-        return DailyAccumulated(
-          date: date,
-          collectable: 300 + (i * 50.0),
-          collected: 250 + (i * 45.0),
-        );
-      });
+      // Fetch daily data
+      final daily = await RepartidorDataService.getDailyCollections(
+        repartidorId: widget.repartidorId,
+        year: _selectedYear,
+        month: _selectedMonth,
+      );
+      
+      _dailyData = daily.map((d) => DailyAccumulated(
+        date: DateTime.parse(d.date),
+        collectable: d.collectable,
+        collected: d.collected,
+      )).toList();
 
       _lastFetchTime = DateTime.now();
       
