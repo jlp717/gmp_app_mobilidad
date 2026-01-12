@@ -59,13 +59,13 @@ class CommissionResult {
   });
 
   factory CommissionResult.empty() => const CommissionResult(
-    collectable: 0,
-    collected: 0,
-    percentageCollected: 0,
+    collectable: 0.0,
+    collected: 0.0,
+    percentageCollected: 0.0,
     thresholdMet: false,
-    thresholdProgress: 0,
+    thresholdProgress: 0.0,
     currentTier: 0,
-    commissionEarned: 0,
+    commissionEarned: 0.0,
     tierLabel: 'Sin cobros',
   );
 }
@@ -96,7 +96,7 @@ class RepartidorCommissionService {
         thresholdMet: false,
         thresholdProgress: thresholdProgress,
         currentTier: 0,
-        commissionEarned: 0,
+        commissionEarned: 0.0,
         tierLabel: 'Umbral no alcanzado (${percentageCollected.toStringAsFixed(1)}% de 30%)',
       );
     }
@@ -127,7 +127,7 @@ class RepartidorCommissionService {
         thresholdMet: true,
         thresholdProgress: 1.0,
         currentTier: 0,
-        commissionEarned: 0,
+        commissionEarned: 0.0,
         tierLabel: 'Umbral OK - Sin exceso para comisionar',
       );
     }
