@@ -27,10 +27,10 @@ class CommissionTier {
 
 /// Los 4 tramos de comisión (iguales que comerciales)
 const List<CommissionTier> commissionTiers = [
-  CommissionTier(tier: 1, minPct: 100, maxPct: 103, rate: 0.010, label: '100-103% → 1.0%'),
-  CommissionTier(tier: 2, minPct: 103, maxPct: 106, rate: 0.013, label: '103-106% → 1.3%'),
-  CommissionTier(tier: 3, minPct: 106, maxPct: 110, rate: 0.016, label: '106-110% → 1.6%'),
-  CommissionTier(tier: 4, minPct: 110, maxPct: double.infinity, rate: 0.020, label: '>110% → 2.0%'),
+  CommissionTier(tier: 1, minPct: 100.0, maxPct: 103.0, rate: 0.010, label: '100-103% → 1.0%'),
+  CommissionTier(tier: 2, minPct: 103.0, maxPct: 106.0, rate: 0.013, label: '103-106% → 1.3%'),
+  CommissionTier(tier: 3, minPct: 106.0, maxPct: 110.0, rate: 0.016, label: '106-110% → 1.6%'),
+  CommissionTier(tier: 4, minPct: 110.0, maxPct: double.infinity, rate: 0.020, label: '>110% → 2.0%'),
 ];
 
 /// Umbral de cobro para empezar a generar comisión

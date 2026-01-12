@@ -158,7 +158,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
       );
     }
 
-    final overallPct = _totalCollectable > 0 ? (_totalCollected / _totalCollectable) * 100 : 0;
+    final overallPct = _totalCollectable > 0 ? (_totalCollected / _totalCollectable) * 100 : 0.0;
     final thresholdProgress = (overallPct / 30).clamp(0.0, 1.0);
 
     return Scaffold(
