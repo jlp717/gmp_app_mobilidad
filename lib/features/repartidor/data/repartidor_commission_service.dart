@@ -155,15 +155,13 @@ class RepartidorCommissionService {
     int? month,
   }) async {
     try {
-      final queryParams = <String, String>{
-        'repartidorId': repartidorId,
-      };
+      final queryParams = <String, String>{};
       
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
 
       final response = await ApiClient.get(
-        '/repartidor/commissions/summary',
+        '/repartidor/collections/summary/$repartidorId',
         queryParameters: queryParams,
       );
       
@@ -180,21 +178,15 @@ class RepartidorCommissionService {
     int? month,
   }) async {
     try {
-      final queryParams = <String, String>{
-        'repartidorId': repartidorId,
-      };
+      final queryParams = <String, String>{};
       
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
 
       final response = await ApiClient.get(
-        '/repartidor/commissions/by-client',
+        '/repartidor/collections/summary/$repartidorId',
         queryParameters: queryParams,
       );
-      
-      if (response is List) {
-        return List<Map<String, dynamic>>.from(response);
-      }
       
       return (response['clients'] as List?)
           ?.cast<Map<String, dynamic>>() ?? [];
@@ -210,21 +202,15 @@ class RepartidorCommissionService {
     int? month,
   }) async {
     try {
-      final queryParams = <String, String>{
-        'repartidorId': repartidorId,
-      };
+      final queryParams = <String, String>{};
       
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
 
       final response = await ApiClient.get(
-        '/repartidor/commissions/daily',
+        '/repartidor/collections/daily/$repartidorId',
         queryParameters: queryParams,
       );
-      
-      if (response is List) {
-        return List<Map<String, dynamic>>.from(response);
-      }
       
       return (response['daily'] as List?)
           ?.cast<Map<String, dynamic>>() ?? [];
