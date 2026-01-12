@@ -49,6 +49,12 @@ dependencies:
   # Navigation
   go_router: ^13.2.0
 
+  # Repartidor Features - Signature, PDF, Sharing
+  signature: ^5.4.1            # Digital signature capture
+  share_plus: ^7.2.1           # Email/WhatsApp sharing
+  pdf: ^3.10.7                 # PDF document generation
+  printing: ^5.11.1            # PDF preview/print support
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -13,6 +13,9 @@ import '../../../cobros/presentation/pages/cobros_page.dart';
 import '../../../settings/presentation/pages/network_settings_page.dart';
 import '../../../entregas/presentation/pages/entregas_page.dart';
 import '../../../entregas/providers/entregas_provider.dart';
+import '../../../repartidor/presentation/pages/repartidor_rutero_page.dart';
+import '../../../repartidor/presentation/pages/repartidor_comisiones_page.dart';
+import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -74,9 +77,9 @@ class _MainShellState extends State<MainShell> {
   }
 
   // Get navigation destinations based on user role
-  // JEFE: Panel, Clientes, Ruta, Objetivos, Comisiones, Cobros, Chat
-  // COMERCIAL: Clientes, Ruta, Objetivos, Comisiones, Cobros, Chat
-  // REPARTIDOR: Entregas, Cobros (solo)
+  // JEFE: Panel, Clientes, Ruta, Objetivos, Comisiones, Chat
+  // COMERCIAL: Clientes, Ruta, Objetivos, Comisiones, Chat
+  // REPARTIDOR: Rutero, Comisiones, Histórico, Chat IA (4 tabs exclusivos)
   List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
     final items = <_NavItem>[];
     
@@ -86,28 +89,40 @@ class _MainShellState extends State<MainShell> {
     final isRepartidor = user?.isRepartidor ?? false;
     
     // ===============================================
-    // REPARTIDOR: Solo ve Entregas + Cobros
+    // REPARTIDOR: 4 pestañas exclusivas
+    // 0=Rutero, 1=Comisiones, 2=Histórico, 3=Chat IA
     // ===============================================
     if (isRepartidor) {
-      items.add(_NavItem(
-        icon: Icons.local_shipping_outlined,
-        selectedIcon: Icons.local_shipping,
-        label: 'Entregas',
-        color: AppTheme.neonBlue,
-      ));
-      
-      items.add(_NavItem(
-        icon: Icons.payments_outlined,
-        selectedIcon: Icons.payments,
-        label: 'Cobros',
-        color: Colors.teal,
-      ));
-
+      // Tab 1: Rutero (Ruta del día con cobros integrados)
       items.add(_NavItem(
         icon: Icons.route_outlined,
         selectedIcon: Icons.route,
-        label: 'Ruta',
+        label: 'Rutero',
+        color: AppTheme.neonBlue,
+      ));
+      
+      // Tab 2: Comisiones (con umbral 30%)
+      items.add(_NavItem(
+        icon: Icons.euro_outlined,
+        selectedIcon: Icons.euro,
+        label: 'Comisiones',
+        color: AppTheme.neonGreen,
+      ));
+
+      // Tab 3: Histórico (albaranes, facturas, firmas)
+      items.add(_NavItem(
+        icon: Icons.history_outlined,
+        selectedIcon: Icons.history,
+        label: 'Histórico',
         color: AppTheme.neonPurple,
+      ));
+      
+      // Tab 4: Chat IA
+      items.add(_NavItem(
+        icon: Icons.smart_toy_outlined,
+        selectedIcon: Icons.smart_toy,
+        label: 'Chat IA',
+        color: AppTheme.neonPink,
       ));
       
       return items;
@@ -164,13 +179,8 @@ class _MainShellState extends State<MainShell> {
       ));
     }
     
-    // Cobros - visible for Jefe y Comercial (cada uno ve su versión)
-    items.add(_NavItem(
-      icon: Icons.receipt_long_outlined,
-      selectedIcon: Icons.receipt_long,
-      label: 'Cobros',
-      color: Colors.teal,
-    ));
+    // COBROS REMOVIDO DE COMERCIAL - Ahora es exclusivo de Repartidor
+    // Los comerciales ya no ven la pestaña de Cobros
     
     // Chat IA - visible for Jefe y Comercial
     items.add(_NavItem(
@@ -538,30 +548,34 @@ class _MainShellState extends State<MainShell> {
     final isRepartidor = user?.isRepartidor ?? false;
     
     // ===============================================
-    // REPARTIDOR: 0=Entregas, 1=Cobros
+    // REPARTIDOR: 0=Rutero, 1=Comisiones, 2=Histórico, 3=Chat IA
     // ===============================================
     if (isRepartidor) {
       final codigoConductor = user?.codigoConductor ?? vendedorCodes.join(',');
       switch (_currentIndex) {
         case 0:
-          // Entregas del día
+          // Rutero del repartidor (con cobros integrados)
           return ChangeNotifierProvider(
             create: (_) => EntregasProvider()..setRepartidor(codigoConductor),
-            child: const EntregasPage(),
+            child: RepartidorRuteroPage(repartidorId: codigoConductor),
           );
         case 1:
-          // Cobros CTR
-          return CobrosPage(employeeCode: codigoConductor, isJefeVentas: false);
+          // Comisiones del repartidor (con umbral 30%)
+          return RepartidorComisionesPage(repartidorId: codigoConductor);
         case 2:
-           // Ruta
-           return RuteroPage(employeeCode: codigoConductor, isJefeVentas: false);
+          // Histórico del repartidor
+          return RepartidorHistoricoPage(repartidorId: codigoConductor);
+        case 3:
+          // Chat IA para repartidores
+          return ChatbotPage(vendedorCodes: [codigoConductor]);
         default:
-          return CobrosPage(employeeCode: codigoConductor, isJefeVentas: false);
+          return const Center(child: Text('Página no encontrada'));
       }
     }
     
     // ===============================================
-    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Cobros, 6=Chat
+    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Chat
+    // (Cobros removido - ahora exclusivo de Repartidor)
     // ===============================================
     if (isJefeVentas) {
       switch (_currentIndex) {
@@ -583,8 +597,6 @@ class _MainShellState extends State<MainShell> {
         case 4:
           return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
         case 5:
-          return CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 6:
           return ChatbotPage(vendedorCodes: vendedorCodes);
         default:
           return const Center(child: Text('Página no encontrada'));
@@ -592,7 +604,8 @@ class _MainShellState extends State<MainShell> {
     }
     
     // ===============================================
-    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Cobros, 5=Chat
+    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Chat
+    // (Cobros removido - ahora exclusivo de Repartidor)
     // ===============================================
     switch (_currentIndex) {
       case 0:
@@ -604,8 +617,6 @@ class _MainShellState extends State<MainShell> {
       case 3:
         return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
       case 4:
-        return CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 5:
         return ChatbotPage(vendedorCodes: vendedorCodes);
       default:
         return const Center(child: Text('Página no encontrada'));
