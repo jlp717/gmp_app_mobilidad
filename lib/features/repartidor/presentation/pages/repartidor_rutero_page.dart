@@ -26,14 +26,24 @@ class RepartidorRuteroPage extends StatefulWidget {
 
 class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
   final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+  final TextEditingController _searchController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   String? _selectedClientId;
   bool _isRefreshing = false;
+  
+  // Filtros
+  String? _statusFilter; // null = todos, 'completed' = completados, 'ctr' = CTR pendiente, 'pending' = pendiente
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -47,6 +57,39 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
         setState(() => _isRefreshing = false);
       }
     }
+  }
+
+  List<AlbaranEntrega> _filterAlbaranes(List<AlbaranEntrega> albaranes) {
+    return albaranes.where((a) {
+      // Filtro por búsqueda de texto
+      final query = _searchController.text.toLowerCase();
+      if (query.isNotEmpty) {
+        final matchesSearch = a.nombreCliente.toLowerCase().contains(query) ||
+            a.codigoCliente.toLowerCase().contains(query) ||
+            a.numeroAlbaran.toString().contains(query);
+        if (!matchesSearch) return false;
+      }
+
+      // Filtro por estado
+      if (_statusFilter != null) {
+        final isCompleted = a.estado == EstadoEntrega.entregado;
+        final isCTR = a.esCTR && !isCompleted;
+        
+        switch (_statusFilter) {
+          case 'completed':
+            if (!isCompleted) return false;
+            break;
+          case 'ctr':
+            if (!isCTR) return false;
+            break;
+          case 'pending':
+            if (isCompleted || isCTR) return false;
+            break;
+        }
+      }
+      
+      return true;
+    }).toList();
   }
 
   @override
@@ -262,38 +305,223 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
       );
     }
 
-    final albaranes = provider.albaranes;
-    if (albaranes.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    final albaranes = _filterAlbaranes(provider.albaranes);
+    final totalAlbaranes = provider.albaranes.length;
+    
+    return Column(
+      children: [
+        // === SEARCH BAR + FILTER CHIPS ===
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Column(
+            children: [
+              // Search bar
+              TextField(
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: 'Buscar cliente o albarán...',
+                  hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                  prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: AppTheme.textSecondary),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {});
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: AppTheme.surfaceColor,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.neonBlue),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                style: const TextStyle(color: AppTheme.textPrimary),
+              ),
+              
+              const SizedBox(height: 10),
+              
+              // Filter chips
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildFilterChip(
+                      icon: Icons.all_inclusive,
+                      label: 'Todos',
+                      isActive: _statusFilter == null,
+                      color: AppTheme.neonBlue,
+                      onTap: () => setState(() => _statusFilter = null),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      icon: Icons.check_circle,
+                      label: 'Completados',
+                      isActive: _statusFilter == 'completed',
+                      color: AppTheme.success,
+                      onTap: () => setState(() => _statusFilter = 'completed'),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      icon: Icons.warning,
+                      label: 'CTR',
+                      isActive: _statusFilter == 'ctr',
+                      color: AppTheme.error,
+                      onTap: () => setState(() => _statusFilter = 'ctr'),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      icon: Icons.pending,
+                      label: 'Pendientes',
+                      isActive: _statusFilter == 'pending',
+                      color: Colors.orange,
+                      onTap: () => setState(() => _statusFilter = 'pending'),
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // Results count
+              Row(
+                children: [
+                  Icon(Icons.filter_list, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${albaranes.length} de $totalAlbaranes entregas',
+                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        
+        // Albaranes list
+        Expanded(
+          child: albaranes.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _statusFilter != null || _searchController.text.isNotEmpty
+                            ? Icons.filter_alt_off
+                            : Icons.check_circle_outline,
+                        size: 64,
+                        color: AppTheme.success.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _statusFilter != null || _searchController.text.isNotEmpty
+                            ? 'No hay entregas que coincidan'
+                            : '¡Sin entregas pendientes!',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_statusFilter != null || _searchController.text.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _statusFilter = null;
+                              _searchController.clear();
+                            });
+                          },
+                          icon: const Icon(Icons.clear, size: 16),
+                          label: const Text('Limpiar filtros'),
+                          style: TextButton.styleFrom(foregroundColor: AppTheme.neonBlue),
+                        )
+                      else
+                        Text(
+                          'No hay albaranes asignados para hoy',
+                          style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.7)),
+                        ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadData,
+                  color: AppTheme.neonBlue,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: albaranes.length,
+                    itemBuilder: (context, index) {
+                      final albaran = albaranes[index];
+                      return _buildClientCard(albaran);
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: isActive
+              ? LinearGradient(
+                  colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
+                )
+              : null,
+          color: isActive ? null : AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? color.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+            width: isActive ? 1.5 : 1,
+          ),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.2),
+                    blurRadius: 8,
+                    spreadRadius: 0,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_outline, size: 64, color: AppTheme.success.withOpacity(0.5)),
-            const SizedBox(height: 16),
-            const Text(
-              '¡Sin entregas pendientes!',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+            Icon(
+              icon,
+              size: 16,
+              color: isActive ? color : AppTheme.textSecondary,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(width: 6),
             Text(
-              'No hay albaranes asignados para hoy',
-              style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.7)),
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isActive ? color : AppTheme.textSecondary,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+              ),
             ),
           ],
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      color: AppTheme.neonBlue,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: albaranes.length,
-        itemBuilder: (context, index) {
-          final albaran = albaranes[index];
-          return _buildClientCard(albaran);
-        },
       ),
     );
   }

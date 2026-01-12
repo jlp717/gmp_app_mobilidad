@@ -260,16 +260,34 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
                   ],
                 ),
               ),
-              // Month/Year selector (simplified)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.darkBase,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  DateFormat('MMMM yyyy', 'es').format(DateTime(_selectedYear, _selectedMonth)),
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              // Month/Year selector (interactive)
+              GestureDetector(
+                onTap: _showMonthYearPicker,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppTheme.neonGreen.withOpacity(0.1),
+                        AppTheme.success.withOpacity(0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.calendar_month, color: AppTheme.neonGreen, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        DateFormat('MMM yyyy', 'es').format(DateTime(_selectedYear, _selectedMonth)),
+                        style: const TextStyle(color: AppTheme.neonGreen, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.arrow_drop_down, color: AppTheme.neonGreen, size: 18),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -690,6 +708,164 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showMonthYearPicker() {
+    final now = DateTime.now();
+    final months = List.generate(12, (i) => i + 1);
+    final years = List.generate(5, (i) => now.year - 2 + i);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 20,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Title
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                'Seleccionar Período',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ),
+
+            // Year selector
+            SizedBox(
+              height: 50,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: years.length,
+                itemBuilder: (context, index) {
+                  final year = years[index];
+                  final isSelected = year == _selectedYear;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedYear = year),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: isSelected
+                            ? LinearGradient(colors: [
+                                AppTheme.neonGreen.withOpacity(0.2),
+                                AppTheme.success.withOpacity(0.1),
+                              ])
+                            : null,
+                        color: isSelected ? null : AppTheme.darkBase,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? AppTheme.neonGreen : Colors.transparent,
+                        ),
+                      ),
+                      child: Text(
+                        year.toString(),
+                        style: TextStyle(
+                          color: isSelected ? AppTheme.neonGreen : AppTheme.textSecondary,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Month grid
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  childAspectRatio: 2,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                ),
+                itemCount: months.length,
+                itemBuilder: (context, index) {
+                  final month = months[index];
+                  final isSelected = month == _selectedMonth;
+                  final isFuture = _selectedYear == now.year && month > now.month;
+                  return GestureDetector(
+                    onTap: isFuture
+                        ? null
+                        : () {
+                            setState(() => _selectedMonth = month);
+                            Navigator.pop(ctx);
+                            _loadData();
+                          },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: isSelected
+                            ? LinearGradient(colors: [
+                                AppTheme.neonGreen.withOpacity(0.3),
+                                AppTheme.success.withOpacity(0.15),
+                              ])
+                            : null,
+                        color: isSelected ? null : AppTheme.darkBase,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected
+                              ? AppTheme.neonGreen
+                              : Colors.transparent,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          DateFormat('MMM', 'es').format(DateTime(_selectedYear, month)),
+                          style: TextStyle(
+                            color: isFuture
+                                ? AppTheme.textSecondary.withOpacity(0.3)
+                                : isSelected
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.textSecondary,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
     );
   }
 }

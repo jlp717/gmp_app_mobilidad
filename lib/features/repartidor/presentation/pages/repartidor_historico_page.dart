@@ -1,6 +1,6 @@
 /// REPARTIDOR HISTÓRICO PAGE
 /// Pestaña de histórico con búsqueda de clientes, albaranes, facturas y firmas
-/// Permite visualizar y reenviar documentos
+/// Permite visualizar y reenviar documentos con filtros avanzados
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -26,9 +26,16 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isLoading = false;
   String? _selectedClientId;
+  String? _selectedClientName;
   List<ClientSummary> _clients = [];
   List<DocumentHistory> _documents = [];
   List<MonthlyObjective> _objectives = [];
+  
+  // === FILTROS MODERNOS ===
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
+  DocumentType? _filterDocType; // null = todos
+  DeliveryStatus? _filterStatus; // null = todos
 
   @override
   void initState() {
@@ -46,7 +53,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     setState(() => _isLoading = true);
     
     try {
-      // Fetch real data from backend API
       final clients = await RepartidorDataService.getHistoryClients(
         repartidorId: widget.repartidorId,
         search: search,
@@ -59,7 +65,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         totalDocuments: c.totalDocuments,
       )).toList();
     } catch (e) {
-      // On error, show empty list
       _clients = [];
     }
 
@@ -68,14 +73,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
   }
 
-  Future<void> _loadClientHistory(String clientId) async {
+  Future<void> _loadClientHistory(String clientId, String clientName) async {
     setState(() {
       _isLoading = true;
       _selectedClientId = clientId;
+      _selectedClientName = clientName;
     });
 
     try {
-      // Fetch documents from backend
       final docs = await RepartidorDataService.getClientDocuments(
         clientId: clientId,
         repartidorId: widget.repartidorId,
@@ -106,7 +111,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         );
       }).toList();
 
-      // Fetch objectives
       final objectives = await RepartidorDataService.getMonthlyObjectives(
         repartidorId: widget.repartidorId,
         clientId: clientId,
@@ -128,6 +132,25 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
   }
 
+  // === FILTRADO AVANZADO ===
+  List<DocumentHistory> get _filteredDocuments {
+    return _documents.where((doc) {
+      // Filtro por tipo de documento
+      if (_filterDocType != null && doc.type != _filterDocType) return false;
+      
+      // Filtro por estado
+      if (_filterStatus != null && doc.status != _filterStatus) return false;
+      
+      // Filtro por fecha desde
+      if (_dateFrom != null && doc.date.isBefore(_dateFrom!)) return false;
+      
+      // Filtro por fecha hasta
+      if (_dateTo != null && doc.date.isAfter(_dateTo!.add(const Duration(days: 1)))) return false;
+      
+      return true;
+    }).toList();
+  }
+
   List<ClientSummary> get _filteredClients {
     final query = _searchController.text.toLowerCase();
     if (query.isEmpty) return _clients;
@@ -137,16 +160,25 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     ).toList();
   }
 
+  void _clearFilters() {
+    setState(() {
+      _dateFrom = null;
+      _dateTo = null;
+      _filterDocType = null;
+      _filterStatus = null;
+    });
+  }
+
+  bool get _hasActiveFilters =>
+      _dateFrom != null || _dateTo != null || _filterDocType != null || _filterStatus != null;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
       body: Column(
         children: [
-          // Header
           _buildHeader(),
-          
-          // Content
           Expanded(
             child: _selectedClientId != null
                 ? _buildClientHistory()
@@ -176,14 +208,16 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       child: Row(
         children: [
           if (_selectedClientId != null) ...[
-            IconButton(
-              onPressed: () => setState(() {
+            _buildGlassButton(
+              icon: Icons.arrow_back,
+              onTap: () => setState(() {
                 _selectedClientId = null;
+                _selectedClientName = null;
                 _documents = [];
+                _clearFilters();
               }),
-              icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
           ] else ...[
             Container(
               padding: const EdgeInsets.all(10),
@@ -207,17 +241,18 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               children: [
                 Text(
                   _selectedClientId != null
-                      ? _clients.firstWhere((c) => c.id == _selectedClientId, orElse: () => _clients.first).name
+                      ? _selectedClientName ?? 'Cliente'
                       : 'Histórico',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: AppTheme.textPrimary,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   _selectedClientId != null
-                      ? 'Albaranes, facturas y firmas'
+                      ? 'Cód: $_selectedClientId'
                       : 'Buscar cliente para ver historial',
                   style: TextStyle(
                     fontSize: 12,
@@ -227,7 +262,119 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               ],
             ),
           ),
+          
+          // Client selector dropdown (when in client view)
+          if (_selectedClientId != null && _clients.isNotEmpty)
+            _buildClientSelector(),
         ],
+      ),
+    );
+  }
+
+  /// Selector moderno de cliente tipo dropdown
+  Widget _buildClientSelector() {
+    return PopupMenuButton<String>(
+      tooltip: 'Cambiar cliente',
+      offset: const Offset(0, 48),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: AppTheme.surfaceColor,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.neonPurple.withOpacity(0.15),
+              AppTheme.neonBlue.withOpacity(0.15),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.swap_horiz, color: AppTheme.neonPurple, size: 18),
+            const SizedBox(width: 6),
+            const Text(
+              'Cliente',
+              style: TextStyle(color: AppTheme.neonPurple, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+      itemBuilder: (context) => _clients.map((client) {
+        final isSelected = client.id == _selectedClientId;
+        return PopupMenuItem<String>(
+          value: client.id,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppTheme.neonPurple.withOpacity(0.2)
+                        : AppTheme.darkBase,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      client.name[0],
+                      style: TextStyle(
+                        color: isSelected ? AppTheme.neonPurple : AppTheme.textSecondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        client.name,
+                        style: TextStyle(
+                          color: isSelected ? AppTheme.neonPurple : AppTheme.textPrimary,
+                          fontSize: 13,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'Cód: ${client.id}',
+                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(Icons.check_circle, color: AppTheme.neonPurple, size: 18),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+      onSelected: (clientId) {
+        final client = _clients.firstWhere((c) => c.id == clientId);
+        _loadClientHistory(clientId, client.name);
+      },
+    );
+  }
+
+  Widget _buildGlassButton({required IconData icon, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
+        ),
+        child: Icon(icon, color: AppTheme.textPrimary, size: 22),
       ),
     );
   }
@@ -235,7 +382,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Widget _buildClientSearch() {
     return Column(
       children: [
-        // Search bar
         Padding(
           padding: const EdgeInsets.all(16),
           child: TextField(
@@ -269,7 +415,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           ),
         ),
         
-        // Client list
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator(color: AppTheme.neonPurple))
@@ -296,7 +441,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Widget _buildClientCard(ClientSummary client) {
     return GestureDetector(
-      onTap: () => _loadClientHistory(client.id),
+      onTap: () => _loadClientHistory(client.id, client.name),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
@@ -403,7 +548,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           Expanded(
             child: TabBarView(
               children: [
-                _buildDocumentsList(),
+                _buildDocumentsTabWithFilters(),
                 _buildObjectivesTable(),
               ],
             ),
@@ -413,15 +558,464 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
   }
 
+  /// Tab de documentos con filtros modernos
+  Widget _buildDocumentsTabWithFilters() {
+    return Column(
+      children: [
+        // === FILTROS FUTURISTAS ===
+        _buildModernFilters(),
+        
+        // Lista filtrada
+        Expanded(
+          child: _buildDocumentsList(),
+        ),
+      ],
+    );
+  }
+
+  /// Panel de filtros moderno con glassmorphism
+  Widget _buildModernFilters() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          // Row 1: Filter chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                // Date range filter
+                _buildFilterChip(
+                  icon: Icons.date_range,
+                  label: _dateFrom != null || _dateTo != null
+                      ? _formatDateRange()
+                      : 'Fechas',
+                  isActive: _dateFrom != null || _dateTo != null,
+                  color: AppTheme.neonBlue,
+                  onTap: _showDateRangePicker,
+                ),
+                const SizedBox(width: 8),
+                
+                // Document type filter
+                _buildFilterChip(
+                  icon: _filterDocType == DocumentType.factura ? Icons.receipt : Icons.description,
+                  label: _filterDocType == null
+                      ? 'Tipo'
+                      : _filterDocType == DocumentType.factura
+                          ? 'Facturas'
+                          : 'Albaranes',
+                  isActive: _filterDocType != null,
+                  color: AppTheme.neonPurple,
+                  onTap: _showDocTypeSelector,
+                ),
+                const SizedBox(width: 8),
+                
+                // Status filter
+                _buildFilterChip(
+                  icon: _getStatusIcon(),
+                  label: _filterStatus == null
+                      ? 'Estado'
+                      : _filterStatus == DeliveryStatus.delivered
+                          ? 'Entregado'
+                          : _filterStatus == DeliveryStatus.partial
+                              ? 'Parcial'
+                              : 'No Entregado',
+                  isActive: _filterStatus != null,
+                  color: _getStatusColor(),
+                  onTap: _showStatusSelector,
+                ),
+                
+                // Clear filters button
+                if (_hasActiveFilters) ...[
+                  const SizedBox(width: 8),
+                  _buildFilterChip(
+                    icon: Icons.close,
+                    label: 'Limpiar',
+                    isActive: false,
+                    color: AppTheme.error,
+                    onTap: _clearFilters,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Results count
+          Row(
+            children: [
+              Icon(Icons.filter_list, size: 14, color: AppTheme.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                '${_filteredDocuments.length} de ${_documents.length} documentos',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  /// Chip de filtro moderno con efecto glassmorphism
+  Widget _buildFilterChip({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: isActive
+              ? LinearGradient(
+                  colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
+                )
+              : null,
+          color: isActive ? null : AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? color.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+            width: isActive ? 1.5 : 1,
+          ),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.2),
+                    blurRadius: 8,
+                    spreadRadius: 0,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isActive ? color : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isActive ? color : AppTheme.textSecondary,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+            if (isActive) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.check, size: 14, color: color),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDateRange() {
+    final df = DateFormat('dd/MM');
+    if (_dateFrom != null && _dateTo != null) {
+      return '${df.format(_dateFrom!)} - ${df.format(_dateTo!)}';
+    } else if (_dateFrom != null) {
+      return 'Desde ${df.format(_dateFrom!)}';
+    } else if (_dateTo != null) {
+      return 'Hasta ${df.format(_dateTo!)}';
+    }
+    return 'Fechas';
+  }
+
+  IconData _getStatusIcon() {
+    switch (_filterStatus) {
+      case DeliveryStatus.delivered:
+        return Icons.check_circle;
+      case DeliveryStatus.partial:
+        return Icons.pie_chart;
+      case DeliveryStatus.notDelivered:
+        return Icons.cancel;
+      default:
+        return Icons.filter_alt;
+    }
+  }
+
+  Color _getStatusColor() {
+    switch (_filterStatus) {
+      case DeliveryStatus.delivered:
+        return AppTheme.success;
+      case DeliveryStatus.partial:
+        return Colors.orange;
+      case DeliveryStatus.notDelivered:
+        return AppTheme.error;
+      default:
+        return AppTheme.neonGreen;
+    }
+  }
+
+  Future<void> _showDateRangePicker() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDateRange: _dateFrom != null && _dateTo != null
+          ? DateTimeRange(start: _dateFrom!, end: _dateTo!)
+          : null,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppTheme.neonPurple,
+              onPrimary: Colors.white,
+              surface: AppTheme.surfaceColor,
+              onSurface: AppTheme.textPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (picked != null) {
+      setState(() {
+        _dateFrom = picked.start;
+        _dateTo = picked.end;
+      });
+    }
+  }
+
+  void _showDocTypeSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _buildModernBottomSheet(
+        title: 'Tipo de Documento',
+        options: [
+          _BottomSheetOption(
+            icon: Icons.all_inclusive,
+            label: 'Todos',
+            isSelected: _filterDocType == null,
+            color: AppTheme.neonPurple,
+            onTap: () {
+              setState(() => _filterDocType = null);
+              Navigator.pop(ctx);
+            },
+          ),
+          _BottomSheetOption(
+            icon: Icons.description,
+            label: 'Albaranes',
+            isSelected: _filterDocType == DocumentType.albaran,
+            color: AppTheme.neonBlue,
+            onTap: () {
+              setState(() => _filterDocType = DocumentType.albaran);
+              Navigator.pop(ctx);
+            },
+          ),
+          _BottomSheetOption(
+            icon: Icons.receipt,
+            label: 'Facturas',
+            isSelected: _filterDocType == DocumentType.factura,
+            color: Colors.purpleAccent,
+            onTap: () {
+              setState(() => _filterDocType = DocumentType.factura);
+              Navigator.pop(ctx);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStatusSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _buildModernBottomSheet(
+        title: 'Estado de Entrega',
+        options: [
+          _BottomSheetOption(
+            icon: Icons.all_inclusive,
+            label: 'Todos',
+            isSelected: _filterStatus == null,
+            color: AppTheme.neonGreen,
+            onTap: () {
+              setState(() => _filterStatus = null);
+              Navigator.pop(ctx);
+            },
+          ),
+          _BottomSheetOption(
+            icon: Icons.check_circle,
+            label: 'Entregado',
+            isSelected: _filterStatus == DeliveryStatus.delivered,
+            color: AppTheme.success,
+            onTap: () {
+              setState(() => _filterStatus = DeliveryStatus.delivered);
+              Navigator.pop(ctx);
+            },
+          ),
+          _BottomSheetOption(
+            icon: Icons.pie_chart,
+            label: 'Parcial',
+            isSelected: _filterStatus == DeliveryStatus.partial,
+            color: Colors.orange,
+            onTap: () {
+              setState(() => _filterStatus = DeliveryStatus.partial);
+              Navigator.pop(ctx);
+            },
+          ),
+          _BottomSheetOption(
+            icon: Icons.cancel,
+            label: 'No Entregado',
+            isSelected: _filterStatus == DeliveryStatus.notDelivered,
+            color: AppTheme.error,
+            onTap: () {
+              setState(() => _filterStatus = DeliveryStatus.notDelivered);
+              Navigator.pop(ctx);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernBottomSheet({
+    required String title,
+    required List<_BottomSheetOption> options,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          
+          // Title
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ),
+          
+          // Options
+          ...options.map((opt) => _buildOptionTile(opt)),
+          
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOptionTile(_BottomSheetOption option) {
+    return GestureDetector(
+      onTap: option.onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: option.isSelected
+              ? LinearGradient(
+                  colors: [
+                    option.color.withOpacity(0.2),
+                    option.color.withOpacity(0.05),
+                  ],
+                )
+              : null,
+          color: option.isSelected ? null : AppTheme.darkBase,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: option.isSelected ? option.color.withOpacity(0.5) : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: option.color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(option.icon, color: option.color, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              option.label,
+              style: TextStyle(
+                fontSize: 16,
+                color: option.isSelected ? option.color : AppTheme.textPrimary,
+                fontWeight: option.isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+            const Spacer(),
+            if (option.isSelected)
+              Icon(Icons.check_circle, color: option.color, size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDocumentsList() {
-    if (_documents.isEmpty) {
+    final docs = _filteredDocuments;
+    
+    if (docs.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.folder_open, size: 48, color: AppTheme.textSecondary.withOpacity(0.5)),
+            Icon(
+              _hasActiveFilters ? Icons.filter_alt_off : Icons.folder_open, 
+              size: 48, 
+              color: AppTheme.textSecondary.withOpacity(0.5),
+            ),
             const SizedBox(height: 16),
-            Text('Sin documentos históricos', style: TextStyle(color: AppTheme.textSecondary)),
+            Text(
+              _hasActiveFilters
+                  ? 'No hay documentos que coincidan con los filtros'
+                  : 'Sin documentos históricos',
+              style: TextStyle(color: AppTheme.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            if (_hasActiveFilters) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: _clearFilters,
+                icon: const Icon(Icons.clear, size: 16),
+                label: const Text('Limpiar filtros'),
+                style: TextButton.styleFrom(foregroundColor: AppTheme.neonPurple),
+              ),
+            ],
           ],
         ),
       );
@@ -429,8 +1023,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _documents.length,
-      itemBuilder: (context, index) => _buildDocumentCard(_documents[index]),
+      itemCount: docs.length,
+      itemBuilder: (context, index) => _buildDocumentCard(docs[index]),
     );
   }
 
@@ -466,7 +1060,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         children: [
           Row(
             children: [
-              // Type badge
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -501,7 +1094,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
               ),
               const Spacer(),
-              // Status
               Row(
                 children: [
                   Icon(statusIcon, size: 16, color: statusColor),
@@ -561,10 +1153,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           
           const SizedBox(height: 10),
           
-          // Action buttons
           Row(
             children: [
-              // Signature button
               if (doc.hasSignature)
                 OutlinedButton.icon(
                   onPressed: () => _showSignature(doc),
@@ -592,7 +1182,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   ),
                 ),
               const Spacer(),
-              // Share button
               IconButton(
                 onPressed: () => _shareDocument(doc),
                 icon: const Icon(Icons.share),
@@ -679,7 +1268,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           children: [
             const Icon(Icons.edit_note, color: AppTheme.neonPurple),
             const SizedBox(width: 8),
-            Text('Firma - ${doc.type == DocumentType.factura ? 'Factura' : 'Albarán'} #${doc.number}'),
+            Expanded(
+              child: Text(
+                'Firma - ${doc.type == DocumentType.factura ? 'Factura' : 'Albarán'} #${doc.number}',
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
           ],
         ),
         content: Container(
@@ -732,8 +1326,24 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    // TODO: Implement actual sharing with share_plus package
   }
+}
+
+// Helper class for bottom sheet options
+class _BottomSheetOption {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final Color color;
+  final VoidCallback onTap;
+
+  _BottomSheetOption({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.color,
+    required this.onTap,
+  });
 }
 
 // Models
