@@ -1274,16 +1274,19 @@ class _ClientCard extends StatelessWidget {
                          (status['variation'] as num?)?.toDouble() ?? 0;
     final ytdPrevYear = (status['ytdPrevYear'] as num?)?.toDouble() ?? 
                         (status['prevMonthSales'] as num?)?.toDouble() ?? 0;
+    // NEW: Total sales in entire previous year (for NEW client detection)
+    final prevYearTotal = (status['prevYearTotal'] as num?)?.toDouble() ?? 0;
 
-    // Lógica de colores mejorada:
-    // 1) Gris: Sin ventas ambos años (ytdSales ≈ 0 Y ytdPrevYear ≈ 0)
-    // 2) Azul NUEVO: Cliente nuevo (ytdSales > 0 Y ytdPrevYear ≈ 0)
-    // 3) Verde: Mejoró respecto al año anterior
-    // 4) Rojo: Empeoró respecto al año anterior
-    final bool noSalesThisYear = ytdSales < 0.01;
-    final bool noSalesLastYear = ytdPrevYear < 0.01;
-    final bool isInactive = noSalesThisYear && noSalesLastYear; // Gris
-    final bool isNewClient = !noSalesThisYear && noSalesLastYear; // Azul
+    // Lógica de colores CORREGIDA:
+    // 1) Gris "SIN VENTAS": Sin ventas en las semanas comparadas de ambos años (ytdSales ≈ 0 Y ytdPrevYear ≈ 0)
+    // 2) Azul "NUEVO": Tiene ventas este período, pero NO tuvo ventas en TODO el año anterior (prevYearTotal ≈ 0)
+    // 3) Verde/Rojo: En cualquier otro caso, compara las semanas equivalentes
+    final bool noSalesThisPeriod = ytdSales < 0.01;
+    final bool noSalesLastPeriod = ytdPrevYear < 0.01;
+    final bool noSalesEntireLastYear = prevYearTotal < 0.01;
+    
+    final bool isInactive = noSalesThisPeriod && noSalesLastPeriod; // Gris - sin ventas ambos períodos
+    final bool isNewClient = !noSalesThisPeriod && noSalesEntireLastYear; // Azul - ventas ahora, pero 0 en TODO el año anterior
     
     Color accentColor;
     if (isInactive) {
@@ -1388,7 +1391,7 @@ class _ClientCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'Ambos años',
+                        'Este período',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 8,
@@ -1405,7 +1408,7 @@ class _ClientCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'Sin ventas ${selectedYear - 1}',
+                        'No vendió en ${selectedYear - 1}',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 8,

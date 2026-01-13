@@ -24,26 +24,27 @@ class SalesSummaryHeader extends StatelessWidget {
     final saleGrowth = (growth['sales'] as num?)?.toDouble() ?? 0;
     
     final currMargin = (curr['margin'] as num?)?.toDouble() ?? 0;
-    //final prevMargin = (prev['margin'] as num?)?.toDouble() ?? 0;
-    //final marginGrowth = (growth['margin'] as num?)?.toDouble() ?? 0;
+    final prevMargin = (prev['margin'] as num?)?.toDouble() ?? 0;
+    final marginGrowth = (growth['margin'] as num?)?.toDouble() ?? 0;
     
     final currUnits = (curr['units'] as num?)?.toDouble() ?? 0;
-    //final prevUnits = (prev['units'] as num?)?.toDouble() ?? 0;
-    //final unitGrowth = (growth['units'] as num?)?.toDouble() ?? 0;
+    final prevUnits = (prev['units'] as num?)?.toDouble() ?? 0;
+    final unitGrowth = (growth['units'] as num?)?.toDouble() ?? 0;
     
-    double totalMargin = currMargin; // Roughly total margin amount if margin is %? 
-    // Wait, the input summary usually has 'margin' as a %.
-    // Let's check `ProductHistoryPage` or typical usage.
-    // If we assume `curr['margin']` is %, we need the absolute if we want to show it.
-    // But in the new design we show `MARGEN %`.
-    
-    // For calculating "Total Margin" amount if not provided:
-    // Usually sales * margin% / 100.
-    // But let's stick to what we have.
+    // NEW: Number of products (SKUs) sold
+    final currProducts = (curr['productCount'] as num?)?.toInt() ?? 0;
+    final prevProducts = (prev['productCount'] as num?)?.toInt() ?? 0;
+    final productGrowth = (growth['productCount'] as num?)?.toDouble() ?? 
+        (prevProducts > 0 ? ((currProducts - prevProducts) / prevProducts) * 100 : (currProducts > 0 ? 100 : 0));
     
     return Column(
       children: [
-        _buildUnifiedSummary(currSales, prevSales, saleGrowth, currUnits, currMargin, 0, 0),
+        _buildUnifiedSummary(
+          currSales, prevSales, saleGrowth, 
+          currUnits, prevUnits, unitGrowth,
+          currMargin, prevMargin, marginGrowth,
+          currProducts, prevProducts, productGrowth,
+        ),
         
         // Breakdown Section (Only if > 1 year)
         if ((summary['breakdown'] as List?)?.isNotEmpty ?? false) ...[
@@ -94,10 +95,18 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildUnifiedSummary(double sales, double prevSales, double growth, double units, double margin, double totalMargin, int uniqueClients) {
+  Widget _buildUnifiedSummary(
+    double sales, double prevSales, double salesGrowth, 
+    double units, double prevUnits, double unitsGrowth,
+    double margin, double prevMargin, double marginGrowth,
+    int productCount, int prevProductCount, double productGrowth,
+  ) {
     // PREMIUM ROW-STYLE SUMMARY - Full width cards with year comparison
     final isNewClient = prevSales < 0.01 && sales > 0;
-    final isPositive = growth >= 0;
+    final isSalesPositive = salesGrowth >= 0;
+    final isUnitsPositive = unitsGrowth >= 0;
+    final isMarginPositive = marginGrowth >= 0;
+    final isProductPositive = productGrowth >= 0;
     
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -119,7 +128,7 @@ class SalesSummaryHeader extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Main row with VENTAS comparison
+          // Main row with VENTAS, UNIDADES, PRODUCTOS
           Row(
             children: [
               // VENTAS Column (Este año)
@@ -153,37 +162,13 @@ class SalesSummaryHeader extends StatelessWidget {
                         child: const Text('NUEVO', style: TextStyle(color: AppColors.neonBlue, fontWeight: FontWeight.bold, fontSize: 11)),
                       )
                     else
-                      Row(
-                        children: [
-                          Text('Año ant: ${_formatCurrency(prevSales)}', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: (isPositive ? AppColors.success : AppColors.error).withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(isPositive ? Icons.arrow_upward : Icons.arrow_downward, 
-                                     color: isPositive ? AppColors.success : AppColors.error, size: 12),
-                                const SizedBox(width: 2),
-                                Text(
-                                  '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}%',
-                                  style: TextStyle(color: isPositive ? AppColors.success : AppColors.error, fontWeight: FontWeight.bold, fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                      _buildComparisonBadge(prevSales, salesGrowth, isSalesPositive, showCurrency: true),
                   ],
                 ),
               ),
               
               // Divider
-              Container(width: 1, height: 60, color: Colors.white12, margin: const EdgeInsets.symmetric(horizontal: 12)),
+              Container(width: 1, height: 70, color: Colors.white12, margin: const EdgeInsets.symmetric(horizontal: 8)),
               
               // UNIDADES Column
               Expanded(
@@ -199,18 +184,54 @@ class SalesSummaryHeader extends StatelessWidget {
                         const Text('UNIDADES', style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 0.5)),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       _formatCompact(units),
                       style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                     ),
+                    const SizedBox(height: 4),
+                    if (prevUnits > 0)
+                      _buildMiniComparisonBadge(unitsGrowth, isUnitsPositive)
+                    else if (units > 0)
+                      const Text('NUEVO', style: TextStyle(color: AppColors.neonBlue, fontWeight: FontWeight.bold, fontSize: 9)),
+                  ],
+                ),
+              ),
+              
+              // Divider
+              Container(width: 1, height: 70, color: Colors.white12, margin: const EdgeInsets.symmetric(horizontal: 8)),
+              
+              // PRODUCTOS Column (Número de SKUs diferentes)
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.category_outlined, color: AppTheme.warning, size: 16),
+                        const SizedBox(width: 4),
+                        const Text('PRODUCTOS', style: TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 0.5)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      productCount.toString(),
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    if (prevProductCount > 0)
+                      _buildMiniComparisonBadge(productGrowth, isProductPositive)
+                    else if (productCount > 0)
+                      const Text('NUEVO', style: TextStyle(color: AppColors.neonBlue, fontWeight: FontWeight.bold, fontSize: 9)),
                   ],
                 ),
               ),
               
               // MARGEN Column (only if showMargin)
               if (showMargin) ...[
-                Container(width: 1, height: 60, color: Colors.white12, margin: const EdgeInsets.symmetric(horizontal: 12)),
+                Container(width: 1, height: 70, color: Colors.white12, margin: const EdgeInsets.symmetric(horizontal: 8)),
                 Expanded(
                   flex: 2,
                   child: Column(
@@ -224,7 +245,7 @@ class SalesSummaryHeader extends StatelessWidget {
                           const Text('MARGEN', style: TextStyle(color: AppTheme.neonPurple, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 0.5)),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Text(
                         '${margin.toStringAsFixed(1)}%',
                         style: TextStyle(
@@ -233,6 +254,11 @@ class SalesSummaryHeader extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      if (prevMargin > 0)
+                        _buildMiniComparisonBadge(marginGrowth, isMarginPositive, isBasisPoints: true)
+                      else if (margin > 0)
+                        const Text('NUEVO', style: TextStyle(color: AppColors.neonBlue, fontWeight: FontWeight.bold, fontSize: 9)),
                     ],
                   ),
                 ),
@@ -240,6 +266,56 @@ class SalesSummaryHeader extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// Builds a comparison badge with prev value and growth %
+  Widget _buildComparisonBadge(double prevValue, double growth, bool isPositive, {bool showCurrency = false}) {
+    return Row(
+      children: [
+        Text(
+          'Ant: ${showCurrency ? _formatCurrency(prevValue) : _formatCompact(prevValue)}', 
+          style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: (isPositive ? AppColors.success : AppColors.error).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(isPositive ? Icons.arrow_upward : Icons.arrow_downward, 
+                   color: isPositive ? AppColors.success : AppColors.error, size: 10),
+              const SizedBox(width: 2),
+              Text(
+                '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}%',
+                style: TextStyle(color: isPositive ? AppColors.success : AppColors.error, fontWeight: FontWeight.bold, fontSize: 10),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Builds a mini comparison badge with just growth % 
+  Widget _buildMiniComparisonBadge(double growth, bool isPositive, {bool isBasisPoints = false}) {
+    final displayText = isBasisPoints 
+        ? '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}pp' // pp = puntos porcentuales
+        : '${isPositive ? '+' : ''}${growth.toStringAsFixed(0)}%';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: (isPositive ? AppColors.success : AppColors.error).withOpacity(0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        displayText,
+        style: TextStyle(color: isPositive ? AppColors.success : AppColors.error, fontWeight: FontWeight.bold, fontSize: 9),
       ),
     );
   }

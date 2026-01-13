@@ -723,6 +723,24 @@ router.get('/rutero/day/:day', async (req, res) => {
             });
         });
 
+        // C2. TOTAL Prev Year Sales (Full Year) - To determine if client is "NEW" vs just no sales in period
+        // A client is "NEW" only if they had ZERO sales in the ENTIRE previous year
+        let prevYearTotalMap = new Map();
+        const prevYearTotalSql = `
+            SELECT 
+                L.LCCDCL as CODE,
+                SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
+              AND L.LCAADC = ${previousYear}
+              AND ${LACLAE_SALES_FILTER}
+            GROUP BY L.LCCDCL
+        `;
+        const prevYearTotalRows = await cachedQuery(query, prevYearTotalSql, `rutero:sales:total:${previousYear}:${clientsHash}`, TTL.LONG);
+        prevYearTotalRows.forEach(r => {
+            prevYearTotalMap.set(r.CODE.trim(), parseFloat(r.SALES) || 0);
+        });
+
         // Merge Data
         const currentYearRows = clientDetailsRows.map(r => {
             const code = r.CODE.trim();
@@ -787,13 +805,14 @@ router.get('/rutero/day/:day', async (req, res) => {
         const clients = currentYearRows.map(r => {
             const code = r.CODE?.trim() || '';
             const prevSales = prevYearMap.get(code) || { sales: 0, cost: 0 };
+            const prevYearTotalSales = prevYearTotalMap.get(code) || 0; // Total sales in entire previous year
             const gps = gpsMap.get(code) || { lat: null, lon: null };
             const note = notesMap.get(code);
 
             const salesCurrent = r.SALES || 0;
-            const salesPrev = prevSales.sales || 0;
+            const salesPrev = prevSales.sales || 0; // Sales in equivalent period of prev year
 
-            // Calculate Growth
+            // Calculate Growth (comparing equivalent periods)
             let growth = 0;
             if (salesPrev > 0) {
                 growth = ((salesCurrent - salesPrev) / salesPrev) * 100;
@@ -816,7 +835,8 @@ router.get('/rutero/day/:day', async (req, res) => {
                 // Frontend expects 'status' object with raw numbers
                 status: {
                     ytdSales: salesCurrent,
-                    ytdPrevYear: salesPrev,
+                    ytdPrevYear: salesPrev, // Sales in equivalent period
+                    prevYearTotal: prevYearTotalSales, // Total sales in entire previous year (for NEW detection)
                     yoyVariation: parseFloat(growth.toFixed(1)),
                     isPositive: growth >= 0
                 },
