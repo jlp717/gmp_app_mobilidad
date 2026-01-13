@@ -54,17 +54,17 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               CAC.SERIEALBARAN,
               CAC.NUMEROALBARAN,
               TRIM(CAC.CODIGOCLIENTEFACTURA) as CLIENTE,
-              TRIM(COALESCE(CLI.NOMBREFISCAL, CLI.NOMBRECOMERCIAL, 'CLIENTE')) as NOMBRE_CLIENTE,
-              TRIM(COALESCE(CLI.DIRECCION1, '')) as DIRECCION,
+              TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, 'CLIENTE')) as NOMBRE_CLIENTE,
+              TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCION,
               TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
-              TRIM(COALESCE(CLI.TELEFONO, '')) as TELEFONO,
+              TRIM(COALESCE(CLI.TELEFONO1, '')) as TELEFONO,
               CAC.IMPORTETOTAL / 100.0 as IMPORTE,
               TRIM(CAC.CODIGOFORMAPAGO) as FORMA_PAGO,
               CAC.DIADOCUMENTO, CAC.MESDOCUMENTO, CAC.ANODOCUMENTO,
               TRIM(CAC.CODIGORUTA) as RUTA
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE TRIM(CAC.CODIGOVENDEDORCONDUCTOR) IN (${ids})
+            WHERE TRIM(CAC.CODIGOVENDEDOR) IN (${ids})
               AND CAC.ANODOCUMENTO = ${ano}
               AND CAC.MESDOCUMENTO = ${mes}
               AND CAC.DIADOCUMENTO = ${dia}
@@ -117,9 +117,12 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
     try {
         const { numero, ejercicio } = req.params;
 
-        // 1. Get Header
+        // 1. Get Header - FIX: usar columnas correctas de CLI
         const headerSql = `
-            SELECT CAC.*, TRIM(CLI.NOMBREFISCAL) as CLIENTE_NOM, TRIM(CLI.DIRECCION1) as DIR, TRIM(CLI.POBLACION) as POB
+            SELECT CAC.*, 
+                TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as CLIENTE_NOM, 
+                TRIM(COALESCE(CLI.DIRECCION, '')) as DIR, 
+                TRIM(COALESCE(CLI.POBLACION, '')) as POB
             FROM DSEDAC.CAC
             LEFT JOIN DSEDAC.CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
             WHERE CAC.NUMEROALBARAN = ${numero} AND CAC.EJERCICIOALBARAN = ${ejercicio}

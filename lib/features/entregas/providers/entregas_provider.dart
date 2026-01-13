@@ -278,8 +278,9 @@ class EntregasProvider extends ChangeNotifier {
 
     try {
       final formattedDate = '${_fechaSeleccionada.year}-${_fechaSeleccionada.month.toString().padLeft(2, '0')}-${_fechaSeleccionada.day.toString().padLeft(2, '0')}';
+      // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
       final response = await ApiClient.get(
-        '${ApiConfig.baseUrl}/api/entregas/pendientes/$_repartidorId?date=$formattedDate',
+        '/entregas/pendientes/$_repartidorId?date=$formattedDate',
       );
 
       if (response['success'] == true) {
@@ -299,8 +300,9 @@ class EntregasProvider extends ChangeNotifier {
   /// Obtener detalle de un albarán
   Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio) async {
     try {
+      // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
       final response = await ApiClient.get(
-        '${ApiConfig.baseUrl}/api/entregas/albaran/$numero/$ejercicio',
+        '/entregas/albaran/$numero/$ejercicio',
       );
 
       if (response['success'] == true && response['albaran'] != null) {
@@ -376,8 +378,9 @@ class EntregasProvider extends ChangeNotifier {
     double? longitud,
   }) async {
     try {
+      // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
       final response = await ApiClient.post(
-        '${ApiConfig.baseUrl}/api/entregas/update',
+        '/entregas/update',
         {
           'itemId': itemId,
           'status': estado.value,

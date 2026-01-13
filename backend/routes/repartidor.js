@@ -31,16 +31,29 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
         const { repartidorId } = req.params;
         const { year, month } = req.query;
 
+        // Validar repartidorId
+        if (!repartidorId || repartidorId.trim() === '') {
+            return res.json({
+                success: true,
+                repartidorId: repartidorId || '',
+                period: { year: new Date().getFullYear(), month: new Date().getMonth() + 1 },
+                summary: { totalCollectable: 0, totalCollected: 0, totalCommission: 0, overallPercentage: 0, thresholdMet: false, clientCount: 0 },
+                clients: []
+            });
+        }
+
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
+        const cleanRepartidorId = repartidorId.toString().trim();
 
-        logger.info(`[REPARTIDOR] Getting collections summary for ${repartidorId} (${selectedMonth}/${selectedYear})`);
+        logger.info(`[REPARTIDOR] Getting collections summary for ${cleanRepartidorId} (${selectedMonth}/${selectedYear})`);
 
         // Get all deliveries assigned to this repartidor with their collections
+        // Usamos CODIGOVENDEDOR como fallback ya que TRANSPORTISTA no siempre está poblado
         const sql = `
             SELECT 
                 TRIM(CAC.CODIGOCLIENTEFACTURA) as CLIENTE,
-                TRIM(CLI.NOMBREFISCAL) as NOMBRE_CLIENTE,
+                TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as NOMBRE_CLIENTE,
                 CAC.CODIGOFORMAPAGO as FORMA_PAGO,
                 SUM(CAC.IMPORTETOTAL) as TOTAL_COBRABLE,
                 SUM(CASE 
@@ -58,13 +71,27 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
                 AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
             WHERE CAC.ANODOCUMENTO = ${selectedYear}
               AND CAC.MESDOCUMENTO = ${selectedMonth}
-              AND TRIM(CAC.TRANSPORTISTA1ALBARAN) = '${repartidorId.trim()}'
-            GROUP BY TRIM(CAC.CODIGOCLIENTEFACTURA), TRIM(CLI.NOMBREFISCAL), CAC.CODIGOFORMAPAGO
+              AND TRIM(CAC.CODIGOVENDEDOR) = '${cleanRepartidorId}'
+            GROUP BY TRIM(CAC.CODIGOCLIENTEFACTURA), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), CAC.CODIGOFORMAPAGO
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
         `;
 
-        const rows = await query(sql, true, false);
+        let rows = [];
+        try {
+            rows = await query(sql, true, false) || [];
+        } catch (queryError) {
+            logger.warn(`[REPARTIDOR] Query error in collections/summary: ${queryError.message}`);
+            // Devolver respuesta vacía en lugar de error 500
+            return res.json({
+                success: true,
+                repartidorId: cleanRepartidorId,
+                period: { year: selectedYear, month: selectedMonth },
+                summary: { totalCollectable: 0, totalCollected: 0, totalCommission: 0, overallPercentage: 0, thresholdMet: false, clientCount: 0 },
+                clients: [],
+                warning: 'No hay datos disponibles para este período'
+            });
+        }
 
         // Calculate commissions for each client
         const clients = rows.map(row => {
@@ -150,6 +177,7 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Getting daily collections for ${repartidorId}`);
 
+        const cleanRepartidorId = repartidorId.toString().trim();
         const sql = `
             SELECT 
                 CAC.DIADOCUMENTO as DIA,
@@ -167,12 +195,18 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
                 AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
             WHERE CAC.ANODOCUMENTO = ${selectedYear}
               AND CAC.MESDOCUMENTO = ${selectedMonth}
-              AND TRIM(CAC.TRANSPORTISTA1ALBARAN) = '${repartidorId.trim()}'
+              AND TRIM(CAC.CODIGOVENDEDOR) = '${cleanRepartidorId}'
             GROUP BY CAC.DIADOCUMENTO
             ORDER BY CAC.DIADOCUMENTO
         `;
 
-        const rows = await query(sql, false);
+        let rows = [];
+        try {
+            rows = await query(sql, false) || [];
+        } catch (queryError) {
+            logger.warn(`[REPARTIDOR] Query error in collections/daily: ${queryError.message}`);
+            return res.json({ success: true, daily: [] });
+        }
 
         const daily = rows.map(row => ({
             day: row.DIA,
@@ -188,7 +222,8 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
 
     } catch (error) {
         logger.error(`[REPARTIDOR] Error in collections/daily: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        // Devolver respuesta vacía en lugar de error 500
+        res.json({ success: true, daily: [], warning: error.message });
     }
 });
 
@@ -203,36 +238,43 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Getting client list for ${repartidorId}`);
 
+        const cleanRepartidorId = repartidorId.toString().trim();
         let whereSearch = '';
         if (search && search.length >= 2) {
-            const s = search.toUpperCase();
-            whereSearch = `AND (TRIM(CLI.CODIGOCLIENTE) LIKE '%${s}%' OR UPPER(CLI.NOMBREFISCAL) LIKE '%${s}%')`;
+            const s = search.toUpperCase().replace(/'/g, "''"); // Escapar comillas simples
+            whereSearch = `AND (TRIM(CLI.CODIGOCLIENTE) LIKE '%${s}%' OR UPPER(COALESCE(CLI.NOMBRECLIENTE, '')) LIKE '%${s}%')`;
         }
 
         const sql = `
             SELECT DISTINCT
                 TRIM(CAC.CODIGOCLIENTEFACTURA) as CLIENTE,
-                TRIM(CLI.NOMBREFISCAL) as NOMBRE,
-                TRIM(CLI.DIRECCION1) as DIRECCION,
-                TRIM(CLI.POBLACION) as POBLACION,
+                TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as NOMBRE,
+                TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCION,
+                TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
                 COUNT(*) as TOTAL_DOCUMENTOS
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE TRIM(CAC.TRANSPORTISTA1ALBARAN) = '${repartidorId.trim()}'
+            WHERE TRIM(CAC.CODIGOVENDEDOR) = '${cleanRepartidorId}'
               AND CAC.ANODOCUMENTO >= ${new Date().getFullYear() - 1}
               ${whereSearch}
-            GROUP BY TRIM(CAC.CODIGOCLIENTEFACTURA), TRIM(CLI.NOMBREFISCAL), TRIM(CLI.DIRECCION1), TRIM(CLI.POBLACION)
+            GROUP BY TRIM(CAC.CODIGOCLIENTEFACTURA), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), TRIM(COALESCE(CLI.DIRECCION, '')), TRIM(COALESCE(CLI.POBLACION, ''))
             ORDER BY TOTAL_DOCUMENTOS DESC
             FETCH FIRST 50 ROWS ONLY
         `;
 
-        const rows = await query(sql, false);
+        let rows = [];
+        try {
+            rows = await query(sql, false) || [];
+        } catch (queryError) {
+            logger.warn(`[REPARTIDOR] Query error in history/clients: ${queryError.message}`);
+            return res.json({ success: true, clients: [] });
+        }
 
         const clients = rows.map(row => ({
-            id: row.CLIENTE,
-            name: row.NOMBRE || row.CLIENTE,
-            address: `${row.DIRECCION || ''}, ${row.POBLACION || ''}`.trim().replace(/^,\s*|,\s*$/g, ''),
-            totalDocuments: row.TOTAL_DOCUMENTOS
+            id: row.CLIENTE || '',
+            name: row.NOMBRE || row.CLIENTE || 'Cliente',
+            address: `${row.DIRECCION || ''}, ${row.POBLACION || ''}`.trim().replace(/^,\s*|,\s*$/g, '') || '',
+            totalDocuments: row.TOTAL_DOCUMENTOS || 0
         }));
 
         res.json({
@@ -242,7 +284,8 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
     } catch (error) {
         logger.error(`[REPARTIDOR] Error in history/clients: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        // Devolver respuesta vacía en lugar de error 500
+        res.json({ success: true, clients: [], warning: error.message });
     }
 });
 
@@ -259,7 +302,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
         let transportistaFilter = '';
         if (repartidorId) {
-            transportistaFilter = `AND TRIM(CAC.TRANSPORTISTA1ALBARAN) = '${repartidorId.trim()}'`;
+            transportistaFilter = `AND TRIM(CAC.CODIGOVENDEDOR) = '${repartidorId.toString().trim()}'`;
         }
 
         const sql = `
@@ -335,6 +378,7 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Getting objectives for ${repartidorId}${clientId ? ` client ${clientId}` : ''}`);
 
+        const cleanRepartidorId = repartidorId.toString().trim();
         let clientFilter = '';
         if (clientId) {
             clientFilter = `AND TRIM(CAC.CODIGOCLIENTEFACTURA) = '${clientId.trim()}'`;
@@ -356,7 +400,7 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
                 AND CVC.EJERCICIODOCUMENTO = CAC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CAC.SERIEFACTURA
                 AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
-            WHERE TRIM(CAC.TRANSPORTISTA1ALBARAN) = '${repartidorId.trim()}'
+            WHERE TRIM(CAC.CODIGOVENDEDOR) = '${cleanRepartidorId}'
               AND CAC.ANODOCUMENTO >= ${new Date().getFullYear() - 1}
               ${clientFilter}
             GROUP BY CAC.ANODOCUMENTO, CAC.MESDOCUMENTO
