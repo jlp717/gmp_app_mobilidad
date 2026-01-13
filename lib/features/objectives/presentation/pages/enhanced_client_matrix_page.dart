@@ -1167,6 +1167,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   Widget _buildMonthlyBreakdownRow(Map<String, dynamic>? monthlyData, {bool compact = false}) {
     if (monthlyData == null || monthlyData.isEmpty) return const SizedBox.shrink();
     
+    // Check if client is NEW (no sales in entire previous year)
+    final isClientNew = _summary['isNewClient'] == true;
+    
     return Container(
       margin: EdgeInsets.only(top: compact ? 6 : 8),
       height: compact ? 52 : 60,
@@ -1211,7 +1214,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           bool prevIsZero = prevSales.abs() < 0.01;
           bool currIsZero = sales.abs() < 0.01;
           
-          if (currIsZero && !prevIsZero) {
+          // Si el cliente es NUEVO (sin ventas en todo el año anterior), todos los meses con ventas son NUEVO
+          if (isClientNew && !currIsZero) {
+            isNew = true;
+            yoyColor = AppTheme.neonBlue;
+            bgColor = AppTheme.neonBlue.withOpacity(0.12);
+          } else if (currIsZero && !prevIsZero) {
             // Perdió ventas - este año 0, año pasado vendió
             isLost = true;
             yoyPct = -100;
