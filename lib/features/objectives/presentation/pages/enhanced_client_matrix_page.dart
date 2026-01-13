@@ -1217,23 +1217,24 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           // Si el cliente es NUEVO (sin ventas en todo el año anterior), todos los meses con ventas son NUEVO
           if (isClientNew && !currIsZero) {
             isNew = true;
-            yoyColor = AppTheme.neonBlue;
-            bgColor = AppTheme.neonBlue.withOpacity(0.12);
+            yoyColor = const Color(0xFF2979FF); // Distinct Blue
+            bgColor = const Color(0xFF2979FF).withOpacity(0.20);
           } else if (currIsZero && !prevIsZero) {
             // Perdió ventas - este año 0, año pasado vendió
             isLost = true;
             yoyPct = -100;
             yoyColor = AppTheme.error;
             bgColor = AppTheme.error.withOpacity(0.15);
+          } else if (!currIsZero && prevIsZero) {
+             // Venta este mes, pero 0 el año pasado -> NUEVO (Blue)
+            isNew = true;
+            yoyColor = const Color(0xFF2979FF); // Distinct Blue
+            bgColor = const Color(0xFF2979FF).withOpacity(0.20);
           } else if (!prevIsZero && !currIsZero) {
             yoyPct = ((sales - prevSales) / prevSales) * 100;
             yoySign = yoyPct >= 0 ? '+' : '';
             yoyColor = yoyPct >= 0 ? AppTheme.success : AppTheme.error;
             bgColor = yoyColor.withOpacity(0.12);
-          } else if (!currIsZero && prevIsZero) {
-            isNew = true;
-            yoyColor = AppTheme.neonBlue;
-            bgColor = AppTheme.neonBlue.withOpacity(0.12);
           } else {
             yoyColor = AppTheme.textSecondary;
             bgColor = AppTheme.darkCard;

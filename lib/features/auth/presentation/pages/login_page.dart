@@ -83,6 +83,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     if (!_formKey.currentState!.validate()) return;
     
     final auth = context.read<AuthProvider>();
+    debugPrint('[LoginPage] Attempting login for: ${_usernameController.text}');
+    
     final success = await auth.login(
       _usernameController.text.trim(),
       _passwordController.text,
@@ -91,20 +93,26 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     if (!mounted) return;
 
     if (success) {
+      debugPrint('[LoginPage] Login Success. Role: ${auth.currentUser?.role}, IsJefe: ${auth.currentUser?.isJefeVentas}');
+      
       if (auth.currentUser?.isJefeVentas == true) {
+         debugPrint('[LoginPage] User is Jefe. Showing Role Selection Dialog...');
          // Show Role Selection Dialog
-         if (!mounted) return;
-         
-         // Use showDialog but don't await result to block navigation, await it to decide WHERE to go
          await showDialog(
            context: context, 
            barrierDismissible: false,
            builder: (ctx) => const RoleSelectionDialog()
          );
-         // The dialog handles navigation to dashboard on confirm/cancel
-         // If dialog is dismissed without navigation (e.g. back button on android), force dashboard?
-         // Dialog is barrierDismissible: false, so they must choose or back out.
+         // If dialog passes (or is dismissed via back button on Android), we might need to force navigation
+         // The dialog internally handles navigation on "Confirm", but if they "Cancel" it pops.
+         if (mounted) {
+            // Safety check: if we are still here, user might have cancelled or dialog closed.
+            // Check if we are already at dashboard? No, we are at login.
+            // Go to dashboard as fallback (default role)
+            context.go('/dashboard');
+         }
       } else {
+         debugPrint('[LoginPage] Regular user. Navigating to Dashboard...');
          context.go('/dashboard');
       }
     } else {
@@ -113,22 +121,24 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         _errorMessage = auth.error ?? 'Credenciales incorrectas';
       });
       
-      debugPrint('[LoginPage] Login Failed. Showing Dialog. w/ Error: $_errorMessage');
+      debugPrint('[LoginPage] Login Failed. Showing Dialog. Error: $_errorMessage');
       
-      // SHOW DIALOG for clearer feedback
-      if (!mounted) {
-         debugPrint('[LoginPage] Context not mounted, skipping dialog');
-         return;
-      }
-      showDialog(
+      // Force ensure dialog shows
+      await showDialog(
         context: context,
         builder: (context) => AlertDialog(
           backgroundColor: AppTheme.darkCard,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Error de acceso', style: TextStyle(color: AppTheme.error)),
-          content: const Text(
-            'Credenciales incorrectas. Por favor, inténtalo de nuevo.', 
-            style: TextStyle(color: Colors.white)
+          title: const Row(
+            children: [
+              Icon(Icons.error_outline, color: AppTheme.error),
+              SizedBox(width: 8),
+              Text('Error de acceso', style: TextStyle(color: AppTheme.error)),
+            ],
+          ),
+          content: Text(
+            _errorMessage ?? 'Credenciales incorrectas. Por favor, inténtalo de nuevo.', 
+            style: const TextStyle(color: Colors.white),
           ),
           actions: [
             TextButton(
