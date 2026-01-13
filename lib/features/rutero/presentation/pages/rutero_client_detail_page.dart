@@ -480,20 +480,28 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
           if (current == 0 && lastYear == 0) return const SizedBox.shrink();
 
           // Lógica de colores:
-          // 1) Sin mes anterior para comparar (lastYear == 0 y current > 0) → NUEVO en azul
-          // 2) Mejor que año anterior → Verde con +X%
-          // 3) Peor que año anterior → Rojo con -X%
-          final isNew = lastYear < 0.01 && current > 0;
+          // 1) Cliente NUEVO (sin ventas en TODO el año anterior) → AZUL para todos los meses
+          // 2) Mes sin ventas en año anterior pero cliente NO es nuevo → Verde +100%
+          // 3) Mejor que año anterior → Verde con +X%
+          // 4) Peor que año anterior → Rojo con -X%
+          final isClientNew = _clientData['totals']?['isNewClient'] == true;
+          final isMonthNew = lastYear < 0.01 && current > 0;
           final isPositive = variation >= 0;
           
           Color accentColor;
           IconData accentIcon;
           String badgeText;
           
-          if (isNew) {
+          if (isClientNew && current > 0) {
+            // Cliente nuevo - todo en azul
             accentColor = AppTheme.neonBlue;
             accentIcon = Icons.star;
             badgeText = 'NUEVO';
+          } else if (isMonthNew) {
+            // Mes nuevo pero cliente ya existía
+            accentColor = AppTheme.success;
+            accentIcon = Icons.arrow_upward;
+            badgeText = '+100%';
           } else if (isPositive) {
             accentColor = AppTheme.success;
             accentIcon = Icons.arrow_upward;
@@ -515,9 +523,11 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               _monthNames[(month['month'] as int) - 1],
               style: const TextStyle(fontWeight: FontWeight.w500),
             ),
-            subtitle: isNew 
-              ? Text('Sin ventas en ${_selectedYear - 1}', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
-              : Text('Anterior: ${month['lastYearFormatted']}', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+            subtitle: (isClientNew && current > 0)
+              ? Text('Cliente nuevo en $_selectedYear', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+              : isMonthNew
+                ? Text('Sin ventas en ${_selectedYear - 1}', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+                : Text('Anterior: ${month['lastYearFormatted']}', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,

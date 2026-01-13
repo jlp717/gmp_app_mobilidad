@@ -413,80 +413,75 @@ router.get('/sales-history', async (req, res) => {
 router.get('/sales-history/summary', async (req, res) => {
     try {
         const { vendedorCodes, clientCode, productSearch, startDate, endDate } = req.query;
-        const vendedorFilter = buildVendedorFilter(vendedorCodes);
-        const searchFilter = productSearch ? `AND (UPPER(ART.DESCRIPCIONARTICULO) LIKE UPPER('%${productSearch}%') OR ART.CODIGOARTICULO LIKE '%${productSearch}%')` : '';
-        const clientFilter = clientCode ? `AND L.CODIGOCLIENTEALBARAN = '${clientCode}'` : '';
+        
+        // Build filters for LACLAE table
+        const LACLAE_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z')`;
+        
+        // Vendedor filter - adaptar para LACLAE (LCCDVD)
+        let vendedorFilter = '';
+        if (vendedorCodes) {
+            const codes = vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',');
+            vendedorFilter = `AND L.LCCDVD IN (${codes})`;
+        }
+        
+        // Client filter - adaptar para LACLAE (LCCDCL)
+        const clientFilter = clientCode ? `AND TRIM(L.LCCDCL) = '${clientCode}'` : '';
+        
+        // Product search filter - adaptar para LACLAE (LCCDRF, LCDESC)
+        const searchFilter = productSearch 
+            ? `AND (UPPER(L.LCDESC) LIKE UPPER('%${productSearch}%') OR TRIM(L.LCCDRF) LIKE '%${productSearch}%')` 
+            : '';
 
-        // Helper to query logic
-        const getStats = async (start, end) => {
-            const sDate = parseInt(start.replace(/-/g, ''));
-            const eDate = parseInt(end.replace(/-/g, ''));
-            const joinArt = productSearch ? 'LEFT JOIN DSEDAC.ARTICULOS ART ON L.CODIGOARTICULO = ART.CODIGOARTICULO' : '';
-            const dateQuery = `AND L.FECHADOCUMENTO BETWEEN ${sDate} AND ${eDate}`;
-
+        // Helper to query LACLAE
+        const getStats = async (year) => {
             const queryStr = `
                 SELECT 
-                    SUM(L.IMPORTEVENTA) as sales,
-                    SUM(L.IMPORTEVENTA - L.IMPORTECOSTO) as margin,
-                    SUM(L.UNIDADES) as units,
-                    SUM(CASE WHEN L.UNIDADES >= 0 THEN L.UNIDADES ELSE 0 END) as positive_units,
-                    COUNT(DISTINCT L.CODIGOARTICULO) as product_count
-                FROM DSEDAC.LAC L
-                ${joinArt}
-                WHERE 1=1 
-                ${dateQuery} 
-                ${vendedorFilter}
-                ${clientFilter} 
-                ${searchFilter}
+                    SUM(L.LCIMVT) as sales,
+                    SUM(L.LCIMVT - L.LCIMCT) as margin,
+                    SUM(L.LCCTUD) as units,
+                    COUNT(DISTINCT TRIM(L.LCCDRF)) as product_count
+                FROM DSED.LACLAE L
+                WHERE ${LACLAE_FILTER}
+                  AND L.LCAADC = ${year}
+                  ${vendedorFilter}
+                  ${clientFilter}
+                  ${searchFilter}
             `;
-            // Cache this since it's summary data
-            const cacheKey = `history:summary:${sDate}:${eDate}:${vendedorCodes}:${clientCode}:${productSearch}`;
+            const cacheKey = `history:summary:laclae:${year}:${vendedorCodes}:${clientCode}:${productSearch}`;
             const result = await cachedQuery(query, queryStr, cacheKey, TTL.SHORT);
             return result[0] || {};
         };
 
         // Helper for Year Breakdown
-        const getYearBreakdown = async (start, end) => {
-            const sDate = parseInt(start.replace(/-/g, ''));
-            const eDate = parseInt(end.replace(/-/g, ''));
-            const joinArt = productSearch ? 'LEFT JOIN DSEDAC.ARTICULOS ART ON L.CODIGOARTICULO = ART.CODIGOARTICULO' : '';
-            const dateQuery = `AND L.FECHADOCUMENTO BETWEEN ${sDate} AND ${eDate}`;
-
+        const getYearBreakdown = async (startYear, endYear) => {
             const queryStr = `
                 SELECT 
-                    L.ANODOCUMENTO as year,
-                    SUM(L.IMPORTEVENTA) as sales,
-                    SUM(L.IMPORTEVENTA - L.IMPORTECOSTO) as margin,
-                    SUM(L.UNIDADES) as units
-                FROM DSEDAC.LAC L
-                ${joinArt}
-                WHERE 1=1 
-                ${dateQuery} 
-                ${vendedorFilter}
-                ${clientFilter} 
-                ${searchFilter}
-                GROUP BY L.ANODOCUMENTO
-                ORDER BY L.ANODOCUMENTO DESC
+                    L.LCAADC as year,
+                    SUM(L.LCIMVT) as sales,
+                    SUM(L.LCIMVT - L.LCIMCT) as margin,
+                    SUM(L.LCCTUD) as units
+                FROM DSED.LACLAE L
+                WHERE ${LACLAE_FILTER}
+                  AND L.LCAADC BETWEEN ${startYear} AND ${endYear}
+                  ${vendedorFilter}
+                  ${clientFilter}
+                  ${searchFilter}
+                GROUP BY L.LCAADC
+                ORDER BY L.LCAADC DESC
             `;
-            return await cachedQuery(query, queryStr, `history:breakdown:${sDate}:${eDate}:${vendedorCodes}:${clientCode}:${productSearch}`, TTL.SHORT);
+            return await cachedQuery(query, queryStr, `history:breakdown:laclae:${startYear}:${endYear}:${vendedorCodes}:${clientCode}:${productSearch}`, TTL.SHORT);
         };
 
-        // --- 1. Current Period ---
+        // --- Determine years ---
         const now = new Date();
-        const sDate = startDate || `${now.getFullYear()}0101`;
-        const eDate = endDate || `${now.getFullYear()}1231`;
-
-        // --- 2. Previous Period ---
-        const sYear = parseInt(sDate.substring(0, 4));
-        const eYear = parseInt(eDate.substring(0, 4));
-        const sPrevOriginal = (sYear - 1) + sDate.substring(4);
-        const ePrevOriginal = (eYear - 1) + eDate.substring(4);
+        const currentYear = startDate ? parseInt(startDate.substring(0, 4)) : now.getFullYear();
+        const previousYear = currentYear - 1;
 
         // Execute parallel queries
         const [curr, prev, breakdown] = await Promise.all([
-            getStats(sDate, eDate),
-            getStats(sPrevOriginal, ePrevOriginal),
-            getYearBreakdown(sDate, eDate)
+            getStats(currentYear),
+            getStats(previousYear),
+            getYearBreakdown(previousYear, currentYear)
         ]);
 
         const currSales = parseFloat(curr.SALES || 0);
@@ -510,14 +505,14 @@ router.get('/sales-history/summary', async (req, res) => {
                 margin: currMargin,
                 units: currUnits,
                 productCount: currProducts,
-                label: `${sYear}`
+                label: `${currentYear}`
             },
             previous: {
                 sales: prevSales,
                 margin: prevMargin,
                 units: prevUnits,
                 productCount: prevProducts,
-                label: `${sYear - 1}`
+                label: `${previousYear}`
             },
             growth: {
                 sales: calcGrowth(currSales, prevSales),

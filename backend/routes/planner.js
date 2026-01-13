@@ -1105,6 +1105,9 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
             ? ((totalCurrentYear - totalLastYear) / totalLastYear) * 100 
             : (totalCurrentYear > 0 ? 100 : 0);
 
+        // Determine if client is NEW (no sales in entire previous year)
+        const isNewClient = totalLastYear < 0.01 && totalCurrentYear > 0;
+
         // Get multi-year history
         const yearlyHistorySql = `
             SELECT 
@@ -1148,7 +1151,8 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 variation: Math.round(totalVariation * 10) / 10,
                 currentYearFormatted: formatCurrencyString(totalCurrentYear),
                 lastYearFormatted: formatCurrencyString(totalLastYear),
-                monthlyAverageFormatted: formatCurrencyString(totalCurrentYear / 12)
+                monthlyAverageFormatted: formatCurrencyString(totalCurrentYear / 12),
+                isNewClient: isNewClient  // Cliente no existía en el año anterior
             },
             monthlyData,
             yearlyTotals,
