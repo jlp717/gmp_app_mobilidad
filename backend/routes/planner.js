@@ -843,7 +843,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             year: currentYear,
             compareYear: previousYear,
             period: {
-                weeks: Math.ceil(((lastSundayDate - new Date(currentYear, 0, 1)) / 86400000 + 1) / 7), // Valid Week of Year calculation
+                weeks: Math.ceil(((referenceDate - new Date(currentYear, 0, 1)) / 86400000 + 1) / 7), // Valid Week of Year calculation
                 current: `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}`,
                 previous: endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Semana cerrada'
             }

@@ -1249,7 +1249,11 @@ class _ClientCard extends StatelessWidget {
     final ytdPrevYear = (status['ytdPrevYear'] as num?)?.toDouble() ?? 
                         (status['prevMonthSales'] as num?)?.toDouble() ?? 0;
 
-    final accentColor = isPositive ? AppTheme.success : AppTheme.error;
+    // Determinar si es cliente nuevo (sin ventas el año anterior pero sí este año)
+    final isNewClient = ytdPrevYear < 0.01 && ytdSales > 0;
+    
+    // El color de acento depende del estado: nuevo = azul, positivo = verde, negativo = rojo
+    final accentColor = isNewClient ? AppTheme.neonBlue : (isPositive ? AppTheme.success : AppTheme.error);
     
     // Check if has observations
     final hasObservaciones = observaciones != null && 
@@ -1314,7 +1318,7 @@ class _ClientCard extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-              // Progress indicator - shows YoY variation
+              // Progress indicator - shows YoY variation or NEW badge
               Container(
                 width: 85,
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1325,27 +1329,46 @@ class _ClientCard extends StatelessWidget {
                 child: Column(
                   children: [
                     Icon(
-                      isPositive ? Icons.trending_up : Icons.trending_down,
+                      isNewClient ? Icons.star : (isPositive ? Icons.trending_up : Icons.trending_down),
                       color: accentColor,
                       size: 26,
                     ),
                     const SizedBox(height: 4),
-                    // Show YoY variation percentage
-                    Text(
-                      '${yoyVariation >= 0 ? '+' : ''}${yoyVariation.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: accentColor,
+                    // Show NUEVO for new clients, otherwise YoY percentage
+                    if (isNewClient) ...[
+                      const Text(
+                        'NUEVO',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.neonBlue,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'vs ${selectedYear - 1}',
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: accentColor.withOpacity(0.8),
+                      Text(
+                        'Sin ventas ${selectedYear - 1}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 8,
+                          color: accentColor.withOpacity(0.8),
+                        ),
                       ),
-                    ),
+                    ] else ...[
+                      Text(
+                        '${yoyVariation >= 0 ? '+' : ''}${yoyVariation.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: accentColor,
+                        ),
+                      ),
+                      Text(
+                        'vs ${selectedYear - 1}',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: accentColor.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
                     // Margin badge - only for jefe de ventas
                     if (margin > 0 && showMargin)
                       Container(
