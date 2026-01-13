@@ -564,43 +564,70 @@ router.get('/rutero/day/:day', async (req, res) => {
         const currentYear = parseInt(year) || now.getFullYear();
         const previousYear = currentYear - 1;
 
-        const today = new Date(now);
-        const dayOfWeek = today.getDay();
-        const diffToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;
-        const lastSundayDate = new Date(today);
-        lastSundayDate.setDate(today.getDate() - diffToLastSunday);
+        // Calculate Reference Date (End date for accumulation)
+        // If specific week is requested, calculate the Sunday of that week as cutoff
+        let lastSundayDate;
+        const reqYear = parseInt(year) || now.getFullYear();
+        const reqMonth = req.query.month ? parseInt(req.query.month) : (now.getMonth() + 1);
+        const reqWeek = req.query.week ? parseInt(req.query.week) : null;
+
+        if (reqWeek && req.query.month) {
+            // Time Travel Mode: Calculate accumulation up to the specific week's Sunday
+            const firstDayOfMonth = new Date(reqYear, reqMonth - 1, 1);
+            // Find first Sunday of the month
+            const dayOfWeek = firstDayOfMonth.getDay(); // 0=Sun, 1=Mon...
+            const daysToSunday = (7 - dayOfWeek) % 7;
+            const firstSunday = new Date(reqYear, reqMonth - 1, 1 + daysToSunday);
+
+            // Target Sunday is (Week-1) weeks after first Sunday
+            // Note: If Week 1 doesn't have a Sunday (e.g. starts late in month?? Unlikely for standard weeks), this handles it.
+            // Adjusting logic to match typical "Week 2" meaning: The Sunday ending Week 2.
+            lastSundayDate = new Date(firstSunday);
+            lastSundayDate.setDate(firstSunday.getDate() + (reqWeek - 1) * 7);
+
+            // Safety cap: Don't go beyond "today" if in current month? 
+            // Actually user wants "accumulated up to week N", even if looking at past. 
+            // If looking at FUTURE week, it will just show sales up to today? 
+            // Let's rely on sales filter dates.
+        } else {
+            // Default: Relative to Today (Last Sunday)
+            const today = new Date(now);
+            const dayOfWeek = today.getDay();
+            const diffToLastSunday = dayOfWeek === 0 ? 0 : dayOfWeek; // fix: if today is sunday, it is the last sunday? or previous? strict "completed" usually implies previous. 
+            // User context: "Acumulado" usually means "Closed weeks". 
+            // Let's stick to "Last completed Sunday" effectively.
+            lastSundayDate = new Date(today);
+            lastSundayDate.setDate(today.getDate() - diffToLastSunday);
+        }
 
         let endMonthCurrent, endDayCurrent;
         let endMonthPrevious, endDayPrevious;
 
-        // Enforce "Completed Weeks" logic: Compare Jan 1 -> Last Sunday for both years
+        // Enforce "Completed Weeks" logic: Compare Jan 1 -> Validated Cutoff Date
         // Calculate the Nth week of current year, then find the same week's Sunday in previous year
         if (lastSundayDate.getFullYear() < currentYear) {
-            // First week of year is incomplete (last Sunday was in December)
-            endMonthCurrent = 0;
-            endDayCurrent = 0;
-            endMonthPrevious = 0;
-            endDayPrevious = 0;
+            // Handling edge case where "Last Sunday" falls in previous year
+            endMonthCurrent = 0; endDayCurrent = 0;
+            endMonthPrevious = 0; endDayPrevious = 0;
         } else {
             endMonthCurrent = lastSundayDate.getMonth() + 1;
             endDayCurrent = lastSundayDate.getDate();
 
-            // Calculate the week number for current year
+            // Calculate the week number for current year (Global week number)
             const startOfCurrentYear = new Date(currentYear, 0, 1);
             const daysSinceStart = Math.floor((lastSundayDate - startOfCurrentYear) / 86400000);
             const weekNumber = Math.floor(daysSinceStart / 7) + 1;
 
             // Find the equivalent Sunday (same week number) in previous year
             const startOfPreviousYear = new Date(previousYear, 0, 1);
-            const firstSundayOffsetPrev = (7 - startOfPreviousYear.getDay()) % 7; // Days until first Sunday
+            const firstSundayOffsetPrev = (7 - startOfPreviousYear.getDay()) % 7;
             const equivalentSundayPrev = new Date(previousYear, 0, 1 + firstSundayOffsetPrev + (weekNumber - 1) * 7);
 
-            // If the equivalent Sunday goes into February or beyond, cap at actual comparable date
+            // If the equivalent Sunday goes into next year (rare but possible with leap years etc), cap it
             if (equivalentSundayPrev.getFullYear() === previousYear) {
                 endMonthPrevious = equivalentSundayPrev.getMonth() + 1;
                 endDayPrevious = equivalentSundayPrev.getDate();
             } else {
-                // Fallback: use same day/month as current year
                 endMonthPrevious = endMonthCurrent;
                 endDayPrevious = endDayCurrent;
             }

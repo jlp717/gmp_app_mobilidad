@@ -118,90 +118,121 @@ class SalesSummaryHeader extends StatelessWidget {
   }
 
   Widget _buildCard(String title, String? currLabel, double currVal, String? prevLabel, double prevVal, double growth, NumberFormat fmt, Color color) {
+    // Determine status color based on growth
+    Color statusColor = Colors.grey;
+    if (growth > 0) statusColor = AppColors.success;
+    else if (growth < 0 && prevVal > 0) statusColor = AppColors.error;
+    else if (prevVal == 0 && currVal > 0) statusColor = AppColors.neonBlue;
+
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.cardColor, // Solid dark background, no gradient
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white12, width: 1), // Subtle border
+        color: AppColors.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
       ),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
       child: Column(
-         crossAxisAlignment: CrossAxisAlignment.start,
-         children: [
-            // Title
-            Text(title, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            
-            // Current year
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(currLabel ?? 'Este año', style: const TextStyle(color: Colors.white54, fontSize: 10)),
-                Text(
-                  fmt.format(currVal), 
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Header: Title and Trend Icon
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.6),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
                 ),
+              ),
+              if (prevVal > 0 || currVal > 0)
+                _buildTrendIcon(growth, prevVal),
+            ],
+          ),
+          
+          // Main Value
+          const SizedBox(height: 12),
+          Text(
+            fmt.format(currVal),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+          
+          // Comparison Footer
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (prevVal > 0) ...[
+                  Text(
+                    growth > 0 ? '+' : '',
+                    style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '${growth.abs().toStringAsFixed(1)}%',
+                    style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    ' vs ${_formatCompact(prevVal)}',
+                    style: TextStyle(color: statusColor.withOpacity(0.8), fontSize: 11),
+                  ),
+                ] else if (currVal > 0) ...[
+                   Text('NUEVO', style: TextStyle(color: AppColors.neonBlue, fontSize: 10, fontWeight: FontWeight.bold)),
+                ] else ...[
+                   const Text('Sin actividad', style: TextStyle(color: Colors.grey, fontSize: 10)),
+                ]
               ],
             ),
-            const SizedBox(height: 8),
-            
-            // Previous year
-            Column(
-               crossAxisAlignment: CrossAxisAlignment.start,
-               children: [
-                 Text(prevLabel ?? 'Año anterior', style: const TextStyle(color: Colors.white54, fontSize: 10)),
-                 Text(
-                   fmt.format(prevVal), 
-                   style: const TextStyle(color: Colors.white70, fontSize: 13),
-                 ),
-               ],
-            ),
-            const SizedBox(height: 8),
-            
-            // Growth
-            _buildGrowthWithLabel(growth, prevVal),
-         ],
+          ),
+        ],
       ),
     );
   }
 
-  /// Enhanced growth display with explicit label and cleaner look
-  Widget _buildGrowthWithLabel(double value, double prevValue) {
-      if (prevValue == 0) {
-         return Container(
-           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-           decoration: BoxDecoration(
-             color: AppColors.neonBlue.withOpacity(0.1), 
-             borderRadius: BorderRadius.circular(4),
-             border: Border.all(color: AppColors.neonBlue.withOpacity(0.3)),
-           ),
-           child: const Text('NUEVO', style: TextStyle(color: AppColors.neonBlue, fontSize: 10, fontWeight: FontWeight.bold)),
-         );
-      }
-      if (value.abs() < 0.1) {
-         return const Text('Sin cambios (0%)', style: TextStyle(color: Colors.grey, fontSize: 11));
-      }
-      final isPositive = value > 0;
-      final displayColor = isPositive ? AppColors.success : AppColors.error;
-      final icon = isPositive ? Icons.arrow_upward : Icons.arrow_downward;
-      
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-           Icon(icon, color: displayColor, size: 14),
-           const SizedBox(width: 4),
-           Text(
-             '${value.abs().toStringAsFixed(1)}%', 
-             style: TextStyle(color: displayColor, fontSize: 12, fontWeight: FontWeight.bold),
-           ),
-           const SizedBox(width: 4),
-           Text(
-             'vs anterior', 
-             style: TextStyle(color: displayColor.withOpacity(0.8), fontSize: 11),
-           ),
-        ],
-      );
+  Widget _buildTrendIcon(double growth, double prevVal) {
+    IconData icon;
+    Color color;
+    
+    if (prevVal == 0) {
+      icon = Icons.fiber_new;
+      color = AppColors.neonBlue;
+    } else if (growth > 0) {
+      icon = Icons.trending_up;
+      color = AppColors.success;
+    } else if (growth < 0) {
+      icon = Icons.trending_down;
+      color = AppColors.error;
+    } else {
+      icon = Icons.remove;
+      color = Colors.grey;
+    }
+
+    return Icon(icon, color: color, size: 16);
   }
+
+  // Helper for compact formatting in footer
+  String _formatCompact(double v) {
+    if (v >= 1000000) return '${(v/1000000).toStringAsFixed(1)}M';
+    if (v >= 1000) return '${(v/1000).toStringAsFixed(0)}k';
+    return v.toStringAsFixed(0);
+  }
+
 
   Widget _buildGrowth(double value, double prevValue) {
       if (prevValue == 0) {
