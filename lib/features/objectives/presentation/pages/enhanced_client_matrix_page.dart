@@ -1073,7 +1073,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
-  /// Enhanced stats with YoY comparison
+  /// Enhanced stats with YoY comparison and explicit labels
   Widget _buildLevelStatsWithYoY(double sales, double units, double marginPercent, double totalMargin, double prevSales, double yoyVariation, String yoyTrend, Color color, {bool compact = false}) {
     Color trendColor = AppTheme.textSecondary;
     IconData trendIcon = Icons.remove;
@@ -1090,47 +1090,71 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Sales + YoY trend
+        // SALES COLUMN
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_formatCurrency(sales), style: TextStyle(fontSize: compact ? 10 : 12, fontWeight: FontWeight.bold, color: color)),
-                const SizedBox(width: 4),
-                Icon(trendIcon, size: compact ? 10 : 12, color: trendColor),
-              ],
-            ),
-            if (prevSales > 0)
-              Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}% vs ${_formatCompact(prevSales)}', 
-                style: TextStyle(fontSize: compact ? 7 : 8, color: trendColor, fontWeight: FontWeight.w500)),
-            Text('${units.toStringAsFixed(0)} uds', style: TextStyle(fontSize: compact ? 7 : 9, color: AppTheme.textSecondary)),
+            Text('Monto este año:', style: TextStyle(fontSize: compact ? 7 : 8, color: AppTheme.textSecondary)),
+            Text(_formatCurrency(sales), style: TextStyle(fontSize: compact ? 10 : 12, fontWeight: FontWeight.bold, color: color)),
           ],
         ),
+        const SizedBox(width: 12),
+        
+        // YOY VARIATION COLUMN
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text('Variación:', style: TextStyle(fontSize: compact ? 7 : 8, color: AppTheme.textSecondary)),
+            if (prevSales > 0)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                   Text('${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}%', 
+                     style: TextStyle(fontSize: compact ? 9 : 10, fontWeight: FontWeight.bold, color: trendColor)),
+                   const SizedBox(width: 2),
+                   Text('vs ${_formatCompact(prevSales)}', 
+                     style: TextStyle(fontSize: compact ? 7 : 8, color: AppTheme.textSecondary)),
+                ],
+              )
+            else
+               Text('SIN HISTÓRICO', style: TextStyle(fontSize: compact ? 7 : 8, color: Colors.grey)),
+          ],
+        ),
+        const SizedBox(width: 12),
+
+        // UNITS COLUMN
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+             Text('Unidades:', style: TextStyle(fontSize: compact ? 7 : 8, color: AppTheme.textSecondary)),
+             Text('${units.toStringAsFixed(0)} uds', style: TextStyle(fontSize: compact ? 10 : 12, color: Colors.white70)),
+          ],
+        ),
+
         // Margin (Jefe Ventas only)
         if (widget.isJefeVentas) ...[
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 6, vertical: compact ? 2 : 3),
-                decoration: BoxDecoration(
-                  color: marginPercent >= 0 ? AppTheme.success.withOpacity(0.15) : AppTheme.error.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '${marginPercent.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    fontSize: compact ? 9 : 10,
-                    fontWeight: FontWeight.bold,
-                    color: marginPercent >= 0 ? AppTheme.success : AppTheme.error,
-                  ),
-                ),
+              Text('Margen:', style: TextStyle(fontSize: compact ? 7 : 8, color: AppTheme.textSecondary)),
+              Row(
+                 mainAxisSize: MainAxisSize.min,
+                 children: [
+                    Text(
+                      '${marginPercent.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: compact ? 9 : 10,
+                        fontWeight: FontWeight.bold,
+                        color: marginPercent >= 0 ? AppTheme.success : AppTheme.error,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text('(${_formatCurrency(totalMargin)})', style: TextStyle(fontSize: compact ? 7 : 8, color: AppTheme.textSecondary)),
+                 ],
               ),
-              Text(_formatCurrency(totalMargin), style: TextStyle(fontSize: compact ? 7 : 8, color: AppTheme.textSecondary)),
             ],
           ),
         ],

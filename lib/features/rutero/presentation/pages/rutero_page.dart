@@ -330,19 +330,8 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                child: Row(
                  children: [
-                   // Refresh button (replaces back arrow that caused black screen)
-                   IconButton(
-                     onPressed: _refreshData,
-                     icon: Icon(
-                       _isLoadingWeek || _isLoadingClients ? Icons.sync : Icons.refresh,
-                       color: Colors.white,
-                       size: 20,
-                     ),
-                     padding: EdgeInsets.zero,
-                     constraints: const BoxConstraints(),
-                     tooltip: 'Actualizar',
-                   ),
-                   const SizedBox(width: 8),
+                   // Title + Role Switcher in one row
+                   const SizedBox(width: 12), // Spacing from left edge
                    // Title + Role Switcher in one row
                    Expanded(
                      child: InkWell(
