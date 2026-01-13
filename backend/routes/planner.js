@@ -554,7 +554,7 @@ router.get('/rutero/positions/:day', async (req, res) => {
 });
 
 // =============================================================================
-// RUTERO DAY (OPTIMIZED WITH CACHING)
+// RUTERO DAY (OPTIMIZED WITH CACHING) - Hotfix Update Check
 // =============================================================================
 router.get('/rutero/day/:day', async (req, res) => {
     try {

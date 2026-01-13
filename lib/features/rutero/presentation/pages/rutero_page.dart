@@ -455,7 +455,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                  ),
                  const SizedBox(width: 8),
                  Text(
-                   'Acum. Sem. 1-$_selectedWeek (${_monthNames[_selectedMonth-1]})', 
+                   _getWeekDateRangeLabel(), 
                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
                  ),
                  const SizedBox(width: 8),
@@ -1961,5 +1961,38 @@ class _ReorderDialogState extends State<ReorderDialog> {
         ),
       ),
     );
+  }
+  String _getWeekDateRangeLabel() {
+    final now = DateTime.now();
+    final year = now.year; 
+    final firstDayOfMonth = DateTime(year, _selectedMonth, 1);
+    
+    // Find first Sunday (Standard ISO/Business week often ends on Sunday)
+    int daysToFirstSunday = (7 - firstDayOfMonth.weekday) % 7;
+    final firstSunday = firstDayOfMonth.add(Duration(days: daysToFirstSunday));
+    
+    DateTime start;
+    DateTime end;
+    
+    if (_selectedWeek == 1) {
+      start = firstDayOfMonth;
+      end = firstSunday;
+    } else {
+      // Week N ends (N-1) weeks after firstSunday
+      end = firstSunday.add(Duration(days: (_selectedWeek - 1) * 7));
+      // Week N starts 1 day after Week N-1 ends
+      start = firstSunday.add(Duration(days: (_selectedWeek - 2) * 7 + 1));
+    }
+    
+    // Cap at end of month
+    final lastDayOfMonth = DateTime(year, _selectedMonth + 1, 0);
+    if (end.isAfter(lastDayOfMonth)) end = lastDayOfMonth;
+    if (start.isAfter(lastDayOfMonth)) start = lastDayOfMonth;
+    
+    // If logic results in start > end (e.g. 5th week starts after month end), clamp
+    if (start.isAfter(end)) start = end;
+
+    final fmt = DateFormat('d MMM', 'es_ES');
+    return 'Sem. $_selectedWeek (${fmt.format(start)} - ${fmt.format(end)})';
   }
 }

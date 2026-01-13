@@ -1207,18 +1207,21 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           bool isNew = false;
           bool isLost = false; // Vendió el año pasado pero no este año
           
-          if (sales == 0 && prevSales > 0) {
+          bool prevIsZero = prevSales.abs() < 0.01;
+          bool currIsZero = sales.abs() < 0.01;
+          
+          if (currIsZero && !prevIsZero) {
             // Perdió ventas - este año 0, año pasado vendió
             isLost = true;
             yoyPct = -100;
             yoyColor = AppTheme.error;
             bgColor = AppTheme.error.withOpacity(0.15);
-          } else if (prevSales > 0 && sales > 0) {
+          } else if (!prevIsZero && !currIsZero) {
             yoyPct = ((sales - prevSales) / prevSales) * 100;
             yoySign = yoyPct >= 0 ? '+' : '';
             yoyColor = yoyPct >= 0 ? AppTheme.success : AppTheme.error;
             bgColor = yoyColor.withOpacity(0.12);
-          } else if (sales > 0 && prevSales == 0) {
+          } else if (!currIsZero && prevIsZero) {
             isNew = true;
             yoyColor = AppTheme.neonBlue;
             bgColor = AppTheme.neonBlue.withOpacity(0.12);
