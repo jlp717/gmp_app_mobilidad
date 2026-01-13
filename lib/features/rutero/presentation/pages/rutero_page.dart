@@ -330,11 +330,17 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                child: Row(
                  children: [
+                   // Refresh button (replaces back arrow that caused black screen)
                    IconButton(
-                     onPressed: () => Navigator.pop(context),
-                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                     onPressed: _refreshData,
+                     icon: Icon(
+                       _isRefreshing ? Icons.sync : Icons.refresh,
+                       color: Colors.white,
+                       size: 20,
+                     ),
                      padding: EdgeInsets.zero,
                      constraints: const BoxConstraints(),
+                     tooltip: 'Actualizar',
                    ),
                    const SizedBox(width: 8),
                    // Title + Role Switcher in one row
@@ -460,7 +466,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                  ),
                  const SizedBox(width: 8),
                  Text(
-                   'Semana $_selectedWeek (${_monthNames[_selectedMonth-1]})', 
+                   'Acum. Sem. 1-$_selectedWeek (${_monthNames[_selectedMonth-1]})', 
                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
                  ),
                  const SizedBox(width: 8),
