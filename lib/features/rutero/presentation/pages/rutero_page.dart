@@ -137,6 +137,23 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     return ((date.day + firstWeekday - 2) ~/ 7) + 1;
   }
 
+  /// Obtiene las fechas de inicio y fin de la semana seleccionada dentro del mes
+  (int startDay, int endDay) _getWeekDates(int year, int month, int weekNum) {
+    final firstOfMonth = DateTime(year, month, 1);
+    final lastOfMonth = DateTime(year, month + 1, 0);
+    final firstWeekday = firstOfMonth.weekday; // 1=Lunes
+    
+    // Calcular día de inicio de la semana (Lunes de esa semana)
+    int startDay = 1 + (weekNum - 1) * 7 - (firstWeekday - 1);
+    if (startDay < 1) startDay = 1;
+    
+    // Día fin (Domingo o último día del mes)
+    int endDay = startDay + 6;
+    if (endDay > lastOfMonth.day) endDay = lastOfMonth.day;
+    
+    return (startDay, endDay);
+  }
+
   void _changeMonth(int delta) {
     setState(() {
       _selectedMonth += delta;
@@ -439,12 +456,16 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
 
 
   Widget _buildCompactWeekSelector() {
+      // Obtener fechas de la semana
+      final (startDay, endDay) = _getWeekDates(_selectedYear, _selectedMonth, _selectedWeek);
+      final monthName = _monthNames[_selectedMonth - 1];
+      
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-             // Month/Week info
+             // Month/Week info con fechas
              Row(
                children: [
                  IconButton(
@@ -455,7 +476,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                  ),
                  const SizedBox(width: 8),
                   Text(
-                   'Semana $_selectedWeek (${_monthNames[_selectedMonth-1]})', 
+                   'Semana $_selectedWeek ($startDay - $endDay $monthName)', 
                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
                  ),
                  const SizedBox(width: 8),
@@ -1438,7 +1459,12 @@ class _ClientCard extends StatelessWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Acumulado Sem $completedWeeks:', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                        Text(
+                          completedWeeks > 1 
+                            ? 'Acumulado Sem. 1-${completedWeeks - 1}:' 
+                            : 'Acumulado Sem. 1:',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade500)
+                        ),
                         const SizedBox(height: 4),
                         Row(
                           children: [

@@ -453,32 +453,51 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       ),
       child: Column(
         children: monthlyData.map((month) {
-          final isPositive = month['isPositive'] == true;
-          final variation = (month['variation'] as num?)?.toDouble() ?? 0;
           final current = (month['currentYear'] as num?)?.toDouble() ?? 0;
+          final lastYear = (month['lastYear'] as num?)?.toDouble() ?? 0;
+          final variation = (month['variation'] as num?)?.toDouble() ?? 0;
 
-          if (current == 0) return const SizedBox.shrink();
+          if (current == 0 && lastYear == 0) return const SizedBox.shrink();
+
+          // Lógica de colores:
+          // 1) Sin mes anterior para comparar (lastYear == 0 y current > 0) → NUEVO en azul
+          // 2) Mejor que año anterior → Verde con +X%
+          // 3) Peor que año anterior → Rojo con -X%
+          final isNew = lastYear < 0.01 && current > 0;
+          final isPositive = variation >= 0;
+          
+          Color accentColor;
+          IconData accentIcon;
+          String badgeText;
+          
+          if (isNew) {
+            accentColor = AppTheme.neonBlue;
+            accentIcon = Icons.star;
+            badgeText = 'NUEVO';
+          } else if (isPositive) {
+            accentColor = AppTheme.success;
+            accentIcon = Icons.arrow_upward;
+            badgeText = '+${variation.toStringAsFixed(1)}%';
+          } else {
+            accentColor = AppTheme.error;
+            accentIcon = Icons.arrow_downward;
+            badgeText = '${variation.toStringAsFixed(1)}%';
+          }
 
           return ListTile(
             dense: true,
             leading: CircleAvatar(
               radius: 16,
-              backgroundColor:
-                  isPositive ? AppTheme.success.withOpacity(0.2) : AppTheme.error.withOpacity(0.2),
-              child: Icon(
-                isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-                size: 16,
-                color: isPositive ? AppTheme.success : AppTheme.error,
-              ),
+              backgroundColor: accentColor.withOpacity(0.2),
+              child: Icon(accentIcon, size: 16, color: accentColor),
             ),
             title: Text(
               _monthNames[(month['month'] as int) - 1],
               style: const TextStyle(fontWeight: FontWeight.w500),
             ),
-            subtitle: Text(
-              'Anterior: ${month['lastYearFormatted']}',
-              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-            ),
+            subtitle: isNew 
+              ? Text('Sin ventas en ${_selectedYear - 1}', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+              : Text('Anterior: ${month['lastYearFormatted']}', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -487,11 +506,19 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                   month['currentYearFormatted'] ?? '0 €',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                Text(
-                  '${variation >= 0 ? '+' : ''}${variation.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isPositive ? AppTheme.success : AppTheme.error,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: accentColor,
+                    ),
                   ),
                 ),
               ],
