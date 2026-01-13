@@ -334,7 +334,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                    IconButton(
                      onPressed: _refreshData,
                      icon: Icon(
-                       _isRefreshing ? Icons.sync : Icons.refresh,
+                       _isLoadingWeek || _isLoadingClients ? Icons.sync : Icons.refresh,
                        color: Colors.white,
                        size: 20,
                      ),
