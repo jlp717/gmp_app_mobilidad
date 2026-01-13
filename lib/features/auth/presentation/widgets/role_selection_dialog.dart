@@ -60,39 +60,7 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
               AppTheme.neonPurple
             ),
             
-            // VIEW AS SELECTOR (Only if Repartidor)
-            if (_selectedRole == 'REPARTIDOR') ...[
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Ver como:', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _viewAs,
-                      dropdownColor: AppTheme.darkCard,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'ALL_DRIVERS', child: Text('Todos los Repartidores')),
-                        DropdownMenuItem(value: 'SELF', child: Text('Mi Ruta (Personal)')),
-                      ],
-                      onChanged: (val) => setState(() => _viewAs = val!),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            // VIEW AS SELECTOR MOVED TO DASHBOARD
 
             const SizedBox(height: 24),
             
@@ -166,7 +134,7 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
   Future<void> _confirmRole() async {
     final auth = context.read<AuthProvider>();
     try {
-      final success = await auth.switchRole(_selectedRole, viewAs: _selectedRole == 'REPARTIDOR' ? _viewAs : null);
+      final success = await auth.switchRole(_selectedRole);
       if (success) {
         if (mounted) {
             Navigator.of(context).pop();

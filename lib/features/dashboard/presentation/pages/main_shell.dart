@@ -193,6 +193,23 @@ class _MainShellState extends State<MainShell> {
     return items;
   }
 
+  // State for Jefe Repartidor View
+  String? _selectedRepartidor;
+
+  // Helper to get available repartidores (mocked or from auth)
+  // For now, if Jefe, we assume he can see all. We need a list of repartidores.
+  // We can filter `authProvider.vendedorCodes` or hardcode known drivers/fetch them.
+  // For simplicity, we'll use a hardcoded list + "TODOS" or filter known drivers.
+  List<Map<String, String>> _getRepartidores(List<String> codes) {
+     // Return a list of {code, name}
+     // Ideally this comes from a provider. For now, we mock or use codes.
+     return [
+       {'code': 'ALL', 'name': 'Todos los Repartidores'},
+       ...codes.map((c) => {'code': c, 'name': 'Repartidor $c'}),
+     ];
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
@@ -204,7 +221,14 @@ class _MainShellState extends State<MainShell> {
       );
     }
 
-    final isJefeVentas = user.isJefeVentas;
+    final isJefeVentas = user.isJefeVentas; // The user capability
+    final isRepartidorMode = user.isRepartidor; // The active mode
+    
+    // Initialize selected if null
+    if (isJefeVentas && isRepartidorMode && _selectedRepartidor == null) {
+       _selectedRepartidor = 'ALL';
+    }
+
     final navItems = _getNavItems(isJefeVentas, authProvider.vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
 
@@ -216,7 +240,7 @@ class _MainShellState extends State<MainShell> {
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              width: _isNavExpanded ? 90 : 0,
+              width: _isNavExpanded ? 240 : 0, // Increased width for logic
               child: _isNavExpanded ? Container(
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceColor,
@@ -233,13 +257,43 @@ class _MainShellState extends State<MainShell> {
                     
                     // User Avatar
                     _buildUserAvatar(user, isJefeVentas),
+
+                    // JEFE REPARTIDOR SELECTOR
+                    if (isJefeVentas && isRepartidorMode)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedRepartidor,
+                              isExpanded: true,
+                              dropdownColor: AppTheme.surfaceColor,
+                              icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.neonPurple),
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                              items: _getRepartidores(authProvider.vendedorCodes).map((r) {
+                                return DropdownMenuItem(
+                                  value: r['code'],
+                                  child: Text(r['name']!),
+                                );
+                              }).toList(),
+                              onChanged: (val) => setState(() => _selectedRepartidor = val),
+                            ),
+                          ),
+                        ),
+                      ),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     
                     // Navigation Items - Take available space
                     Expanded(
                       child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
                         itemCount: navItems.length,
                         itemBuilder: (context, index) {
                           return Padding(
@@ -551,23 +605,34 @@ class _MainShellState extends State<MainShell> {
     // REPARTIDOR: 0=Rutero, 1=Comisiones, 2=Histórico, 3=Chat IA
     // ===============================================
     if (isRepartidor) {
-      final codigoConductor = user?.codigoConductor ?? vendedorCodes.join(',');
+      // Determine effective repartidor ID
+      // If Jefe, use _selectedRepartidor. If real Repartidor, use his code.
+      String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); // Default for real repartidor
+      
+      if (isJefeVentas && _selectedRepartidor != null) {
+         if (_selectedRepartidor == 'ALL') {
+           effectiveRepartidorId = vendedorCodes.join(',');
+         } else {
+           effectiveRepartidorId = _selectedRepartidor!;
+         }
+      }
+
       switch (_currentIndex) {
         case 0:
           // Rutero del repartidor (con cobros integrados)
           return ChangeNotifierProvider(
-            create: (_) => EntregasProvider()..setRepartidor(codigoConductor),
-            child: RepartidorRuteroPage(repartidorId: codigoConductor),
+            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
+            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
           );
         case 1:
           // Comisiones del repartidor (con umbral 30%)
-          return RepartidorComisionesPage(repartidorId: codigoConductor);
+          return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
         case 2:
           // Histórico del repartidor
-          return RepartidorHistoricoPage(repartidorId: codigoConductor);
+          return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
         case 3:
           // Chat IA para repartidores
-          return ChatbotPage(vendedorCodes: [codigoConductor]);
+          return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
         default:
           return const Center(child: Text('Página no encontrada'));
       }
