@@ -93,24 +93,29 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     if (!mounted) return;
 
     if (success) {
-      debugPrint('[LoginPage] Login Success. Role: ${auth.currentUser?.role}, IsJefe: ${auth.currentUser?.isJefeVentas}');
+      final user = auth.currentUser;
+      debugPrint('[LoginPage] Login Success. Role: ${user?.role}, IsJefe: ${user?.isJefeVentas}');
       
-      if (auth.currentUser?.isJefeVentas == true) {
-         debugPrint('[LoginPage] User is Jefe. Showing Role Selection Dialog...');
-         // Show Role Selection Dialog
-         await showDialog(
-           context: context, 
-           barrierDismissible: false,
-           builder: (ctx) => const RoleSelectionDialog()
-         );
-         // If dialog passes (or is dismissed via back button on Android), we might need to force navigation
-         // The dialog internally handles navigation on "Confirm", but if they "Cancel" it pops.
-         if (mounted) {
-            // Safety check: if we are still here, user might have cancelled or dialog closed.
-            // Check if we are already at dashboard? No, we are at login.
-            // Go to dashboard as fallback (default role)
-            context.go('/dashboard');
-         }
+      // Robust check for Jefe role
+      final isJefe = user?.isJefeVentas == true || 
+                     user?.role == 'JEFE_VENTAS' || 
+                     user?.role == 'JEFE';
+                     
+      if (isJefe) {
+         debugPrint('[LoginPage] User detected as Jefe. Triggering Role Selection Dialog...');
+         
+         if (!mounted) return;
+         
+         // Use Future.microtask to ensure we are out of the current frame/event loop if needed
+         Future.microtask(() async {
+           if (!mounted) return;
+           await showDialog(
+             context: context, 
+             barrierDismissible: false,
+             builder: (ctx) => const RoleSelectionDialog()
+           );
+         });
+         
       } else {
          debugPrint('[LoginPage] Regular user. Navigating to Dashboard...');
          context.go('/dashboard');

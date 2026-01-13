@@ -55,7 +55,7 @@ class UserModel extends Equatable {
       company: json['company'] ?? 'GMP',
       delegation: json['delegation'],
       vendedorCode: json['vendedorCode'],
-      isJefeVentas: json['isJefeVentas'] ?? false,
+      isJefeVentas: _parseBool(json['isJefeVentas']),
       tipoVendedor: json['tipoVendedor'],
       role: json['role'] ?? 'COMERCIAL',
       codigoConductor: json['codigoConductor'],
@@ -90,5 +90,15 @@ class UserModel extends Equatable {
         role,
         codigoConductor,
       ];
+  static bool _parseBool(dynamic value) {
+    if (value == null) return false;
+    if (value is bool) return value;
+    if (value is int) return value == 1;
+    if (value is String) {
+      final v = value.toUpperCase();
+      return v == 'TRUE' || v == 'S' || v == '1' || v == 'YES' || v == 'Y';
+    }
+    return false;
+  }
 }
 
