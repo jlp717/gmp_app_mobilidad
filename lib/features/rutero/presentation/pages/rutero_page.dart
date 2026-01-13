@@ -31,6 +31,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   Map<String, int> _weekData = {};
   int _totalUniqueClients = 0; // Total de clientes únicos (no suma duplicada por días)
   int _completedWeeks = 0; // NEW: Track completed weeks for YoY label
+  String _periodLabel = ''; // NEW: Period label like "1 Ene - 12 Ene"
   List<Map<String, dynamic>> _dayClients = [];
   bool _isLoadingWeek = true;
   bool _isLoadingClients = false;
@@ -262,9 +263,10 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       setState(() {
         final rawList = response['clients'] ?? [];
         _dayClients = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
-        // Parse completed weeks from metadata
+        // Parse completed weeks and period label from metadata
         if (response['period'] != null) {
            _completedWeeks = (response['period']['weeks'] as num?)?.toInt() ?? 0;
+           _periodLabel = response['period']['current'] as String? ?? '';
         }
         _isLoadingClients = false;
       });
@@ -744,7 +746,8 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             onNotesTap: () => _openNotesDialog(client),
             showMargin: widget.isJefeVentas,
             selectedYear: _selectedYear,
-            completedWeeks: _completedWeeks, // Pass to widget
+            completedWeeks: _completedWeeks,
+            periodLabel: _periodLabel, // Pass period label like "1 Ene - 12 Ene"
           );
         },
       ),
@@ -1233,7 +1236,8 @@ class _ClientCard extends StatelessWidget {
   final VoidCallback? onNotesTap;
   final bool showMargin;
   final int selectedYear;
-  final int completedWeeks; // NEW
+  final int completedWeeks;
+  final String periodLabel; // NEW: "1 Ene - 12 Ene"
 
   const _ClientCard({
     required this.client,
@@ -1243,10 +1247,11 @@ class _ClientCard extends StatelessWidget {
     required this.onMapTap,
     required this.onCallTap,
     this.onWhatsAppTap,
-    this.onNotesTap, // NEW
+    this.onNotesTap,
     this.showMargin = false,
     required this.selectedYear,
-    this.completedWeeks = 0, // NEW field
+    this.completedWeeks = 0,
+    this.periodLabel = '',
   });
 
   @override
@@ -1270,11 +1275,26 @@ class _ClientCard extends StatelessWidget {
     final ytdPrevYear = (status['ytdPrevYear'] as num?)?.toDouble() ?? 
                         (status['prevMonthSales'] as num?)?.toDouble() ?? 0;
 
-    // Determinar si es cliente nuevo (sin ventas el año anterior pero sí este año)
-    final isNewClient = ytdPrevYear < 0.01 && ytdSales > 0;
+    // Lógica de colores mejorada:
+    // 1) Gris: Sin ventas ambos años (ytdSales ≈ 0 Y ytdPrevYear ≈ 0)
+    // 2) Azul NUEVO: Cliente nuevo (ytdSales > 0 Y ytdPrevYear ≈ 0)
+    // 3) Verde: Mejoró respecto al año anterior
+    // 4) Rojo: Empeoró respecto al año anterior
+    final bool noSalesThisYear = ytdSales < 0.01;
+    final bool noSalesLastYear = ytdPrevYear < 0.01;
+    final bool isInactive = noSalesThisYear && noSalesLastYear; // Gris
+    final bool isNewClient = !noSalesThisYear && noSalesLastYear; // Azul
     
-    // El color de acento depende del estado: nuevo = azul, positivo = verde, negativo = rojo
-    final accentColor = isNewClient ? AppTheme.neonBlue : (isPositive ? AppTheme.success : AppTheme.error);
+    Color accentColor;
+    if (isInactive) {
+      accentColor = Colors.grey;
+    } else if (isNewClient) {
+      accentColor = AppTheme.neonBlue;
+    } else if (isPositive) {
+      accentColor = AppTheme.success;
+    } else {
+      accentColor = AppTheme.error;
+    }
     
     // Check if has observations
     final hasObservaciones = observaciones != null && 
@@ -1339,7 +1359,7 @@ class _ClientCard extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-              // Progress indicator - shows YoY variation or NEW badge
+              // Progress indicator - shows YoY variation, NEW badge, or inactive state
               Container(
                 width: 85,
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1350,13 +1370,32 @@ class _ClientCard extends StatelessWidget {
                 child: Column(
                   children: [
                     Icon(
-                      isNewClient ? Icons.star : (isPositive ? Icons.trending_up : Icons.trending_down),
+                      isInactive ? Icons.remove_circle_outline 
+                        : (isNewClient ? Icons.star : (isPositive ? Icons.trending_up : Icons.trending_down)),
                       color: accentColor,
                       size: 26,
                     ),
                     const SizedBox(height: 4),
-                    // Show NUEVO for new clients, otherwise YoY percentage
-                    if (isNewClient) ...[
+                    // Show different states: INACTIVE, NUEVO, or YoY percentage
+                    if (isInactive) ...[
+                      Text(
+                        'SIN VENTAS',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                      Text(
+                        'Ambos años',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 8,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ] else if (isNewClient) ...[
                       const Text(
                         'NUEVO',
                         style: TextStyle(
@@ -1461,8 +1500,8 @@ class _ClientCard extends StatelessWidget {
                       children: [
                         Text(
                           completedWeeks > 1 
-                            ? 'Acumulado Sem. 1-${completedWeeks - 1}:' 
-                            : 'Acumulado Sem. 1:',
+                            ? 'Acumulado Sem. 1-${completedWeeks - 1}${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:' 
+                            : 'Acumulado Sem. 1${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:',
                           style: TextStyle(fontSize: 11, color: Colors.grey.shade500)
                         ),
                         const SizedBox(height: 4),

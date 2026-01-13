@@ -255,16 +255,40 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   }
 
   Widget _buildYearTotalCard(Map<String, dynamic> totals) {
-    final isPositive = totals['isPositive'] == true;
+    final currentYear = (totals['currentYear'] as num?)?.toDouble() ?? 0;
+    final lastYear = (totals['lastYear'] as num?)?.toDouble() ?? 0;
     final variation = (totals['variation'] as num?)?.toDouble() ?? 0;
+    
+    // Lógica de colores:
+    // 1) NUEVO en azul: ventas este año pero no el anterior
+    // 2) Verde: mejoró vs año anterior
+    // 3) Rojo: empeoró vs año anterior
+    final isNew = lastYear < 0.01 && currentYear > 0;
+    final isPositive = variation >= 0;
+    
+    Color accentColor;
+    IconData accentIcon;
+    String badgeText;
+    
+    if (isNew) {
+      accentColor = AppTheme.neonBlue;
+      accentIcon = Icons.star;
+      badgeText = 'NUEVO';
+    } else if (isPositive) {
+      accentColor = AppTheme.success;
+      accentIcon = Icons.trending_up;
+      badgeText = '+${variation.toStringAsFixed(1)}%';
+    } else {
+      accentColor = AppTheme.error;
+      accentIcon = Icons.trending_down;
+      badgeText = '${variation.toStringAsFixed(1)}%';
+    }
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: isPositive
-              ? [AppTheme.success.withOpacity(0.2), AppTheme.success.withOpacity(0.1)]
-              : [AppTheme.error.withOpacity(0.2), AppTheme.error.withOpacity(0.1)],
+          colors: [accentColor.withOpacity(0.2), accentColor.withOpacity(0.1)],
         ),
         borderRadius: BorderRadius.circular(16),
       ),
@@ -272,11 +296,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
         children: [
           Row(
             children: [
-              Icon(
-                isPositive ? Icons.trending_up : Icons.trending_down,
-                size: 40,
-                color: isPositive ? AppTheme.success : AppTheme.error,
-              ),
+              Icon(accentIcon, size: 40, color: accentColor),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -298,11 +318,11 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isPositive ? AppTheme.success : AppTheme.error,
+                  color: accentColor,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '${variation >= 0 ? '+' : ''}${variation.toStringAsFixed(1)}%',
+                  badgeText,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -315,7 +335,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatColumn('Año Anterior', totals['lastYearFormatted'] ?? '0 €'),
+              _buildStatColumn('Año Anterior', isNew ? 'Sin ventas' : (totals['lastYearFormatted'] ?? '0 €')),
               _buildStatColumn(
                   'Promedio Mensual', totals['monthlyAverageFormatted'] ?? '0 €'),
             ],
