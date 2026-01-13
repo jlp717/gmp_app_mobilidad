@@ -1500,8 +1500,10 @@ class _ClientCard extends StatelessWidget {
                       children: [
                         Text(
                           completedWeeks > 1 
-                            ? 'Acumulado Sem. 1-${completedWeeks - 1}${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:' 
-                            : 'Acumulado Sem. 1${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:',
+                            ? 'Acumulado Sem. 1-$completedWeeks${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:' 
+                            : completedWeeks == 1 
+                              ? 'Acumulado Sem. 1${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:'
+                              : 'Sin semanas completadas:',
                           style: TextStyle(fontSize: 11, color: Colors.grey.shade500)
                         ),
                         const SizedBox(height: 4),

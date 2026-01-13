@@ -565,53 +565,51 @@ router.get('/rutero/day/:day', async (req, res) => {
         const previousYear = currentYear - 1;
 
         // Determine the reference date (The "End Date" for calculation)
-        // If week/month provided, use the Sunday of that week as the cutoff.
-        // Otherwise, use "Today" (or last Sunday relative to today).
+        // IMPORTANT: We want to compare COMPLETED weeks only.
+        // If user is viewing week 3, we compare weeks 1-2 (completed weeks).
+        // So referenceDate should be the Sunday of week (selected - 1), NOT week selected.
         let referenceDate;
+        let completedWeeks = 0; // Track how many weeks are completed for the period label
 
         if (month && week) {
             const m = parseInt(month);
             const w = parseInt(week);
-            // Calculate the Nth Sunday of the month? Or Nth week of month?
-            // Simple approach: Start of month + (week * 7) days?
-            // Better: Week 1 ends on first Sunday? Or just roughly?
-            // App logic: _getCurrentWeekInMonth: ((day + firstWeekday - 2) / 7) + 1
-            // Let's approximate: Find the Sunday of the requested week.
-            // Start of Month:
+            
+            // Calculate the Sunday that ends the PREVIOUS week (completed weeks)
+            // If viewing week 1, there are no completed weeks yet -> use Jan 1
+            // If viewing week 2, use end of week 1
+            // If viewing week 3, use end of week 2, etc.
+            
             const firstDayOfMonth = new Date(currentYear, m - 1, 1);
-            // Find first Sunday of month
+            // Find first Sunday of month (or end of first week)
             let daysUntilSunday = (7 - firstDayOfMonth.getDay()) % 7;
+            if (daysUntilSunday === 0) daysUntilSunday = 7; // If Jan 1 is Sunday, first week ends that day
             let firstSunday = new Date(currentYear, m - 1, 1 + daysUntilSunday);
 
-            // Target Sunday is (week - 1) weeks after first Sunday
-            // If week=1, it is firstSunday.
-            referenceDate = new Date(firstSunday);
-            referenceDate.setDate(firstSunday.getDate() + (w - 1) * 7);
-
-            // Cap at today? No, allow looking at past fully. Cap at end of month?
-            // If referenceDate crosses into next month, clamp it to ensure we don't drift too far if logic diff maps.
-            // But usually Rutero weeks align. Let's stick to the Sunday cutoff.
+            if (w <= 1) {
+                // Week 1: No completed weeks yet, use start of year for minimal comparison
+                referenceDate = new Date(currentYear, 0, 1);
+                completedWeeks = 0;
+            } else {
+                // For week N, completed weeks are 1 to (N-1)
+                // End of week (N-1) is the Sunday before the current week
+                completedWeeks = w - 1;
+                referenceDate = new Date(firstSunday);
+                referenceDate.setDate(firstSunday.getDate() + (w - 2) * 7); // -2 because we want previous week's Sunday
+            }
         } else {
-            // Default to Today logic
+            // Default to Today logic - use last completed Sunday
             const today = new Date(now);
             const dayOfWeek = today.getDay();
-            const diffToLastSunday = dayOfWeek === 0 ? 0 : dayOfWeek; // Sales usually up to last closed day? 
-            // Previous logic used dayOfWeek===0 ? 7 : dayOfWeek (Last Sunday).
-            // Let's keep consistent: Sales usually accumulate full closed weeks? 
-            // Or just YTD up to "Reference Date".
-            // Let's use Today as reference if not specified.
-            referenceDate = new Date(today);
-            // Verify if we want "Last Sunday" specifically or just "Today":
-            // Previous code: lastSundayDate.setDate(today.getDate() - diffToLastSunday);
-            // Let's keep using Last Sunday to ensure complete data comparison? 
-            // Actually, if we are mid-week, we might want current sales.
-            // But existing code used last Sunday. Let's check existing code lines 567-571.
-            // "const diffToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;" -> This implies "Last Sunday strictly before today" (if today is Sunday, go back 7 days?? Rare).
-            // If today is Sunday (0), it went back 7 days. That seems like "Completed Weeks only".
-
-            // Let's stick to: If no param, use Last Sunday (Completed Weeks).
+            // If today is Sunday (0), go back 7 days to previous Sunday
+            // Otherwise, go back to last Sunday
             const d = dayOfWeek === 0 ? 7 : dayOfWeek;
+            referenceDate = new Date(today);
             referenceDate.setDate(today.getDate() - d);
+            
+            // Calculate completed weeks from start of year
+            const startOfYear = new Date(currentYear, 0, 1);
+            completedWeeks = Math.floor((referenceDate - startOfYear) / (7 * 86400000)) + 1;
         }
 
         let endMonthCurrent = referenceDate.getMonth() + 1;
@@ -843,9 +841,9 @@ router.get('/rutero/day/:day', async (req, res) => {
             year: currentYear,
             compareYear: previousYear,
             period: {
-                weeks: Math.ceil(((referenceDate - new Date(currentYear, 0, 1)) / 86400000 + 1) / 7), // Valid Week of Year calculation
-                current: `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}`,
-                previous: endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Semana cerrada'
+                weeks: completedWeeks, // Number of completed weeks being compared
+                current: completedWeeks > 0 ? `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}` : 'Sin semanas completadas',
+                previous: completedWeeks > 0 && endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Sin comparación'
             }
         });
 
@@ -1004,6 +1002,147 @@ router.get('/diagnose/client/:code', async (req, res) => {
     } catch (error) {
         logger.error(`Diagnose Error: ${error.message}`);
         res.status(500).json({ error: 'Error en diagnóstico', details: error.message });
+    }
+});
+
+// =============================================================================
+// RUTERO CLIENT DETAIL - Year comparison data for client detail page
+// =============================================================================
+router.get('/rutero/client/:code/detail', async (req, res) => {
+    try {
+        const { code } = req.params;
+        const { year } = req.query;
+        const clientCode = code.trim();
+        const currentYear = parseInt(year) || getCurrentDate().getFullYear();
+        const previousYear = currentYear - 1;
+
+        const formatCurrencyLocal = (v) => {
+            const n = parseFloat(v) || 0;
+            return Math.round(n * 100) / 100;
+        };
+
+        const formatCurrencyString = (v) => {
+            const n = parseFloat(v) || 0;
+            return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+        };
+
+        // Get monthly sales for current and previous year
+        const monthlySalesSql = `
+            SELECT 
+                L.LCAADC as YEAR,
+                L.LCMMDC as MONTH,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST,
+                SUM(L.LCIMVT - L.LCIMCT) as MARGIN
+            FROM DSED.LACLAE L
+            WHERE TRIM(L.LCCDCL) = '${clientCode}'
+              AND L.LCAADC IN (${currentYear}, ${previousYear})
+              AND ${LACLAE_SALES_FILTER}
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY L.LCAADC DESC, L.LCMMDC ASC
+        `;
+        const monthlySales = await query(monthlySalesSql, false, false);
+
+        // Group by month and calculate comparisons
+        const monthMap = {};
+        for (let m = 1; m <= 12; m++) {
+            monthMap[m] = { 
+                month: m, 
+                currentYear: 0, 
+                lastYear: 0 
+            };
+        }
+
+        monthlySales.forEach(row => {
+            const month = row.MONTH;
+            const sales = formatCurrencyLocal(row.SALES);
+            if (row.YEAR === currentYear) {
+                monthMap[month].currentYear = sales;
+            } else if (row.YEAR === previousYear) {
+                monthMap[month].lastYear = sales;
+            }
+        });
+
+        // Build monthlyData array with variations
+        const monthlyData = Object.values(monthMap).map(m => {
+            const variation = m.lastYear > 0 
+                ? ((m.currentYear - m.lastYear) / m.lastYear) * 100 
+                : (m.currentYear > 0 ? 100 : 0);
+            return {
+                month: m.month,
+                currentYear: m.currentYear,
+                lastYear: m.lastYear,
+                variation: Math.round(variation * 10) / 10,
+                currentYearFormatted: formatCurrencyString(m.currentYear),
+                lastYearFormatted: formatCurrencyString(m.lastYear)
+            };
+        });
+
+        // Calculate yearly totals
+        const totalCurrentYear = Object.values(monthMap).reduce((sum, m) => sum + m.currentYear, 0);
+        const totalLastYear = Object.values(monthMap).reduce((sum, m) => sum + m.lastYear, 0);
+        const totalVariation = totalLastYear > 0 
+            ? ((totalCurrentYear - totalLastYear) / totalLastYear) * 100 
+            : (totalCurrentYear > 0 ? 100 : 0);
+
+        // Get multi-year history
+        const yearlyHistorySql = `
+            SELECT 
+                L.LCAADC as YEAR,
+                SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE TRIM(L.LCCDCL) = '${clientCode}'
+              AND L.LCAADC >= ${currentYear - 5}
+              AND ${LACLAE_SALES_FILTER}
+            GROUP BY L.LCAADC
+            ORDER BY L.LCAADC DESC
+        `;
+        const yearlyHistory = await query(yearlyHistorySql, false, false);
+        const yearlyTotals = yearlyHistory.map(row => ({
+            year: row.YEAR,
+            sales: formatCurrencyLocal(row.SALES),
+            salesFormatted: formatCurrencyString(row.SALES)
+        }));
+
+        // Calculate purchase frequency (orders in current year)
+        const frequencySql = `
+            SELECT 
+                COUNT(DISTINCT L.LCDIDL || '-' || L.LCMIDL || '-' || L.LCAIDL) as ORDER_COUNT,
+                COUNT(*) as LINE_COUNT,
+                MAX(L.LCAIDL * 10000 + L.LCMIDL * 100 + L.LCDIDL) as LAST_ORDER_DATE
+            FROM DSED.LACLAE L
+            WHERE TRIM(L.LCCDCL) = '${clientCode}'
+              AND L.LCAADC = ${currentYear}
+              AND ${LACLAE_SALES_FILTER}
+        `;
+        const frequencyResult = await query(frequencySql, false, false);
+        const freq = frequencyResult[0] || {};
+        const orderCount = parseInt(freq.ORDER_COUNT) || 0;
+        const monthsWithData = monthlyData.filter(m => m.currentYear > 0).length;
+        const avgPerMonth = monthsWithData > 0 ? (orderCount / monthsWithData) : 0;
+
+        res.json({
+            totals: {
+                currentYear: totalCurrentYear,
+                lastYear: totalLastYear,
+                variation: Math.round(totalVariation * 10) / 10,
+                currentYearFormatted: formatCurrencyString(totalCurrentYear),
+                lastYearFormatted: formatCurrencyString(totalLastYear),
+                monthlyAverageFormatted: formatCurrencyString(totalCurrentYear / 12)
+            },
+            monthlyData,
+            yearlyTotals,
+            purchaseFrequency: {
+                totalOrders: orderCount,
+                avgOrdersPerMonth: Math.round(avgPerMonth * 10) / 10,
+                monthsActive: monthsWithData,
+                lineCount: parseInt(freq.LINE_COUNT) || 0
+            }
+        });
+
+    } catch (error) {
+        logger.error(`Rutero Client Detail Error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo detalle de cliente', details: error.message });
     }
 });
 
