@@ -647,11 +647,18 @@ class SalesSummaryHeader extends StatelessWidget {
   }
 
   String _formatCompact(double value) {
-    if (value >= 1000000) {
-      return '${(value / 1000000).toStringAsFixed(1)}M';
-    } else if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(1)}K';
+    // Formato español completo: 2.345,67 (sin K/M)
+    final parts = value.toStringAsFixed(2).split('.');
+    final intPart = parts[0];
+    final decPart = parts.length > 1 ? parts[1] : '00';
+    // Add thousand separators
+    String formatted = '';
+    int count = 0;
+    for (int i = intPart.length - 1; i >= 0; i--) {
+      if (count > 0 && count % 3 == 0 && intPart[i] != '-') formatted = '.$formatted';
+      formatted = intPart[i] + formatted;
+      count++;
     }
-    return NumberFormat.decimalPattern('es_ES').format(value);
+    return '$formatted,$decPart';
   }
 }
