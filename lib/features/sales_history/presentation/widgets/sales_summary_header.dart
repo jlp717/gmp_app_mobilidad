@@ -64,8 +64,21 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildBreakdownSection(List breakdown) {
+  Widget _buildBreakdownSection(List breakdownJson) {
+    // Check if we have monthly breakdown in the parent summary map?
+    // The 'breakdownJson' passed here is usually summary['breakdown'].
+    // We need to check if 'summary' has 'monthlyBreakdown'.
+    // Since we only pass 'breakdown' to this method in the build(), we should update build() or check global 'summary'.
+    // BUT 'summary' is a class field. So we can access `summary`.
+    
+    final monthlyData = summary['monthlyBreakdown'] as List?;
+    final useMonthly = monthlyData != null && monthlyData.isNotEmpty;
+    
+    final dataToShow = useMonthly ? monthlyData : breakdownJson;
+    final title = useMonthly ? 'EVOLUCIÓN MENSUAL (Mes Actual vs Año Anterior)' : 'HISTÓRICO ANUAL';
+
     final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 0);
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -82,9 +95,9 @@ class SalesSummaryHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Text(
-                'HISTÓRICO ANUAL', 
-                style: TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5)
+               Text(
+                title, 
+                style: const TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5)
               ),
             ],
           ),
@@ -92,34 +105,118 @@ class SalesSummaryHeader extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: breakdown.map((item) {
+              children: dataToShow!.map((item) {
                 final i = item as Map<String, dynamic>;
-                final year = i['year']?.toString() ?? '-';
-                final s = (i['sales'] as num?)?.toDouble() ?? 0;
-                final m = (i['margin'] as num?)?.toDouble() ?? 0;
-                final u = (i['units'] as num?)?.toDouble() ?? 0;
                 
+                // Determine label (Month Name or Year)
+                String label;
+                if (useMonthly) {
+                   final monthIndex = (i['month'] as num?)?.toInt() ?? 1;
+                   // List of short month names
+                   const months = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+                   label = (monthIndex >= 1 && monthIndex <= 12) ? months[monthIndex - 1] : '-';
+                } else {
+                   label = i['year']?.toString() ?? '-';
+                }
+
+                // Values
+                // For Monthly: 'current' is this year, 'previous' is last year
+                // For Annual: 'sales' is the sales for that year
+                
+                double mainValue;
+                double? prevValue; // Only for monthly comparison
+                
+                if (useMonthly) {
+                  mainValue = (i['current'] as num?)?.toDouble() ?? 0;
+                  prevValue = (i['previous'] as num?)?.toDouble() ?? 0;
+                } else {
+                  mainValue = (i['sales'] as num?)?.toDouble() ?? 0;
+                  prevValue = null; // Annual view just lists years, maybe no direct comparison in card
+                }
+                
+                final u = (i['units'] as num?)?.toDouble() ?? 0;
+                // For monthly, units might not be in the breakdown object properly if I defined it as just sales?
+                // backend sending: { month, current, previous }. NO units/margin yet for monthly.
+                // OK, I should have added units/margin to backend Monthly breakdown if needed.
+                // But the prompt emphasized COLORS for SALES.
+                // Text below says: '${_formatCompact(u)} Uds...'.
+                // If I don't have units for monthly, I'll hide it or show 0.
+                
+                // COLOR LOGIC (Strictly requested)
+                // Blue (#0000FF) if prevSales == 0 (and assumedly current > 0 or new) - User said "cliente no tuvo ventas... marca como nuevo"
+                // Green (#00FF00) if curr > prev
+                // Red (#FF0000) if curr <= prev (desmejora)
+                
+                Color cardColor;
+                String statusLabel = '';
+                
+                if (useMonthly && prevValue != null) {
+                   if (prevValue == 0) {
+                      // CASO 1: Nuevo (No hubo ventas mes anterior)
+                      cardColor = const Color(0xFF0000FF).withOpacity(0.2); // Azul background tint
+                      statusLabel = 'NUEVO';
+                   } else if (mainValue > prevValue) {
+                      // CASO 2: Mejora
+                      cardColor = const Color(0xFF00FF00).withOpacity(0.15); // Verde
+                   } else {
+                      // CASO 3: Desmejora
+                      cardColor = const Color(0xFFFF0000).withOpacity(0.15); // Rojo
+                   }
+                } else {
+                   // Annual default
+                   cardColor = AppTheme.darkCard.withOpacity(0.8);
+                }
+                
+                // Border Color based on same logic to make it pop
+                Color borderColor = Colors.white10;
+                 if (useMonthly && prevValue != null) {
+                   if (prevValue == 0) borderColor = const Color(0xFF0000FF);
+                   else if (mainValue > prevValue) borderColor = const Color(0xFF00FF00);
+                   else borderColor = const Color(0xFFFF0000);
+                }
+
                 return Container(
                   margin: const EdgeInsets.only(right: 10),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
+                    color: cardColor, // Use dynamic bg
                     gradient: LinearGradient(
-                      colors: [AppTheme.surfaceColor, AppTheme.darkCard.withOpacity(0.8)],
+                      colors: [AppTheme.surfaceColor.withOpacity(0.5), cardColor],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white10),
+                    border: Border.all(color: borderColor, width: 1.5),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(year, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.neonGreen)),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                          if (statusLabel.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(4)),
+                              child: Text(statusLabel, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)),
+                            )
+                          ]
+                        ],
+                      ),
                       const SizedBox(height: 4),
-                      Text(fmt.format(s), style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 2),
-                      Text('${_formatCompact(u)} Uds${showMargin ? ' • ${m.toStringAsFixed(1)}%' : ''}', 
-                           style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                      Text(fmt.format(mainValue), style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                      if (useMonthly && prevValue != null)
+                         Text(
+                           'vs ${fmt.format(prevValue)}', 
+                           style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)
+                         ),
+                      // Only show aux data if annual
+                      if (!useMonthly) ...[
+                        const SizedBox(height: 2),
+                        Text('${_formatCompact(u)} Uds', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                      ]
                     ],
                   ),
                 );

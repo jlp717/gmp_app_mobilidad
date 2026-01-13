@@ -6,6 +6,7 @@ import 'dart:math' as math;
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
+import '../widgets/role_selection_dialog.dart';
 
 /// Página de login espectacular con diseño glassmorphism y feedback intuitivo
 class LoginPage extends StatefulWidget {
@@ -90,7 +91,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     if (!mounted) return;
 
     if (success) {
-      context.go('/dashboard');
+      if (auth.currentUser?.isJefeVentas == true) {
+         // Show Role Selection Dialog
+         if (!mounted) return;
+         
+         // Use showDialog but don't await result to block navigation, await it to decide WHERE to go
+         await showDialog(
+           context: context, 
+           barrierDismissible: false,
+           builder: (ctx) => const RoleSelectionDialog()
+         );
+         // The dialog handles navigation to dashboard on confirm/cancel
+         // If dialog is dismissed without navigation (e.g. back button on android), force dashboard?
+         // Dialog is barrierDismissible: false, so they must choose or back out.
+      } else {
+         context.go('/dashboard');
+      }
     } else {
       setState(() {
         _hasError = true;
@@ -110,7 +126,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           backgroundColor: AppTheme.darkCard,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('Error de acceso', style: TextStyle(color: AppTheme.error)),
-          content: Text(_errorMessage ?? 'Verifica tu usuario y PIN.', style: const TextStyle(color: Colors.white)),
+          content: const Text(
+            'Credenciales incorrectas. Por favor, inténtalo de nuevo.', 
+            style: TextStyle(color: Colors.white)
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -441,7 +460,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
+                      shape: BoxShape.circle,
                         color: AppTheme.error.withOpacity(0.2),
                       ),
                       child: const Icon(Icons.error_outline, color: AppTheme.error, size: 20),

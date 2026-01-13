@@ -413,23 +413,23 @@ router.get('/sales-history', async (req, res) => {
 router.get('/sales-history/summary', async (req, res) => {
     try {
         const { vendedorCodes, clientCode, productSearch, startDate, endDate } = req.query;
-        
+
         // Build filters for LACLAE table
         const LACLAE_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z')`;
-        
+
         // Vendedor filter - adaptar para LACLAE (LCCDVD)
         let vendedorFilter = '';
         if (vendedorCodes) {
             const codes = vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',');
             vendedorFilter = `AND L.LCCDVD IN (${codes})`;
         }
-        
+
         // Client filter - adaptar para LACLAE (LCCDCL)
         const clientFilter = clientCode ? `AND TRIM(L.LCCDCL) = '${clientCode}'` : '';
-        
+
         // Product search filter - adaptar para LACLAE (LCCDRF, LCDESC)
-        const searchFilter = productSearch 
-            ? `AND (UPPER(L.LCDESC) LIKE UPPER('%${productSearch}%') OR TRIM(L.LCCDRF) LIKE '%${productSearch}%')` 
+        const searchFilter = productSearch
+            ? `AND (UPPER(L.LCDESC) LIKE UPPER('%${productSearch}%') OR TRIM(L.LCCDRF) LIKE '%${productSearch}%')`
             : '';
 
         // Helper to query LACLAE
@@ -472,16 +472,50 @@ router.get('/sales-history/summary', async (req, res) => {
             return await cachedQuery(query, queryStr, `history:breakdown:laclae:${startYear}:${endYear}:${vendedorCodes}:${clientCode}:${productSearch}`, TTL.SHORT);
         };
 
+        // Helper for Monthly Breakdown (Current vs Last Year)
+        const getMonthlyBreakdown = async (year, prevYear) => {
+            // Get Monthly data for BOTH years
+            const queryStr = `
+                SELECT 
+                    L.LCAADC as year,
+                    L.LCMMDC as month,
+                    SUM(L.LCIMVT) as sales
+                FROM DSED.LACLAE L
+                WHERE ${LACLAE_FILTER}
+                  AND L.LCAADC IN (${year}, ${prevYear})
+                  ${vendedorFilter}
+                  ${clientFilter}
+                  ${searchFilter}
+                GROUP BY L.LCAADC, L.LCMMDC
+                ORDER BY L.LCMMDC
+            `;
+            const rows = await cachedQuery(query, queryStr, `history:monthly:${year}:${prevYear}:${vendedorCodes}:${clientCode}:${productSearch}`, TTL.SHORT);
+
+            // Merge rows into Month objects
+            const months = {};
+            for (let i = 1; i <= 12; i++) months[i] = { month: i, current: 0, previous: 0 };
+
+            rows.forEach(r => {
+                const m = r.MONTH;
+                if (!months[m]) return;
+                if (r.YEAR === year) months[m].current = parseFloat(r.SALES || 0);
+                if (r.YEAR === prevYear) months[m].previous = parseFloat(r.SALES || 0);
+            });
+
+            return Object.values(months);
+        };
+
         // --- Determine years ---
         const now = new Date();
         const currentYear = startDate ? parseInt(startDate.substring(0, 4)) : now.getFullYear();
         const previousYear = currentYear - 1;
 
         // Execute parallel queries
-        const [curr, prev, breakdown] = await Promise.all([
+        const [curr, prev, breakdown, monthlyBreakdown] = await Promise.all([
             getStats(currentYear),
             getStats(previousYear),
-            getYearBreakdown(previousYear, currentYear)
+            getYearBreakdown(previousYear, currentYear),
+            getMonthlyBreakdown(currentYear, previousYear)
         ]);
 
         const currSales = parseFloat(curr.SALES || 0);
@@ -529,7 +563,8 @@ router.get('/sales-history/summary', async (req, res) => {
                 sales: parseFloat(b.SALES || 0),
                 margin: parseFloat(b.MARGIN || 0),
                 units: parseFloat(b.UNITS || 0)
-            }))
+            })),
+            monthlyBreakdown: monthlyBreakdown // array of { month, current, previous }
         });
 
     } catch (error) {

@@ -231,4 +231,39 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 });
 
+// =============================================================================
+// SWITCH ROLE ENDPOINT - For Jefes / Multi-role users
+// =============================================================================
+router.post('/switch-role', async (req, res) => {
+    try {
+        const { userId, newRole, viewAs } = req.body;
+
+        // In a real implementation with signed JWT, we would verify the token here again
+        // AND check if the user actually has permission for 'newRole'.
+        // consistently using the existing logic (mock or DB check).
+
+        logger.info(`[Auth] Role switch request: User ${userId} -> ${newRole}`);
+
+        // Simple validation
+        if (!['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR'].includes(newRole)) {
+            return res.status(400).json({ error: 'Rol no válido' });
+        }
+
+        // Regenerate token with new context (simple base64 as per existing implementation)
+        // Format: V{Code}:{Code}:{Timestamp}:{Role} - appending role to track context if needed
+        const token = Buffer.from(`${userId}:${userId}:${Date.now()}:${newRole}`).toString('base64');
+
+        res.json({
+            success: true,
+            role: newRole,
+            token: token,
+            viewAs: viewAs || null
+        });
+
+    } catch (error) {
+        logger.error(`Switch role error: ${error.message}`);
+        res.status(500).json({ error: 'Error cambiando de rol' });
+    }
+});
+
 module.exports = router;

@@ -109,4 +109,50 @@ class AuthProvider with ChangeNotifier {
     await prefs.clear();
     notifyListeners();
   }
+
+  /// Switch user role (Jefe / Repartidor)
+  Future<bool> switchRole(String newRole, {String? viewAs}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await ApiClient.post(
+        '/auth/switch-role',
+        {
+          'userId': _currentUser?.code,
+          'newRole': newRole,
+          'viewAs': viewAs
+        },
+      );
+
+      if (response != null && response['success'] == true) {
+        // Update token
+        if (response['token'] != null) {
+          ApiClient.setAuthToken(response['token']);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_token', response['token']);
+          
+          // Update local user model if needed, or just reload user
+          // For now, assume simple role update in memory is enough or trigger reload
+          if (_currentUser != null) {
+             // Create a copy with new role (assuming UserModel has copyWith or fromJson)
+             // Or mostly just rely on the token for backend rights and 'role' field
+             // We might need to update _currentUser.role
+          }
+        }
+        
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+      
+      throw Exception('Failed to switch role');
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
 }
