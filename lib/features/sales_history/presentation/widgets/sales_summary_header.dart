@@ -95,91 +95,92 @@ class SalesSummaryHeader extends StatelessWidget {
   }
 
   Widget _buildUnifiedSummary(double sales, double prevSales, double growth, double units, double margin, double totalMargin, int uniqueClients) {
+    // REVERTED TO "CLASSIC" STYLE AS REQUESTED (Horizontal Cards)
+    // "Solo las etiquetas de ventas, uds, margen y productos, el resto dejalo sin tocar"
+    
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // 1. VENTAS
+          _buildClassicCard(
+            title: 'VENTAS', 
+            value: _formatCurrency(sales), 
+            icon: Icons.attach_money, 
+            color: AppTheme.neonGreen,
+            child: _buildPremiumGrowthBadge(growth, prevSales), // Keep the fixed logic!
+          ),
+          
+          const SizedBox(width: 8),
+          
+          // 2. AÑO ANTERIOR (Explicitly requested separate or just clear?)
+          // The user complained about "etiquetas... feisimas". 
+          // Let's include Prev Year as a small info in Ventas or separate?
+          // New design had "Año Anterior" in the dashboard.
+          // Let's make a card for "AÑO ANT." to be clear.
+          _buildClassicCard(
+            title: 'AÑO ANT.',
+            value: _formatCurrency(prevSales),
+            icon: Icons.history,
+            color: Colors.white70,
+          ),
+
+          const SizedBox(width: 8),
+
+          // 3. UNIDADES / CAJAS
+          _buildClassicCard(
+            title: 'UDS / CAJAS',
+            value: _formatCompact(units),
+            icon: Icons.inventory_2_outlined,
+            color: AppTheme.neonBlue,
+          ),
+
+          const SizedBox(width: 8),
+
+          // 4. MARGEN (If Manager)
+          if (showMargin) ...[
+            _buildClassicCard(
+              title: 'MARGEN',
+              value: '${margin.toStringAsFixed(1)}%',
+              icon: Icons.show_chart,
+              color: AppTheme.neonPurple,
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassicCard({required String title, required String value, required IconData icon, required Color color, Widget? child}) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
+      constraints: const BoxConstraints(minWidth: 140),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase, // Solid dark background
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
         boxShadow: [
-          BoxShadow(color: Colors.black38, blurRadius: 12, offset: const Offset(0, 6)),
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-           // Top Row: Sales & Growth (The Hero Metric)
-           Row(
-             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-             crossAxisAlignment: CrossAxisAlignment.start,
-             children: [
-               Column(
-                 crossAxisAlignment: CrossAxisAlignment.start,
-                 children: [
-                   Text('VENTAS ACUMULADAS', style: TextStyle(color: Colors.white54, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
-                   const SizedBox(height: 6),
-                   Text(_formatCurrency(sales), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-                 ],
-               ),
-               // Growth Pill
-               _buildPremiumGrowthBadge(growth, prevSales),
-             ],
-           ),
-           
-           const SizedBox(height: 20),
-           Divider(color: Colors.white10, height: 1),
-           const SizedBox(height: 20),
-           
-           // Bottom Grid: Comparison | Units | Margin
-           Row(
-             crossAxisAlignment: CrossAxisAlignment.start,
-             children: [
-               // 1. Previous Year Comparison
-               Expanded(
-                 child: Column(
-                   crossAxisAlignment: CrossAxisAlignment.start,
-                   children: [
-                      Text('AÑO ANTERIOR', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                      const SizedBox(height: 4),
-                      Text(_formatCurrency(prevSales), style: const TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w600)),
-                   ],
-                 ),
-               ),
-               
-               // 2. Units
-               Expanded(
-                 child: Column(
-                   crossAxisAlignment: CrossAxisAlignment.start,
-                   children: [
-                      Text('UNIDADES', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                      const SizedBox(height: 4),
-                      Text('${_formatCompact(units)}', style: const TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w600)),
-                   ],
-                 ),
-               ),
-               
-               // 3. Margin (if manager)
-               if (showMargin)
-               Expanded(
-                 child: Column(
-                   crossAxisAlignment: CrossAxisAlignment.end,
-                   children: [
-                      Text('MARGEN', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: margin >= 0 ? AppColors.success.withOpacity(0.15) : AppColors.error.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(4)
-                        ),
-                        child: Text('${margin.toStringAsFixed(1)}%', 
-                            style: TextStyle(color: margin >= 0 ? AppColors.success : AppColors.error, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
-                   ],
-                 ),
-               ),
-             ],
-           ),
+          Row(
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 8),
+              Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          if (child != null) ...[
+            const SizedBox(height: 8),
+            child,
+          ]
         ],
       ),
     );
