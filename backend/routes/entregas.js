@@ -67,21 +67,26 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
               ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-              AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
             INNER JOIN DSEDAC.CAC CAC 
               ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
               AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
               AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
               AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            WHERE OPP.CODIGOREPARTIDOR IN (${ids})
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids})
               AND OPP.DIAREPARTO = ${dia}
               AND OPP.MESREPARTO = ${mes}
               AND OPP.ANOREPARTO = ${ano}
             ORDER BY CAC.NUMEROALBARAN
         `;
 
-        const rows = await query(sql, false);
+        let rows = [];
+        try {
+            rows = await query(sql, false) || [];
+        } catch (queryError) {
+            logger.error(`[ENTREGAS] Query error in pendientes: ${queryError.message}`);
+            return res.json({ success: true, albaranes: [], total: 0 });
+        }
 
         // Process rows
         const albaranes = rows.map(row => {

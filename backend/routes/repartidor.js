@@ -65,7 +65,6 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             LEFT JOIN DSEDAC.CVC CVC 
                 ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
@@ -74,7 +73,7 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE OPP.MESREPARTO = ${selectedMonth}
               AND OPP.ANOREPARTO = ${selectedYear}
-              AND OPP.CODIGOREPARTIDOR = '${cleanRepartidorId}'
+              AND TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
             GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), CPC.CODIGOFORMAPAGO
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
@@ -195,7 +194,6 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
             LEFT JOIN DSEDAC.CVC CVC 
                 ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
@@ -203,7 +201,7 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE OPP.ANOREPARTO = ${selectedYear}
               AND OPP.MESREPARTO = ${selectedMonth}
-              AND OPP.CODIGOREPARTIDOR = '${cleanRepartidorId}'
+              AND TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
             GROUP BY OPP.DIAREPARTO
             ORDER BY OPP.DIAREPARTO
         `;
@@ -264,9 +262,8 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            WHERE OPP.CODIGOREPARTIDOR = '${cleanRepartidorId}'
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
               AND OPP.ANOREPARTO >= ${new Date().getFullYear() - 1}
               ${whereSearch}
             GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), TRIM(COALESCE(CLI.DIRECCION, '')), TRIM(COALESCE(CLI.POBLACION, ''))
@@ -318,9 +315,8 @@ router.get('/history/documents/:clientId', async (req, res) => {
         if (repartidorId) {
             repartidorJoin = `
                 INNER JOIN DSEDAC.OPP OPP 
-                    ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                    AND OPP.EJERCICIO = CPC.EJERCICIOORDENPREPARACION`;
-            repartidorFilter = `AND OPP.CODIGOREPARTIDOR = '${repartidorId.toString().trim()}'`;
+                    ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION`;
+            repartidorFilter = `AND TRIM(OPP.CODIGOREPARTIDOR) = '${repartidorId.toString().trim()}'`;
         }
 
         const sql = `
@@ -412,13 +408,12 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
             LEFT JOIN DSEDAC.CVC CVC 
                 ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE OPP.CODIGOREPARTIDOR = '${cleanRepartidorId}'
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
               AND OPP.ANOREPARTO >= ${new Date().getFullYear() - 1}
               ${clientFilter}
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO
