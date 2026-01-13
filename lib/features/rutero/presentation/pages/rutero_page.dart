@@ -1391,7 +1391,7 @@ class _ClientCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'Este período',
+                        'Este período (acumulativo de semanas)',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 8,

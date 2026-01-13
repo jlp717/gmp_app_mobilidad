@@ -429,7 +429,8 @@ router.get('/sales-history/summary', async (req, res) => {
                     SUM(L.IMPORTEVENTA) as sales,
                     SUM(L.IMPORTEVENTA - L.IMPORTECOSTO) as margin,
                     SUM(L.UNIDADES) as units,
-                    SUM(CASE WHEN L.UNIDADES >= 0 THEN L.UNIDADES ELSE 0 END) as positive_units
+                    SUM(CASE WHEN L.UNIDADES >= 0 THEN L.UNIDADES ELSE 0 END) as positive_units,
+                    COUNT(DISTINCT L.CODIGOARTICULO) as product_count
                 FROM DSEDAC.LAC L
                 ${joinArt}
                 WHERE 1=1 
@@ -490,10 +491,16 @@ router.get('/sales-history/summary', async (req, res) => {
 
         const currSales = parseFloat(curr.SALES || 0);
         const prevSales = parseFloat(prev.SALES || 0);
-        const currMargin = parseFloat(curr.MARGIN || 0);
-        const prevMargin = parseFloat(prev.MARGIN || 0);
+        const currMarginAbs = parseFloat(curr.MARGIN || 0);
+        const prevMarginAbs = parseFloat(prev.MARGIN || 0);
         const currUnits = parseFloat(curr.UNITS || 0);
         const prevUnits = parseFloat(prev.UNITS || 0);
+        const currProducts = parseInt(curr.PRODUCT_COUNT || 0);
+        const prevProducts = parseInt(prev.PRODUCT_COUNT || 0);
+
+        // Calculate margin as percentage: (margin / sales) * 100
+        const currMargin = currSales > 0 ? (currMarginAbs / currSales) * 100 : 0;
+        const prevMargin = prevSales > 0 ? (prevMarginAbs / prevSales) * 100 : 0;
 
         const calcGrowth = (c, p) => (p && p !== 0) ? ((c - p) / p) * 100 : (c > 0 ? 100 : 0);
 
@@ -502,18 +509,21 @@ router.get('/sales-history/summary', async (req, res) => {
                 sales: currSales,
                 margin: currMargin,
                 units: currUnits,
+                productCount: currProducts,
                 label: `${sYear}`
             },
             previous: {
                 sales: prevSales,
                 margin: prevMargin,
                 units: prevUnits,
+                productCount: prevProducts,
                 label: `${sYear - 1}`
             },
             growth: {
                 sales: calcGrowth(currSales, prevSales),
-                margin: calcGrowth(currMargin, prevMargin),
-                units: calcGrowth(currUnits, prevUnits)
+                margin: currMargin - prevMargin, // Difference in percentage points
+                units: calcGrowth(currUnits, prevUnits),
+                productCount: calcGrowth(currProducts, prevProducts)
             },
             breakdown: breakdown.map(b => ({
                 year: b.YEAR,

@@ -700,7 +700,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
       children: [
       children: [
         if (_salesSummary != null)
-           SalesSummaryHeader(summary: _salesSummary!),
+           SalesSummaryHeader(summary: _salesSummary!, showMargin: false, isJefeVentas: false),
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: ElevatedButton.icon(

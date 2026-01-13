@@ -576,6 +576,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return SalesSummaryHeader(
       summary: _summary,
       showMargin: widget.isJefeVentas,
+      isJefeVentas: widget.isJefeVentas,
     );
   }
 
