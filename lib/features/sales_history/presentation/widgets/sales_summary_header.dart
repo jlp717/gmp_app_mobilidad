@@ -22,6 +22,9 @@ class SalesSummaryHeader extends StatelessWidget {
     final prev = summary['previous'] ?? {};
     final growth = summary['growth'] ?? {};
     
+    // Check if client is new from backend response
+    final isClientNewFromBackend = summary['isNewClient'] == true;
+    
     final currSales = (curr['sales'] as num?)?.toDouble() ?? 0;
     final prevSales = (prev['sales'] as num?)?.toDouble() ?? 0;
     final saleGrowth = (growth['sales'] as num?)?.toDouble() ?? 0;
@@ -40,6 +43,9 @@ class SalesSummaryHeader extends StatelessWidget {
     final productGrowth = (growth['productCount'] as num?)?.toDouble() ?? 
         (prevProducts > 0 ? ((currProducts - prevProducts) / prevProducts) * 100 : (currProducts > 0 ? 100 : 0));
     
+    // Fallback: calculate isNewClient if not provided by backend
+    final isNewClient = isClientNewFromBackend || (prevSales < 0.01 && currSales > 0);
+    
     return Column(
       children: [
         _buildPremiumSummary(
@@ -47,6 +53,7 @@ class SalesSummaryHeader extends StatelessWidget {
           currUnits, prevUnits, unitGrowth,
           currMargin, prevMargin, marginGrowth,
           currProducts, prevProducts, productGrowth,
+          isNewClient,
         ),
         
         // Breakdown Section (Only if > 1 year)
@@ -129,9 +136,8 @@ class SalesSummaryHeader extends StatelessWidget {
     double units, double prevUnits, double unitsGrowth,
     double margin, double prevMargin, double marginGrowth,
     int productCount, int prevProductCount, double productGrowth,
+    bool isNewClient,
   ) {
-    final isNewClient = prevSales < 0.01 && sales > 0;
-    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -180,6 +186,7 @@ class SalesSummaryHeader extends StatelessWidget {
                     prevValue: prevUnits,
                     growth: unitsGrowth,
                     isNew: prevUnits < 0.01 && units > 0,
+                    isClientNew: isNewClient,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -195,6 +202,7 @@ class SalesSummaryHeader extends StatelessWidget {
                     growth: productGrowth,
                     isNew: prevProductCount == 0 && productCount > 0,
                     isInteger: true,
+                    isClientNew: isNewClient,
                   ),
                 ),
                 
@@ -202,7 +210,7 @@ class SalesSummaryHeader extends StatelessWidget {
                 if (showMargin) ...[
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _buildCompactMarginCard(margin, prevMargin, marginGrowth),
+                    child: _buildCompactMarginCard(margin, prevMargin, marginGrowth, isClientNew: isNewClient),
                   ),
                 ],
               ],
@@ -385,18 +393,24 @@ class SalesSummaryHeader extends StatelessWidget {
     required double growth,
     required bool isNew,
     bool isInteger = false,
+    bool isClientNew = false,
   }) {
     final isPositive = growth >= 0;
     final prevText = isInteger ? prevValue.toInt().toString() : _formatCompact(prevValue);
     
+    // Si el cliente es nuevo, mostrar NUEVO en azul para todas las métricas
+    final showNuevo = isClientNew || isNew;
+    
     return Container(
       padding: const EdgeInsets.all(8),
+      constraints: const BoxConstraints(minHeight: 70), // Altura mínima uniforme
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.white.withOpacity(0.06)),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Value principal
@@ -413,28 +427,32 @@ class SalesSummaryHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          // Comparison
-          if (isNew)
+          // Comparison - siempre mostrar algo para altura uniforme
+          if (showNuevo)
             _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
           else if (prevValue > 0)
-            _buildCompactComparison(prevText, growth, isPositive),
+            _buildCompactComparison(prevText, growth, isPositive)
+          else
+            const SizedBox(height: 16), // Placeholder para mantener altura
         ],
       ),
     );
   }
 
-  Widget _buildCompactMarginCard(double margin, double prevMargin, double marginGrowth) {
+  Widget _buildCompactMarginCard(double margin, double prevMargin, double marginGrowth, {bool isClientNew = false}) {
     final isPositive = marginGrowth >= 0;
     final marginColor = margin >= 15 ? AppTheme.success : (margin >= 10 ? AppTheme.warning : AppTheme.error);
     
     return Container(
       padding: const EdgeInsets.all(8),
+      constraints: const BoxConstraints(minHeight: 70), // Altura mínima uniforme
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.white.withOpacity(0.06)),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Value
@@ -452,10 +470,14 @@ class SalesSummaryHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           // Comparison
-          if (prevMargin > 0)
+          if (isClientNew)
+            _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
+          else if (prevMargin > 0)
             _buildCompactComparison('${prevMargin.toStringAsFixed(1)}%', marginGrowth, isPositive)
           else if (margin > 0)
-            _buildMiniStatusBadge('NUEVO', AppColors.neonBlue),
+            _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
+          else
+            const SizedBox(height: 16),
         ],
       ),
     );

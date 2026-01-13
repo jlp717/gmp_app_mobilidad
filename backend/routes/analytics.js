@@ -497,9 +497,13 @@ router.get('/sales-history/summary', async (req, res) => {
         const currMargin = currSales > 0 ? (currMarginAbs / currSales) * 100 : 0;
         const prevMargin = prevSales > 0 ? (prevMarginAbs / prevSales) * 100 : 0;
 
+        // Determine if client is NEW (no sales in entire previous year)
+        const isNewClient = prevSales < 0.01 && currSales > 0;
+
         const calcGrowth = (c, p) => (p && p !== 0) ? ((c - p) / p) * 100 : (c > 0 ? 100 : 0);
 
         res.json({
+            isNewClient,
             current: {
                 sales: currSales,
                 margin: currMargin,

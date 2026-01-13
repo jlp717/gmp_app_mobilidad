@@ -680,6 +680,7 @@ router.get('/matrix', async (req, res) => {
         let grandTotalSales = 0, grandTotalCost = 0, grandTotalUnits = 0;
         let grandTotalPrevSales = 0, grandTotalPrevCost = 0, grandTotalPrevUnits = 0;
         const productSet = new Set();
+        const prevProductSet = new Set(); // Products from previous year
 
         // Monthly YoY Calculation
         const monthlyStats = new Map();
@@ -780,6 +781,7 @@ router.get('/matrix', async (req, res) => {
                 grandTotalPrevSales += sales;
                 grandTotalPrevCost += cost;
                 grandTotalPrevUnits += units;
+                prevProductSet.add(prodCode);
             }
 
             // Add to hierarchy
@@ -1392,24 +1394,33 @@ router.get('/matrix', async (req, res) => {
         const marginGrowth = grandTotalPrevMargin > 0 ? ((grandTotalMargin - grandTotalPrevMargin) / grandTotalPrevMargin) * 100 : 0;
         const unitsGrowth = grandTotalPrevUnits > 0 ? ((grandTotalUnits - grandTotalPrevUnits) / grandTotalPrevUnits) * 100 : 0;
 
+        // Determine if client is NEW (no sales in entire previous year)
+        const isNewClient = grandTotalPrevSales < 0.01 && grandTotalSales > 0;
+        const productGrowth = prevProductSet.size > 0 
+            ? ((productSet.size - prevProductSet.size) / prevProductSet.size) * 100 
+            : (productSet.size > 0 ? 100 : 0);
+
         const summary = {
+            isNewClient,
             current: {
                 label: yearsArray.join(', '),
                 sales: grandTotalSales,
                 margin: grandTotalMargin,
                 units: grandTotalUnits,
-                products: productSet.size
+                productCount: productSet.size
             },
             previous: {
                 label: yearsArray.map(y => y - 1).join(', '),
                 sales: grandTotalPrevSales,
                 margin: grandTotalPrevMargin,
-                units: grandTotalPrevUnits
+                units: grandTotalPrevUnits,
+                productCount: prevProductSet.size
             },
             growth: {
                 sales: salesGrowth,
                 margin: marginGrowth,
-                units: unitsGrowth
+                units: unitsGrowth,
+                productCount: productGrowth
             },
             breakdown: []
         };
