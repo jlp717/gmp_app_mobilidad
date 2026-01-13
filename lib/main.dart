@@ -36,32 +36,27 @@ void main() async {
   runApp(const GMPSalesAnalyticsApp());
 }
 
-class GMPSalesAnalyticsApp extends StatelessWidget {
+class GMPSalesAnalyticsApp extends StatefulWidget {
   const GMPSalesAnalyticsApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => SalesHistoryProvider()),
-        ChangeNotifierProvider(create: (_) => FilterProvider()),
-      ],
-      child: Consumer<AuthProvider>(
-        builder: (context, authProvider, _) {
-          return MaterialApp.router(
-            title: 'GMP Sales Analytics',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.darkTheme,
-            routerConfig: _router(authProvider),
-          );
-        },
-      ),
-    );
+  State<GMPSalesAnalyticsApp> createState() => _GMPSalesAnalyticsAppState();
+}
+
+class _GMPSalesAnalyticsAppState extends State<GMPSalesAnalyticsApp> {
+  late final AuthProvider _authProvider;
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _authProvider = AuthProvider();
+    _router = _createRouter(_authProvider);
   }
 
-  GoRouter _router(AuthProvider authProvider) {
+  GoRouter _createRouter(AuthProvider authProvider) {
     return GoRouter(
+      refreshListenable: authProvider,
       initialLocation: '/login',
       redirect: (context, state) {
         final isLoggedIn = authProvider.isAuthenticated;
@@ -71,6 +66,13 @@ class GMPSalesAnalyticsApp extends StatelessWidget {
           return '/login';
         }
         if (isLoggedIn && isLoggingIn) {
+          // CRITICAL: Check if user is Jefe to allow Role Selection Dialog
+          // If Jefe, do NOT auto-redirect yet. Logic in LoginPage will handle navigation after dialog.
+          if (authProvider.currentUser?.isJefeVentas == true || 
+              authProvider.currentUser?.role == 'JEFE_VENTAS' ||
+              authProvider.currentUser?.role == 'JEFE') {
+             return null; // Stay on /login
+          }
           return '/home';
         }
         return null;
@@ -85,6 +87,10 @@ class GMPSalesAnalyticsApp extends StatelessWidget {
           builder: (context, state) => MainShell(),
         ),
         GoRoute(
+          path: '/dashboard', // Alias for /home to support legacy calls
+          redirect: (_, __) => '/home', 
+        ),
+        GoRoute(
           path: '/sales-history',
           builder: (context, state) {
             final clientCode = state.extra as String?;
@@ -92,6 +98,23 @@ class GMPSalesAnalyticsApp extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: _authProvider),
+        ChangeNotifierProvider(create: (_) => SalesHistoryProvider()),
+        ChangeNotifierProvider(create: (_) => FilterProvider()),
+      ],
+      child: MaterialApp.router(
+        title: 'GMP Sales Analytics',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.darkTheme,
+        routerConfig: _router,
+      ),
     );
   }
 }
