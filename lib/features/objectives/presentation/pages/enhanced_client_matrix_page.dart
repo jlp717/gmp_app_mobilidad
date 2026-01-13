@@ -624,10 +624,30 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           final yoyTrend = data?['yoyTrend'] as String?;
           final yoyVar = (data?['yoyVariation'] as num?)?.toDouble();
           
+          
+          // Check if client is NEW (no sales in entire previous year)
+          final isClientNew = _summary['isNewClient'] == true;
+          final prevSales = (data?['prevSales'] as num?)?.toDouble() ?? 0;
+          bool prevIsZero = prevSales.abs() < 0.01;
+          bool currIsZero = sales.abs() < 0.01;
+
           Color borderColor = Colors.grey.withOpacity(0.3);
           Color bgColor = AppTheme.surfaceColor;
+          bool showNewBadge = false;
           
-          if (yoyTrend == 'up') {
+          if (isClientNew && !currIsZero) {
+             borderColor = const Color(0xFF2979FF); // Distinct Blue
+             bgColor = const Color(0xFF2979FF).withOpacity(0.20);
+             showNewBadge = true;
+          } else if (currIsZero && !prevIsZero) {
+             borderColor = AppTheme.error;
+             bgColor = AppTheme.error.withOpacity(0.15);
+          } else if (!currIsZero && prevIsZero) {
+             // New month sales
+             borderColor = const Color(0xFF2979FF); // Distinct Blue
+             bgColor = const Color(0xFF2979FF).withOpacity(0.20);
+             showNewBadge = true;
+          } else if (yoyTrend == 'up') {
              borderColor = AppTheme.success;
              bgColor = AppTheme.success.withOpacity(0.15);
           } else if (yoyTrend == 'down') {
@@ -651,7 +671,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 children: [
                   Text(_mNames[m - 1].toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                   Text(_formatCurrency(sales), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600)),
-                  if (yoyVar != null && yoyVar != 0)
+                  if (showNewBadge)
+                    const Text('NUEVO', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Color(0xFF2979FF)))
+                  else if (yoyVar != null && yoyVar != 0)
                     Text('${yoyVar >= 0 ? "+" : ""}${yoyVar.toStringAsFixed(0)}%', 
                       style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: yoyTrend == 'up' ? AppTheme.success : AppTheme.error)),
                 ],
