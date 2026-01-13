@@ -42,32 +42,42 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         const mes = targetDate.getMonth() + 1;
         const ano = targetDate.getFullYear();
 
-        logger.info(`[ENTREGAS] Getting pending deliveries for ${repartidorId} (${dia}/${mes}/${ano})`);
+        logger.info(`[ENTREGAS] Getting pending deliveries for repartidor ${repartidorId} (${dia}/${mes}/${ano})`);
 
         // Handle multiple IDs (comma separated) case
         const ids = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
+        // CORRECTO: Usar OPP → CPC → CAC para repartidores
+        // OPP tiene CODIGOREPARTIDOR, CPC vincula con CAC
         const sql = `
             SELECT 
               CAC.SUBEMPRESAALBARAN,
               CAC.EJERCICIOALBARAN,
               CAC.SERIEALBARAN,
               CAC.NUMEROALBARAN,
-              TRIM(CAC.CODIGOCLIENTEFACTURA) as CLIENTE,
+              TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
               TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, 'CLIENTE')) as NOMBRE_CLIENTE,
               TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCION,
               TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
               TRIM(COALESCE(CLI.TELEFONO1, '')) as TELEFONO,
-              CAC.IMPORTETOTAL / 100.0 as IMPORTE,
-              TRIM(CAC.CODIGOFORMAPAGO) as FORMA_PAGO,
-              CAC.DIADOCUMENTO, CAC.MESDOCUMENTO, CAC.ANODOCUMENTO,
-              TRIM(CAC.CODIGORUTA) as RUTA
-            FROM DSEDAC.CAC CAC
-            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE TRIM(CAC.CODIGOVENDEDOR) IN (${ids})
-              AND CAC.ANODOCUMENTO = ${ano}
-              AND CAC.MESDOCUMENTO = ${mes}
-              AND CAC.DIADOCUMENTO = ${dia}
+              CPC.IMPORTETOTAL / 100.0 as IMPORTE,
+              TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
+              CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
+              TRIM(CPC.CODIGORUTA) as RUTA
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+              ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+              AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
+            INNER JOIN DSEDAC.CAC CAC 
+              ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+              AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
+              AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
+              AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            WHERE OPP.CODIGOREPARTIDOR IN (${ids})
+              AND OPP.DIAREPARTO = ${dia}
+              AND OPP.MESREPARTO = ${mes}
+              AND OPP.ANOREPARTO = ${ano}
             ORDER BY CAC.NUMEROALBARAN
         `;
 

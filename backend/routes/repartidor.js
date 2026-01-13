@@ -48,31 +48,34 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Getting collections summary for ${cleanRepartidorId} (${selectedMonth}/${selectedYear})`);
 
-        // Get all deliveries assigned to this repartidor with their collections
-        // Usamos CODIGOVENDEDOR como fallback ya que TRANSPORTISTA no siempre está poblado
+        // CORRECTO: Usar OPP → CPC → CAC para repartidores
+        // OPP tiene CODIGOREPARTIDOR, CPC vincula con documentos de CAC
         const sql = `
             SELECT 
-                TRIM(CAC.CODIGOCLIENTEFACTURA) as CLIENTE,
+                TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
                 TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as NOMBRE_CLIENTE,
-                CAC.CODIGOFORMAPAGO as FORMA_PAGO,
-                SUM(CAC.IMPORTETOTAL) as TOTAL_COBRABLE,
+                CPC.CODIGOFORMAPAGO as FORMA_PAGO,
+                SUM(CPC.IMPORTETOTAL) as TOTAL_COBRABLE,
                 SUM(CASE 
                     WHEN COALESCE(CVC.IMPORTEPENDIENTE, 0) = 0 
-                    THEN CAC.IMPORTETOTAL 
-                    ELSE CAC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)
+                    THEN CPC.IMPORTETOTAL 
+                    ELSE CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)
                 END) as TOTAL_COBRADO,
                 COUNT(*) as NUM_DOCUMENTOS
-            FROM DSEDAC.CAC CAC
-            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             LEFT JOIN DSEDAC.CVC CVC 
-                ON CVC.SUBEMPRESADOCUMENTO = CAC.SUBEMPRESAALBARAN
-                AND CVC.EJERCICIODOCUMENTO = CAC.EJERCICIOALBARAN
-                AND CVC.SERIEDOCUMENTO = CAC.SERIEFACTURA
-                AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
-            WHERE CAC.ANODOCUMENTO = ${selectedYear}
-              AND CAC.MESDOCUMENTO = ${selectedMonth}
-              AND TRIM(CAC.CODIGOVENDEDOR) = '${cleanRepartidorId}'
-            GROUP BY TRIM(CAC.CODIGOCLIENTEFACTURA), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), CAC.CODIGOFORMAPAGO
+                ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+                AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+                AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            WHERE OPP.MESREPARTO = ${selectedMonth}
+              AND OPP.ANOREPARTO = ${selectedYear}
+              AND OPP.CODIGOREPARTIDOR = '${cleanRepartidorId}'
+            GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), CPC.CODIGOFORMAPAGO
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
         `;
@@ -178,26 +181,31 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
         logger.info(`[REPARTIDOR] Getting daily collections for ${repartidorId}`);
 
         const cleanRepartidorId = repartidorId.toString().trim();
+        
+        // CORRECTO: Usar OPP → CPC para repartidores
         const sql = `
             SELECT 
-                CAC.DIADOCUMENTO as DIA,
-                SUM(CAC.IMPORTETOTAL) as TOTAL_COBRABLE,
+                OPP.DIAREPARTO as DIA,
+                SUM(CPC.IMPORTETOTAL) as TOTAL_COBRABLE,
                 SUM(CASE 
                     WHEN COALESCE(CVC.IMPORTEPENDIENTE, 0) = 0 
-                    THEN CAC.IMPORTETOTAL 
-                    ELSE CAC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0) 
+                    THEN CPC.IMPORTETOTAL 
+                    ELSE CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0) 
                 END) as TOTAL_COBRADO
-            FROM DSEDAC.CAC CAC
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
             LEFT JOIN DSEDAC.CVC CVC 
-                ON CVC.SUBEMPRESADOCUMENTO = CAC.SUBEMPRESAALBARAN
-                AND CVC.EJERCICIODOCUMENTO = CAC.EJERCICIOALBARAN
-                AND CVC.SERIEDOCUMENTO = CAC.SERIEFACTURA
-                AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
-            WHERE CAC.ANODOCUMENTO = ${selectedYear}
-              AND CAC.MESDOCUMENTO = ${selectedMonth}
-              AND TRIM(CAC.CODIGOVENDEDOR) = '${cleanRepartidorId}'
-            GROUP BY CAC.DIADOCUMENTO
-            ORDER BY CAC.DIADOCUMENTO
+                ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+                AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+                AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            WHERE OPP.ANOREPARTO = ${selectedYear}
+              AND OPP.MESREPARTO = ${selectedMonth}
+              AND OPP.CODIGOREPARTIDOR = '${cleanRepartidorId}'
+            GROUP BY OPP.DIAREPARTO
+            ORDER BY OPP.DIAREPARTO
         `;
 
         let rows = [];
@@ -245,19 +253,23 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
             whereSearch = `AND (TRIM(CLI.CODIGOCLIENTE) LIKE '%${s}%' OR UPPER(COALESCE(CLI.NOMBRECLIENTE, '')) LIKE '%${s}%')`;
         }
 
+        // CORRECTO: Usar OPP → CPC para repartidores
         const sql = `
             SELECT DISTINCT
-                TRIM(CAC.CODIGOCLIENTEFACTURA) as CLIENTE,
+                TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
                 TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as NOMBRE,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCION,
                 TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
                 COUNT(*) as TOTAL_DOCUMENTOS
-            FROM DSEDAC.CAC CAC
-            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE TRIM(CAC.CODIGOVENDEDOR) = '${cleanRepartidorId}'
-              AND CAC.ANODOCUMENTO >= ${new Date().getFullYear() - 1}
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            WHERE OPP.CODIGOREPARTIDOR = '${cleanRepartidorId}'
+              AND OPP.ANOREPARTO >= ${new Date().getFullYear() - 1}
               ${whereSearch}
-            GROUP BY TRIM(CAC.CODIGOCLIENTEFACTURA), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), TRIM(COALESCE(CLI.DIRECCION, '')), TRIM(COALESCE(CLI.POBLACION, ''))
+            GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), TRIM(COALESCE(CLI.DIRECCION, '')), TRIM(COALESCE(CLI.POBLACION, ''))
             ORDER BY TOTAL_DOCUMENTOS DESC
             FETCH FIRST 50 ROWS ONLY
         `;
@@ -300,40 +312,44 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Getting documents for client ${clientId}`);
 
-        let transportistaFilter = '';
+        // CORRECTO: Usar OPP → CPC para filtrar por repartidor
+        let repartidorJoin = '';
+        let repartidorFilter = '';
         if (repartidorId) {
-            transportistaFilter = `AND TRIM(CAC.CODIGOVENDEDOR) = '${repartidorId.toString().trim()}'`;
+            repartidorJoin = `
+                INNER JOIN DSEDAC.OPP OPP 
+                    ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                    AND OPP.EJERCICIO = CPC.EJERCICIOORDENPREPARACION`;
+            repartidorFilter = `AND OPP.CODIGOREPARTIDOR = '${repartidorId.toString().trim()}'`;
         }
 
         const sql = `
             SELECT 
-                CAC.NUMEROALBARAN,
-                CAC.NUMEROFACTURA,
-                CAC.SERIEFACTURA,
-                CAC.EJERCICIOALBARAN,
-                CAC.ANODOCUMENTO as ANO,
-                CAC.MESDOCUMENTO as MES,
-                CAC.DIADOCUMENTO as DIA,
-                CAC.IMPORTETOTAL,
+                CPC.NUMEROALBARAN,
+                CPC.EJERCICIOALBARAN,
+                CPC.ANODOCUMENTO as ANO,
+                CPC.MESDOCUMENTO as MES,
+                CPC.DIADOCUMENTO as DIA,
+                CPC.IMPORTETOTAL,
                 COALESCE(CVC.IMPORTEPENDIENTE, 0) as IMPORTE_PENDIENTE,
-                CAC.CODIGOFORMAPAGO
-            FROM DSEDAC.CAC CAC
+                CPC.CODIGOFORMAPAGO
+            FROM DSEDAC.CPC CPC
+            ${repartidorJoin}
             LEFT JOIN DSEDAC.CVC CVC 
-                ON CVC.SUBEMPRESADOCUMENTO = CAC.SUBEMPRESAALBARAN
-                AND CVC.EJERCICIODOCUMENTO = CAC.EJERCICIOALBARAN
-                AND CVC.SERIEDOCUMENTO = CAC.SERIEFACTURA
-                AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
-            WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${clientId.trim()}'
-              AND CAC.ANODOCUMENTO >= ${new Date().getFullYear() - 1}
-              ${transportistaFilter}
-            ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC, CAC.DIADOCUMENTO DESC
+                ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+                AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+                AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'
+              AND CPC.ANODOCUMENTO >= ${new Date().getFullYear() - 1}
+              ${repartidorFilter}
+            ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
             FETCH FIRST 50 ROWS ONLY
         `;
 
         const rows = await query(sql, false);
 
         const documents = rows.map(row => {
-            const isFactura = row.NUMEROFACTURA && row.NUMEROFACTURA > 0;
             const importe = parseFloat(row.IMPORTETOTAL) || 0;
             const pendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
 
@@ -342,11 +358,9 @@ router.get('/history/documents/:clientId', async (req, res) => {
             else if (pendiente > 0) status = 'partial';
 
             return {
-                id: isFactura
-                    ? `FAC-${row.EJERCICIOALBARAN}-${row.NUMEROFACTURA}`
-                    : `ALB-${row.EJERCICIOALBARAN}-${row.NUMEROALBARAN}`,
-                type: isFactura ? 'factura' : 'albaran',
-                number: isFactura ? row.NUMEROFACTURA : row.NUMEROALBARAN,
+                id: `ALB-${row.EJERCICIOALBARAN}-${row.NUMEROALBARAN}`,
+                type: 'albaran',
+                number: row.NUMEROALBARAN,
                 date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
                 amount: importe,
                 pending: pendiente,
@@ -381,30 +395,34 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
         const cleanRepartidorId = repartidorId.toString().trim();
         let clientFilter = '';
         if (clientId) {
-            clientFilter = `AND TRIM(CAC.CODIGOCLIENTEFACTURA) = '${clientId.trim()}'`;
+            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'`;
         }
 
+        // CORRECTO: Usar OPP → CPC para repartidores
         const sql = `
             SELECT 
-                CAC.ANODOCUMENTO as ANO,
-                CAC.MESDOCUMENTO as MES,
-                SUM(CAC.IMPORTETOTAL) as TOTAL_COBRABLE,
+                OPP.ANOREPARTO as ANO,
+                OPP.MESREPARTO as MES,
+                SUM(CPC.IMPORTETOTAL) as TOTAL_COBRABLE,
                 SUM(CASE 
                     WHEN COALESCE(CVC.IMPORTEPENDIENTE, 0) = 0 
-                    THEN CAC.IMPORTETOTAL 
-                    ELSE CAC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)
+                    THEN CPC.IMPORTETOTAL 
+                    ELSE CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)
                 END) as TOTAL_COBRADO
-            FROM DSEDAC.CAC CAC
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIO
             LEFT JOIN DSEDAC.CVC CVC 
-                ON CVC.SUBEMPRESADOCUMENTO = CAC.SUBEMPRESAALBARAN
-                AND CVC.EJERCICIODOCUMENTO = CAC.EJERCICIOALBARAN
-                AND CVC.SERIEDOCUMENTO = CAC.SERIEFACTURA
-                AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
-            WHERE TRIM(CAC.CODIGOVENDEDOR) = '${cleanRepartidorId}'
-              AND CAC.ANODOCUMENTO >= ${new Date().getFullYear() - 1}
+                ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+                AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+                AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            WHERE OPP.CODIGOREPARTIDOR = '${cleanRepartidorId}'
+              AND OPP.ANOREPARTO >= ${new Date().getFullYear() - 1}
               ${clientFilter}
-            GROUP BY CAC.ANODOCUMENTO, CAC.MESDOCUMENTO
-            ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC
+            GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO
+            ORDER BY OPP.ANOREPARTO DESC, OPP.MESREPARTO DESC
             FETCH FIRST 12 ROWS ONLY
         `;
 
