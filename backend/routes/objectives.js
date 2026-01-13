@@ -513,13 +513,13 @@ router.get('/matrix', async (req, res) => {
         }
         // -------------------------------------------
 
-        // Build filter conditions
+        // Build filter conditions (using LACLAE column names)
         let filterConditions = '';
         if (productCode && productCode.trim()) {
-            filterConditions += ` AND UPPER(L.CODIGOARTICULO) LIKE '%${productCode.trim().toUpperCase()}%'`;
+            filterConditions += ` AND UPPER(L.LCCDRF) LIKE '%${productCode.trim().toUpperCase()}%'`;
         }
         if (productName && productName.trim()) {
-            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE '%${productName.trim().toUpperCase()}%' OR UPPER(L.DESCRIPCION) LIKE '%${productName.trim().toUpperCase()}%')`;
+            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE '%${productName.trim().toUpperCase()}%' OR UPPER(L.LCDESC) LIKE '%${productName.trim().toUpperCase()}%')`;
         }
         // Legacy family/subfamily filters (mantener compatibilidad)
         if (familyCode && familyCode.trim()) {
@@ -552,51 +552,46 @@ router.get('/matrix', async (req, res) => {
         }
         
         // Build ARTX join if needed
-        const artxJoin = needsArtxJoin ? 'LEFT JOIN DSEDAC.ARTX AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO' : '';
+        const artxJoin = needsArtxJoin ? 'LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO' : '';
 
-        // Get product purchases for this client
+        // Get product purchases for this client - USING DSED.LACLAE (which has data for all clients including PUA)
         const rows = await query(`
       SELECT 
-        L.CODIGOARTICULO as PRODUCT_CODE,
-        COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION)) as PRODUCT_NAME,
+        L.LCCDRF as PRODUCT_CODE,
+        COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCDESC)) as PRODUCT_NAME,
         COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
         COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as SUBFAMILY_CODE,
         COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
-        L.ANODOCUMENTO as YEAR,
-        L.MESDOCUMENTO as MONTH,
-        SUM(L.IMPORTEVENTA) as SALES,
-        SUM(L.IMPORTECOSTO) as COST,
-        SUM(L.CANTIDADUNIDADES) as UNITS,
-        -- Discount detection AND details
-        SUM(CASE WHEN L.PRECIOTARIFACLIENTE <> 0 AND L.PRECIOTARIFA01 <> 0 
-                  AND L.PRECIOTARIFACLIENTE <> L.PRECIOTARIFA01 THEN 1 ELSE 0 END) as HAS_SPECIAL_PRICE,
-        SUM(CASE WHEN L.PORCENTAJEDESCUENTO <> 0 OR L.IMPORTEDESCUENTOUNIDAD <> 0 THEN 1 ELSE 0 END) as HAS_DISCOUNT,
-        AVG(CASE WHEN L.PORCENTAJEDESCUENTO <> 0 THEN L.PORCENTAJEDESCUENTO ELSE NULL END) as AVG_DISCOUNT_PCT,
-        AVG(CASE WHEN L.IMPORTEDESCUENTOUNIDAD <> 0 THEN L.IMPORTEDESCUENTOUNIDAD ELSE NULL END) as AVG_DISCOUNT_EUR,
+        L.LCAADC as YEAR,
+        L.LCMMDC as MONTH,
+        SUM(L.LCIMVT) as SALES,
+        SUM(L.LCIMCT) as COST,
+        SUM(L.LCCTUD) as UNITS,
+        -- Discount detection AND details (using LACLAE equivalents)
+        SUM(CASE WHEN L.LCPRTC <> 0 AND L.LCPRT1 <> 0 
+                  AND L.LCPRTC <> L.LCPRT1 THEN 1 ELSE 0 END) as HAS_SPECIAL_PRICE,
+        SUM(CASE WHEN L.LCPJDT <> 0 THEN 1 ELSE 0 END) as HAS_DISCOUNT,
+        AVG(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END) as AVG_DISCOUNT_PCT,
+        CAST(NULL AS DECIMAL(10,2)) as AVG_DISCOUNT_EUR,
         -- Average prices for comparison
-        AVG(L.PRECIOTARIFACLIENTE) as AVG_CLIENT_TARIFF,
-        AVG(L.PRECIOTARIFA01) as AVG_BASE_TARIFF,
+        AVG(L.LCPRTC) as AVG_CLIENT_TARIFF,
+        AVG(L.LCPRT1) as AVG_BASE_TARIFF,
         -- FI codes for 5-level hierarchy grouping
         COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
         COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
         COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
         COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
         COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
-      FROM DSEDAC.LAC L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      LEFT JOIN DSEDAC.ARTX AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO
-      LEFT JOIN DSEDAC.CAC C ON C.CCSBAB = L.LCSBAB 
-        AND C.CCYEAB = L.LCYEAB 
-        AND C.CCSRAB = L.LCSRAB 
-        AND C.CCTRAB = L.LCTRAB 
-        AND C.CCNRAB = L.LCNRAB
-      WHERE L.CODIGOCLIENTEALBARAN = '${clientCode}'
-        AND L.ANODOCUMENTO IN(${yearsFilter})
-        AND L.MESDOCUMENTO BETWEEN ${monthStart} AND ${monthEnd}
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+      LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
+      WHERE L.LCCDCL = '${clientCode}'
+        AND L.LCAADC IN(${yearsFilter})
+        AND L.LCMMDC BETWEEN ${monthStart} AND ${monthEnd}
         -- FILTERS to match LACLAE logic
-        AND ${LAC_SALES_FILTER}
+        AND ${LACLAE_SALES_FILTER}
         ${filterConditions}
-      GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.ANODOCUMENTO, L.MESDOCUMENTO, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
+      GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
       ORDER BY SALES DESC
     `);
 
