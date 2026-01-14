@@ -400,11 +400,15 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
   }
 
   void _showDetailDialog(AlbaranEntrega albaran) {
+    final entregasProvider = Provider.of<EntregasProvider>(context, listen: false);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent, // Important for custom border radius
-      builder: (context) => _DetailSheet(albaran: albaran),
+      builder: (context) => ChangeNotifierProvider.value(
+        value: entregasProvider,
+        child: _DetailSheet(albaran: albaran),
+      ),
     );
   }
 }
