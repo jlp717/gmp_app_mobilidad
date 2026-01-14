@@ -108,8 +108,10 @@ class EntregaItem {
   final String descripcion;
   final double cantidadPedida;
   final String? unit;
+  final double precioUnitario;
   double cantidadEntregada;
   EstadoEntrega estado;
+  String? observacion; // New field for row observation
 
   EntregaItem({
     required this.itemId,
@@ -117,8 +119,10 @@ class EntregaItem {
     required this.descripcion,
     required this.cantidadPedida,
     this.unit,
+    this.precioUnitario = 0,
     this.cantidadEntregada = 0,
     this.estado = EstadoEntrega.pendiente,
+    this.observacion,
   });
 
   factory EntregaItem.fromJson(Map<String, dynamic> json) {
@@ -128,8 +132,10 @@ class EntregaItem {
       descripcion: json['descripcion']?.toString() ?? '',
       cantidadPedida: (json['cantidadPedida'] ?? json['QTY'] ?? 0).toDouble(),
       unit: json['UNIT']?.toString() ?? json['unit']?.toString(), // Handle both cases
+      precioUnitario: (json['precioUnitario'] ?? json['PRICE'] ?? 0).toDouble(),
       cantidadEntregada: (json['cantidadEntregada'] ?? 0).toDouble(),
       estado: EstadoEntregaExtension.fromString(json['estado'] ?? 'PENDIENTE'),
+      observacion: json['observacion'],
     );
   }
 
@@ -142,6 +148,8 @@ class AlbaranEntrega {
   final int numeroAlbaran;
   final int ejercicio;
   final String serie;
+  final int numeroFactura;
+  final String serieFactura;
   final String codigoCliente;
   final String nombreCliente;
   final String direccion;
@@ -166,6 +174,8 @@ class AlbaranEntrega {
     required this.numeroAlbaran,
     required this.ejercicio,
     this.serie = '',
+    this.numeroFactura = 0,
+    this.serieFactura = '',
     required this.codigoCliente,
     required this.nombreCliente,
     this.direccion = '',
@@ -192,6 +202,8 @@ class AlbaranEntrega {
       numeroAlbaran: json['numeroAlbaran'] ?? json['numero'] ?? 0,
       ejercicio: json['ejercicio'] ?? DateTime.now().year,
       serie: json['serie']?.toString() ?? '',
+      numeroFactura: json['numeroFactura'] ?? 0,
+      serieFactura: json['serieFactura']?.toString() ?? '',
       codigoCliente: json['codigoCliente']?.toString() ?? '',
       nombreCliente: json['nombreCliente']?.toString() ?? 'Cliente',
       direccion: json['direccion']?.toString() ?? '',

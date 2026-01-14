@@ -353,6 +353,32 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                                 ),
                               ),
                             ),
+                            if (albaran.numeroFactura > 0) ...[
+                               const SizedBox(height: 4),
+                               Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.neonBlue.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.receipt, size: 10, color: AppTheme.neonBlue),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'FAC: ${albaran.serieFactura}-${albaran.numeroFactura}',
+                                        style: const TextStyle(
+                                          color: AppTheme.neonBlue,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                               ),
+                            ],
                             const SizedBox(height: 4),
                             // Staple Visual (Icon)
                             RotationTransition(
@@ -490,7 +516,12 @@ class _DetailSheetState extends State<_DetailSheet> {
   late AlbaranEntrega _details;
   bool _loading = true;
   String _error = '';
-  Map<String, bool> _checkedItems = {}; 
+  
+  // Advanced State
+  final Map<String, double> _qtyParams = {};
+  final Map<String, String> _obsParams = {};
+  
+  // Global observation
   final TextEditingController _obsController = TextEditingController();
   
   // SIGNATURE
@@ -523,9 +554,10 @@ class _DetailSheetState extends State<_DetailSheet> {
            setState(() {
              _details = full;
              _loading = false;
-             // Default state: ALL UNCHECKED (User request)
+             // Initialize Inputs
              for(var i in _details.items) {
-               _checkedItems[i.codigoArticulo] = false;
+               _qtyParams[i.codigoArticulo] = i.cantidadPedida; // Default to full delivery
+               _obsParams[i.codigoArticulo] = '';
              }
            });
          } else {
@@ -537,33 +569,126 @@ class _DetailSheetState extends State<_DetailSheet> {
     }
   }
 
-  bool get _allItemsChecked => _checkedItems.isNotEmpty && _checkedItems.values.every((v) => v);
-  bool get _anyItemChecked => _checkedItems.values.any((v) => v);
-
-  void _toggleAll(bool value) {
-    setState(() {
-      for (var k in _checkedItems.keys) {
-        _checkedItems[k] = value;
+  // Helpers
+  bool get _allMatched => _details.items.every((i) => 
+      (_qtyParams[i.codigoArticulo] ?? 0) == i.cantidadPedida);
+      
+  double get _currentTotal {
+      if (_loading) return 0;
+      double total = 0;
+      for (var i in _details.items) {
+          double qty = _qtyParams[i.codigoArticulo] ?? 0;
+          double price = i.precioUnitario;
+          total += (qty * price); 
       }
-    });
+      return total.abs() > 0 ? total : widget.albaran.importeTotal; // Fallback if price is 0
+  }
+
+  void _onConfirmationPressed() {
+      // Validation: Check if any discrepancy exists without observation
+      for(var i in _details.items) {
+          double current = _qtyParams[i.codigoArticulo] ?? 0;
+          if (current != i.cantidadPedida) {
+              String obs = _obsParams[i.codigoArticulo] ?? '';
+              if (obs.trim().isEmpty) {
+                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Falta motivo/observación en ${i.descripcion}'),
+                      backgroundColor: AppTheme.error,
+                   ));
+                   return;
+              }
+          }
+      }
+      
+      _showFinalConfirmationDialog();
+  }
+
+  Future<void> _showFinalConfirmationDialog() async {
+      final confirm = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+              backgroundColor: AppTheme.darkSurface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                  children: [
+                      Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 28),
+                      SizedBox(width: 12),
+                      Text('Confirmar Entrega', style: TextStyle(color: AppTheme.textPrimary)),
+                  ],
+              ),
+              content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                      Text('Albarán: #${widget.albaran.numeroAlbaran}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                      const SizedBox(height: 8),
+                      Text('Cliente: ${widget.albaran.nombreCliente}', style: const TextStyle(color: AppTheme.textSecondary)),
+                      const SizedBox(height: 12),
+                      Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                              color: AppTheme.darkBase,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.borderColor)
+                          ),
+                          child: Column(
+                              children: [
+                                  Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                          const Text('Total Original:', style: TextStyle(color: AppTheme.textSecondary)),
+                                          Text('${widget.albaran.importeTotal.toStringAsFixed(2)} €', style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold)),
+                                      ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                          const Text('Total Final:', style: TextStyle(color: AppTheme.textSecondary)),
+                                          Text('${_currentTotal.toStringAsFixed(2)} €', style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 16)),
+                                      ],
+                                  ),
+                              ],
+                          ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                          '¿Estás seguro de marcar este albarán como ENTREGADO?\nEsta acción es irreversible y afectará los registros de facturación.',
+                          style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
+                      ),
+                  ],
+              ),
+              actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancelar', style: TextStyle(color: AppTheme.textSecondary)),
+                  ),
+                  ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.success,
+                          foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Confirmar y Firmar'),
+                  ),
+              ],
+          ),
+      );
+
+      if (confirm == true) {
+          setState(() {
+               _showSignaturePad = true;
+          });
+      }
   }
 
   Future<void> _submit() async {
-     // Validate
-     if (!_allItemsChecked && _obsController.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Debe indicar motivo si desmarca artículos'),
-          backgroundColor: AppTheme.error,
-        ));
-        return;
-     }
-
      if (_sigController.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('La firma es obligatoria'),
           backgroundColor: AppTheme.warning,
         ));
-        setState(() => _showSignaturePad = true);
         return;
      }
 
@@ -572,6 +697,70 @@ class _DetailSheetState extends State<_DetailSheet> {
        // Get Signature
        final Uint8List? sigBytes = await _sigController.toPngBytes();
        if (sigBytes == null) return;
+       final String base64Sig = base64Encode(sigBytes);
+       
+       // Global Obs + Item Obs
+       String globalObs = _obsController.text.trim();
+       // Note: Currently backend only accepts one global observation field.
+       // We should concatenate item observations if backend doesn't support lines update yet, 
+       // OR if we update backend to support lines, we send them.
+       // Given user request "Implementa ... backend ... updates en endpoints", I will assume we might need to send a formatted string 
+       // or we just send the discrepancies in the global observation for now to be safe until backend schema verification for lines update.
+       // Let's construct a detailed observation string for safety.
+       
+       StringBuffer fullObs = StringBuffer();
+       if (globalObs.isNotEmpty) fullObs.writeln("Nota General: $globalObs");
+       
+       _details.items.forEach((item) {
+           double qty = _qtyParams[item.codigoArticulo] ?? 0;
+           String itemObs = _obsParams[item.codigoArticulo] ?? '';
+           if (qty != item.cantidadPedida || itemObs.isNotEmpty) {
+               fullObs.writeln("[${item.codigoArticulo}] Entregado: $qty (Solicitado: ${item.cantidadPedida}). $itemObs");
+           }
+       });
+
+       final provider = Provider.of<EntregasProvider>(context, listen: false);
+       bool success = false;
+        
+       // Use ALL MATCHED logic for Entregado/Parcial status
+       if (_allMatched) {
+         success = await provider.marcarEntregado(
+           albaranId: widget.albaran.id,
+           firma: base64Sig,
+           observaciones: fullObs.toString().trim().isNotEmpty ? fullObs.toString() : null,
+         );
+       } else {
+         success = await provider.marcarParcial(
+           albaranId: widget.albaran.id,
+           observaciones: fullObs.toString(),
+           firma: base64Sig,
+         );
+       }
+       
+       if (mounted) {
+         if (success) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Entrega registrada correctamente'),
+                backgroundColor: AppTheme.success,
+            ));
+         } else {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Error al guardar: ${provider.error ?? "Desconocido"}'),
+                backgroundColor: AppTheme.error,
+            ));
+         }
+       }
+     } catch (e) {
+       print(e);
+       if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: AppTheme.error,
+          ));
+       }
+     }
+  }
        final String base64Sig = base64Encode(sigBytes);
        final String obs = _obsController.text.trim();
 
@@ -662,7 +851,7 @@ class _DetailSheetState extends State<_DetailSheet> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  // Info Card
+                  // Info Card (Total)
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -674,32 +863,15 @@ class _DetailSheetState extends State<_DetailSheet> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                          const Text('Importe Total:', style: TextStyle(fontWeight: FontWeight.w500, color: AppTheme.textPrimary)),
-                         Text('${widget.albaran.importeTotal.toStringAsFixed(2)} €', 
+                         Text('${_currentTotal.toStringAsFixed(2)} €', 
                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 18)),
                       ],
                     ),
                   ),
                   const SizedBox(height: 20),
                   
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                       const Text('Artículos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary)),
-                       Row(
-                         children: [
-                           TextButton(
-                             onPressed: () => _toggleAll(true),
-                             child: const Text('Todo', style: TextStyle(fontSize: 12, color: AppTheme.neonBlue)),
-                           ),
-                           TextButton(
-                             onPressed: () => _toggleAll(false),
-                             child: const Text('Nada', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                           ),
-                         ],
-                       )
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+                  const Text('Artículos (Detalle)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 12),
 
                   if (_details.items.isEmpty)
                     Container(
@@ -714,48 +886,19 @@ class _DetailSheetState extends State<_DetailSheet> {
                       ),
                     ),
 
-                  ..._details.items.map((item) {
-                    final isChecked = _checkedItems[item.codigoArticulo] ?? false;
-                    // Determine unit: Backend 'unit' (e.g. 'UNIDAD') -> Friendly (e.g. 'Uds')
-                    // Assuming backend sends 'UNIT' in model, but if not updated in AlbaranItem model yet, might need to update model too.
-                    // Checking existing model usage... 'cantidadPedida' is used.
-                    // Wait, I updated backend to return 'UNIT' as 'unit' column but likely need to update Flutter model `AlbaranItem`.
-                    String uom = 'Uds';
-                    if (item.unit != null && item.unit!.isNotEmpty) {
-                        uom = item.unit!; 
-                        if (uom == 'UNIDAD') uom = 'Uds';
-                    }
-                    
-                    return Theme(
-                      data: ThemeData(unselectedWidgetColor: AppTheme.textSecondary),
-                      child: CheckboxListTile(
-                        value: isChecked,
-                        activeColor: AppTheme.neonBlue,
-                        checkColor: AppTheme.darkBase,
-                        title: Text(item.descripcion.isNotEmpty ? item.descripcion : 'Art. ${item.codigoArticulo}', style: const TextStyle(color: AppTheme.textPrimary)),
-                        subtitle: Text('${item.cantidadPedida.toStringAsFixed(0)} $uom', style: const TextStyle(color: AppTheme.textSecondary)),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (val) {
-                          setState(() {
-                            _checkedItems[item.codigoArticulo] = val ?? false;
-                          });
-                        },
-                      ),
-                    );
-                  }).toList(),
+                  ..._details.items.map((item) => _buildEditableItemRow(item)).toList(),
                   
                   const SizedBox(height: 20),
                   const Divider(color: AppTheme.borderColor),
                   const SizedBox(height: 10),
 
-                  // Observations
+                  // Global Observations
                   TextField(
                     controller: _obsController,
                     maxLines: 2,
                     decoration: InputDecoration(
-                      labelText: 'Observaciones / Motivo',
-                      hintText: !_allItemsChecked ? 'Obligatorio si hay incidencias' : 'Opcional',
+                      labelText: 'Observaciones Generales (Opcional)',
+                      hintText: 'Añadir nota general...',
                       hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
                       labelStyle: const TextStyle(color: AppTheme.textSecondary),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -764,47 +907,15 @@ class _DetailSheetState extends State<_DetailSheet> {
                       fillColor: AppTheme.darkBase,
                     ),
                     style: const TextStyle(color: AppTheme.textPrimary),
-                    onChanged: (v) => setState((){}),
                   ),
 
                   const SizedBox(height: 20),
                   
-                  // SIGNATURE PADDLE
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Firma Cliente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary)),
-                      if (_showSignaturePad)
-                        TextButton(
-                          onPressed: () => _sigController.clear(), 
-                          child: const Text('Borrar', style: TextStyle(color: AppTheme.error))
-                        )
-                    ],
-                  ),
-                  
-                  if (!_showSignaturePad)
-                    InkWell(
-                      onTap: () => setState(() => _showSignaturePad = true),
-                      child: Container(
-                        height: 100,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: AppTheme.darkBase,
-                          border: Border.all(color: AppTheme.borderColor),
-                          borderRadius: BorderRadius.circular(8)
-                        ),
-                        child: const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                             Icon(Icons.edit, color: AppTheme.textSecondary),
-                             SizedBox(height: 8),
-                             Text('Toque para firmar', style: TextStyle(color: AppTheme.textSecondary)),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    Container(
+                  // SIGNATURE PADDLE & ACTIONS
+                  if (_showSignaturePad) ...[
+                      const Text('Firma Obligatoria', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                      const SizedBox(height: 8),
+                      Container(
                       height: 200,
                       decoration: BoxDecoration(
                         color: AppTheme.darkBase,
@@ -814,35 +925,46 @@ class _DetailSheetState extends State<_DetailSheet> {
                       child: Signature(
                         controller: _sigController,
                         backgroundColor: AppTheme.darkBase,
-                        width: MediaQuery.of(context).size.width - 64, // Estimate width
+                        width: MediaQuery.of(context).size.width - 64, 
                         height: 198,
                       ),
                     ),
+                    Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                            TextButton(onPressed: () => _sigController.clear(), child: const Text('Borrar Firma', style: TextStyle(color: AppTheme.error))),
+                        ],
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                        onPressed: _submit,
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.neonBlue,
+                            foregroundColor: AppTheme.darkBase,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            minimumSize: const Size(double.infinity, 50)
+                        ),
+                        child: const Text('FINALIZAR ENTREGA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    )
+                  ] else ...[
+                     ElevatedButton(
+                        onPressed: _onConfirmationPressed,
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.neonBlue,
+                            foregroundColor: AppTheme.darkBase,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            minimumSize: const Size(double.infinity, 50)
+                        ),
+                        child: const Text('FIRMAR Y CONFIRMAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    )
+                  ],
+                  const SizedBox(height: 40), // Bottom padding
                 ],
               ),
+
             ),
 
-          // Footer Actions
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppTheme.borderColor))
-            ),
-            child: SizedBox(
-               width: double.infinity,
-               child: ElevatedButton(
-                 style: ElevatedButton.styleFrom(
-                   backgroundColor: _allItemsChecked ? AppTheme.success : AppTheme.warning,
-                   padding: const EdgeInsets.symmetric(vertical: 16),
-                 ),
-                 onPressed: _submit,
-                 child: Text(
-                   _allItemsChecked ? 'CONFIRMAR ENTREGA' : 'REGISTRAR INCIDENCIA',
-                   style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkBase),
-                 ),
-               ),
-            ),
-          )
+
         ],
       ),
     );

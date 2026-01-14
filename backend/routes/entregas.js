@@ -155,7 +155,8 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
                 TRIM(L.CODIGOARTICULO) as CODIGO,
                 TRIM(L.DESCRIPCION) as DESC,
                 L.CANTIDADUNIDADES as QTY,
-                TRIM(L.UNIDADMEDIDA) as UNIT
+                TRIM(L.UNIDADMEDIDA) as UNIT,
+                L.PRECIOVENTA as PRICE
             FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
             ORDER BY L.SECUENCIA
@@ -163,19 +164,23 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         const items = await query(itemsSql, false);
 
         const albaran = {
-            id: `${header.EJERCICIOALBARAN} -${header.SERIEALBARAN || ''} -${header.NUMEROALBARAN} `,
+            id: `${header.EJERCICIOALBARAN}-${header.SERIEALBARAN || ''}-${header.NUMEROALBARAN}`,
             numeroAlbaran: header.NUMEROALBARAN,
             ejercicio: header.EJERCICIOALBARAN,
+            numeroFactura: header.NUMEROFACTURA || 0,
+            serieFactura: (header.SERIEFACTURA || '').trim(),
             nombreCliente: header.CLIENTE_NOM?.trim(),
             direccion: header.DIR?.trim(),
             poblacion: header.POB?.trim(),
-            fecha: `${header.DIADOCUMENTO} /${header.MESDOCUMENTO}/${header.ANODOCUMENTO} `,
+            fecha: `${header.DIADOCUMENTO}/${header.MESDOCUMENTO}/${header.ANODOCUMENTO}`,
             importe: parseFloat(header.IMPORTETOTAL),
             items: items.map(i => ({
                 itemId: i.ITEM_ID,
                 codigoArticulo: i.CODIGO,
                 descripcion: i.DESC,
                 cantidadPedida: parseFloat(i.QTY),
+                unit: i.UNIT,
+                precioUnitario: parseFloat(i.PRICE || 0),
                 cantidadEntregada: 0,
                 estado: 'PENDIENTE'
             })),
