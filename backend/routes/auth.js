@@ -266,4 +266,23 @@ router.post('/switch-role', async (req, res) => {
     }
 });
 
+// GET /repartidores - List of all repartidores for Jefe dropdown
+router.get('/repartidores', authenticateToken, async (req, res) => {
+    try {
+        const sql = `
+          SELECT DISTINCT 
+            V.CODIGOVENDEDOR as code, 
+            TRIM(D.NOMBREVENDEDOR) as name
+          FROM DSEDAC.VEH V
+          JOIN DSEDAC.VDD D ON V.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+          ORDER BY V.CODIGOVENDEDOR
+        `;
+        const result = await query(sql);
+        res.json(result);
+    } catch (error) {
+        console.error('Error fetching repartidores:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 module.exports = router;

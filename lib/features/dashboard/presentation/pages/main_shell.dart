@@ -31,6 +31,11 @@ class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   DashboardProvider? _dashboardProvider;
   bool _isNavExpanded = true; // Estado del navbar colapsable
+  
+  // State for Jefe Repartidor View
+  String? _selectedRepartidor;
+  List<Map<String, dynamic>> _repartidoresOptions = [];
+  bool _isLoadingRepartidores = false;
 
   @override
   void initState() {
@@ -51,6 +56,8 @@ class _MainShellState extends State<MainShell> {
             );
             _dashboardProvider!.fetchDashboardData();
           });
+          // Fetch repartidores
+          _fetchRepartidores();
         } else {
           // Non-Jefe starts at first available section (Clientes)
           setState(() {
@@ -74,6 +81,19 @@ class _MainShellState extends State<MainShell> {
     if (shouldLogout == true) {
       authProvider.logout();
     }
+  }
+
+  Future<void> _fetchRepartidores() async {
+      try {
+        final res = await ApiClient.get('/auth/repartidores');
+        if (res is List) {
+          setState(() {
+             _repartidoresOptions = List<Map<String, dynamic>>.from(res);
+          });
+        }
+      } catch (e) {
+        debugPrint('Error fetching repartidores: $e');
+      }
   }
 
   // Get navigation destinations based on user role
@@ -193,9 +213,6 @@ class _MainShellState extends State<MainShell> {
     return items;
   }
 
-  // State for Jefe Repartidor View
-  String? _selectedRepartidor;
-
   // Helper to get available repartidores (mocked or from auth)
   // For now, if Jefe, we assume he can see all. We need a list of repartidores.
   // We can filter `authProvider.vendedorCodes` or hardcode known drivers/fetch them.
@@ -240,7 +257,7 @@ class _MainShellState extends State<MainShell> {
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              width: _isNavExpanded ? 240 : 0, // Increased width for logic
+              width: _isNavExpanded ? 90 : 0, // REVERTED TO 90
               child: _isNavExpanded ? Container(
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceColor,
@@ -257,43 +274,13 @@ class _MainShellState extends State<MainShell> {
                     
                     // User Avatar
                     _buildUserAvatar(user, isJefeVentas),
-
-                    // JEFE REPARTIDOR SELECTOR
-                    if (isJefeVentas && isRepartidorMode)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedRepartidor,
-                              isExpanded: true,
-                              dropdownColor: AppTheme.surfaceColor,
-                              icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.neonPurple),
-                              style: const TextStyle(color: Colors.white, fontSize: 13),
-                              items: _getRepartidores(authProvider.vendedorCodes).map((r) {
-                                return DropdownMenuItem(
-                                  value: r['code'],
-                                  child: Text(r['name']!),
-                                );
-                              }).toList(),
-                              onChanged: (val) => setState(() => _selectedRepartidor = val),
-                            ),
-                          ),
-                        ),
-                      ),
                     
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
                     
                     // Navigation Items - Take available space
                     Expanded(
                       child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         itemCount: navItems.length,
                         itemBuilder: (context, index) {
                           return Padding(
@@ -595,6 +582,56 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  // Header Dropdown Widget for Repartidor Mode
+  Widget _buildRepartidorHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+      ),
+      child: Row(
+        children: [
+           const Text('VISTA DE REPARTO', style: TextStyle(color: AppTheme.neonPurple, fontWeight: FontWeight.bold, fontSize: 12)),
+           const SizedBox(width: 16),
+           Expanded(
+             child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedRepartidor, 
+                    hint: const Text('Seleccionar Repartidor', style: TextStyle(color: Colors.white54)),
+                    isExpanded: true,
+                    dropdownColor: AppTheme.surfaceColor,
+                    icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.neonPurple),
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    items: [
+                      const DropdownMenuItem(
+                          value: 'ALL', 
+                          child: Text('Todos los Repartidores', style: TextStyle(fontWeight: FontWeight.bold))
+                      ),
+                      ..._repartidoresOptions.map((r) {
+                        return DropdownMenuItem(
+                          value: r['code'].toString(),
+                          child: Text('${r['code']} - ${r['name']}'),
+                        );
+                      }),
+                    ],
+                    onChanged: (val) => setState(() => _selectedRepartidor = val),
+                  ),
+                ),
+             ),
+           ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCurrentPage(List<String> vendedorCodes, bool isJefeVentas) {
     // Obtener el rol del usuario
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -606,36 +643,49 @@ class _MainShellState extends State<MainShell> {
     // ===============================================
     if (isRepartidor) {
       // Determine effective repartidor ID
-      // If Jefe, use _selectedRepartidor. If real Repartidor, use his code.
       String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); // Default for real repartidor
       
-      if (isJefeVentas && _selectedRepartidor != null) {
-         if (_selectedRepartidor == 'ALL') {
-           effectiveRepartidorId = vendedorCodes.join(',');
-         } else {
-           effectiveRepartidorId = _selectedRepartidor!;
-         }
+      // If Jefe, override with selection
+      if (isJefeVentas) {
+          if (_selectedRepartidor == null || _selectedRepartidor == 'ALL') {
+             if (_repartidoresOptions.isNotEmpty) {
+                effectiveRepartidorId = _repartidoresOptions.map((e) => e['code']).join(',');
+             } else {
+                effectiveRepartidorId = vendedorCodes.join(','); 
+             }
+          } else {
+             effectiveRepartidorId = _selectedRepartidor!;
+          }
       }
 
-      switch (_currentIndex) {
-        case 0:
-          // Rutero del repartidor (con cobros integrados)
-          return ChangeNotifierProvider(
-            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
-          );
-        case 1:
-          // Comisiones del repartidor (con umbral 30%)
-          return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
-        case 2:
-          // Histórico del repartidor
-          return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
-        case 3:
-          // Chat IA para repartidores
-          return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
-        default:
-          return const Center(child: Text('Página no encontrada'));
+      final content = Builder(builder: (_) {
+         switch (_currentIndex) {
+          case 0:
+            return ChangeNotifierProvider(
+              create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
+              child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
+            );
+          case 1:
+            return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
+          case 2:
+            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
+          case 3:
+            return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
+          default:
+            return const Center(child: Text('Página no encontrada'));
+        }
+      });
+
+      // Wrap in Column with Header only if Jefe
+      if (isJefeVentas) {
+         return Column(
+           children: [
+             _buildRepartidorHeader(),
+             Expanded(child: content),
+           ],
+         );
       }
+      return content;
     }
     
     // ===============================================
