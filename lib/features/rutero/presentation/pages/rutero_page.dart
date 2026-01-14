@@ -314,10 +314,11 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           children: [
             // Smart Sync Header
             SmartSyncHeader(
+              title: 'Rutero Comercial',
+              subtitle: _periodLabel.isNotEmpty ? _periodLabel : 'Planificación Semanal',
               lastSync: _lastFetchTime,
               isLoading: _isLoadingWeek || _isLoadingClients,
               onSync: _refreshData,
-              error: _error,
             ),
             
             // Unified Compact Header Region

@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/repartidor_commission_service.dart';
 import '../../data/repartidor_data_service.dart';
@@ -119,7 +120,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (_isLoading && _clientData.isEmpty) { // Show loading only if no data
       return const Scaffold(
         backgroundColor: AppTheme.darkBase,
         body: Center(
@@ -135,7 +136,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
       );
     }
 
-    if (_error != null) {
+    if (_error != null && _clientData.isEmpty) {
       return Scaffold(
         backgroundColor: AppTheme.darkBase,
         body: Center(
@@ -166,8 +167,18 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
       body: Column(
         children: [
           // Header
-          _buildHeader(overallPct, thresholdProgress),
+           SmartSyncHeader(
+            title: 'Comisiones',
+            subtitle: DateFormat('MMMM yyyy', 'es').format(DateTime(_selectedYear, _selectedMonth)),
+            lastSync: _lastFetchTime ?? DateTime.now(),
+            isLoading: _isLoading,
+            onSync: _loadData,
+            onMonthTap: _showMonthYearPicker, // Use month picker feature
+          ),
           
+          // Custom Commission Progress Header
+          _buildCommissionProgress(overallPct, thresholdProgress),
+
           // Summary Cards
           _buildSummaryCards(),
           
@@ -196,107 +207,18 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _loadData,
-        backgroundColor: AppTheme.neonGreen,
-        child: const Icon(Icons.refresh),
-      ),
+      // FAB REMOVED
     );
   }
 
-  Widget _buildHeader(double overallPct, double thresholdProgress) {
+  Widget _buildCommissionProgress(double overallPct, double thresholdProgress) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.surfaceColor,
-            AppTheme.surfaceColor.withOpacity(0.8),
-          ],
-        ),
-        border: Border(
-          bottom: BorderSide(color: AppTheme.neonGreen.withOpacity(0.2), width: 1),
-        ),
+        color: AppTheme.surfaceColor,
+        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
       ),
       child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.neonGreen.withOpacity(0.2),
-                      AppTheme.success.withOpacity(0.2),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.euro, color: AppTheme.neonGreen, size: 24),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Comisiones Repartidor',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      'Umbral 30% + 4 Tramos',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary.withOpacity(0.8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Month/Year selector (interactive)
-              GestureDetector(
-                onTap: _showMonthYearPicker,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.neonGreen.withOpacity(0.1),
-                        AppTheme.success.withOpacity(0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.calendar_month, color: AppTheme.neonGreen, size: 16),
-                      const SizedBox(width: 6),
-                      Text(
-                        DateFormat('MMM yyyy', 'es').format(DateTime(_selectedYear, _selectedMonth)),
-                        style: const TextStyle(color: AppTheme.neonGreen, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.arrow_drop_down, color: AppTheme.neonGreen, size: 18),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Overall threshold progress bar
-          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -343,8 +265,6 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
                   ),
                 ),
             ],
-          ),
-        ],
       ),
     );
   }

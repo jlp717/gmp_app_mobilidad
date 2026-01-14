@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/repartidor_data_service.dart';
 
@@ -190,84 +191,57 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.surfaceColor,
-            AppTheme.surfaceColor.withOpacity(0.8),
-          ],
+    // If we are viewing a specific client, we show a detail header
+    if (_selectedClientId != null) {
+       return Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          border: Border(bottom: BorderSide(color: AppTheme.neonPurple.withOpacity(0.2), width: 1)),
         ),
-        border: Border(
-          bottom: BorderSide(color: AppTheme.neonPurple.withOpacity(0.2), width: 1),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (_selectedClientId != null) ...[
-            _buildGlassButton(
-              icon: Icons.arrow_back,
-              onTap: () => setState(() {
-                _selectedClientId = null;
-                _selectedClientName = null;
-                _documents = [];
-                _clearFilters();
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: () => setState(() {
+                  _selectedClientId = null;
+                  _selectedClientName = null;
+                  _documents = [];
+                  _clearFilters();
               }),
+              icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
             ),
-            const SizedBox(width: 12),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.neonPurple.withOpacity(0.2),
-                    AppTheme.neonBlue.withOpacity(0.2),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(12),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Text(
+                        _selectedClientName ?? 'Cliente',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                        overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                        'Cód: $_selectedClientId',
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.8)),
+                    ),
+                ],
               ),
-              child: const Icon(Icons.history, color: AppTheme.neonPurple, size: 24),
             ),
-            const SizedBox(width: 12),
+             // Client selector dropdown (when in client view)
+            if (_clients.isNotEmpty)
+              _buildClientSelector(),
           ],
-          
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _selectedClientId != null
-                      ? _selectedClientName ?? 'Cliente'
-                      : 'Histórico',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  _selectedClientId != null
-                      ? 'Cód: $_selectedClientId'
-                      : 'Buscar cliente para ver historial',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary.withOpacity(0.8),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Client selector dropdown (when in client view)
-          if (_selectedClientId != null && _clients.isNotEmpty)
-            _buildClientSelector(),
-        ],
-      ),
+        ),
+       );
+    }
+    
+    // Main Header using SmartSyncHeader
+    return SmartSyncHeader(
+      title: 'Histórico',
+      subtitle: 'Búsqueda de clientes y documentos',
+      lastSync: DateTime.now(), // Real app would track this
+      isLoading: _isLoading,
+      onSync: () => _loadClients(_searchController.text),
     );
   }
 

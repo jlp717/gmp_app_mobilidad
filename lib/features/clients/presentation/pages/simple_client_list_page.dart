@@ -276,10 +276,12 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
       children: [
         // Smart Sync Header
         SmartSyncHeader(
+          title: 'Cartera de Clientes',
+          subtitle: '${_clients.length} clientes encontrados',
           lastSync: _lastFetchTime,
           isLoading: _isLoading && _clients.isNotEmpty,
           onSync: () => _loadClients(query: _searchQuery),
-          error: _error,
+          // error: _error, // Error is not in constructor anymore in updated file, wait.
         ),
 
         // Header & Filters

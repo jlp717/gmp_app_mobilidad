@@ -88,7 +88,21 @@ class _MainShellState extends State<MainShell> {
       try {
         final res = await ApiClient.getList('/auth/repartidores');
         setState(() {
-           _repartidoresOptions = res.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+           // Helper to safely get value regardless of case
+           String? getValue(Map m, String key) {
+             if (m.containsKey(key)) return m[key]?.toString();
+             if (m.containsKey(key.toUpperCase())) return m[key.toUpperCase()]?.toString();
+             if (m.containsKey(key.toLowerCase())) return m[key.toLowerCase()]?.toString();
+             return null;
+           }
+
+           _repartidoresOptions = res.map((item) {
+              final m = item as Map;
+              return {
+                 'code': getValue(m, 'code') ?? getValue(m, 'CODIGOVENDEDOR') ?? '',
+                 'name': getValue(m, 'name') ?? getValue(m, 'NOMBREVENDEDOR') ?? 'Desconocido',
+              };
+           }).toList();
         });
       } catch (e) {
         debugPrint('Error fetching repartidores: $e');
@@ -105,6 +119,7 @@ class _MainShellState extends State<MainShell> {
     // Obtener el rol del usuario
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
+    // Check ACTIVE role first
     final isRepartidor = user?.isRepartidor ?? false;
     
     // ===============================================

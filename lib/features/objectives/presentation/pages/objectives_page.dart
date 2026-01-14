@@ -748,10 +748,11 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         
         // SmartSyncHeader - igual que en Clientes
         SmartSyncHeader(
+          title: 'Estado de Objetivos',
+          subtitle: _periodLabel.isNotEmpty ? _periodLabel : 'Resumen de Ventas',
           lastSync: _lastFetchTime,
           isLoading: _isLoading,
           onSync: _loadData,
-          error: _error,
         ),
         
         // Selector de vendedor para jefe de ventas

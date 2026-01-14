@@ -416,10 +416,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
         children: [
            // Smart Sync Header (like other pages)
            SmartSyncHeader(
+             title: 'Comisiones',
+             subtitle: 'Seguimiento y Objetivos',
              lastSync: _lastFetchTime,
              isLoading: _isLoading,
              onSync: _loadData,
-             error: _error,
            ),
            // Header
            Container(

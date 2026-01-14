@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 import '../widgets/signature_modal.dart';
+import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
+import '../widgets/signature_modal.dart';
 import '../widgets/delivery_item_list.dart';
 
 /// Página principal del Rutero para Repartidores
@@ -101,7 +103,24 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           body: Column(
             children: [
               // Header
-              _buildHeader(provider),
+              if (_selectedClientId == null)
+                 SmartSyncHeader(
+                  title: 'Rutero del Día',
+                  subtitle: DateFormat('EEEE, d MMMM', 'es').format(_selectedDate),
+                  lastSync: DateTime.now(), // In real app, store this timestamp
+                  isLoading: _isRefreshing,
+                  onSync: _loadData,
+                ),
+
+              // Summary Badges (Keep this separately or inside header? User said "copy same design". 
+              // SmartSyncHeader handles title and sync. The badges were specific to Rutero.
+              // I will stack them below SmartSyncHeader for the main view.)
+              if (_selectedClientId == null)
+                _buildSummaryStats(provider),
+
+              // Detail Header override if selected
+              if (_selectedClientId != null)
+                 _buildDetailHeader(provider),
               
               // Content
               Expanded(
@@ -111,127 +130,73 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
               ),
             ],
           ),
-          floatingActionButton: _selectedClientId == null
-              ? FloatingActionButton.extended(
-                  onPressed: _loadData,
-                  icon: Icon(_isRefreshing ? Icons.sync : Icons.refresh),
-                  label: Text(_isRefreshing ? 'Actualizando...' : 'Actualizar'),
-                  backgroundColor: AppTheme.neonBlue,
-                )
-              : null,
+          // FAB REMOVED
         );
       },
     );
   }
 
-  Widget _buildHeader(EntregasProvider provider) {
+  Widget _buildSummaryStats(EntregasProvider provider) {
     final totalPendientes = provider.albaranesPendientes.length;
     final totalEntregados = provider.albaranesEntregados.length;
     final importeCTR = provider.importeTotalCTR;
 
     return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+            _buildStatBadge(
+              icon: Icons.pending_actions,
+              label: 'Pendientes',
+              value: '$totalPendientes',
+              color: Colors.orange,
+            ),
+            _buildStatBadge(
+              icon: Icons.check_circle,
+              label: 'Entregados',
+              value: '$totalEntregados',
+              color: AppTheme.success,
+            ),
+            _buildStatBadge(
+              icon: Icons.euro,
+              label: 'CTR',
+              value: _currencyFormat.format(importeCTR),
+              color: AppTheme.neonPurple,
+              isLarge: true,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailHeader(EntregasProvider provider) {
+      return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.surfaceColor,
-            AppTheme.surfaceColor.withOpacity(0.8),
-          ],
-        ),
-        border: Border(
-          bottom: BorderSide(
-            color: AppTheme.neonBlue.withOpacity(0.2),
-            width: 1,
-          ),
-        ),
+        color: AppTheme.surfaceColor,
+        border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2), width: 1)),
       ),
-      child: Column(
+      child: Row(
         children: [
-          // Top bar with back button (if in detail) and title
-          Row(
-            children: [
-              if (_selectedClientId != null) ...[
-                IconButton(
-                  onPressed: () => setState(() => _selectedClientId = null),
-                  icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
-                ),
-                const SizedBox(width: 8),
-              ] else ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.neonBlue.withOpacity(0.2),
-                        AppTheme.neonPurple.withOpacity(0.2),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.route,
-                    color: AppTheme.neonBlue,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 12),
-              ],
-              
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _selectedClientId != null ? 'Detalle Entrega' : 'Rutero del Día',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      DateFormat('EEEE, d MMMM yyyy', 'es').format(_selectedDate),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary.withOpacity(0.8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Stats badges
-              if (_selectedClientId == null) ...[
-                _buildStatBadge(
-                  icon: Icons.pending_actions,
-                  label: 'Pendientes',
-                  value: '$totalPendientes',
-                  color: Colors.orange,
-                ),
-                const SizedBox(width: 8),
-                _buildStatBadge(
-                  icon: Icons.check_circle,
-                  label: 'Entregados',
-                  value: '$totalEntregados',
-                  color: AppTheme.success,
-                ),
-                const SizedBox(width: 8),
-                _buildStatBadge(
-                  icon: Icons.euro,
-                  label: 'CTR',
-                  value: _currencyFormat.format(importeCTR),
-                  color: AppTheme.neonPurple,
-                  isLarge: true,
-                ),
-              ],
-            ],
+          IconButton(
+            onPressed: () => setState(() => _selectedClientId = null),
+            icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'Detalle Entrega',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
           ),
         ],
       ),
     );
   }
+
 
   Widget _buildStatBadge({
     required IconData icon,

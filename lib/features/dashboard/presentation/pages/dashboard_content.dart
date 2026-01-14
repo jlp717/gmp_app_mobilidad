@@ -434,10 +434,11 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
             children: [
               // Smart Sync Header
               SmartSyncHeader(
+                title: 'Panel de Control',
+                subtitle: 'Visión General del Negocio',
                 lastSync: _lastFetchTime,
                 isLoading: _isLoading,
                 onSync: _fetchAllData,
-                error: _error,
               ),
               
               Padding(
