@@ -275,126 +275,191 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
   }
 
   Widget _buildClientCard(AlbaranEntrega albaran) {
-    
-    // Status Logic
-    bool isDelivered = albaran.estado == EstadoEntrega.entregado;
-    bool isPartial = albaran.estado == EstadoEntrega.parcial;
-    bool isCTR = albaran.esCTR;
-    
-    Color statusColor = Colors.orange;
-    String statusText = 'PENDIENTE';
-    IconData statusIcon = Icons.schedule;
+    // "Stapled" visual effect variables
+    final bool isPendiente = albaran.estado == EstadoEntrega.pendiente;
+    final bool isEntregado = albaran.estado == EstadoEntrega.entregado;
+    final Color statusColor = isEntregado ? AppTheme.success : (isPendiente ? AppTheme.error : Colors.orange);
 
-    if (isDelivered) {
-      statusColor = AppTheme.success;
-      statusText = 'ENTREGADO';
-      statusIcon = Icons.check_circle;
-    } else if (isPartial) {
-      statusColor = AppTheme.warning;
-      statusText = 'PARCIAL';
-      statusIcon = Icons.pie_chart;
-    } else if (isCTR) {
-      statusColor = AppTheme.error;
-      statusText = 'COBRO'; 
-      statusIcon = Icons.euro;
-    }
-
-    return Card(
-      elevation: 4,
-      color: AppTheme.darkCard,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => _showDetailDialog(albaran),
-        borderRadius: BorderRadius.circular(12),
-        splashColor: AppTheme.neonBlue.withOpacity(0.1),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top Row: Code & Amount
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                   Container(
-                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                     decoration: BoxDecoration(
-                       color: AppTheme.darkBase,
-                       borderRadius: BorderRadius.circular(4),
-                       border: Border.all(color: AppTheme.borderColor)
-                     ),
-                     child: Text(
-                       albaran.codigoCliente, 
-                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.textSecondary)
-                     ),
-                   ),
-                   Text(
-                     '${albaran.importeTotal.toStringAsFixed(2)} €',
-                     style: TextStyle(
-                       fontWeight: FontWeight.bold,
-                       fontSize: 16,
-                       color: isCTR ? AppTheme.error : AppTheme.textPrimary
-                     ),
-                   ),
-                ],
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      // Stack for the "Stapled" effect
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Background "Invoice" Card (The paper behind)
+          Positioned(
+            top: -4,
+            left: 4,
+            right: -4,
+            bottom: 4,
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5), // Light paper color
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
               ),
-              const SizedBox(height: 8),
-
-              // Name
-              Text(
-                albaran.nombreCliente,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: const Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Icon(Icons.receipt_long, color: Colors.grey, size: 20),
+                ),
               ),
-
-              const SizedBox(height: 4),
-              // Address
-               Row(
-                children: [
-                  const Icon(Icons.location_on, size: 14, color: AppTheme.textTertiary),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '${albaran.direccion}, ${albaran.poblacion}',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+          ),
+          
+          // Main "Albaran" Card
+          Card(
+            margin: EdgeInsets.zero,
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            color: AppTheme.darkSurface, // Keep dark theme consistent
+            child: InkWell(
+              onTap: () {
+                 if (isEntregado) {
+                   _showEditConfirmation(albaran);
+                 } else {
+                   _showDetailDialog(albaran);
+                 }
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header: ID and Amount
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left: ID & Label
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.darkBase,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                              ),
+                              child: Text(
+                                'ALB #${albaran.numeroAlbaran}',
+                                style: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            // Staple Visual (Icon)
+                            RotationTransition(
+                              turns: const AlwaysStoppedAnimation(-0.1),
+                              child: Icon(Icons.attach_file, color: Colors.grey.shade400, size: 18),
+                            ),
+                          ],
+                        ),
+                        
+                        // Right: Amount (Big & Bold)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              NumberFormat.currency(symbol: '€', locale: 'es_ES').format(albaran.importeTotal),
+                              style: TextStyle(
+                                color: statusColor, // Green or Red
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            if (isPendiente)
+                              Tooltip(
+                                message: "Estado basado en gestión interna de DSEDAC",
+                                triggerMode: TooltipTriggerMode.tap,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "PENDIENTE",
+                                      style: TextStyle(
+                                        color: AppTheme.textSecondary,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    
+                     // Client Info
+                    Text(
+                      albaran.nombreCliente,
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                         Icon(Icons.location_on_outlined, size: 14, color: AppTheme.textSecondary),
+                         const SizedBox(width: 4),
+                         Expanded(
+                           child: Text(
+                             "${albaran.direccion}, ${albaran.poblacion}",
+                             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                             maxLines: 1,
+                             overflow: TextOverflow.ellipsis,
+                           ),
+                         ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              
-              const SizedBox(height: 12),
-              
-              // Footer: Status & Albaran
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(statusIcon, size: 16, color: statusColor),
-                      const SizedBox(width: 4),
-                      Text(
-                        statusText,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    'Alb #${albaran.numeroAlbaran}',
-                    style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-                  ),
-                ],
-              )
-            ],
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditConfirmation(AlbaranEntrega albaran) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        title: const Text('⚠️ Albarán ya entregado', style: TextStyle(color: AppTheme.textPrimary)),
+        content: const Text(
+          'Este albarán ya ha sido confirmado y firmado.\n¿Estás seguro de que quieres editarlo? Esto podría afectar a los registros.',
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showDetailDialog(albaran);
+            },
+            child: const Text('Sí, Editar', style: TextStyle(color: AppTheme.error)),
+          ),
+        ],
       ),
     );
   }
@@ -458,9 +523,9 @@ class _DetailSheetState extends State<_DetailSheet> {
            setState(() {
              _details = full;
              _loading = false;
-             // Default check all to true
+             // Default state: ALL UNCHECKED (User request)
              for(var i in _details.items) {
-               _checkedItems[i.codigoArticulo] = true;
+               _checkedItems[i.codigoArticulo] = false;
              }
            });
          } else {
@@ -472,7 +537,16 @@ class _DetailSheetState extends State<_DetailSheet> {
     }
   }
 
-  bool get _allItemsChecked => _checkedItems.values.every((v) => v);
+  bool get _allItemsChecked => _checkedItems.isNotEmpty && _checkedItems.values.every((v) => v);
+  bool get _anyItemChecked => _checkedItems.values.any((v) => v);
+
+  void _toggleAll(bool value) {
+    setState(() {
+      for (var k in _checkedItems.keys) {
+        _checkedItems[k] = value;
+      }
+    });
+  }
 
   Future<void> _submit() async {
      // Validate
@@ -607,7 +681,24 @@ class _DetailSheetState extends State<_DetailSheet> {
                   ),
                   const SizedBox(height: 20),
                   
-                  const Text('Artículos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                       const Text('Artículos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary)),
+                       Row(
+                         children: [
+                           TextButton(
+                             onPressed: () => _toggleAll(true),
+                             child: const Text('Todo', style: TextStyle(fontSize: 12, color: AppTheme.neonBlue)),
+                           ),
+                           TextButton(
+                             onPressed: () => _toggleAll(false),
+                             child: const Text('Nada', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                           ),
+                         ],
+                       )
+                    ],
+                  ),
                   const SizedBox(height: 8),
 
                   if (_details.items.isEmpty)
@@ -625,6 +716,16 @@ class _DetailSheetState extends State<_DetailSheet> {
 
                   ..._details.items.map((item) {
                     final isChecked = _checkedItems[item.codigoArticulo] ?? false;
+                    // Determine unit: Backend 'unit' (e.g. 'UNIDAD') -> Friendly (e.g. 'Uds')
+                    // Assuming backend sends 'UNIT' in model, but if not updated in AlbaranItem model yet, might need to update model too.
+                    // Checking existing model usage... 'cantidadPedida' is used.
+                    // Wait, I updated backend to return 'UNIT' as 'unit' column but likely need to update Flutter model `AlbaranItem`.
+                    String uom = 'Uds';
+                    if (item.unit != null && item.unit!.isNotEmpty) {
+                        uom = item.unit!; 
+                        if (uom == 'UNIDAD') uom = 'Uds';
+                    }
+                    
                     return Theme(
                       data: ThemeData(unselectedWidgetColor: AppTheme.textSecondary),
                       child: CheckboxListTile(
@@ -632,7 +733,7 @@ class _DetailSheetState extends State<_DetailSheet> {
                         activeColor: AppTheme.neonBlue,
                         checkColor: AppTheme.darkBase,
                         title: Text(item.descripcion.isNotEmpty ? item.descripcion : 'Art. ${item.codigoArticulo}', style: const TextStyle(color: AppTheme.textPrimary)),
-                        subtitle: Text('${item.cantidadPedida.toStringAsFixed(0)} Uds', style: const TextStyle(color: AppTheme.textSecondary)),
+                        subtitle: Text('${item.cantidadPedida.toStringAsFixed(0)} $uom', style: const TextStyle(color: AppTheme.textSecondary)),
                         controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: EdgeInsets.zero,
                         onChanged: (val) {

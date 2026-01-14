@@ -154,7 +154,8 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
                 L.SECUENCIA as ITEM_ID,
                 TRIM(L.CODIGOARTICULO) as CODIGO,
                 TRIM(L.DESCRIPCION) as DESC,
-                L.CANTIDADUNIDADES as QTY
+                L.CANTIDADUNIDADES as QTY,
+                TRIM(L.UNIDADMEDIDA) as UNIT
             FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
             ORDER BY L.SECUENCIA
@@ -162,13 +163,13 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         const items = await query(itemsSql, false);
 
         const albaran = {
-            id: `${header.EJERCICIOALBARAN}-${header.SERIEALBARAN || ''}-${header.NUMEROALBARAN}`,
+            id: `${header.EJERCICIOALBARAN} -${header.SERIEALBARAN || ''} -${header.NUMEROALBARAN} `,
             numeroAlbaran: header.NUMEROALBARAN,
             ejercicio: header.EJERCICIOALBARAN,
             nombreCliente: header.CLIENTE_NOM?.trim(),
             direccion: header.DIR?.trim(),
             poblacion: header.POB?.trim(),
-            fecha: `${header.DIADOCUMENTO}/${header.MESDOCUMENTO}/${header.ANODOCUMENTO}`,
+            fecha: `${header.DIADOCUMENTO} /${header.MESDOCUMENTO}/${header.ANODOCUMENTO} `,
             importe: parseFloat(header.IMPORTETOTAL),
             items: items.map(i => ({
                 itemId: i.ITEM_ID,

@@ -107,6 +107,7 @@ class EntregaItem {
   final String codigoArticulo;
   final String descripcion;
   final double cantidadPedida;
+  final String? unit;
   double cantidadEntregada;
   EstadoEntrega estado;
 
@@ -115,6 +116,7 @@ class EntregaItem {
     required this.codigoArticulo,
     required this.descripcion,
     required this.cantidadPedida,
+    this.unit,
     this.cantidadEntregada = 0,
     this.estado = EstadoEntrega.pendiente,
   });
@@ -124,7 +126,8 @@ class EntregaItem {
       itemId: json['itemId']?.toString() ?? '',
       codigoArticulo: json['codigoArticulo']?.toString() ?? '',
       descripcion: json['descripcion']?.toString() ?? '',
-      cantidadPedida: (json['cantidadPedida'] ?? 0).toDouble(),
+      cantidadPedida: (json['cantidadPedida'] ?? json['QTY'] ?? 0).toDouble(),
+      unit: json['UNIT']?.toString() ?? json['unit']?.toString(), // Handle both cases
       cantidadEntregada: (json['cantidadEntregada'] ?? 0).toDouble(),
       estado: EstadoEntregaExtension.fromString(json['estado'] ?? 'PENDIENTE'),
     );
