@@ -77,6 +77,32 @@ class UserModel extends Equatable {
     };
   }
 
+  UserModel copyWith({
+    String? id,
+    String? code,
+    String? name,
+    String? company,
+    String? delegation,
+    String? vendedorCode,
+    bool? isJefeVentas,
+    String? tipoVendedor,
+    String? role,
+    String? codigoConductor,
+  }) {
+    return UserModel(
+      id: id ?? this.id,
+      code: code ?? this.code,
+      name: name ?? this.name,
+      company: company ?? this.company,
+      delegation: delegation ?? this.delegation,
+      vendedorCode: vendedorCode ?? this.vendedorCode,
+      isJefeVentas: isJefeVentas ?? this.isJefeVentas,
+      tipoVendedor: tipoVendedor ?? this.tipoVendedor,
+      role: role ?? this.role,
+      codigoConductor: codigoConductor ?? this.codigoConductor,
+    );
+  }
+
   @override
   List<Object?> get props => [
         id,

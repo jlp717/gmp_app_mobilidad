@@ -133,12 +133,12 @@ class AuthProvider with ChangeNotifier {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('user_token', response['token']);
           
-          // Update local user model if needed, or just reload user
-          // For now, assume simple role update in memory is enough or trigger reload
+          // Update local user model with new role
           if (_currentUser != null) {
-             // Create a copy with new role (assuming UserModel has copyWith or fromJson)
-             // Or mostly just rely on the token for backend rights and 'role' field
-             // We might need to update _currentUser.role
+             _currentUser = _currentUser!.copyWith(role: newRole);
+             
+             // If debugging, print to verify
+             debugPrint('[AuthProvider] Local user role updated to: ${_currentUser!.userRole}');
           }
         }
         
