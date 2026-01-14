@@ -687,6 +687,14 @@ class _DetailSheetState extends State<_DetailSheet> {
   );
   bool _showSignaturePad = false;
 
+  // DNI and Name for signature
+  final TextEditingController _dniController = TextEditingController();
+  final TextEditingController _nombreReceptorController = TextEditingController();
+  
+  // Cobro (Payment)
+  final TextEditingController _cobroController = TextEditingController();
+  final TextEditingController _cobroObsController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -697,6 +705,10 @@ class _DetailSheetState extends State<_DetailSheet> {
   void dispose() {
     _obsController.dispose();
     _sigController.dispose();
+    _dniController.dispose();
+    _nombreReceptorController.dispose();
+    _cobroController.dispose();
+    _cobroObsController.dispose();
     super.dispose();
   }
 
@@ -844,6 +856,41 @@ class _DetailSheetState extends State<_DetailSheet> {
   }
 
   Future<void> _submit() async {
+     // Validate DNI and Name
+     final dni = _dniController.text.trim();
+     final nombre = _nombreReceptorController.text.trim();
+     
+     if (nombre.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('El nombre del receptor es obligatorio'),
+          backgroundColor: AppTheme.warning,
+        ));
+        return;
+     }
+     
+     if (dni.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('El DNI/NIF es obligatorio'),
+          backgroundColor: AppTheme.warning,
+        ));
+        return;
+     }
+
+     // Validate Cobro for CTR (mandatory payment)
+     if (widget.albaran.esCTR) {
+        final cobroText = _cobroController.text.trim();
+        final cobroAmount = double.tryParse(cobroText) ?? 0;
+        final expectedAmount = _currentTotal;
+        
+        if (cobroAmount != expectedAmount && _cobroObsController.text.trim().isEmpty) {
+           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+             content: Text('Debe explicar la diferencia en el cobro'),
+             backgroundColor: AppTheme.error,
+           ));
+           return;
+        }
+     }
+
      if (_sigController.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('La firma es obligatoria'),
@@ -1248,6 +1295,144 @@ class _DetailSheetState extends State<_DetailSheet> {
                   
                   // SIGNATURE PADDLE & ACTIONS
                   if (_showSignaturePad) ...[
+                      // DNI and Name Fields
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.darkBase,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Datos del Receptor', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary, fontSize: 14)),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _nombreReceptorController,
+                              decoration: InputDecoration(
+                                labelText: 'Nombre Completo *',
+                                hintText: 'Juan García López',
+                                prefixIcon: const Icon(Icons.person, color: AppTheme.neonBlue, size: 20),
+                                labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                                hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                                filled: true,
+                                fillColor: AppTheme.darkSurface,
+                                isDense: true,
+                              ),
+                              style: const TextStyle(color: AppTheme.textPrimary),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _dniController,
+                              decoration: InputDecoration(
+                                labelText: 'DNI/NIF *',
+                                hintText: '12345678A',
+                                prefixIcon: const Icon(Icons.badge, color: AppTheme.neonBlue, size: 20),
+                                labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                                hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                                filled: true,
+                                fillColor: AppTheme.darkSurface,
+                                isDense: true,
+                              ),
+                              style: const TextStyle(color: AppTheme.textPrimary),
+                              textCapitalization: TextCapitalization.characters,
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Cobro Section (CTR = Mandatory, Others = Optional)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: widget.albaran.esCTR ? AppTheme.error.withOpacity(0.1) : AppTheme.success.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: widget.albaran.esCTR ? AppTheme.error.withOpacity(0.5) : AppTheme.success.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  widget.albaran.esCTR ? Icons.warning_amber_rounded : Icons.info_outline,
+                                  color: widget.albaran.esCTR ? AppTheme.error : AppTheme.success,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  widget.albaran.esCTR ? 'COBRO OBLIGATORIO' : 'Cobro Opcional',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold, 
+                                    color: widget.albaran.esCTR ? AppTheme.error : AppTheme.success,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Debe Cobrar:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                                      Text(
+                                        '${_currentTotal.toStringAsFixed(2)} €',
+                                        style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _cobroController,
+                                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                    decoration: InputDecoration(
+                                      labelText: 'Cobrado',
+                                      prefixIcon: const Icon(Icons.euro, color: AppTheme.neonBlue, size: 18),
+                                      labelStyle: const TextStyle(color: AppTheme.textSecondary),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                                      filled: true,
+                                      fillColor: AppTheme.darkSurface,
+                                      isDense: true,
+                                    ),
+                                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _cobroObsController,
+                              maxLines: 2,
+                              decoration: InputDecoration(
+                                labelText: widget.albaran.esCTR ? 'Observaciones Cobro (Obligatorio si difiere)' : 'Observaciones Cobro (Opcional)',
+                                hintText: 'Ej: Pagó parcial, resto pendiente...',
+                                hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                                labelStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                                filled: true,
+                                fillColor: AppTheme.darkSurface,
+                                isDense: true,
+                              ),
+                              style: const TextStyle(color: AppTheme.textPrimary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
                       const Text('Firma Obligatoria', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
                       const SizedBox(height: 8),
                       Container(
