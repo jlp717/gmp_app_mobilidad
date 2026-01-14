@@ -761,50 +761,140 @@ class _DetailSheetState extends State<_DetailSheet> {
        }
      }
   }
-       final String base64Sig = base64Encode(sigBytes);
-       final String obs = _obsController.text.trim();
 
-       final provider = Provider.of<EntregasProvider>(context, listen: false);
-       bool success = false;
+  Widget _buildEditableItemRow(EntregaItem item) {
+      final double requested = item.cantidadPedida;
+      final double current = _qtyParams[item.codigoArticulo] ?? 0;
+      final bool isMatch = current == requested;
+      final double price = item.precioUnitario;
+      final double subtotal = current * price;
+      
+      String uom = 'Uds';
+      if (item.unit != null && item.unit!.isNotEmpty) {
+          uom = item.unit!; 
+          if (uom == 'UNIDAD') uom = 'Uds';
+      }
 
-       if (_allItemsChecked) {
-         success = await provider.marcarEntregado(
-           albaranId: widget.albaran.id,
-           firma: base64Sig,
-           observaciones: obs.isNotEmpty ? obs : null,
-         );
-       } else {
-         success = await provider.marcarParcial(
-           albaranId: widget.albaran.id,
-           observaciones: obs,
-           firma: base64Sig,
-         );
-       }
-       
-       if (mounted) {
-         if (success) {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Entrega registrada correctamente'),
-                backgroundColor: AppTheme.success,
-            ));
-            // Trigger refresh logic? The provider update should handle list state.
-         } else {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Error al guardar: ${provider.error ?? "Desconocido"}'),
-                backgroundColor: AppTheme.error,
-            ));
-         }
-       }
-     } catch (e) {
-       print(e);
-       if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: AppTheme.error,
-          ));
-       }
-     }
+      return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+              color: AppTheme.darkBase,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                  color: isMatch ? AppTheme.success.withOpacity(0.3) : AppTheme.error.withOpacity(0.5),
+                  width: 1.5
+              )
+          ),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                  // Row 1: Name and Price
+                  Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                          Expanded(
+                              child: Text(
+                                  item.descripcion.isNotEmpty ? item.descripcion : 'Art. ${item.codigoArticulo}', 
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)
+                              ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                              '${price.toStringAsFixed(2)} €/ud',
+                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)
+                          ),
+                      ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Row 2: Controls
+                  Row(
+                      children: [
+                           // Input Qty
+                           Container(
+                               width: 100,
+                               decoration: BoxDecoration(
+                                   color: AppTheme.darkSurface,
+                                   borderRadius: BorderRadius.circular(8),
+                                   border: Border.all(color: AppTheme.borderColor)
+                               ),
+                               child: Row(
+                                   children: [
+                                       IconButton(
+                                           icon: const Icon(Icons.remove, size: 16, color: AppTheme.textSecondary),
+                                           padding: EdgeInsets.zero,
+                                           constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                           onPressed: () {
+                                               setState(() {
+                                                   double val = _qtyParams[item.codigoArticulo] ?? 0;
+                                                   if (val > 0) _qtyParams[item.codigoArticulo] = val - 1;
+                                               });
+                                           },
+                                       ),
+                                       Expanded(
+                                           child: Center(
+                                               child: Text(
+                                                   current.toStringAsFixed(0),
+                                                   style: TextStyle(
+                                                       fontWeight: FontWeight.bold, 
+                                                       color: isMatch ? AppTheme.success : AppTheme.error,
+                                                       fontSize: 16
+                                                   ),
+                                               ),
+                                           ),
+                                       ),
+                                       IconButton(
+                                           icon: const Icon(Icons.add, size: 16, color: AppTheme.textSecondary),
+                                           padding: EdgeInsets.zero,
+                                           constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                           onPressed: () {
+                                               setState(() {
+                                                   double val = _qtyParams[item.codigoArticulo] ?? 0;
+                                                   _qtyParams[item.codigoArticulo] = val + 1;
+                                               });
+                                           },
+                                       ),
+                                   ],
+                               ),
+                           ),
+                           const SizedBox(width: 12),
+                           Text('de $requested $uom', style: const TextStyle(color: AppTheme.textSecondary)),
+                           const Spacer(),
+                           Column(
+                               crossAxisAlignment: CrossAxisAlignment.end,
+                               children: [
+                                   const Text('Subtotal', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                                   Text('${subtotal.toStringAsFixed(2)} €', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                               ],
+                           )
+                      ],
+                  ),
+                  
+                  // Row 3: Observation if mismatch
+                  if (!isMatch) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                          controller: TextEditingController(text: _obsParams[item.codigoArticulo])
+                            ..selection = TextSelection.collapsed(offset: (_obsParams[item.codigoArticulo] ?? '').length),
+                          onChanged: (val) {
+                               _obsParams[item.codigoArticulo] = val;
+                               // Force rebuild not needed strictly if using controller but we want to store it
+                          },
+                          decoration: InputDecoration(
+                              labelText: 'Motivo discrepancia (Obligatorio)',
+                              labelStyle: const TextStyle(color: AppTheme.error, fontSize: 12),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: const BorderSide(color: AppTheme.error)),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: const BorderSide(color: AppTheme.error)),
+                          ),
+                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                      )
+                  ]
+              ],
+          )
+      );
   }
 
   @override
