@@ -151,13 +151,13 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         // 2. Get Items
         const itemsSql = `
             SELECT 
-                L.NUMEROLINEA as ITEM_ID,
+                L.SECUENCIA as ITEM_ID,
                 TRIM(L.CODIGOARTICULO) as CODIGO,
                 TRIM(L.DESCRIPCION) as DESC,
                 L.CANTIDADUNIDADES as QTY
             FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
-            ORDER BY L.NUMEROLINEA
+            ORDER BY L.SECUENCIA
         `;
         const items = await query(itemsSql, false);
 
