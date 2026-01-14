@@ -96,7 +96,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             const esCTR = fp.includes('CONTADO') || fp.includes('EFECTIVO') || fp.includes('CTR') || fp === '01';
 
             return {
-                id: `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.NUMEROALBARAN}`,
+                id: `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
                 subempresa: row.SUBEMPRESAALBARAN,
                 ejercicio: row.EJERCICIOALBARAN,
                 serie: row.SERIEALBARAN?.trim() || '',
@@ -181,8 +181,8 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             itemsSql += ` AND L.SERIEALBARAN = '${serie}'`;
         }
 
-        if (terminal) {
-            itemsSql += ` AND L.TERMINALALBARAN = ${terminal}`;
+        if (req.query.terminal) {
+            itemsSql += ` AND L.TERMINALALBARAN = ${req.query.terminal}`;
         }
 
         itemsSql += ` ORDER BY L.SECUENCIA`;
