@@ -80,8 +80,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
         _lastLoadedId = targetId;
       }
       
-      await entregas.setRepartidor(targetId);
-      await entregas.seleccionarFecha(_selectedDate); 
+      entregas.setRepartidor(targetId);
+      entregas.seleccionarFecha(_selectedDate); 
       _loadWeekData(targetId);
     }
   }
