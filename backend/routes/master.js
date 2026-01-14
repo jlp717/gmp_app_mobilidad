@@ -82,7 +82,7 @@ router.get('/vendedores', async (req, res) => {
         res.json({
             vendedores: vendedores.map(v => ({
                 code: v.CODE?.trim(),
-                name: v.NAME?.trim() || `Vendedor ${v.CODE}`,
+                name: (v.NAME?.trim() || `Vendedor ${v.CODE}`).replace(/^(\d+)\s+-\s+\1\s+/, '').replace(/^(\d+)\s+-\s+/, ''),
                 type: 'COMERCIAL',
                 isJefe: false // Simplified for this view
             }))

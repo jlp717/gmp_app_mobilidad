@@ -1,902 +1,559 @@
-/// REPARTIDOR RUTERO PAGE
-/// Pestaña principal con ruta del día y cobros integrados
-/// Color-coded: verde=cobrado/completado, rojo=pendiente
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/theme/app_theme.dart';
+import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/providers/filter_provider.dart';
+import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../entregas/providers/entregas_provider.dart';
-import '../widgets/signature_modal.dart';
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../widgets/signature_modal.dart';
-import '../widgets/delivery_item_list.dart';
+import '../../../../core/api/api_client.dart';
 
-/// Página principal del Rutero para Repartidores
-/// Muestra lista de clientes del día con estados de cobro/entrega
 class RepartidorRuteroPage extends StatefulWidget {
-  final String repartidorId;
+  // Removed repartidorId from constructor as it should be derived from global state (Auth/Filter)
+  // But to be compatible with existing navigation if passed:
+  final String? repartidorId;
 
-  const RepartidorRuteroPage({
-    super.key,
-    required this.repartidorId,
-  });
+  const RepartidorRuteroPage({super.key, this.repartidorId});
 
   @override
   State<RepartidorRuteroPage> createState() => _RepartidorRuteroPageState();
 }
 
 class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
-  final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
-  final TextEditingController _searchController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
-  String? _selectedClientId;
-  bool _isRefreshing = false;
-  
-  // Filtros
-  String? _statusFilter; // null = todos, 'completed' = completados, 'ctr' = CTR pendiente, 'pending' = pendiente
+  List<Map<String, dynamic>> _weekDays = [];
+  bool _isLoadingWeek = false;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
   }
 
   Future<void> _loadData() async {
-    setState(() => _isRefreshing = true);
-    try {
-      final provider = context.read<EntregasProvider>();
-      provider.setRepartidor(widget.repartidorId);
-      await provider.cargarAlbaranesPendientes();
-    } finally {
-      if (mounted) {
-        setState(() => _isRefreshing = false);
-      }
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final filter = Provider.of<FilterProvider>(context, listen: false);
+    final entregas = Provider.of<EntregasProvider>(context, listen: false);
+
+    String targetId = widget.repartidorId ?? auth.user?.code ?? '';
+    
+    // Support "View As"
+    if (auth.isJefeVentas && filter.selectedVendorCode != null) {
+      targetId = filter.selectedVendorCode!;
+    }
+
+    if (targetId.isNotEmpty) {
+      entregas.setRepartidor(targetId);
+      entregas.seleccionarFecha(_selectedDate); // Load deliveries
+      _loadWeekData(targetId);
     }
   }
 
-  List<AlbaranEntrega> _filterAlbaranes(List<AlbaranEntrega> albaranes) {
-    return albaranes.where((a) {
-      // Filtro por búsqueda de texto
-      final query = _searchController.text.toLowerCase();
-      if (query.isNotEmpty) {
-        final matchesSearch = a.nombreCliente.toLowerCase().contains(query) ||
-            a.codigoCliente.toLowerCase().contains(query) ||
-            a.numeroAlbaran.toString().contains(query);
-        if (!matchesSearch) return false;
-      }
+  Future<void> _loadWeekData(String repartidorId) async {
+    if (_isLoadingWeek) return;
+    setState(() => _isLoadingWeek = true);
 
-      // Filtro por estado
-      if (_statusFilter != null) {
-        final isCompleted = a.estado == EstadoEntrega.entregado;
-        final isCTR = a.esCTR && !isCompleted;
-        
-        switch (_statusFilter) {
-          case 'completed':
-            if (!isCompleted) return false;
-            break;
-          case 'ctr':
-            if (!isCTR) return false;
-            break;
-          case 'pending':
-            if (isCompleted || isCTR) return false;
-            break;
-        }
+    try {
+      final response = await ApiClient.get('/repartidor/rutero/week/$repartidorId?date=${_selectedDate.toIso8601String()}');
+      if (response['success'] == true && mounted) {
+        setState(() {
+          _weekDays = List<Map<String, dynamic>>.from(response['days']);
+        });
       }
-      
-      return true;
-    }).toList();
+    } catch (e) {
+      print('Error loading week data: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingWeek = false);
+    }
+  }
+
+  void _onDaySelected(DateTime date) {
+    setState(() {
+      _selectedDate = date;
+    });
+    final entregas = Provider.of<EntregasProvider>(context, listen: false);
+    entregas.seleccionarFecha(date);
+     // Reload week stats effectively? Or keeps static? 
+     // Usually stats don't change by clicking a day, but clicking sync does.
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<EntregasProvider>(
-      builder: (context, provider, _) {
-        return Scaffold(
-          backgroundColor: AppTheme.darkBase,
-          body: Column(
-            children: [
-              // Header
-              if (_selectedClientId == null)
-                 SmartSyncHeader(
-                  title: 'Rutero del Día',
-                  subtitle: DateFormat('EEEE, d MMMM', 'es').format(_selectedDate),
-                  lastSync: DateTime.now(), // In real app, store this timestamp
-                  isLoading: _isRefreshing,
-                  onSync: _loadData,
+    final auth = Provider.of<AuthProvider>(context);
+    final filter = Provider.of<FilterProvider>(context);
+    final entregas = Provider.of<EntregasProvider>(context);
+
+    String currentName = auth.user?.name ?? 'Repartidor';
+    if (auth.isJefeVentas && filter.selectedVendor != null) {
+      currentName = filter.selectedVendor!.name;
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      body: Column(
+        children: [
+          // HEADER
+          SmartSyncHeader(
+            title: 'Rutero Reparto',
+            subtitle: currentName,
+            onSync: () => _loadData(),
+            isLoading: entregas.isLoading || _isLoadingWeek,
+          ),
+
+          // WEEKLY STRIP
+          if (_weekDays.isNotEmpty) _buildWeeklyStrip(),
+
+          // ERROR
+          if (entregas.error != null)
+             Container(
+               padding: const EdgeInsets.all(8),
+               color: Colors.red.shade50,
+               width: double.infinity,
+               child: Text(
+                 '${entregas.error}', 
+                 style: TextStyle(color: Colors.red.shade800, fontSize: 12),
+                 textAlign: TextAlign.center,
                 ),
+             ),
 
-              // Summary Badges (Keep this separately or inside header? User said "copy same design". 
-              // SmartSyncHeader handles title and sync. The badges were specific to Rutero.
-              // I will stack them below SmartSyncHeader for the main view.)
-              if (_selectedClientId == null)
-                _buildSummaryStats(provider),
+          // LIST
+          Expanded(
+            child: entregas.isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : _buildClientList(entregas),
+          ),
+        ],
+      ),
+    );
+  }
 
-              // Detail Header override if selected
-              if (_selectedClientId != null)
-                 _buildDetailHeader(provider),
-              
-              // Content
-              Expanded(
-                child: _selectedClientId != null
-                    ? _buildClientDetail(provider)
-                    : _buildClientList(provider),
+  Widget _buildWeeklyStrip() {
+    return Container(
+      height: 85,
+      color: Colors.white,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        itemCount: _weekDays.length,
+        itemBuilder: (context, index) {
+          final dayData = _weekDays[index];
+          final date = DateTime.parse(dayData['date']);
+          final isSelected = DateUtils.isSameDay(date, _selectedDate);
+          final status = dayData['status']; // 'good' (green), 'bad' (red), 'none' (gray)
+          final count = dayData['clients'] ?? 0;
+
+          Color bgColor = Colors.white;
+          Color borderColor = Colors.grey.shade300;
+          Color textColor = Colors.black87;
+          
+          if (status == 'good') {
+            bgColor = Colors.green.shade50;
+            borderColor = Colors.green.shade200;
+            textColor = Colors.green.shade900;
+          } else if (status == 'bad') {
+            bgColor = Colors.red.shade50;
+            borderColor = Colors.red.shade200;
+            textColor = Colors.red.shade900;
+          }
+
+          if (isSelected) {
+            bgColor = Theme.of(context).primaryColor;
+            borderColor = Theme.of(context).primaryColor;
+            textColor = Colors.white;
+          }
+
+          return GestureDetector(
+            onTap: () => _onDaySelected(date),
+            child: Container(
+              width: 55,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor, width: 1.5),
+                boxShadow: isSelected ? [
+                  BoxShadow(color: bgColor.withOpacity(0.4), blurRadius: 4, offset:const Offset(0, 2))
+                ] : null
               ),
-            ],
-          ),
-          // FAB REMOVED
-        );
-      },
-    );
-  }
-
-  Widget _buildSummaryStats(EntregasProvider provider) {
-    final totalPendientes = provider.albaranesPendientes.length;
-    final totalEntregados = provider.albaranesEntregados.length;
-    final importeCTR = provider.importeTotalCTR;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-            _buildStatBadge(
-              icon: Icons.pending_actions,
-              label: 'Pendientes',
-              value: '$totalPendientes',
-              color: Colors.orange,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    dayData['dayName'] ?? '',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: textColor.withOpacity(isSelected ? 0.9 : 0.7),
+                    ),
+                  ),
+                  Text(
+                    '${dayData['day']}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: textColor,
+                    ),
+                  ),
+                  if (count > 0 || status != 'none')
+                     Container(
+                       margin: const EdgeInsets.only(top: 2),
+                       width: 6,
+                       height: 6,
+                       decoration: BoxDecoration(
+                         shape: BoxShape.circle,
+                         color: isSelected ? Colors.white : (status == 'good' ? Colors.green : (status == 'bad' ? Colors.red : Colors.grey)),
+                       ),
+                     )
+                ],
+              ),
             ),
-            _buildStatBadge(
-              icon: Icons.check_circle,
-              label: 'Entregados',
-              value: '$totalEntregados',
-              color: AppTheme.success,
-            ),
-            _buildStatBadge(
-              icon: Icons.euro,
-              label: 'CTR',
-              value: _currencyFormat.format(importeCTR),
-              color: AppTheme.neonPurple,
-              isLarge: true,
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailHeader(EntregasProvider provider) {
-      return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2), width: 1)),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => setState(() => _selectedClientId = null),
-            icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            'Detalle Entrega',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  Widget _buildStatBadge({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-    bool isLarge = false,
-  }) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: isLarge ? 14 : 10,
-        vertical: 8,
-      ),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 6),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: TextStyle(fontSize: 9, color: color.withOpacity(0.8))),
-              Text(value, style: TextStyle(
-                fontSize: isLarge ? 14 : 12,
-                fontWeight: FontWeight.bold,
-                color: color,
-              )),
-            ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildClientList(EntregasProvider provider) {
-    if (provider.isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: AppTheme.neonBlue),
-            SizedBox(height: 16),
-            Text('Cargando ruta del día...', style: TextStyle(color: AppTheme.textSecondary)),
-          ],
-        ),
-      );
-    }
-
-    if (provider.error != null) {
+    if (provider.albaranes.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppTheme.error),
+            Icon(Icons.assignment_turned_in_outlined, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            Text(provider.error!, style: const TextStyle(color: AppTheme.textSecondary)),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
-            ),
+            Text('No hay entregas para este día', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
           ],
         ),
       );
     }
 
-    final albaranes = _filterAlbaranes(provider.albaranes);
-    final totalAlbaranes = provider.albaranes.length;
-    
-    return Column(
-      children: [
-        // === SEARCH BAR + FILTER CHIPS ===
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Column(
-            children: [
-              // Search bar
-              TextField(
-                controller: _searchController,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: 'Buscar cliente o albarán...',
-                  hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
-                  prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, color: AppTheme.textSecondary),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {});
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: AppTheme.surfaceColor,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppTheme.neonBlue),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                style: const TextStyle(color: AppTheme.textPrimary),
-              ),
-              
-              const SizedBox(height: 10),
-              
-              // Filter chips
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildFilterChip(
-                      icon: Icons.all_inclusive,
-                      label: 'Todos',
-                      isActive: _statusFilter == null,
-                      color: AppTheme.neonBlue,
-                      onTap: () => setState(() => _statusFilter = null),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      icon: Icons.check_circle,
-                      label: 'Completados',
-                      isActive: _statusFilter == 'completed',
-                      color: AppTheme.success,
-                      onTap: () => setState(() => _statusFilter = 'completed'),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      icon: Icons.warning,
-                      label: 'CTR',
-                      isActive: _statusFilter == 'ctr',
-                      color: AppTheme.error,
-                      onTap: () => setState(() => _statusFilter = 'ctr'),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      icon: Icons.pending,
-                      label: 'Pendientes',
-                      isActive: _statusFilter == 'pending',
-                      color: Colors.orange,
-                      onTap: () => setState(() => _statusFilter = 'pending'),
-                    ),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: 8),
-              
-              // Results count
-              Row(
-                children: [
-                  Icon(Icons.filter_list, size: 14, color: AppTheme.textSecondary),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${albaranes.length} de $totalAlbaranes entregas',
-                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        
-        // Albaranes list
-        Expanded(
-          child: albaranes.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _statusFilter != null || _searchController.text.isNotEmpty
-                            ? Icons.filter_alt_off
-                            : Icons.check_circle_outline,
-                        size: 64,
-                        color: AppTheme.success.withOpacity(0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _statusFilter != null || _searchController.text.isNotEmpty
-                            ? 'No hay entregas que coincidan'
-                            : '¡Sin entregas pendientes!',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_statusFilter != null || _searchController.text.isNotEmpty)
-                        TextButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _statusFilter = null;
-                              _searchController.clear();
-                            });
-                          },
-                          icon: const Icon(Icons.clear, size: 16),
-                          label: const Text('Limpiar filtros'),
-                          style: TextButton.styleFrom(foregroundColor: AppTheme.neonBlue),
-                        )
-                      else
-                        Text(
-                          'No hay albaranes asignados para hoy',
-                          style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.7)),
-                        ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadData,
-                  color: AppTheme.neonBlue,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: albaranes.length,
-                    itemBuilder: (context, index) {
-                      final albaran = albaranes[index];
-                      return _buildClientCard(albaran);
-                    },
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilterChip({
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          gradient: isActive
-              ? LinearGradient(
-                  colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
-                )
-              : null,
-          color: isActive ? null : AppTheme.surfaceColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive ? color.withOpacity(0.5) : Colors.white.withOpacity(0.1),
-            width: isActive ? 1.5 : 1,
-          ),
-          boxShadow: isActive
-              ? [
-                  BoxShadow(
-                    color: color.withOpacity(0.2),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isActive ? color : AppTheme.textSecondary,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: isActive ? color : AppTheme.textSecondary,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: provider.albaranes.length,
+      itemBuilder: (context, index) {
+        final albaran = provider.albaranes[index];
+        return _buildClientCard(albaran);
+      },
     );
   }
 
   Widget _buildClientCard(AlbaranEntrega albaran) {
-    // Color coding: verde si entregado, rojo si CTR pendiente, naranja si pendiente normal
-    final bool isCompleted = albaran.estado == EstadoEntrega.entregado;
-    final bool isCTRPending = albaran.esCTR && !isCompleted;
     
-    final Color cardColor = isCompleted
-        ? AppTheme.success
-        : (isCTRPending ? AppTheme.error : Colors.orange);
+    // Status Logic
+    bool isDelivered = albaran.estado == EstadoEntrega.entregado;
+    bool isPartial = albaran.estado == EstadoEntrega.parcial;
+    bool isCTR = albaran.esCTR;
+    
+    Color statusColor = Colors.orange;
+    String statusText = 'PENDIENTE';
+    IconData statusIcon = Icons.schedule;
 
-    return GestureDetector(
-      onTap: () => setState(() => _selectedClientId = albaran.id),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              cardColor.withOpacity(0.15),
-              AppTheme.surfaceColor,
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cardColor.withOpacity(0.3), width: 1.5),
-        ),
-        child: Row(
-          children: [
-            // Status indicator
-            Container(
-              width: 4,
-              height: 60,
-              decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(2),
+    if (isDelivered) {
+      statusColor = Colors.green;
+      statusText = 'ENTREGADO';
+      statusIcon = Icons.check_circle;
+    } else if (isPartial) {
+      statusColor = Colors.amber.shade700;
+      statusText = 'PARCIAL';
+      statusIcon = Icons.pie_chart;
+    } else if (isCTR) {
+      statusColor = Colors.red;
+      statusText = 'COBRO'; // Highlight CTR
+      statusIcon = Icons.euro;
+    }
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _showDetailDialog(albaran),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Row: Code & Amount
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   Container(
+                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                     decoration: BoxDecoration(
+                       color: Colors.grey[100],
+                       borderRadius: BorderRadius.circular(4),
+                       border: Border.all(color: Colors.grey.shade300)
+                     ),
+                     child: Text(
+                       albaran.codigoCliente, 
+                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54)
+                     ),
+                   ),
+                   Text(
+                     '${albaran.importeTotal.toStringAsFixed(2)} €',
+                     style: TextStyle(
+                       fontWeight: FontWeight.bold,
+                       fontSize: 16,
+                       color: isCTR ? Colors.red : Colors.black87
+                     ),
+                   ),
+                ],
               ),
-            ),
-            const SizedBox(width: 16),
-            
-            // Client info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 8),
+
+              // Name
+              Text(
+                albaran.nombreCliente,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+
+              const SizedBox(height: 4),
+              // Address
+               Row(
+                children: [
+                  Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      '${albaran.direccion}, ${albaran.poblacion}',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 12),
+              
+              // Footer: Status & Albaran
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.neonBlue.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          albaran.codigoCliente,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.neonBlue,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (albaran.esCTR)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppTheme.error.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'CTR',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.error,
-                            ),
-                          ),
-                        ),
-                      const Spacer(),
+                      Icon(statusIcon, size: 16, color: statusColor),
+                      const SizedBox(width: 4),
                       Text(
-                        _currencyFormat.format(albaran.importeTotal),
+                        statusText,
                         style: TextStyle(
-                          fontSize: 14,
+                          color: statusColor,
                           fontWeight: FontWeight.bold,
-                          color: cardColor,
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
                   Text(
-                    albaran.nombreCliente,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    albaran.direccion.isNotEmpty ? albaran.direccion : 'Sin dirección',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary.withOpacity(0.7),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    'Alb #${albaran.numeroAlbaran}',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
                   ),
                 ],
-              ),
-            ),
-            
-            // Status icon and arrow
-            Column(
-              children: [
-                Icon(
-                  isCompleted ? Icons.check_circle : (isCTRPending ? Icons.warning : Icons.pending),
-                  color: cardColor,
-                  size: 28,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  isCompleted ? 'Completo' : (isCTRPending ? 'Cobrar' : 'Pendiente'),
-                  style: TextStyle(fontSize: 9, color: cardColor),
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-            Icon(Icons.chevron_right, color: AppTheme.textSecondary.withOpacity(0.5)),
-          ],
+              )
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildClientDetail(EntregasProvider provider) {
-    final albaran = provider.albaranes.firstWhere(
-      (a) => a.id == _selectedClientId,
-      orElse: () => provider.albaranes.first,
+  void _showDetailDialog(AlbaranEntrega albaran) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _DetailSheet(albaran: albaran),
     );
+  }
+}
 
-    // Convert EntregaItems to DeliveryItems for the widget
-    final deliveryItems = albaran.items.map((item) => DeliveryItem(
-      id: item.itemId,
-      code: item.codigoArticulo,
-      description: item.descripcion,
-      quantityOrdered: item.cantidadPedida,
-      quantityDelivered: item.cantidadEntregada,
-      status: _mapStatus(item.estado),
-    )).toList();
+// INLINE DETAIL SHEET
+class _DetailSheet extends StatefulWidget {
+  final AlbaranEntrega albaran;
+  const _DetailSheet({required this.albaran});
+  @override
+  State<_DetailSheet> createState() => _DetailSheetState();
+}
 
-    final bool requiresPayment = albaran.esCTR && albaran.estado != EstadoEntrega.entregado;
-    final bool allItemsDelivered = deliveryItems.every((i) => i.status == ItemDeliveryStatus.delivered);
+class _DetailSheetState extends State<_DetailSheet> {
+  late AlbaranEntrega _details;
+  bool _loading = true;
+  String _error = '';
+  Map<String, bool> _checkedItems = {}; // Code -> Checked
+  final TextEditingController _obsController = TextEditingController();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+  @override
+  void initState() {
+    super.initState();
+    _loadDetails();
+  }
+
+  Future<void> _loadDetails() async {
+    try {
+       final provider = Provider.of<EntregasProvider>(context, listen: false);
+       final full = await provider.obtenerDetalleAlbaran(widget.albaran.numeroAlbaran, widget.albaran.ejercicio);
+       if (mounted) {
+         if (full != null) {
+           setState(() {
+             _details = full;
+             _loading = false;
+             // Default check all items as Delivered
+             for(var i in _details.items) {
+               _checkedItems[i.codigoArticulo] = true;
+             }
+           });
+         } else {
+           setState(() { _error = 'No se pudo cargar detalles'; _loading = false; });
+         }
+       }
+    } catch(e) {
+      if(mounted) setState(() { _error = 'Error: $e'; _loading = false; });
+    }
+  }
+
+  bool get _allItemsChecked => _checkedItems.values.every((v) => v);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.9,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Albaran header
+          // Header
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.05)),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200))
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Text(
-                      'Albarán #${albaran.numeroAlbaran}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (albaran.esCTR)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppTheme.error.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.warning_amber, color: AppTheme.error, size: 14),
-                            SizedBox(width: 4),
-                            Text('CONTADO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.error)),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(Icons.store, size: 16, color: AppTheme.textSecondary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        albaran.nombreCliente,
-                        style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(Icons.location_on, size: 16, color: AppTheme.textSecondary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        albaran.direccion.isNotEmpty ? albaran.direccion : 'Sin dirección',
-                        style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.8), fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Importe Total:', style: TextStyle(color: AppTheme.textSecondary)),
-                      Text(
-                        _currencyFormat.format(albaran.importeTotal),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.neonBlue,
-                        ),
-                      ),
+                      Text(widget.albaran.nombreCliente, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('${widget.albaran.direccion}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                     ],
                   ),
                 ),
+                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
               ],
             ),
           ),
           
-          const SizedBox(height: 20),
+          if (_loading) const Expanded(child: Center(child: CircularProgressIndicator())),
           
-          // Items section
-          const Text(
-            'Artículos a Entregar',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-          ),
-          const SizedBox(height: 12),
-          
-          DeliveryItemList(
-            items: deliveryItems,
-            onItemChanged: (item, status, observations) {
-              // Update the provider with item status change
-              // This would call the backend to persist the change
-              setState(() {
-                final originalItem = albaran.items.firstWhere((i) => i.itemId == item.id);
-                originalItem.estado = _mapStatusReverse(status);
-                originalItem.cantidadEntregada = item.quantityDelivered;
-              });
-            },
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // Payment requirement warning for CTR
-          if (requiresPayment)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.error.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.error.withOpacity(0.3)),
-              ),
-              child: Row(
+          if (!_loading)
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
                 children: [
-                  const Icon(Icons.warning_amber, color: AppTheme.error),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  // Info Card
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Cobro Obligatorio',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.error),
-                        ),
-                        Text(
-                          'Este albarán es CTR (Contado). Debe cobrar ${_currencyFormat.format(albaran.importeTotal)} antes de completar.',
-                          style: TextStyle(fontSize: 12, color: AppTheme.error.withOpacity(0.8)),
-                        ),
+                         const Text('Importe Total:', style: TextStyle(fontWeight: FontWeight.w500)),
+                         Text('${widget.albaran.importeTotal.toStringAsFixed(2)} €', 
+                           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900, fontSize: 18)),
                       ],
                     ),
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  const Text('Artículos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+
+                  if (_details.items.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(child: Text('No hay artículos disponibles. Verificar Albarán.', style: TextStyle(color: Colors.grey))),
+                    ),
+
+                  ..._details.items.map((item) {
+                    final isChecked = _checkedItems[item.codigoArticulo] ?? false;
+                    return CheckboxListTile(
+                      value: isChecked,
+                      activeColor: Colors.blue,
+                      title: Text(item.descripcion.isNotEmpty ? item.descripcion : 'Art. ${item.codigoArticulo}'),
+                      subtitle: Text('${item.cantidadPedida.toStringAsFixed(0)} Uds'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setState(() {
+                          _checkedItems[item.codigoArticulo] = val ?? false;
+                        });
+                      },
+                    );
+                  }).toList(),
+                  
+                  const SizedBox(height: 20),
+                  const Divider(),
+                  const SizedBox(height: 10),
+
+                  // Observations
+                  TextField(
+                    controller: _obsController,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      labelText: 'Observaciones / Motivo',
+                      hintText: !_allItemsChecked ? 'Obligatorio si hay incidencias' : 'Opcional',
+                      border: const OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                    ),
+                    onChanged: (v) => setState((){}),
                   ),
                 ],
               ),
             ),
-          
-          const SizedBox(height: 16),
-          
-          // Action buttons
-          Row(
-            children: [
-              // Complete and Sign button
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: allItemsDelivered ? () => _showSignatureAndComplete(albaran) : null,
-                  icon: const Icon(Icons.edit_note),
-                  label: const Text('Firmar y Completar'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: allItemsDelivered ? AppTheme.neonGreen : Colors.grey,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          if (!allItemsDelivered)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Marque todos los artículos como entregados para continuar',
-                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                textAlign: TextAlign.center,
-              ),
+
+          // Footer Actions
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: Colors.grey.shade200))
             ),
-          
-          const SizedBox(height: 24),
+            child: SizedBox(
+               width: double.infinity,
+               child: ElevatedButton(
+                 style: ElevatedButton.styleFrom(
+                   backgroundColor: _allItemsChecked ? Colors.green : Colors.orange,
+                   padding: const EdgeInsets.symmetric(vertical: 16),
+                 ),
+                 onPressed: () {
+                   if (!_allItemsChecked && _obsController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Debe indicar motivo si desmarca artículos'),
+                        backgroundColor: Colors.red,
+                      ));
+                      return;
+                   }
+                   // Logic to complete...
+                   Navigator.pop(context);
+                 },
+                 child: Text(
+                   _allItemsChecked ? 'CONFIRMAR ENTREGA' : 'REGISTRAR INCIDENCIA',
+                   style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                 ),
+               ),
+            ),
+          )
         ],
       ),
     );
-  }
-
-  Future<void> _showSignatureAndComplete(AlbaranEntrega albaran) async {
-    // Show signature modal
-    final signature = await SignatureModal.show(
-      context,
-      title: 'Firma del Cliente',
-      subtitle: '${albaran.nombreCliente} - Albarán #${albaran.numeroAlbaran}',
-    );
-
-    if (signature != null && mounted) {
-      // Save signature and complete delivery
-      final provider = context.read<EntregasProvider>();
-      
-      final success = await provider.marcarEntregado(
-        albaranId: albaran.id,
-        firma: signature,
-        observaciones: 'Entrega completada con firma digital',
-      );
-
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                Text('Entrega ${albaran.numeroAlbaran} completada'),
-              ],
-            ),
-            backgroundColor: AppTheme.success,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        
-        // Go back to list
-        setState(() => _selectedClientId = null);
-      }
-    }
-  }
-
-  ItemDeliveryStatus _mapStatus(EstadoEntrega estado) {
-    switch (estado) {
-      case EstadoEntrega.entregado:
-        return ItemDeliveryStatus.delivered;
-      case EstadoEntrega.noEntregado:
-      case EstadoEntrega.rechazado:
-        return ItemDeliveryStatus.notDelivered;
-      default:
-        return ItemDeliveryStatus.pending;
-    }
-  }
-
-  EstadoEntrega _mapStatusReverse(ItemDeliveryStatus status) {
-    switch (status) {
-      case ItemDeliveryStatus.delivered:
-        return EstadoEntrega.entregado;
-      case ItemDeliveryStatus.notDelivered:
-        return EstadoEntrega.noEntregado;
-      case ItemDeliveryStatus.pending:
-        return EstadoEntrega.pendiente;
-    }
   }
 }

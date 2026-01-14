@@ -56,11 +56,11 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               CAC.SERIEALBARAN,
               CAC.NUMEROALBARAN,
               TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
-              TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, 'CLIENTE')) as NOMBRE_CLIENTE,
+              TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, 'CLIENTE')) as NOMBRE_CLIENTE,
               TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCION,
               TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
               TRIM(COALESCE(CLI.TELEFONO1, '')) as TELEFONO,
-              CPC.IMPORTETOTAL / 100.0 as IMPORTE,
+              CPC.IMPORTETOTAL as IMPORTE,
               TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
               TRIM(CPC.CODIGORUTA) as RUTA
@@ -135,7 +135,7 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         // 1. Get Header - FIX: usar columnas correctas de CLI
         const headerSql = `
             SELECT CAC.*, 
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as CLIENTE_NOM, 
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as CLIENTE_NOM, 
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIR, 
                 TRIM(COALESCE(CLI.POBLACION, '')) as POB
             FROM DSEDAC.CAC
@@ -169,7 +169,7 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             direccion: header.DIR?.trim(),
             poblacion: header.POB?.trim(),
             fecha: `${header.DIADOCUMENTO}/${header.MESDOCUMENTO}/${header.ANODOCUMENTO}`,
-            importe: parseFloat(header.IMPORTETOTAL) / 100.0,
+            importe: parseFloat(header.IMPORTETOTAL),
             items: items.map(i => ({
                 itemId: i.ITEM_ID,
                 codigoArticulo: i.CODIGO,

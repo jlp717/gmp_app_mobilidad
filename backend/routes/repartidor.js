@@ -180,7 +180,7 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
         logger.info(`[REPARTIDOR] Getting daily collections for ${repartidorId}`);
 
         const cleanRepartidorId = repartidorId.toString().trim();
-        
+
         // CORRECTO: Usar OPP → CPC para repartidores
         const sql = `
             SELECT 
@@ -779,4 +779,147 @@ router.get('/entregas/:entregaId/firma', async (req, res) => {
     }
 });
 
+// =============================================================================
+// GET /rutero/week/:repartidorId
+// Resumen semanal para el calendario (LUN 30, MAR 31...)
+// Estado basado en cobros de CONTADO, REPOSICION, MENSUAL
+// =============================================================================
+router.get('/rutero/week/:repartidorId', async (req, res) => {
+    try {
+        const { repartidorId } = req.params;
+        const { date } = req.query; // Fecha de referencia (ej. hoy)
+
+        const refDate = date ? new Date(date) : new Date();
+        const currentYear = refDate.getFullYear();
+        const currentMonth = refDate.getMonth() + 1;
+        const currentDay = refDate.getDate();
+
+        // Calculate start/end of week (Monday to Sunday)
+        const dayOfWeek = refDate.getDay() || 7; // 1 (Mon) to 7 (Sun)
+        const startOfWeek = new Date(refDate);
+        startOfWeek.setDate(currentDay - dayOfWeek + 1);
+
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+        // Generate array of expected dates
+        const weekDays = [];
+        const d = new Date(startOfWeek);
+        while (d <= endOfWeek) {
+            weekDays.push({
+                sday: d.getDate(),
+                smonth: d.getMonth() + 1,
+                syear: d.getFullYear(),
+                formatted: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            });
+            d.setDate(d.getDate() + 1);
+        }
+
+        const cleanRepartidorId = repartidorId.toString().trim();
+        const startDateStr = weekDays[0].formatted;
+        const endDateStr = weekDays[6].formatted;
+
+        logger.info(`[REPARTIDOR] Getting weekly stats ${startDateStr} to ${endDateStr} for ${cleanRepartidorId}`);
+
+        // Query to get daily aggregates
+        // Filter by specific payment types for Color Status
+        const sql = `
+            SELECT 
+                OPP.DIAREPARTO as DIA,
+                OPP.MESREPARTO as MES,
+                OPP.ANOREPARTO as ANO,
+                COUNT(*) as TOTAL_CLIENTES,
+                SUM(CASE 
+                    WHEN UPPER(CPC.CODIGOFORMAPAGO) IN ('01', 'CNT', 'CONTADO', 'EFECTIVO') THEN 1
+                    WHEN UPPER(CPC.CODIGOFORMAPAGO) LIKE '%REP%' THEN 1
+                    WHEN UPPER(CPC.CODIGOFORMAPAGO) LIKE '%MEN%' THEN 1
+                    ELSE 0 
+                END) as TOTAL_COBRABLES,
+                SUM(CASE 
+                    WHEN UPPER(CPC.CODIGOFORMAPAGO) IN ('01', 'CNT', 'CONTADO', 'EFECTIVO') 
+                         OR UPPER(CPC.CODIGOFORMAPAGO) LIKE '%REP%' 
+                         OR UPPER(CPC.CODIGOFORMAPAGO) LIKE '%MEN%' 
+                    THEN CPC.IMPORTETOTAL 
+                    ELSE 0 
+                END) as IMPORTE_ESPERADO,
+                SUM(CASE 
+                    WHEN (UPPER(CPC.CODIGOFORMAPAGO) IN ('01', 'CNT', 'CONTADO', 'EFECTIVO') 
+                          OR UPPER(CPC.CODIGOFORMAPAGO) LIKE '%REP%' 
+                          OR UPPER(CPC.CODIGOFORMAPAGO) LIKE '%MEN%')
+                         AND COALESCE(CVC.IMPORTEPENDIENTE, 0) <= 0.05 -- Consider small margin as paid
+                    THEN CPC.IMPORTETOTAL 
+                    ELSE 0 
+                END) as IMPORTE_COBRADO
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+            LEFT JOIN DSEDAC.CVC CVC 
+                ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+                AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+                AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            WHERE (
+                    (OPP.ANOREPARTO = ${weekDays[0].syear} AND OPP.MESREPARTO = ${weekDays[0].smonth} AND OPP.DIAREPARTO >= ${weekDays[0].sday})
+                    OR 
+                    (OPP.ANOREPARTO = ${weekDays[6].syear} AND OPP.MESREPARTO = ${weekDays[6].smonth} AND OPP.DIAREPARTO <= ${weekDays[6].sday})
+                  )
+              -- Note: The simplified date logic above handles same-month weeks. 
+              -- For cross-month weeks, we'd need cleaner SQL date logic, 
+              -- but standard DB2/AS400 date construction can be verbose. 
+              -- Fallback to string comparison might be safer if Dates are stored as numbers:
+              AND (
+                  (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday}
+                  AND 
+                  (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) <= ${weekDays[6].syear * 10000 + weekDays[6].smonth * 100 + weekDays[6].sday}
+              )
+              AND TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
+            GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO
+        `;
+
+        const rows = await query(sql, false);
+
+        // Map results to weekDays
+        const days = weekDays.map(wd => {
+            const row = rows.find(r => r.ANO === wd.syear && r.MES === wd.smonth && r.DIA === wd.sday);
+
+            const totalClients = row ? parseInt(row.TOTAL_CLIENTES) : 0;
+            const totalCobrables = row ? parseInt(row.TOTAL_COBRABLES) : 0;
+            const expected = row ? parseFloat(row.IMPORTE_ESPERADO) : 0;
+            const collected = row ? parseFloat(row.IMPORTE_COBRADO) : 0;
+
+            // Status Logic:
+            // 0 cobrables -> 'none' (Gray)
+            // collected >= expected -> 'good' (Green)
+            // collected < expected -> 'bad' (Red)
+            let status = 'none';
+            if (totalCobrables > 0) {
+                // If we have collected everything (within small margin)
+                if (collected >= (expected - 0.10)) {
+                    status = 'good';
+                } else {
+                    status = 'bad';
+                }
+            }
+
+            return {
+                date: wd.formatted,
+                day: wd.sday,
+                dayName: ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'][new Date(wd.formatted).getDay()],
+                clients: totalClients,
+                status: status
+            };
+        });
+
+        res.json({
+            success: true,
+            days
+        });
+
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in /rutero/week: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 module.exports = router;
+
