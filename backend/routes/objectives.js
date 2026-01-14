@@ -348,6 +348,39 @@ router.get('/evolution', async (req, res) => {
             }
         }
 
+        // ==========================================================================
+        // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS
+        // ==========================================================================
+        let fixedMonthlyTarget = null;
+        if (vendedorCodes && vendedorCodes !== 'ALL') {
+            const firstCode = vendedorCodes.split(',')[0].trim();
+            const currentYear = yearsArray[0] || getCurrentDate().getFullYear();
+            const currentMonth = now.getMonth() + 1;
+
+            try {
+                const fixedRows = await query(`
+                    SELECT IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION
+                    FROM JAVIER.COMMERCIAL_TARGETS
+                    WHERE CODIGOVENDEDOR = '${firstCode}'
+                      AND ANIO = ${currentYear}
+                      AND (MES = ${currentMonth} OR MES IS NULL)
+                      AND ACTIVO = 1
+                    ORDER BY MES DESC
+                    FETCH FIRST 1 ROWS ONLY
+                `, false);
+
+                if (fixedRows && fixedRows.length > 0) {
+                    fixedMonthlyTarget = parseFloat(fixedRows[0].IMPORTE_OBJETIVO) || null;
+                    if (fixedMonthlyTarget) {
+                        console.log(`📊 [OBJECTIVES] Vendor ${firstCode} has FIXED monthly target: ${fixedMonthlyTarget}€`);
+                    }
+                }
+            } catch (err) {
+                // Table might not exist - continue with percentage-based
+                console.log(`📊 [OBJECTIVES] COMMERCIAL_TARGETS: ${err.message}`);
+            }
+        }
+
         yearsArray.forEach(year => {
             // Calculate Annual Objective first: Total Previous Year Sales * 1.10
             let prevYearTotal = 0;
@@ -372,8 +405,18 @@ router.get('/evolution', async (req, res) => {
 
             // Combined: own sales + inherited sales from clients
             const combinedPrevTotal = prevYearTotal + inheritedTotal;
-            const annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * 1.10 : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * 1.10 : 0);
-            const monthlyObjective = annualObjective / 12;
+
+            // FIXED TARGET OVERRIDE: Use fixed target if available, otherwise calculate from previous year
+            let annualObjective, monthlyObjective;
+            if (fixedMonthlyTarget && fixedMonthlyTarget > 0) {
+                // Use fixed monthly target
+                monthlyObjective = fixedMonthlyTarget;
+                annualObjective = fixedMonthlyTarget * 12;
+            } else {
+                // Standard calculation: previous year * 1.10
+                annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * 1.10 : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * 1.10 : 0);
+                monthlyObjective = annualObjective / 12;
+            }
 
             yearlyData[year] = [];
 
@@ -1688,44 +1731,32 @@ router.get('/by-client', async (req, res) => {
             const prevSales = prevSalesMap.get(code) || 0;
 
             // Objective Logic: 
-            // 1. Check COMMERCIAL_TARGETS for fixed monthly amount (for new commercials like #15)
-            // 2. If not found, look for specific client rule in OBJ_CONFIG
-            // 3. If not found, use Default from DB ('*')
-            // 4. Fallback to 10%
+            // 1. Check COMMERCIAL_TARGETS for vendor-level fixed target (for summary only)
+            // 2. For per-client breakdown, ALWAYS use percentage-based (OBJ_CONFIG or default 10%)
+            // 3. Fixed targets apply only to vendor totals, not individual clients
 
-            // First, check if we have a fixed vendor-level target from COMMERCIAL_TARGETS
-            // Fixed targets apply to ALL clients of that vendor (e.g., commercial #15 has 25,000€/month total)
-            let fixedTarget = null;
+            // Get vendor-level fixed target for summary calculation (not per-client)
+            let vendorHasFixedTarget = false;
+            let vendorFixedAmount = 0;
             for (const vendorCode of vendorCodesArray) {
                 const vendorTarget = fixedTargetsMap.get(`VENDOR_${vendorCode}`);
                 if (vendorTarget && vendorTarget.importe > 0) {
-                    fixedTarget = vendorTarget;
+                    vendorHasFixedTarget = true;
+                    vendorFixedAmount = vendorTarget.importe;
                     break;
                 }
             }
 
-            let objective = 0;
-            let targetSource = 'percentage';
+            // Per-client objective: ALWAYS use percentage-based calculation
+            let targetPct = objectiveConfigMap.has(code)
+                ? objectiveConfigMap.get(code)
+                : defaultObjectiveData.percentage;
 
-            if (fixedTarget && fixedTarget.importe > 0) {
-                // Use fixed amount from COMMERCIAL_TARGETS
-                // NOTE: This is total monthly target for the vendor, not per-client
-                // For per-client view, we still use percentage-based
-                // The fixed target is shown at vendor summary level
-                objective = fixedTarget.importe;
-                targetSource = 'fixed';
-            } else {
-                // Use percentage-based calculation
-                let targetPct = objectiveConfigMap.has(code)
-                    ? objectiveConfigMap.get(code)
-                    : defaultObjectiveData.percentage;
+            // Percentage stored as 10 for 10%. Multiplier = 1 + (10/100) = 1.10
+            const multiplier = 1 + (targetPct / 100.0);
 
-                // Percentage stored as 10 for 10%. Multiplier = 1 + (10/100) = 1.10
-                const multiplier = 1 + (targetPct / 100.0);
-
-                // Objective: Previous year sales * multiplier
-                objective = prevSales > 0 ? prevSales * multiplier : sales;
-            }
+            // Objective: Previous year sales * multiplier
+            let objective = prevSales > 0 ? prevSales * multiplier : sales;
 
             const progress = objective > 0 ? (sales / objective) * 100 : (sales > 0 ? 100 : 0);
 
