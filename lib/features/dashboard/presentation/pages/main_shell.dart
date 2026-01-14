@@ -606,7 +606,13 @@ class _MainShellState extends State<MainShell> {
       ),
       child: Row(
         children: [
-           const Text('VISTA DE REPARTO', style: TextStyle(color: AppTheme.neonPurple, fontWeight: FontWeight.bold, fontSize: 12)),
+           const Row(
+             children: [
+               Icon(Icons.visibility, color: AppTheme.neonBlue, size: 16),
+               SizedBox(width: 8),
+               Text('Ver Como', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+             ],
+           ),
            const SizedBox(width: 16),
            Expanded(
              child: Container(

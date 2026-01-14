@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/providers/filter_provider.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 import '../../../../core/api/api_client.dart';
@@ -37,8 +38,6 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     final filter = Provider.of<FilterProvider>(context, listen: true);
     
     // Determine effective target
-    // Check role safely using currentUser (not auth.isJefeVentas which doesn't exist on provider)
-    // Use auth.isDirector as the proxy for "Jefe/Admin"
     String targetId = widget.repartidorId ?? auth.currentUser?.code ?? '';
     if (auth.isDirector && filter.selectedVendor != null) {
       targetId = filter.selectedVendor!;
@@ -46,9 +45,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
 
     // Auto-reload if ID changed
     if (targetId.isNotEmpty && targetId != _lastLoadedId) {
-      // Trigger load next frame to avoid build cycle
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Ensure mounted
         if (mounted) {
           setState(() { _lastLoadedId = targetId; });
           _loadData(); 
@@ -112,13 +109,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     // Header Name Logic
     String currentName = auth.currentUser?.name ?? 'Repartidor';
     if (auth.isDirector && filter.selectedVendor != null) {
-      // FilterProvider only stores the ID string, so we show "ID" or a generic label.
-      // Ideally we'd look up the name, but for now showing ID is safer than crashing.
       currentName = 'Repartidor ${filter.selectedVendor}';
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppTheme.darkBase, // Dark Background
       body: Column(
         children: [
           // HEADER
@@ -136,11 +131,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           if (entregas.error != null)
              Container(
                padding: const EdgeInsets.all(8),
-               color: Colors.red.shade50,
+               color: AppTheme.error.withOpacity(0.1),
                width: double.infinity,
                child: Text(
                  '${entregas.error}', 
-                 style: TextStyle(color: Colors.red.shade800, fontSize: 12),
+                 style: const TextStyle(color: AppTheme.error, fontSize: 12),
                  textAlign: TextAlign.center,
                 ),
              ),
@@ -148,7 +143,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           // LIST
           Expanded(
             child: entregas.isLoading 
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
                 : _buildClientList(entregas),
           ),
         ],
@@ -159,7 +154,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
   Widget _buildWeeklyStrip() {
     return Container(
       height: 85,
-      color: Colors.white,
+      color: AppTheme.surfaceColor, // Dark Surface
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -171,24 +166,24 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           final status = dayData['status'];
           final count = dayData['clients'] ?? 0;
 
-          Color bgColor = Colors.white;
-          Color borderColor = Colors.grey.shade300;
-          Color textColor = Colors.black87;
+          Color bgColor = AppTheme.darkCard;
+          Color borderColor = Colors.white.withOpacity(0.1);
+          Color textColor = AppTheme.textSecondary;
           
           if (status == 'good') {
-            bgColor = Colors.green.shade50;
-            borderColor = Colors.green.shade200;
-            textColor = Colors.green.shade900;
+            bgColor = AppTheme.success.withOpacity(0.1);
+            borderColor = AppTheme.success.withOpacity(0.3);
+            textColor = AppTheme.success;
           } else if (status == 'bad') {
-            bgColor = Colors.red.shade50;
-            borderColor = Colors.red.shade200;
-            textColor = Colors.red.shade900;
+            bgColor = AppTheme.error.withOpacity(0.1);
+            borderColor = AppTheme.error.withOpacity(0.3);
+            textColor = AppTheme.error;
           }
 
           if (isSelected) {
-            bgColor = Theme.of(context).primaryColor;
-            borderColor = Theme.of(context).primaryColor;
-            textColor = Colors.white;
+            bgColor = AppTheme.neonBlue;
+            borderColor = AppTheme.neonBlue;
+            textColor = AppTheme.darkBase;
           }
 
           return GestureDetector(
@@ -201,7 +196,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: borderColor, width: 1.5),
                 boxShadow: isSelected ? [
-                  BoxShadow(color: bgColor.withOpacity(0.4), blurRadius: 4, offset:const Offset(0, 2))
+                  BoxShadow(color: AppTheme.neonBlue.withOpacity(0.4), blurRadius: 4, offset:const Offset(0, 2))
                 ] : null
               ),
               child: Column(
@@ -230,7 +225,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                        height: 6,
                        decoration: BoxDecoration(
                          shape: BoxShape.circle,
-                         color: isSelected ? Colors.white : (status == 'good' ? Colors.green : (status == 'bad' ? Colors.red : Colors.grey)),
+                         color: isSelected ? AppTheme.darkBase : (status == 'good' ? AppTheme.success : (status == 'bad' ? AppTheme.error : Colors.grey)),
                        ),
                      )
                 ],
@@ -244,13 +239,13 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
 
   Widget _buildClientList(EntregasProvider provider) {
     if (provider.albaranes.isEmpty) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.assignment_turned_in_outlined, size: 64, color: Colors.grey[300]),
-            const SizedBox(height: 16),
-            Text('No hay entregas para este día', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+            Icon(Icons.assignment_turned_in_outlined, size: 64, color: AppTheme.textSecondary),
+            SizedBox(height: 16),
+            Text('No hay entregas para este día', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
           ],
         ),
       );
@@ -278,26 +273,28 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     IconData statusIcon = Icons.schedule;
 
     if (isDelivered) {
-      statusColor = Colors.green;
+      statusColor = AppTheme.success;
       statusText = 'ENTREGADO';
       statusIcon = Icons.check_circle;
     } else if (isPartial) {
-      statusColor = Colors.amber.shade700;
+      statusColor = AppTheme.warning;
       statusText = 'PARCIAL';
       statusIcon = Icons.pie_chart;
     } else if (isCTR) {
-      statusColor = Colors.red;
-      statusText = 'COBRO'; // Highlight CTR
+      statusColor = AppTheme.error;
+      statusText = 'COBRO'; 
       statusIcon = Icons.euro;
     }
 
     return Card(
-      elevation: 2,
+      elevation: 4,
+      color: AppTheme.darkCard,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () => _showDetailDialog(albaran),
         borderRadius: BorderRadius.circular(12),
+        splashColor: AppTheme.neonBlue.withOpacity(0.1),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -310,13 +307,13 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                    Container(
                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                      decoration: BoxDecoration(
-                       color: Colors.grey[100],
+                       color: AppTheme.darkBase,
                        borderRadius: BorderRadius.circular(4),
-                       border: Border.all(color: Colors.grey.shade300)
+                       border: Border.all(color: AppTheme.borderColor)
                      ),
                      child: Text(
                        albaran.codigoCliente, 
-                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54)
+                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.textSecondary)
                      ),
                    ),
                    Text(
@@ -324,7 +321,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                      style: TextStyle(
                        fontWeight: FontWeight.bold,
                        fontSize: 16,
-                       color: isCTR ? Colors.red : Colors.black87
+                       color: isCTR ? AppTheme.error : AppTheme.textPrimary
                      ),
                    ),
                 ],
@@ -334,7 +331,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
               // Name
               Text(
                 albaran.nombreCliente,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -343,12 +340,12 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
               // Address
                Row(
                 children: [
-                  Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
+                  const Icon(Icons.location_on, size: 14, color: AppTheme.textTertiary),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       '${albaran.direccion}, ${albaran.poblacion}',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -378,7 +375,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                   ),
                   Text(
                     'Alb #${albaran.numeroAlbaran}',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                   ),
                 ],
               )
@@ -450,7 +447,7 @@ class _DetailSheetState extends State<_DetailSheet> {
     return Container(
       height: MediaQuery.of(context).size.height * 0.9,
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surfaceColor, // Dark background
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
@@ -458,8 +455,8 @@ class _DetailSheetState extends State<_DetailSheet> {
           // Header
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: Colors.grey.shade200))
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppTheme.borderColor))
             ),
             child: Row(
               children: [
@@ -467,17 +464,17 @@ class _DetailSheetState extends State<_DetailSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.albaran.nombreCliente, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      Text('${widget.albaran.direccion}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      Text(widget.albaran.nombreCliente, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.textPrimary)),
+                      Text('${widget.albaran.direccion}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                     ],
                   ),
                 ),
-                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: AppTheme.textPrimary)),
               ],
             ),
           ),
           
-          if (_loading) const Expanded(child: Center(child: CircularProgressIndicator())),
+          if (_loading) const Expanded(child: Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))),
           
           if (!_loading)
             Expanded(
@@ -488,36 +485,38 @@ class _DetailSheetState extends State<_DetailSheet> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
+                      color: AppTheme.neonBlue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3))
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                         const Text('Importe Total:', style: TextStyle(fontWeight: FontWeight.w500)),
+                         const Text('Importe Total:', style: TextStyle(fontWeight: FontWeight.w500, color: AppTheme.textPrimary)),
                          Text('${widget.albaran.importeTotal.toStringAsFixed(2)} €', 
-                           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900, fontSize: 18)),
+                           style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 18)),
                       ],
                     ),
                   ),
                   const SizedBox(height: 20),
                   
-                  const Text('Artículos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const Text('Artículos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary)),
                   const SizedBox(height: 8),
 
                   if (_details.items.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Center(child: Text('No hay artículos disponibles. Verificar Albarán.', style: TextStyle(color: Colors.grey))),
+                      child: Center(child: Text('No hay artículos disponibles. Verificar Albarán.', style: TextStyle(color: AppTheme.textTertiary))),
                     ),
 
                   ..._details.items.map((item) {
                     final isChecked = _checkedItems[item.codigoArticulo] ?? false;
                     return CheckboxListTile(
                       value: isChecked,
-                      activeColor: Colors.blue,
-                      title: Text(item.descripcion.isNotEmpty ? item.descripcion : 'Art. ${item.codigoArticulo}'),
-                      subtitle: Text('${item.cantidadPedida.toStringAsFixed(0)} Uds'),
+                      activeColor: AppTheme.neonBlue,
+                      checkColor: AppTheme.darkBase,
+                      title: Text(item.descripcion.isNotEmpty ? item.descripcion : 'Art. ${item.codigoArticulo}', style: const TextStyle(color: AppTheme.textPrimary)),
+                      subtitle: Text('${item.cantidadPedida.toStringAsFixed(0)} Uds', style: const TextStyle(color: AppTheme.textSecondary)),
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
                       onChanged: (val) {
@@ -529,7 +528,7 @@ class _DetailSheetState extends State<_DetailSheet> {
                   }).toList(),
                   
                   const SizedBox(height: 20),
-                  const Divider(),
+                  const Divider(color: AppTheme.borderColor),
                   const SizedBox(height: 10),
 
                   // Observations
@@ -539,10 +538,13 @@ class _DetailSheetState extends State<_DetailSheet> {
                     decoration: InputDecoration(
                       labelText: 'Observaciones / Motivo',
                       hintText: !_allItemsChecked ? 'Obligatorio si hay incidencias' : 'Opcional',
+                      hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                      labelStyle: const TextStyle(color: AppTheme.textSecondary),
                       border: const OutlineInputBorder(),
                       filled: true,
-                      fillColor: Colors.grey[50],
+                      fillColor: AppTheme.darkBase,
                     ),
+                    style: const TextStyle(color: AppTheme.textPrimary),
                     onChanged: (v) => setState((){}),
                   ),
                 ],
@@ -552,21 +554,21 @@ class _DetailSheetState extends State<_DetailSheet> {
           // Footer Actions
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: Colors.grey.shade200))
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: AppTheme.borderColor))
             ),
             child: SizedBox(
                width: double.infinity,
                child: ElevatedButton(
                  style: ElevatedButton.styleFrom(
-                   backgroundColor: _allItemsChecked ? Colors.green : Colors.orange,
+                   backgroundColor: _allItemsChecked ? AppTheme.success : AppTheme.warning,
                    padding: const EdgeInsets.symmetric(vertical: 16),
                  ),
                  onPressed: () {
                    if (!_allItemsChecked && _obsController.text.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                         content: Text('Debe indicar motivo si desmarca artículos'),
-                        backgroundColor: Colors.red,
+                        backgroundColor: AppTheme.error,
                       ));
                       return;
                    }
@@ -575,7 +577,7 @@ class _DetailSheetState extends State<_DetailSheet> {
                  },
                  child: Text(
                    _allItemsChecked ? 'CONFIRMAR ENTREGA' : 'REGISTRAR INCIDENCIA',
-                   style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                   style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkBase),
                  ),
                ),
             ),
