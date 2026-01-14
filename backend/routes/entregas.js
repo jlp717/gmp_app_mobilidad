@@ -54,6 +54,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               CAC.SUBEMPRESAALBARAN,
               CAC.EJERCICIOALBARAN,
               CAC.SERIEALBARAN,
+              CAC.TERMINALALBARAN,
               CAC.NUMEROALBARAN,
               TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
               TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, 'CLIENTE')) as NOMBRE_CLIENTE,
@@ -99,6 +100,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 subempresa: row.SUBEMPRESAALBARAN,
                 ejercicio: row.EJERCICIOALBARAN,
                 serie: row.SERIEALBARAN?.trim() || '',
+                terminal: row.TERMINALALBARAN,
                 numero: row.NUMEROALBARAN,
                 codigoCliente: row.CLIENTE?.trim(),
                 nombreCliente: row.NOMBRE_CLIENTE?.trim(),
@@ -148,6 +150,10 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             headerSql += ` AND CAC.SERIEALBARAN = '${serie}'`;
         }
 
+        if (req.query.terminal) {
+            headerSql += ` AND CAC.TERMINALALBARAN = ${req.query.terminal}`;
+        }
+
         headerSql += ` FETCH FIRST 1 ROWS ONLY`;
 
         const headers = await query(headerSql, false);
@@ -173,6 +179,10 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 
         if (serie) {
             itemsSql += ` AND L.SERIEALBARAN = '${serie}'`;
+        }
+
+        if (terminal) {
+            itemsSql += ` AND L.TERMINALALBARAN = ${terminal}`;
         }
 
         itemsSql += ` ORDER BY L.SECUENCIA`;

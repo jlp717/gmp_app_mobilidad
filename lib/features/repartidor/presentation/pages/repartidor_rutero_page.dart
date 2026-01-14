@@ -548,7 +548,12 @@ class _DetailSheetState extends State<_DetailSheet> {
   Future<void> _loadDetails() async {
     try {
        final provider = Provider.of<EntregasProvider>(context, listen: false);
-       final full = await provider.obtenerDetalleAlbaran(widget.albaran.numeroAlbaran, widget.albaran.ejercicio, widget.albaran.serie);
+       final full = await provider.obtenerDetalleAlbaran(
+           widget.albaran.numeroAlbaran, 
+           widget.albaran.ejercicio, 
+           widget.albaran.serie,
+           widget.albaran.terminal
+       );
        if (mounted) {
          if (full != null) {
            setState(() {
@@ -829,6 +834,31 @@ class _DetailSheetState extends State<_DetailSheet> {
                                ),
                                child: Row(
                                    children: [
+                                       // Check Button (Quick verify)
+                                       IconButton(
+                                           icon: Icon(
+                                               isMatch ? Icons.check_circle : Icons.check_circle_outline, 
+                                               color: isMatch ? AppTheme.success : AppTheme.textSecondary.withOpacity(0.5)
+                                           ),
+                                           padding: EdgeInsets.zero,
+                                           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                                           onPressed: () {
+                                               setState(() {
+                                                   if (!isMatch) {
+                                                       // Mark as correct
+                                                       _qtyParams[item.codigoArticulo] = requested;
+                                                       _obsParams[item.codigoArticulo] = '';
+                                                   } else {
+                                                       // Toggle off? Or just leave it. 
+                                                       // User asked "if line by line goes accepting". So setting to correct is key.
+                                                       // Maybe if already match, set to 0? No, that's dangerous.
+                                                       // Let's just re-confirm.
+                                                   }
+                                               });
+                                           },
+                                       ),
+                                       Container(width: 1, height: 30, color: AppTheme.borderColor),
+                                       
                                        IconButton(
                                            icon: const Icon(Icons.remove, color: AppTheme.textSecondary),
                                            onPressed: () {

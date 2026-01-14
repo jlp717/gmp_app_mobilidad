@@ -148,6 +148,7 @@ class AlbaranEntrega {
   final int numeroAlbaran;
   final int ejercicio;
   final String serie;
+  final int terminal;
   final int numeroFactura;
   final String serieFactura;
   final String codigoCliente;
@@ -174,6 +175,7 @@ class AlbaranEntrega {
     required this.numeroAlbaran,
     required this.ejercicio,
     this.serie = '',
+    this.terminal = 0,
     this.numeroFactura = 0,
     this.serieFactura = '',
     required this.codigoCliente,
@@ -202,6 +204,7 @@ class AlbaranEntrega {
       numeroAlbaran: json['numeroAlbaran'] ?? json['numero'] ?? 0,
       ejercicio: json['ejercicio'] ?? DateTime.now().year,
       serie: json['serie']?.toString() ?? '',
+      terminal: json['terminal'] ?? 0,
       numeroFactura: json['numeroFactura'] ?? 0,
       serieFactura: json['serieFactura']?.toString() ?? '',
       codigoCliente: json['codigoCliente']?.toString() ?? '',
@@ -313,11 +316,11 @@ class EntregasProvider extends ChangeNotifier {
   }
 
   /// Obtener detalle de un albarán
-  Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio, String serie) async {
+  Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio, String serie, int terminal) async {
     try {
       // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
       final response = await ApiClient.get(
-        '/entregas/albaran/$numero/$ejercicio?serie=$serie',
+        '/entregas/albaran/$numero/$ejercicio?serie=$serie&terminal=$terminal',
       );
 
       if (response['success'] == true && response['albaran'] != null) {
