@@ -8,8 +8,6 @@ import '../../../entregas/providers/entregas_provider.dart';
 import '../../../../core/api/api_client.dart';
 
 class RepartidorRuteroPage extends StatefulWidget {
-  // Removed repartidorId from constructor as it should be derived from global state (Auth/Filter)
-  // But to be compatible with existing navigation if passed:
   final String? repartidorId;
 
   const RepartidorRuteroPage({super.key, this.repartidorId});
@@ -22,6 +20,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _weekDays = [];
   bool _isLoadingWeek = false;
+  String? _lastLoadedId;
 
   @override
   void initState() {
@@ -31,21 +30,49 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final filter = Provider.of<FilterProvider>(context, listen: true);
+    
+    // Determine effective target
+    // Check role safely using currentUser (not auth.isJefeVentas which doesn't exist on provider)
+    // Use auth.isDirector as the proxy for "Jefe/Admin"
+    String targetId = widget.repartidorId ?? auth.currentUser?.code ?? '';
+    if (auth.isDirector && filter.selectedVendor != null) {
+      targetId = filter.selectedVendor!;
+    }
+
+    // Auto-reload if ID changed
+    if (targetId.isNotEmpty && targetId != _lastLoadedId) {
+      // Trigger load next frame to avoid build cycle
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Ensure mounted
+        if (mounted) {
+          setState(() { _lastLoadedId = targetId; });
+          _loadData(); 
+        }
+      });
+    }
+  }
+
   Future<void> _loadData() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final filter = Provider.of<FilterProvider>(context, listen: false);
     final entregas = Provider.of<EntregasProvider>(context, listen: false);
 
-    String targetId = widget.repartidorId ?? auth.user?.code ?? '';
+    String targetId = widget.repartidorId ?? auth.currentUser?.code ?? '';
     
-    // Support "View As"
-    if (auth.isJefeVentas && filter.selectedVendorCode != null) {
-      targetId = filter.selectedVendorCode!;
+    // View As logic
+    if (auth.isDirector && filter.selectedVendor != null) {
+      targetId = filter.selectedVendor!;
     }
 
     if (targetId.isNotEmpty) {
+      _lastLoadedId = targetId; // Sync
       entregas.setRepartidor(targetId);
-      entregas.seleccionarFecha(_selectedDate); // Load deliveries
+      entregas.seleccionarFecha(_selectedDate); 
       _loadWeekData(targetId);
     }
   }
@@ -74,8 +101,6 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     });
     final entregas = Provider.of<EntregasProvider>(context, listen: false);
     entregas.seleccionarFecha(date);
-     // Reload week stats effectively? Or keeps static? 
-     // Usually stats don't change by clicking a day, but clicking sync does.
   }
 
   @override
@@ -84,9 +109,12 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     final filter = Provider.of<FilterProvider>(context);
     final entregas = Provider.of<EntregasProvider>(context);
 
-    String currentName = auth.user?.name ?? 'Repartidor';
-    if (auth.isJefeVentas && filter.selectedVendor != null) {
-      currentName = filter.selectedVendor!.name;
+    // Header Name Logic
+    String currentName = auth.currentUser?.name ?? 'Repartidor';
+    if (auth.isDirector && filter.selectedVendor != null) {
+      // FilterProvider only stores the ID string, so we show "ID" or a generic label.
+      // Ideally we'd look up the name, but for now showing ID is safer than crashing.
+      currentName = 'Repartidor ${filter.selectedVendor}';
     }
 
     return Scaffold(
@@ -140,7 +168,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           final dayData = _weekDays[index];
           final date = DateTime.parse(dayData['date']);
           final isSelected = DateUtils.isSameDay(date, _selectedDate);
-          final status = dayData['status']; // 'good' (green), 'bad' (red), 'none' (gray)
+          final status = dayData['status'];
           final count = dayData['clients'] ?? 0;
 
           Color bgColor = Colors.white;
