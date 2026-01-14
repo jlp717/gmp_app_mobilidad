@@ -20,21 +20,22 @@ async function findTable() {
         `;
 
         const rows = await query(sql, false);
-        console.log('--- FOUND TABLES CANDIDATES ---');
-        rows.forEach(r => console.log(`Schema: ${r.TABLE_SCHEMA}, Table: ${r.TABLE_NAME}`));
-        console.log('-------------------------------');
 
-        if (rows.length > 0) {
-            const table = rows[0].TABLE_NAME;
-            const schema = rows[0].TABLE_SCHEMA;
-            console.log(`Checking content of ${schema}.${table}...`);
-            const checkSql = `SELECT * FROM ${schema}.${table} FETCH FIRST 1 ROWS ONLY`;
-            const content = await query(checkSql, false);
-            console.log('Content:', content);
+        console.log('\n\n==========================================');
+        console.log('       FOUND TABLES CANDIDATES');
+        console.log('==========================================');
+
+        if (rows.length === 0) {
+            console.log('NO TABLES FOUND matching criteria.');
+        } else {
+            rows.forEach(r => {
+                console.log(`found: ${r.TABLE_SCHEMA}.${r.TABLE_NAME}`);
+            });
         }
+        console.log('==========================================\n');
 
-    } catch (e) {
-        console.error('Error:', e);
+    } catch (error) {
+        console.error('Error finding table:', error);
     }
 }
 

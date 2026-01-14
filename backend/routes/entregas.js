@@ -153,9 +153,9 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             SELECT 
                 L.NUMEROLINEA as ITEM_ID,
                 TRIM(L.CODIGOARTICULO) as CODIGO,
-                TRIM(L.DESCRIPCIONARTICULO) as DESC,
-                L.CANTIDADSIRUVIDA as QTY
-            FROM DSEDAC.LAL L
+                TRIM(L.DESCRIPCION) as DESC,
+                L.CANTIDADUNIDADES as QTY
+            FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
             ORDER BY L.NUMEROLINEA
         `;
