@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/api/api_client.dart';
 import '../../../../core/providers/dashboard_provider.dart';
 import '../../../clients/presentation/pages/simple_client_list_page.dart';
 import '../../../rutero/presentation/pages/rutero_page.dart';
