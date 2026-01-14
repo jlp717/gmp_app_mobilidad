@@ -429,10 +429,13 @@ router.get('/evolution', async (req, res) => {
                 const clients = row ? parseInt(row.CLIENTS) || 0 : 0;
 
                 // SEASONAL OBJECTIVE with INHERITED support:
-                // If we have combined history (own + inherited), use it for seasonality.
+                // If vendor has fixed monthly target, use that. Otherwise calculate from history.
                 let seasonalObjective = 0;
 
-                if (combinedPrevTotal > 0) {
+                // FIXED TARGET OVERRIDE: If fixedMonthlyTarget is set, use it for all months
+                if (fixedMonthlyTarget && fixedMonthlyTarget > 0) {
+                    seasonalObjective = fixedMonthlyTarget; // 25,000€ for vendor 15
+                } else if (combinedPrevTotal > 0) {
                     // Get own sales first
                     let baseSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
 
