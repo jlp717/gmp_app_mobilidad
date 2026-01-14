@@ -471,7 +471,7 @@ router.get('/matrix', async (req, res) => {
         // --- NEW: Client Contact & Observations ---
         let contactInfo = { phone: '', phone2: '', email: '', phones: [] };
         let editableNotes = null;
-        
+
         // Get phones (separate try-catch to not break if one fails)
         try {
             const contactRows = await query(`
@@ -494,7 +494,7 @@ router.get('/matrix', async (req, res) => {
         } catch (e) {
             logger.warn(`Could not load contact info: ${e.message}`);
         }
-        
+
         // Get editable notes (separate try-catch - table may not exist)
         try {
             const notesRows = await query(`
@@ -528,7 +528,7 @@ router.get('/matrix', async (req, res) => {
         if (subfamilyCode && subfamilyCode.trim()) {
             filterConditions += ` AND A.CODIGOSUBFAMILIA = '${subfamilyCode.trim()}'`;
         }
-        
+
         // NEW: FI hierarchical filters (join con ARTX)
         let needsArtxJoin = false;
         if (fi1 && fi1.trim()) {
@@ -550,7 +550,7 @@ router.get('/matrix', async (req, res) => {
         if (fi5 && fi5.trim()) {
             filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = '${fi5.trim()}'`;
         }
-        
+
         // Build ARTX join if needed
         const artxJoin = needsArtxJoin ? 'LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO' : '';
 
@@ -611,7 +611,7 @@ router.get('/matrix', async (req, res) => {
 
         // Load FI descriptions for all levels (from cache or fallback to query)
         let fi1Names = {}, fi2Names = {}, fi3Names = {}, fi4Names = {}, fi5Names = {};
-        
+
         if (isMetadataCacheReady()) {
             // Use cached data (instant)
             Object.assign(familyNames, getCachedFamilyNames() || {});
@@ -625,37 +625,37 @@ router.get('/matrix', async (req, res) => {
             try {
                 const famRows = await query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM DSEDAC.FAM`, false, false);
                 famRows.forEach(r => { familyNames[r.CODIGOFAMILIA?.trim()] = r.DESCRIPCIONFAMILIA?.trim() || r.CODIGOFAMILIA?.trim(); });
-                
+
                 const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false);
-                fi1Rows.forEach(r => { 
+                fi1Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi1Names[code] = name;
                 });
-                
+
                 const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false);
-                fi2Rows.forEach(r => { 
+                fi2Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi2Names[code] = name;
                 });
-                
+
                 const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false);
-                fi3Rows.forEach(r => { 
+                fi3Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi3Names[code] = name;
                 });
-                
+
                 const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false);
-                fi4Rows.forEach(r => { 
+                fi4Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi4Names[code] = name;
                 });
-                
+
                 const fi5Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI5`, false, false);
-                fi5Rows.forEach(r => { 
+                fi5Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi5Names[code] = name;
@@ -668,10 +668,10 @@ router.get('/matrix', async (req, res) => {
 
         // Build hierarchy: Family -> Subfamily -> Product (legacy)
         const familyMap = new Map();
-        
+
         // NEW: Build 5-level FI hierarchy: FI1 -> FI2 -> FI3 -> FI4 -> Products
         const fiHierarchyMap = new Map();
-        
+
         let grandTotalSales = 0, grandTotalCost = 0, grandTotalUnits = 0;
         let grandTotalPrevSales = 0, grandTotalPrevCost = 0, grandTotalPrevUnits = 0;
         const productSet = new Set();
@@ -703,7 +703,7 @@ router.get('/matrix', async (req, res) => {
 
             const avgClientTariff = parseFloat(row.AVG_CLIENT_TARIFF) || 0;
             const avgBaseTariff = parseFloat(row.AVG_BASE_TARIFF) || 0;
-            
+
             // FI codes from row - all 5 levels
             const fi1Code = row.FI1_CODE?.trim() || '';
             const fi2Code = row.FI2_CODE?.trim() || '';
@@ -724,7 +724,7 @@ router.get('/matrix', async (req, res) => {
                     name: subfamilyNames[subfamCode] ? `${subfamCode} - ${subfamilyNames[subfamCode]}` : subfamCode
                 });
             }
-            
+
             // Populate FI Filter Maps - all 5 levels
             if (fi1Code && !availableFi1Map.has(fi1Code)) {
                 availableFi1Map.set(fi1Code, {
@@ -859,13 +859,13 @@ router.get('/matrix', async (req, res) => {
                 product.monthlyData[year][month].units += units;
                 if (avgDiscountPct > 0) product.monthlyData[year][month].avgDiscountPct = avgDiscountPct;
                 if (avgDiscountEur > 0) product.monthlyData[year][month].avgDiscountEur = avgDiscountEur;
-                
+
                 // ===== BUILD 5-LEVEL FI HIERARCHY (FI1 > FI2 > FI3 > FI4 > Products) =====
                 const fi1Key = fi1Code || 'SIN_CAT';
                 const fi2Key = fi2Code || 'General';
                 const fi3Key = fi3Code || '';
                 const fi4Key = fi4Code || '';
-                
+
                 // FI1 Level (Categoría)
                 if (!fiHierarchyMap.has(fi1Key)) {
                     fiHierarchyMap.set(fi1Key, {
@@ -894,7 +894,7 @@ router.get('/matrix', async (req, res) => {
                 fi1Level.monthlyData[year][month].sales += sales;
                 fi1Level.monthlyData[year][month].cost += cost;
                 fi1Level.monthlyData[year][month].units += units;
-                
+
                 // FI2 Level (Subcategoría)
                 if (!fi1Level.children.has(fi2Key)) {
                     fi1Level.children.set(fi2Key, {
@@ -923,7 +923,7 @@ router.get('/matrix', async (req, res) => {
                 fi2Level.monthlyData[year][month].sales += sales;
                 fi2Level.monthlyData[year][month].cost += cost;
                 fi2Level.monthlyData[year][month].units += units;
-                
+
                 // FI3 Level (Detalle) - Solo si hay código FI3
                 const fi3Display = fi3Key || 'General';
                 if (!fi2Level.children.has(fi3Display)) {
@@ -953,7 +953,7 @@ router.get('/matrix', async (req, res) => {
                 fi3Level.monthlyData[year][month].sales += sales;
                 fi3Level.monthlyData[year][month].cost += cost;
                 fi3Level.monthlyData[year][month].units += units;
-                
+
                 // FI4 Level (Especial) - Solo si hay código FI4
                 const fi4Display = fi4Key || 'General';
                 if (!fi3Level.children.has(fi4Display)) {
@@ -983,7 +983,7 @@ router.get('/matrix', async (req, res) => {
                 fi4Level.monthlyData[year][month].sales += sales;
                 fi4Level.monthlyData[year][month].cost += cost;
                 fi4Level.monthlyData[year][month].units += units;
-                
+
                 // Product level within FI4
                 if (!fi4Level.products.has(prodCode)) {
                     fi4Level.products.set(prodCode, {
@@ -1217,10 +1217,10 @@ router.get('/matrix', async (req, res) => {
             if (p.prevYearSales === 0 && p.totalSales > 0) yoyTrend = 'new';
             else if (variation > 5) yoyTrend = 'up';
             else if (variation < -5) yoyTrend = 'down';
-            
+
             // Format product monthly data
             const productMonthly = formatLevelMonthly(p.monthlyData || {});
-            
+
             return {
                 code: p.code,
                 name: p.name,
@@ -1250,12 +1250,12 @@ router.get('/matrix', async (req, res) => {
                 yoyVariation: parseFloat(variation.toFixed(1))
             };
         };
-        
+
         // Build FI hierarchy array
         const fiHierarchy = Array.from(fiHierarchyMap.values()).map(fi1 => {
             const margin1 = fi1.totalSales - fi1.totalCost;
             const marginPercent1 = fi1.totalSales > 0 ? (margin1 / fi1.totalSales) * 100 : 0;
-            
+
             const children1 = Array.from(fi1.children.values()).map(fi2 => {
                 const margin2 = fi2.totalSales - fi2.totalCost;
                 const marginPercent2 = fi2.totalSales > 0 ? (margin2 / fi2.totalSales) * 100 : 0;
@@ -1265,7 +1265,7 @@ router.get('/matrix', async (req, res) => {
                 if (fi2.prevYearSales === 0 && fi2.totalSales > 0) yoy2 = 'new';
                 else if (variation2 > 5) yoy2 = 'up';
                 else if (variation2 < -5) yoy2 = 'down';
-                
+
                 const children2 = Array.from(fi2.children.values()).map(fi3 => {
                     const margin3 = fi3.totalSales - fi3.totalCost;
                     const marginPercent3 = fi3.totalSales > 0 ? (margin3 / fi3.totalSales) * 100 : 0;
@@ -1275,7 +1275,7 @@ router.get('/matrix', async (req, res) => {
                     if (fi3.prevYearSales === 0 && fi3.totalSales > 0) yoy3 = 'new';
                     else if (variation3 > 5) yoy3 = 'up';
                     else if (variation3 < -5) yoy3 = 'down';
-                    
+
                     const children3 = Array.from(fi3.children.values()).map(fi4 => {
                         const margin4 = fi4.totalSales - fi4.totalCost;
                         const marginPercent4 = fi4.totalSales > 0 ? (margin4 / fi4.totalSales) * 100 : 0;
@@ -1285,11 +1285,11 @@ router.get('/matrix', async (req, res) => {
                         if (fi4.prevYearSales === 0 && fi4.totalSales > 0) yoy4 = 'new';
                         else if (variation4 > 5) yoy4 = 'up';
                         else if (variation4 < -5) yoy4 = 'down';
-                        
+
                         const products = Array.from(fi4.products.values())
                             .map(formatFiProduct)
                             .sort((a, b) => b.totalSales - a.totalSales);
-                        
+
                         return {
                             code: fi4.code,
                             name: fi4.name,
@@ -1310,7 +1310,7 @@ router.get('/matrix', async (req, res) => {
                             products
                         };
                     }).filter(f => f.totalSales > 0 || f.productCount > 0).sort((a, b) => b.totalSales - a.totalSales);
-                    
+
                     return {
                         code: fi3.code,
                         name: fi3.name,
@@ -1331,7 +1331,7 @@ router.get('/matrix', async (req, res) => {
                         children: children3
                     };
                 }).filter(f => f.totalSales > 0 || f.childCount > 0).sort((a, b) => b.totalSales - a.totalSales);
-                
+
                 return {
                     code: fi2.code,
                     name: fi2.name,
@@ -1352,14 +1352,14 @@ router.get('/matrix', async (req, res) => {
                     children: children2
                 };
             }).filter(f => f.totalSales > 0 || f.childCount > 0).sort((a, b) => b.totalSales - a.totalSales);
-            
+
             const prevMargin1 = fi1.prevYearSales - fi1.prevYearCost;
             const variation1 = fi1.prevYearSales > 0 ? ((fi1.totalSales - fi1.prevYearSales) / fi1.prevYearSales) * 100 : 0;
             let yoy1 = 'neutral';
             if (fi1.prevYearSales === 0 && fi1.totalSales > 0) yoy1 = 'new';
             else if (variation1 > 5) yoy1 = 'up';
             else if (variation1 < -5) yoy1 = 'down';
-            
+
             return {
                 code: fi1.code,
                 name: fi1.name,
@@ -1391,8 +1391,8 @@ router.get('/matrix', async (req, res) => {
 
         // Determine if client is NEW (no sales in entire previous year)
         const isNewClient = grandTotalPrevSales < 0.01 && grandTotalSales > 0;
-        const productGrowth = prevProductSet.size > 0 
-            ? ((productSet.size - prevProductSet.size) / prevProductSet.size) * 100 
+        const productGrowth = prevProductSet.size > 0
+            ? ((productSet.size - prevProductSet.size) / prevProductSet.size) * 100
             : (productSet.size > 0 ? 100 : 0);
 
         const summary = {
@@ -1489,7 +1489,7 @@ router.get('/by-client', async (req, res) => {
 
         const yearsFilter = yearsArray.join(',');
         const monthsFilter = monthsArray.join(',');
-        
+
         // Use LACLAE with R1_T8CDVD (route vendor) for consistency with client list and rutero
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes, 'L');
 
@@ -1508,14 +1508,14 @@ router.get('/by-client', async (req, res) => {
 
         // OPTIMIZATION: Get client codes from cache instead of heavy subquery
         const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
-        
+
         let totalClientsCount = 0;
         let currentRows = [];
 
         if (cachedClientCodes && cachedClientCodes.length > 0) {
             // Use cached client codes for fast filtering
             const clientCodesFilter = cachedClientCodes.map(c => `'${c}'`).join(',');
-            
+
             // Query 0: Count clients from cache (filtered by extra filters if any)
             if (extraFilters) {
                 const countResult = await query(`
@@ -1559,7 +1559,7 @@ router.get('/by-client', async (req, res) => {
         } else {
             // Fallback: Use original query with vendedor filter if cache not available
             const vendedorFilterSales = buildVendedorFilterLACLAE(vendedorCodes, 'L');
-            
+
             currentRows = await query(`
               SELECT 
                 L.LCCDCL as CODE,
@@ -1637,6 +1637,49 @@ router.get('/by-client', async (req, res) => {
             }
         }
 
+        // NEW: Fetch fixed monthly targets from COMMERCIAL_TARGETS for vendors with fixed amounts
+        // This is for new commercials like #15 who have fixed objectives (e.g., 25,000€/month)
+        let fixedTargetsMap = new Map();
+        const vendorCodesArray = vendedorCodes ? vendedorCodes.split(',').map(v => v.trim()) : [];
+
+        if (vendorCodesArray.length > 0) {
+            const now = getCurrentDate();
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+
+            try {
+                const vendorList = vendorCodesArray.map(v => `'${v}'`).join(',');
+                const fixedRows = await query(`
+                    SELECT CODIGOVENDEDOR, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA
+                    FROM JAVIER.COMMERCIAL_TARGETS
+                    WHERE CODIGOVENDEDOR IN (${vendorList})
+                      AND ANIO = ${currentYear}
+                      AND (MES = ${currentMonth} OR MES IS NULL)
+                      AND ACTIVO = 1
+                    ORDER BY MES DESC
+                    FETCH FIRST 1 ROWS ONLY
+                `, false);
+
+                fixedRows.forEach(r => {
+                    const vendorCode = r.CODIGOVENDEDOR?.trim();
+                    if (vendorCode) {
+                        // Store as vendor-level target (applies to all clients of this vendor)
+                        fixedTargetsMap.set(`VENDOR_${vendorCode}`, {
+                            importe: parseFloat(r.IMPORTE_OBJETIVO) || 0,
+                            baseComision: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
+                            porcentaje: parseFloat(r.PORCENTAJE_MEJORA) || 10
+                        });
+                    }
+                });
+
+                if (fixedTargetsMap.size > 0) {
+                    logger.info(`[OBJECTIVES] Loaded ${fixedTargetsMap.size} fixed commercial targets`);
+                }
+            } catch (err) {
+                logger.warn(`Could not load fixed commercial targets: ${err.message}`);
+            }
+        }
+
         const clients = currentRows.map(r => {
             const code = r.CODE?.trim() || '';
             const sales = parseFloat(r.SALES) || 0;
@@ -1645,18 +1688,45 @@ router.get('/by-client', async (req, res) => {
             const prevSales = prevSalesMap.get(code) || 0;
 
             // Objective Logic: 
-            // 1. Look for specific client rule
-            // 2. If not found, use Default from DB ('*')
-            // 3. Fallback to 10%
-            let targetPct = objectiveConfigMap.has(code)
-                ? objectiveConfigMap.get(code)
-                : defaultObjectiveData.percentage;
+            // 1. Check COMMERCIAL_TARGETS for fixed monthly amount (for new commercials like #15)
+            // 2. If not found, look for specific client rule in OBJ_CONFIG
+            // 3. If not found, use Default from DB ('*')
+            // 4. Fallback to 10%
 
-            // Percentage stored as 10 for 10%. Multiplier = 1 + (10/100) = 1.10
-            const multiplier = 1 + (targetPct / 100.0);
+            // First, check if we have a fixed vendor-level target from COMMERCIAL_TARGETS
+            // Fixed targets apply to ALL clients of that vendor (e.g., commercial #15 has 25,000€/month total)
+            let fixedTarget = null;
+            for (const vendorCode of vendorCodesArray) {
+                const vendorTarget = fixedTargetsMap.get(`VENDOR_${vendorCode}`);
+                if (vendorTarget && vendorTarget.importe > 0) {
+                    fixedTarget = vendorTarget;
+                    break;
+                }
+            }
 
-            // Objective: Previous year sales * multiplier
-            const objective = prevSales > 0 ? prevSales * multiplier : sales;
+            let objective = 0;
+            let targetSource = 'percentage';
+
+            if (fixedTarget && fixedTarget.importe > 0) {
+                // Use fixed amount from COMMERCIAL_TARGETS
+                // NOTE: This is total monthly target for the vendor, not per-client
+                // For per-client view, we still use percentage-based
+                // The fixed target is shown at vendor summary level
+                objective = fixedTarget.importe;
+                targetSource = 'fixed';
+            } else {
+                // Use percentage-based calculation
+                let targetPct = objectiveConfigMap.has(code)
+                    ? objectiveConfigMap.get(code)
+                    : defaultObjectiveData.percentage;
+
+                // Percentage stored as 10 for 10%. Multiplier = 1 + (10/100) = 1.10
+                const multiplier = 1 + (targetPct / 100.0);
+
+                // Objective: Previous year sales * multiplier
+                objective = prevSales > 0 ? prevSales * multiplier : sales;
+            }
+
             const progress = objective > 0 ? (sales / objective) * 100 : (sales > 0 ? 100 : 0);
 
             // Status based on progress
