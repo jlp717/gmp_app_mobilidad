@@ -137,6 +137,9 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
             isLoading: entregas.isLoading || _isLoadingWeek,
           ),
 
+          // WEEK NAVIGATION ROW
+          if (_weekDays.isNotEmpty) _buildWeekNavigation(entregas),
+
           // WEEKLY STRIP
           if (_weekDays.isNotEmpty) _buildWeeklyStrip(),
 
@@ -158,6 +161,103 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
             child: entregas.isLoading 
                 ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
                 : _buildClientList(entregas),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Calculate week number
+  int _getWeekNumber(DateTime date) {
+    final firstDayOfYear = DateTime(date.year, 1, 1);
+    final days = date.difference(firstDayOfYear).inDays;
+    return ((days + firstDayOfYear.weekday) / 7).ceil();
+  }
+
+  void _changeWeek(int delta) {
+    setState(() {
+      _selectedDate = _selectedDate.add(Duration(days: 7 * delta));
+    });
+    _loadData();
+  }
+
+  Widget _buildWeekNavigation(EntregasProvider entregas) {
+    final weekNum = _getWeekNumber(_selectedDate);
+    final totalClients = entregas.albaranes.length;
+    
+    // Calculate week date range
+    final weekStart = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    final dateFormat = DateFormat('d MMM', 'es_ES');
+    final weekRange = '${dateFormat.format(weekStart)} - ${dateFormat.format(weekEnd)}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: AppTheme.darkSurface,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Left: Week Navigation
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left, color: AppTheme.textSecondary),
+                onPressed: () => _changeWeek(-1),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    'Semana $weekNum',
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    weekRange,
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                onPressed: () => _changeWeek(1),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+            ],
+          ),
+          
+          // Right: Client Count
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.neonBlue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.people_alt_outlined, size: 16, color: AppTheme.neonBlue),
+                const SizedBox(width: 6),
+                Text(
+                  '$totalClients Clientes',
+                  style: const TextStyle(
+                    color: AppTheme.neonBlue,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -426,14 +526,29 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                     ),
                     const SizedBox(height: 12),
                     
-                     // Client Info
-                    Text(
-                      albaran.nombreCliente,
-                      style: const TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
+                     // Client Info with Code
+                    RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${albaran.codigoCliente} ',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.neonBlue,
+                            ),
+                          ),
+                          TextSpan(
+                            text: albaran.nombreCliente,
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -451,6 +566,46 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                              overflow: TextOverflow.ellipsis,
                            ),
                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Payment Condition Badge
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: albaran.esCTR ? AppTheme.success.withOpacity(0.15) : AppTheme.textSecondary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: albaran.esCTR ? AppTheme.success.withOpacity(0.5) : AppTheme.textSecondary.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                albaran.esCTR ? Icons.payments : Icons.credit_card,
+                                size: 14,
+                                color: albaran.esCTR ? AppTheme.success : AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                albaran.esCTR ? 'COBRAR' : 'CRÉDITO',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: albaran.esCTR ? AppTheme.success : AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          albaran.formaPago.isNotEmpty ? albaran.formaPago : '',
+                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        ),
                       ],
                     ),
                   ],
