@@ -131,9 +131,10 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 router.get('/albaran/:numero/:ejercicio', async (req, res) => {
     try {
         const { numero, ejercicio } = req.params;
+        const serie = req.query.serie; // Optional series filter
 
         // 1. Get Header - FIX: usar columnas correctas de CLI
-        const headerSql = `
+        let headerSql = `
             SELECT CAC.*, 
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as CLIENTE_NOM, 
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIR, 
@@ -141,30 +142,45 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             FROM DSEDAC.CAC
             LEFT JOIN DSEDAC.CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
             WHERE CAC.NUMEROALBARAN = ${numero} AND CAC.EJERCICIOALBARAN = ${ejercicio}
-            FETCH FIRST 1 ROWS ONLY
         `;
+
+        if (serie) {
+            headerSql += ` AND CAC.SERIEALBARAN = '${serie}'`;
+        }
+
+        headerSql += ` FETCH FIRST 1 ROWS ONLY`;
+
         const headers = await query(headerSql, false);
         if (headers.length === 0) return res.status(404).json({ success: false, error: 'Albaran not found' });
 
         const header = headers[0];
 
         // 2. Get Items
-        const itemsSql = `
+        let itemsSql = `
             SELECT 
                 L.SECUENCIA as ITEM_ID,
                 TRIM(L.CODIGOARTICULO) as CODIGO,
                 TRIM(L.DESCRIPCION) as DESC,
                 L.CANTIDADUNIDADES as QTY,
                 TRIM(L.UNIDADMEDIDA) as UNIT,
-                L.PRECIOVENTA as PRICE
+                CASE 
+                    WHEN L.CANTIDADUNIDADES <> 0 THEN ROUND(L.IMPORTEVENTA / L.CANTIDADUNIDADES, 4) 
+                    ELSE 0 
+                END as PRICE
             FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
-            ORDER BY L.SECUENCIA
         `;
+
+        if (serie) {
+            itemsSql += ` AND L.SERIEALBARAN = '${serie}'`;
+        }
+
+        itemsSql += ` ORDER BY L.SECUENCIA`;
+
         const items = await query(itemsSql, false);
 
         const albaran = {
-            id: `${header.EJERCICIOALBARAN}-${header.SERIEALBARAN || ''}-${header.NUMEROALBARAN}`,
+            id: `${header.EJERCICIOALBARAN} -${header.SERIEALBARAN || ''} -${header.NUMEROALBARAN} `,
             numeroAlbaran: header.NUMEROALBARAN,
             ejercicio: header.EJERCICIOALBARAN,
             numeroFactura: header.NUMEROFACTURA || 0,
@@ -172,7 +188,7 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             nombreCliente: header.CLIENTE_NOM?.trim(),
             direccion: header.DIR?.trim(),
             poblacion: header.POB?.trim(),
-            fecha: `${header.DIADOCUMENTO}/${header.MESDOCUMENTO}/${header.ANODOCUMENTO}`,
+            fecha: `${header.DIADOCUMENTO} /${header.MESDOCUMENTO}/${header.ANODOCUMENTO} `,
             importe: parseFloat(header.IMPORTETOTAL),
             items: items.map(i => ({
                 itemId: i.ITEM_ID,

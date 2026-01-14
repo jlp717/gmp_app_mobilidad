@@ -313,11 +313,11 @@ class EntregasProvider extends ChangeNotifier {
   }
 
   /// Obtener detalle de un albarán
-  Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio) async {
+  Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio, String serie) async {
     try {
       // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
       final response = await ApiClient.get(
-        '/entregas/albaran/$numero/$ejercicio',
+        '/entregas/albaran/$numero/$ejercicio?serie=$serie',
       );
 
       if (response['success'] == true && response['albaran'] != null) {

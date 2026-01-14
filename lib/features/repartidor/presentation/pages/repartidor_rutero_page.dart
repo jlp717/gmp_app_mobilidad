@@ -548,7 +548,7 @@ class _DetailSheetState extends State<_DetailSheet> {
   Future<void> _loadDetails() async {
     try {
        final provider = Provider.of<EntregasProvider>(context, listen: false);
-       final full = await provider.obtenerDetalleAlbaran(widget.albaran.numeroAlbaran, widget.albaran.ejercicio);
+       final full = await provider.obtenerDetalleAlbaran(widget.albaran.numeroAlbaran, widget.albaran.ejercicio, widget.albaran.serie);
        if (mounted) {
          if (full != null) {
            setState(() {
@@ -789,42 +789,48 @@ class _DetailSheetState extends State<_DetailSheet> {
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                  // Row 1: Name and Price
-                  Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                          Expanded(
-                              child: Text(
-                                  item.descripcion.isNotEmpty ? item.descripcion : 'Art. ${item.codigoArticulo}', 
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)
-                              ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                              '${price.toStringAsFixed(2)} €/ud',
-                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)
-                          ),
-                      ],
+                  // Row 1: Name
+                  Text(
+                      item.descripcion.isNotEmpty ? item.descripcion : 'Art. ${item.codigoArticulo}', 
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary, fontSize: 16)
                   ),
                   const SizedBox(height: 12),
                   
-                  // Row 2: Controls
+                  // Row 2: Comparison (Requested vs Delivered)
                   Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                           // Input Qty
+                           // Left: Requested
                            Container(
-                               width: 100,
+                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                               decoration: BoxDecoration(
+                                   color: AppTheme.neonBlue.withOpacity(0.1),
+                                   borderRadius: BorderRadius.circular(8),
+                                   border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3))
+                               ),
+                               child: Column(
+                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                   children: [
+                                       const Text('PEDIDO', style: TextStyle(color: AppTheme.neonBlue, fontSize: 10, fontWeight: FontWeight.bold)),
+                                       Text(
+                                           '${requested.toStringAsFixed(0)} $uom', 
+                                           style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)
+                                       ),
+                                   ],
+                               ),
+                           ),
+                           
+                           // Right: Delivered Input
+                           Container(
                                decoration: BoxDecoration(
                                    color: AppTheme.darkSurface,
                                    borderRadius: BorderRadius.circular(8),
-                                   border: Border.all(color: AppTheme.borderColor)
+                                   border: Border.all(color: isMatch ? AppTheme.borderColor : AppTheme.error)
                                ),
                                child: Row(
                                    children: [
                                        IconButton(
-                                           icon: const Icon(Icons.remove, size: 16, color: AppTheme.textSecondary),
-                                           padding: EdgeInsets.zero,
-                                           constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                           icon: const Icon(Icons.remove, color: AppTheme.textSecondary),
                                            onPressed: () {
                                                setState(() {
                                                    double val = _qtyParams[item.codigoArticulo] ?? 0;
@@ -832,46 +838,57 @@ class _DetailSheetState extends State<_DetailSheet> {
                                                });
                                            },
                                        ),
-                                       Expanded(
-                                           child: Center(
+                                       GestureDetector(
+                                           onTap: () => _showQuantityDialog(item, current),
+                                           child: Container(
+                                               width: 60,
+                                               height: 48,
+                                               alignment: Alignment.center,
+                                               decoration: BoxDecoration(
+                                                  color: AppTheme.darkBase,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(color: AppTheme.borderColor.withOpacity(0.3))
+                                               ),
                                                child: Text(
                                                    current.toStringAsFixed(0),
                                                    style: TextStyle(
-                                                       fontWeight: FontWeight.bold, 
-                                                       color: isMatch ? AppTheme.success : AppTheme.error,
-                                                       fontSize: 16
+                                                       fontSize: 20, 
+                                                       fontWeight: FontWeight.bold,
+                                                       color: isMatch ? AppTheme.success : AppTheme.error
                                                    ),
                                                ),
                                            ),
                                        ),
                                        IconButton(
-                                           icon: const Icon(Icons.add, size: 16, color: AppTheme.textSecondary),
-                                           padding: EdgeInsets.zero,
-                                           constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                           icon: const Icon(Icons.add, color: AppTheme.textSecondary),
                                            onPressed: () {
-                                               setState(() {
+                                                setState(() {
                                                    double val = _qtyParams[item.codigoArticulo] ?? 0;
                                                    _qtyParams[item.codigoArticulo] = val + 1;
-                                               });
+                                                });
                                            },
                                        ),
                                    ],
                                ),
-                           ),
-                           const SizedBox(width: 12),
-                           Text('de $requested $uom', style: const TextStyle(color: AppTheme.textSecondary)),
-                           const Spacer(),
-                           Column(
-                               crossAxisAlignment: CrossAxisAlignment.end,
-                               children: [
-                                   const Text('Subtotal', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
-                                   Text('${subtotal.toStringAsFixed(2)} €', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                               ],
                            )
                       ],
                   ),
                   
-                  // Row 3: Observation if mismatch
+                  const SizedBox(height: 8),
+                  
+                  // Row 3: Price & total
+                  Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                          Text('${price.toStringAsFixed(2)} €/ud', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                          const SizedBox(width: 8),
+                          const Text('|', style: TextStyle(color: AppTheme.textSecondary)),
+                          const SizedBox(width: 8),
+                          Text('${subtotal.toStringAsFixed(2)} €', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary, fontSize: 14)),
+                      ],
+                  ),
+
+                  // Row 4: Observation if mismatch
                   if (!isMatch) ...[
                       const SizedBox(height: 12),
                       TextField(
@@ -879,19 +896,62 @@ class _DetailSheetState extends State<_DetailSheet> {
                             ..selection = TextSelection.collapsed(offset: (_obsParams[item.codigoArticulo] ?? '').length),
                           onChanged: (val) {
                                _obsParams[item.codigoArticulo] = val;
-                               // Force rebuild not needed strictly if using controller but we want to store it
                           },
                           decoration: InputDecoration(
                               labelText: 'Motivo discrepancia (Obligatorio)',
                               labelStyle: const TextStyle(color: AppTheme.error, fontSize: 12),
                               isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              fillColor: AppTheme.error.withOpacity(0.05),
+                              filled: true,
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: const BorderSide(color: AppTheme.error)),
                               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: const BorderSide(color: AppTheme.error)),
                           ),
                           style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                       )
                   ]
+              ],
+          )
+      );
+  }
+
+  Future<void> _showQuantityDialog(EntregaItem item, double current) async {
+      final TextEditingController _controller = TextEditingController(text: current.toStringAsFixed(0));
+      _controller.selection = TextSelection(baseOffset: 0, extentOffset: _controller.text.length);
+      
+      await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+              backgroundColor: AppTheme.darkSurface,
+              title: Text('Cantidad: ${item.descripcion}', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+              content: TextField(
+                  controller: _controller,
+                  keyboardType: TextInputType.number,
+                  autofocus: true,
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 24, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                      border: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.neonBlue)),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.neonBlue)),
+                  ),
+              ),
+              actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancelar', style: TextStyle(color: AppTheme.textSecondary)),
+                  ),
+                  ElevatedButton(
+                      onPressed: () {
+                          final double? val = double.tryParse(_controller.text);
+                          if (val != null) {
+                              setState(() {
+                                  _qtyParams[item.codigoArticulo] = val;
+                              });
+                          }
+                          Navigator.pop(ctx);
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
+                      child: const Text('Aceptar', style: TextStyle(color: AppTheme.darkBase)),
+                  )
               ],
           )
       );
