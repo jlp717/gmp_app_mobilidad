@@ -365,6 +365,37 @@ router.get('/summary', async (req, res) => {
             }
         }
 
+        // =====================================================================
+        // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS
+        // For commission, we use IMPORTE_BASE_COMISION (e.g., 22,727€ for vendor 15)
+        // =====================================================================
+        let fixedCommissionBase = null;
+        if (!isAll) {
+            try {
+                const currentMonth = now.getMonth() + 1;
+                const fixedRows = await query(`
+                    SELECT IMPORTE_BASE_COMISION
+                    FROM JAVIER.COMMERCIAL_TARGETS
+                    WHERE CODIGOVENDEDOR = '${vendedorCode}'
+                      AND ANIO = ${selectedYear}
+                      AND (MES = ${currentMonth} OR MES IS NULL)
+                      AND ACTIVO = 1
+                    ORDER BY MES DESC
+                    FETCH FIRST 1 ROWS ONLY
+                `, false);
+
+                if (fixedRows && fixedRows.length > 0) {
+                    fixedCommissionBase = parseFloat(fixedRows[0].IMPORTE_BASE_COMISION) || null;
+                    if (fixedCommissionBase) {
+                        console.log(`📊 [COMMISSIONS] Vendor ${vendedorCode} has FIXED commission base: ${fixedCommissionBase}€`);
+                    }
+                }
+            } catch (err) {
+                // Table might not exist - continue with percentage-based
+                console.log(`📊 [COMMISSIONS] COMMERCIAL_TARGETS: ${err.message}`);
+            }
+        }
+
         for (let m = 1; m <= 12; m++) {
             const prevRow = salesRows.find(r => r.YEAR == prevYear && r.MONTH == m);
             const currRow = salesRows.find(r => r.YEAR == selectedYear && r.MONTH == m);
@@ -379,8 +410,17 @@ router.get('/summary', async (req, res) => {
                 targetSource = 'inherited';
             }
 
-            // Target 2026 = 2025 * (1 + IPC)
-            const target = prevSales * (1 + (config.ipc / 100));
+            // Target 2026: 
+            // - If vendor has FIXED commission base from COMMERCIAL_TARGETS, use that
+            // - Otherwise: prevSales * (1 + IPC)
+            let target;
+            if (fixedCommissionBase && fixedCommissionBase > 0) {
+                // Fixed commission base applies to commission calculations
+                target = fixedCommissionBase;
+                targetSource = 'fixed';
+            } else {
+                target = prevSales * (1 + (config.ipc / 100));
+            }
 
             // Commission for this month
             const result = calculateCommission(currentSales, target, config);
