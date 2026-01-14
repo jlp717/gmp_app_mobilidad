@@ -86,12 +86,10 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _fetchRepartidores() async {
       try {
-        final res = await ApiClient.get('/auth/repartidores');
-        if (res is List) {
-          setState(() {
-             _repartidoresOptions = List<Map<String, dynamic>>.from(res);
-          });
-        }
+        final res = await ApiClient.getList('/auth/repartidores');
+        setState(() {
+           _repartidoresOptions = res.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        });
       } catch (e) {
         debugPrint('Error fetching repartidores: $e');
       }
