@@ -294,9 +294,21 @@ class EntregasProvider extends ChangeNotifier {
   // Search and sort state
   String _searchQuery = '';
   String _sortBy = 'default'; // 'default', 'importe_desc', 'importe_asc'
+  String _filterTipoPago = ''; // 'CONTADO', 'CREDITO', 'DOMICILIADO', etc.
+  String _filterDebeCobrar = ''; // 'S' or 'N'
   
+  // Resumen totals from API
+  double _resumenTotalBruto = 0;
+  double _resumenTotalACobrar = 0;
+  double _resumenTotalOpcional = 0;
+
   String get searchQuery => _searchQuery;
   String get sortBy => _sortBy;
+  String get filterTipoPago => _filterTipoPago;
+  String get filterDebeCobrar => _filterDebeCobrar;
+  double get resumenTotalBruto => _resumenTotalBruto;
+  double get resumenTotalACobrar => _resumenTotalACobrar;
+  double get resumenTotalOpcional => _resumenTotalOpcional;
 
   void setSearchQuery(String query) {
     _searchQuery = query;
@@ -305,6 +317,16 @@ class EntregasProvider extends ChangeNotifier {
 
   void setSortBy(String sort) {
     _sortBy = sort;
+    cargarAlbaranesPendientes();
+  }
+
+  void setFilterTipoPago(String tipo) {
+    _filterTipoPago = tipo;
+    cargarAlbaranesPendientes();
+  }
+
+  void setFilterDebeCobrar(String debeCobrar) {
+    _filterDebeCobrar = debeCobrar;
     cargarAlbaranesPendientes();
   }
 
@@ -330,7 +352,7 @@ class EntregasProvider extends ChangeNotifier {
     try {
       final formattedDate = '${_fechaSeleccionada.year}-${_fechaSeleccionada.month.toString().padLeft(2, '0')}-${_fechaSeleccionada.day.toString().padLeft(2, '0')}';
       
-      // Build URL with search and sort parameters
+      // Build URL with search, sort, and filter parameters
       String url = '/entregas/pendientes/$_repartidorId?date=$formattedDate';
       if (_searchQuery.isNotEmpty) {
         url += '&search=${Uri.encodeComponent(_searchQuery)}';
@@ -338,12 +360,24 @@ class EntregasProvider extends ChangeNotifier {
       if (_sortBy != 'default') {
         url += '&sortBy=$_sortBy';
       }
+      if (_filterTipoPago.isNotEmpty) {
+        url += '&tipoPago=$_filterTipoPago';
+      }
+      if (_filterDebeCobrar.isNotEmpty) {
+        url += '&debeCobrar=$_filterDebeCobrar';
+      }
       
       final response = await ApiClient.get(url);
 
       if (response['success'] == true) {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
         _albaranes = lista.map((e) => AlbaranEntrega.fromJson(e)).toList();
+        
+        // Parse resumen totals
+        final resumen = response['resumen'] as Map<String, dynamic>? ?? {};
+        _resumenTotalBruto = (resumen['totalBruto'] ?? 0).toDouble();
+        _resumenTotalACobrar = (resumen['totalACobrar'] ?? 0).toDouble();
+        _resumenTotalOpcional = (resumen['totalOpcional'] ?? 0).toDouble();
       } else {
         _error = response['error'] ?? 'Error cargando entregas';
       }

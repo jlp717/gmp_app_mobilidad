@@ -173,6 +173,22 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             );
         }
 
+        // --- FILTER BY PAYMENT TYPE ---
+        const filterTipo = req.query.tipoPago || ''; // e.g., 'CONTADO', 'CREDITO', 'DOMICILIADO'
+        if (filterTipo) {
+            filteredAlbaranes = filteredAlbaranes.filter(a =>
+                a.tipoPago?.toUpperCase() === filterTipo.toUpperCase()
+            );
+        }
+
+        // --- FILTER BY COLLECTION STATUS ---
+        const filterCobrar = req.query.debeCobrar; // 'S' or 'N'
+        if (filterCobrar === 'S') {
+            filteredAlbaranes = filteredAlbaranes.filter(a => a.esCTR === true);
+        } else if (filterCobrar === 'N') {
+            filteredAlbaranes = filteredAlbaranes.filter(a => a.esCTR === false);
+        }
+
         // --- SORTING ---
         const sortBy = req.query.sortBy || 'default'; // 'default', 'importe_asc', 'importe_desc'
         if (sortBy === 'importe_desc') {
@@ -182,14 +198,54 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         }
         // 'default' keeps the original ORDER BY CAC.NUMEROALBARAN from SQL
 
+        // Calculate totals for summary
+        const totalBruto = filteredAlbaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
+        const totalACobrar = filteredAlbaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        const totalOpcional = filteredAlbaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+
         res.json({
             success: true,
             albaranes: filteredAlbaranes,
             total: filteredAlbaranes.length,
-            originalTotal: albaranes.length
+            originalTotal: albaranes.length,
+            resumen: {
+                totalBruto: Math.round(totalBruto * 100) / 100,
+                totalACobrar: Math.round(totalACobrar * 100) / 100,
+                totalOpcional: Math.round(totalOpcional * 100) / 100
+            }
         });
     } catch (error) {
         logger.error(`Error in /pendientes: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ===================================
+// GET /payment-conditions - List available payment conditions
+// ===================================
+router.get('/payment-conditions', async (req, res) => {
+    try {
+        const conditions = await query(`
+            SELECT CODIGO, DESCRIPCION, TIPO, DIAS_PAGO, DEBE_COBRAR, PUEDE_COBRAR, COLOR
+            FROM JAVIER.PAYMENT_CONDITIONS
+            WHERE ACTIVO = 'S'
+            ORDER BY TIPO, CODIGO
+        `, false);
+
+        res.json({
+            success: true,
+            conditions: conditions.map(c => ({
+                codigo: (c.CODIGO || '').trim(),
+                descripcion: (c.DESCRIPCION || '').trim(),
+                tipo: (c.TIPO || '').trim(),
+                diasPago: c.DIAS_PAGO || 0,
+                debeCobrar: c.DEBE_COBRAR === 'S',
+                puedeCobrar: c.PUEDE_COBRAR === 'S',
+                color: (c.COLOR || 'green').trim()
+            }))
+        });
+    } catch (error) {
+        logger.error(`Error in /payment-conditions: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });

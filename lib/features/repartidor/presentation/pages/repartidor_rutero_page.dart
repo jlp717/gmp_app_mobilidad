@@ -180,7 +180,6 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                       ),
                       style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                       onChanged: (value) {
-                        // Debounce in real app, but for now direct call
                         Future.delayed(const Duration(milliseconds: 500), () {
                           entregas.setSearchQuery(value);
                         });
@@ -217,6 +216,52 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
               ],
             ),
           ),
+
+          // PAYMENT TYPE FILTER CHIPS
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                _buildFilterChip('Todos', entregas.filterTipoPago.isEmpty, () => entregas.setFilterTipoPago(''), Colors.grey),
+                const SizedBox(width: 6),
+                _buildFilterChip('🔴 A Cobrar', entregas.filterDebeCobrar == 'S', () => entregas.setFilterDebeCobrar(entregas.filterDebeCobrar == 'S' ? '' : 'S'), AppTheme.error),
+                const SizedBox(width: 6),
+                _buildFilterChip('CONTADO', entregas.filterTipoPago == 'CONTADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CONTADO' ? '' : 'CONTADO'), AppTheme.error),
+                const SizedBox(width: 6),
+                _buildFilterChip('CRÉDITO', entregas.filterTipoPago == 'CREDITO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CREDITO' ? '' : 'CREDITO'), AppTheme.success),
+                const SizedBox(width: 6),
+                _buildFilterChip('DOMICILIADO', entregas.filterTipoPago == 'DOMICILIADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'DOMICILIADO' ? '' : 'DOMICILIADO'), AppTheme.success),
+                const SizedBox(width: 6),
+                _buildFilterChip('TRANSF.', entregas.filterTipoPago == 'TRANSFERENCIA', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'TRANSFERENCIA' ? '' : 'TRANSFERENCIA'), AppTheme.warning),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // SUMMARY BAR
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppTheme.darkSurface, AppTheme.surfaceColor],
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade700),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildSummaryItem('Total', entregas.resumenTotalBruto, AppTheme.textPrimary),
+                Container(width: 1, height: 30, color: Colors.grey.shade600),
+                _buildSummaryItem('A Cobrar', entregas.resumenTotalACobrar, AppTheme.error),
+                Container(width: 1, height: 30, color: Colors.grey.shade600),
+                _buildSummaryItem('Opcional', entregas.resumenTotalOpcional, AppTheme.warning),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
 
           // LIST
           Expanded(
@@ -448,6 +493,58 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
         return AppTheme.success;
     }
   }
+
+  /// Build filter chip for payment types
+  Widget _buildFilterChip(String label, bool isSelected, VoidCallback onTap, Color color) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.2) : AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? color : Colors.grey.shade600,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? color : AppTheme.textSecondary,
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build summary item for totals bar
+  Widget _buildSummaryItem(String label, double amount, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 10,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '${amount.toStringAsFixed(0)}€',
+          style: TextStyle(
+            color: color,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
 
   Widget _buildClientCard(AlbaranEntrega albaran) {
     // "Stapled" visual effect variables
