@@ -149,10 +149,30 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             };
         });
 
+        // --- FILTERING: Search by client name or code ---
+        const searchQuery = req.query.search?.toLowerCase().trim() || '';
+        let filteredAlbaranes = albaranes;
+        if (searchQuery) {
+            filteredAlbaranes = albaranes.filter(a =>
+                a.nombreCliente?.toLowerCase().includes(searchQuery) ||
+                a.codigoCliente?.toLowerCase().includes(searchQuery)
+            );
+        }
+
+        // --- SORTING ---
+        const sortBy = req.query.sortBy || 'default'; // 'default', 'importe_asc', 'importe_desc'
+        if (sortBy === 'importe_desc') {
+            filteredAlbaranes.sort((a, b) => b.importe - a.importe);
+        } else if (sortBy === 'importe_asc') {
+            filteredAlbaranes.sort((a, b) => a.importe - b.importe);
+        }
+        // 'default' keeps the original ORDER BY CAC.NUMEROALBARAN from SQL
+
         res.json({
             success: true,
-            albaranes,
-            total: albaranes.length
+            albaranes: filteredAlbaranes,
+            total: filteredAlbaranes.length,
+            originalTotal: albaranes.length
         });
     } catch (error) {
         logger.error(`Error in /pendientes: ${error.message}`);

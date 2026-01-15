@@ -156,6 +156,68 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                 ),
              ),
 
+          // SEARCH & SORT ROW
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                // Search TextField
+                Expanded(
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey.shade700),
+                    ),
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Buscar cliente...',
+                        hintStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                        prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                      onChanged: (value) {
+                        // Debounce in real app, but for now direct call
+                        Future.delayed(const Duration(milliseconds: 500), () {
+                          entregas.setSearchQuery(value);
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Sort Dropdown
+                Container(
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade700),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: entregas.sortBy,
+                      icon: const Icon(Icons.sort, color: AppTheme.neonBlue, size: 18),
+                      dropdownColor: AppTheme.surfaceColor,
+                      items: const [
+                        DropdownMenuItem(value: 'default', child: Text('Orden', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12))),
+                        DropdownMenuItem(value: 'importe_desc', child: Text('Mayor €', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12))),
+                        DropdownMenuItem(value: 'importe_asc', child: Text('Menor €', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12))),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) entregas.setSortBy(val);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // LIST
           Expanded(
             child: entregas.isLoading 

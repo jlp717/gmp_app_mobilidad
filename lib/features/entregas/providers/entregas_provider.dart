@@ -291,6 +291,23 @@ class EntregasProvider extends ChangeNotifier {
       .where((a) => a.esCTR && a.estado != EstadoEntrega.entregado)
       .fold(0, (sum, a) => sum + a.importeTotal);
 
+  // Search and sort state
+  String _searchQuery = '';
+  String _sortBy = 'default'; // 'default', 'importe_desc', 'importe_asc'
+  
+  String get searchQuery => _searchQuery;
+  String get sortBy => _sortBy;
+
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    cargarAlbaranesPendientes();
+  }
+
+  void setSortBy(String sort) {
+    _sortBy = sort;
+    cargarAlbaranesPendientes();
+  }
+
   /// Inicializar con ID del repartidor
   void setRepartidor(String repartidorId) {
     _repartidorId = repartidorId;
@@ -312,10 +329,17 @@ class EntregasProvider extends ChangeNotifier {
 
     try {
       final formattedDate = '${_fechaSeleccionada.year}-${_fechaSeleccionada.month.toString().padLeft(2, '0')}-${_fechaSeleccionada.day.toString().padLeft(2, '0')}';
-      // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
-      final response = await ApiClient.get(
-        '/entregas/pendientes/$_repartidorId?date=$formattedDate',
-      );
+      
+      // Build URL with search and sort parameters
+      String url = '/entregas/pendientes/$_repartidorId?date=$formattedDate';
+      if (_searchQuery.isNotEmpty) {
+        url += '&search=${Uri.encodeComponent(_searchQuery)}';
+      }
+      if (_sortBy != 'default') {
+        url += '&sortBy=$_sortBy';
+      }
+      
+      final response = await ApiClient.get(url);
 
       if (response['success'] == true) {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
