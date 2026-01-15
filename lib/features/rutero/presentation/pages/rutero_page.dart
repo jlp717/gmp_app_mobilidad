@@ -1291,9 +1291,9 @@ class _ClientCard extends StatelessWidget {
     
     Color accentColor;
     if (isInactive) {
-      accentColor = Colors.grey;
+      accentColor = AppTheme.error; // Rojo para sin ventas
     } else if (isNewClient) {
-      accentColor = AppTheme.neonBlue;
+      accentColor = AppTheme.success; // Verde para nuevo
     } else if (isPositive) {
       accentColor = AppTheme.success;
     } else {
@@ -1388,7 +1388,7 @@ class _ClientCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey.shade500,
+                          color: AppTheme.error,
                         ),
                       ),
                       Text(
@@ -1405,7 +1405,7 @@ class _ClientCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: AppTheme.neonBlue,
+                          color: AppTheme.success,
                         ),
                       ),
                       Text(
