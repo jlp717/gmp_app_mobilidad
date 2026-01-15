@@ -299,7 +299,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     final weekRange = '${dateFormat.format(weekStart)} - ${dateFormat.format(weekEnd)}';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), // Reduced padding
       color: AppTheme.darkSurface,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -308,59 +308,59 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.chevron_left, color: AppTheme.textSecondary),
+                icon: const Icon(Icons.chevron_left, color: AppTheme.textSecondary, size: 20),
                 onPressed: () => _changeWeek(-1),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    'Semana $weekNum',
+                    'S$weekNum',
                     style: const TextStyle(
                       color: AppTheme.textPrimary,
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: 12,
                     ),
                   ),
                   Text(
                     weekRange,
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
-                      fontSize: 11,
+                      fontSize: 10,
                     ),
                   ),
                 ],
               ),
               IconButton(
-                icon: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                icon: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
                 onPressed: () => _changeWeek(1),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
             ],
           ),
           
           // Right: Client Count
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: AppTheme.neonBlue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.people_alt_outlined, size: 16, color: AppTheme.neonBlue),
-                const SizedBox(width: 6),
+                const Icon(Icons.people_alt_outlined, size: 14, color: AppTheme.neonBlue),
+                const SizedBox(width: 4),
                 Text(
-                  '$totalClients Clientes',
+                  '$totalClients',
                   style: const TextStyle(
                     color: AppTheme.neonBlue,
                     fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                    fontSize: 11,
                   ),
                 ),
               ],
@@ -373,11 +373,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
 
   Widget _buildWeeklyStrip() {
     return Container(
-      height: 85,
+      height: 60, // Reduced from 85
       color: AppTheme.surfaceColor, 
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         itemCount: _weekDays.length,
         itemBuilder: (context, index) {
           final dayData = _weekDays[index];
@@ -409,14 +409,14 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           return GestureDetector(
             onTap: () => _onDaySelected(date),
             child: Container(
-              width: 55,
-              margin: const EdgeInsets.only(right: 6),
+              width: 46, // Reduced from 55
+              margin: const EdgeInsets.only(right: 4),
               decoration: BoxDecoration(
                 color: bgColor,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: borderColor, width: 1.5),
                 boxShadow: isSelected ? [
-                  BoxShadow(color: AppTheme.neonBlue.withOpacity(0.4), blurRadius: 4, offset:const Offset(0, 2))
+                  BoxShadow(color: AppTheme.neonBlue.withOpacity(0.4), blurRadius: 3, offset:const Offset(0, 1))
                 ] : null
               ),
               child: Column(
@@ -425,7 +425,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                   Text(
                     dayData['dayName'] ?? '',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 9, // Reduced from 11
                       fontWeight: FontWeight.bold,
                       color: textColor.withOpacity(isSelected ? 0.9 : 0.7),
                     ),
@@ -433,21 +433,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                   Text(
                     '${dayData['day']}',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14, // Reduced from 16
                       fontWeight: FontWeight.w900,
                       color: textColor,
                     ),
                   ),
-                  if (count > 0 || status != 'none')
-                     Container(
-                       margin: const EdgeInsets.only(top: 2),
-                       width: 6,
-                       height: 6,
-                       decoration: BoxDecoration(
-                         shape: BoxShape.circle,
-                         color: isSelected ? AppTheme.darkBase : (status == 'good' ? AppTheme.success : (status == 'bad' ? AppTheme.error : Colors.grey)),
-                       ),
-                     )
                 ],
               ),
             ),
