@@ -374,6 +374,19 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     );
   }
 
+  /// Helper to map colorEstado from backend to Flutter Color
+  Color _getPaymentColor(String colorEstado) {
+    switch (colorEstado.toLowerCase()) {
+      case 'red':
+        return AppTheme.error;
+      case 'orange':
+        return AppTheme.warning;
+      case 'green':
+      default:
+        return AppTheme.success;
+    }
+  }
+
   Widget _buildClientCard(AlbaranEntrega albaran) {
     // "Stapled" visual effect variables
     final bool isPendiente = albaran.estado == EstadoEntrega.pendiente;
@@ -569,42 +582,54 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    // Payment Condition Badge
+                    // Payment Condition Badge - colored by backend status
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: albaran.esCTR ? AppTheme.success.withOpacity(0.15) : AppTheme.textSecondary.withOpacity(0.1),
+                            color: _getPaymentColor(albaran.colorEstado).withOpacity(0.15),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: albaran.esCTR ? AppTheme.success.withOpacity(0.5) : AppTheme.textSecondary.withOpacity(0.3),
+                              color: _getPaymentColor(albaran.colorEstado).withOpacity(0.5),
                             ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                albaran.esCTR ? Icons.payments : Icons.credit_card,
-                                size: 14,
-                                color: albaran.esCTR ? AppTheme.success : AppTheme.textSecondary,
+                                albaran.esCTR ? Icons.payments_rounded : 
+                                  (albaran.puedeCobrarse ? Icons.account_balance_wallet : Icons.credit_card),
+                                size: 16,
+                                color: _getPaymentColor(albaran.colorEstado),
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 6),
                               Text(
-                                albaran.esCTR ? 'COBRAR' : 'CRÉDITO',
+                                albaran.esCTR ? '💰 COBRAR' : 
+                                  (albaran.puedeCobrarse ? 'OPCIONAL' : 'CRÉDITO'),
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
-                                  color: albaran.esCTR ? AppTheme.success : AppTheme.textSecondary,
+                                  color: _getPaymentColor(albaran.colorEstado),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          albaran.formaPago.isNotEmpty ? albaran.formaPago : '',
-                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        const SizedBox(width: 10),
+                        // Payment type description
+                        Expanded(
+                          child: Text(
+                            albaran.formaPagoDesc.isNotEmpty 
+                                ? albaran.formaPagoDesc 
+                                : albaran.formaPago,
+                            style: const TextStyle(
+                              fontSize: 11, 
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),

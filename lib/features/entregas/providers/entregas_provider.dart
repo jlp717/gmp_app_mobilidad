@@ -159,7 +159,12 @@ class AlbaranEntrega {
   final String fecha;
   final double importeTotal;
   final String formaPago;
-  final bool esCTR;
+  final String formaPagoDesc;  // e.g., "CRÉDITO", "CONTADO"
+  final String tipoPago;       // e.g., "CREDITO", "CONTADO", "REPOSICION"
+  final int diasPago;          // 0, 7, 30, 60, etc.
+  final bool esCTR;            // MUST collect
+  final bool puedeCobrarse;    // CAN optionally collect
+  final String colorEstado;    // "red", "green", "orange"
   final String ruta;
   final String codigoVendedor;
   final String nombreVendedor;
@@ -186,7 +191,12 @@ class AlbaranEntrega {
     required this.fecha,
     required this.importeTotal,
     this.formaPago = '',
+    this.formaPagoDesc = '',
+    this.tipoPago = '',
+    this.diasPago = 0,
     this.esCTR = false,
+    this.puedeCobrarse = false,
+    this.colorEstado = 'green',
     this.ruta = '',
     this.codigoVendedor = '',
     this.nombreVendedor = '',
@@ -197,6 +207,7 @@ class AlbaranEntrega {
     this.firma,
     this.horaEntrega,
   });
+
 
   factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
     return AlbaranEntrega(
@@ -215,7 +226,12 @@ class AlbaranEntrega {
       fecha: json['fecha']?.toString() ?? '',
       importeTotal: (json['importe'] ?? json['importeTotal'] ?? 0).toDouble(),
       formaPago: json['formaPago']?.toString() ?? '',
+      formaPagoDesc: json['formaPagoDesc']?.toString() ?? '',
+      tipoPago: json['tipoPago']?.toString() ?? '',
+      diasPago: json['diasPago'] ?? 0,
       esCTR: json['esCTR'] == true,
+      puedeCobrarse: json['puedeCobrarse'] == true,
+      colorEstado: json['colorEstado']?.toString() ?? 'green',
       ruta: json['ruta']?.toString() ?? '',
       codigoVendedor: json['codigoVendedor']?.toString() ?? '',
       nombreVendedor: json['nombreVendedor']?.toString() ?? '',

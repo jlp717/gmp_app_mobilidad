@@ -89,11 +89,39 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             return res.json({ success: true, albaranes: [], total: 0 });
         }
 
+        // Payment type mapping based on FOP table knowledge
+        // 01=CONTADO, 02=CRÉDITO, C2/C5=CONTADO variants, D1-D9=RECIBO DOMICILIADO, T0=TRANSFERENCIA, etc.
+        const PAYMENT_TYPES = {
+            '01': { desc: 'CONTADO', type: 'CONTADO', diasPago: 0, mustCollect: true, color: 'red' },
+            'C2': { desc: 'CONTADO', type: 'CONTADO', diasPago: 0, mustCollect: true, color: 'red' },
+            'C5': { desc: 'CONTADO', type: 'CONTADO', diasPago: 0, mustCollect: true, color: 'red' },
+            '02': { desc: 'CRÉDITO', type: 'CREDITO', diasPago: 30, mustCollect: false, color: 'green' },
+            'D1': { desc: 'RECIBO DOMICILIADO 0 DÍAS', type: 'DOMICILIADO', diasPago: 2, mustCollect: false, color: 'green' },
+            'D2': { desc: 'RECIBO DOMICILIADO 15 DÍAS', type: 'DOMICILIADO', diasPago: 15, mustCollect: false, color: 'green' },
+            'D3': { desc: 'RECIBO DOMICILIADO 30 DÍAS', type: 'DOMICILIADO', diasPago: 30, mustCollect: false, color: 'green' },
+            'D4': { desc: 'RECIBO DOMICILIADO 45 DÍAS', type: 'DOMICILIADO', diasPago: 45, mustCollect: false, color: 'green' },
+            'D6': { desc: 'RECIBO DOMICILIADO 60 DÍAS', type: 'DOMICILIADO', diasPago: 60, mustCollect: false, color: 'green' },
+            'D8': { desc: 'RECIBO DOMICILIADO 80 DÍAS', type: 'DOMICILIADO', diasPago: 80, mustCollect: false, color: 'green' },
+            'D9': { desc: 'RECIBO DOMICILIADO 90 DÍAS', type: 'DOMICILIADO', diasPago: 90, mustCollect: false, color: 'green' },
+            'DA': { desc: 'RECIBO DOMICILIADO 120 DÍAS', type: 'DOMICILIADO', diasPago: 120, mustCollect: false, color: 'green' },
+            'T0': { desc: 'TRANSFERENCIA', type: 'TRANSFERENCIA', diasPago: 30, mustCollect: false, canCollect: true, color: 'orange' },
+            'G1': { desc: 'GIRO 30 DÍAS', type: 'GIRO', diasPago: 30, mustCollect: false, color: 'green' },
+            'G6': { desc: 'GIRO 60 DÍAS', type: 'GIRO', diasPago: 60, mustCollect: false, color: 'green' },
+            'PG': { desc: 'PAGARÉ', type: 'PAGARE', diasPago: 30, mustCollect: false, color: 'green' },
+            'P1': { desc: 'PAGARÉ 30 DÍAS', type: 'PAGARE', diasPago: 30, mustCollect: false, color: 'green' },
+            'RP': { desc: 'REPOSICIÓN', type: 'REPOSICION', diasPago: 7, mustCollect: true, color: 'red' },
+        };
+        const DEFAULT_PAYMENT = { desc: 'CRÉDITO', type: 'CREDITO', diasPago: 30, mustCollect: false, color: 'green' };
+
         // Process rows
         const albaranes = rows.map(row => {
-            // Simple logic for CTR (Cash/Reimbursement)
-            const fp = (row.FORMA_PAGO || '').toUpperCase();
-            const esCTR = fp.includes('CONTADO') || fp.includes('EFECTIVO') || fp.includes('CTR') || fp === '01';
+            const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
+            const paymentInfo = PAYMENT_TYPES[fp] || DEFAULT_PAYMENT;
+
+            // Determine if repartidor MUST collect money
+            const esCTR = paymentInfo.mustCollect;
+            // Can optionally collect (e.g., transferencia clients paying cash)
+            const puedeCobrarse = paymentInfo.canCollect || esCTR;
 
             return {
                 id: `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
@@ -109,10 +137,15 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 telefono: row.TELEFONO?.trim(),
                 importe: parseFloat(row.IMPORTE),
                 formaPago: fp,
+                formaPagoDesc: paymentInfo.desc,
+                tipoPago: paymentInfo.type,
+                diasPago: paymentInfo.diasPago,
                 esCTR: esCTR,
+                puedeCobrarse: puedeCobrarse,
+                colorEstado: paymentInfo.color,
                 fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
                 ruta: row.RUTA?.trim(),
-                estado: 'PENDIENTE' // Default to pending as we don't have tracking table linked yet in this simple version
+                estado: 'PENDIENTE'
             };
         });
 
