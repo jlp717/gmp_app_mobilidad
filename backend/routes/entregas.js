@@ -47,8 +47,36 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         // Handle multiple IDs (comma separated) case
         const ids = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
+        // Load payment conditions from JAVIER.PAYMENT_CONDITIONS table
+        let paymentConditions = {};
+        try {
+            const pcRows = await query(`
+                SELECT CODIGO, DESCRIPCION, TIPO, DIAS_PAGO, DEBE_COBRAR, PUEDE_COBRAR, COLOR
+                FROM JAVIER.PAYMENT_CONDITIONS
+                WHERE ACTIVO = 'S'
+            `, false);
+
+            pcRows.forEach(pc => {
+                const code = (pc.CODIGO || '').trim();
+                paymentConditions[code] = {
+                    desc: (pc.DESCRIPCION || '').trim(),
+                    type: (pc.TIPO || 'CREDITO').trim(),
+                    diasPago: pc.DIAS_PAGO || 0,
+                    mustCollect: pc.DEBE_COBRAR === 'S',
+                    canCollect: pc.PUEDE_COBRAR === 'S',
+                    color: (pc.COLOR || 'green').trim()
+                };
+            });
+            logger.info(`[ENTREGAS] Loaded ${Object.keys(paymentConditions).length} payment conditions from DB`);
+        } catch (pcError) {
+            logger.warn(`[ENTREGAS] Could not load PAYMENT_CONDITIONS: ${pcError.message}, using defaults`);
+        }
+
+        const DEFAULT_PAYMENT = { desc: 'CRÉDITO', type: 'CREDITO', diasPago: 30, mustCollect: false, canCollect: false, color: 'green' };
+
         // CORRECTO: Usar OPP → CPC → CAC para repartidores
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con CAC
+        // IMPORTANTE: Usar IMPORTEBRUTO (sin IVA) para cobros
         const sql = `
             SELECT 
               CAC.SUBEMPRESAALBARAN,
@@ -56,12 +84,14 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               CAC.SERIEALBARAN,
               CAC.TERMINALALBARAN,
               CAC.NUMEROALBARAN,
+              CAC.NUMEROFACTURA,
+              CAC.SERIEFACTURA,
               TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
               TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, 'CLIENTE')) as NOMBRE_CLIENTE,
               TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCION,
               TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
               TRIM(COALESCE(CLI.TELEFONO1, '')) as TELEFONO,
-              CPC.IMPORTETOTAL as IMPORTE,
+              CPC.IMPORTEBRUTO as IMPORTE,
               TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
               TRIM(CPC.CODIGORUTA) as RUTA
@@ -89,39 +119,20 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             return res.json({ success: true, albaranes: [], total: 0 });
         }
 
-        // Payment type mapping based on FOP table knowledge
-        // 01=CONTADO, 02=CRÉDITO, C2/C5=CONTADO variants, D1-D9=RECIBO DOMICILIADO, T0=TRANSFERENCIA, etc.
-        const PAYMENT_TYPES = {
-            '01': { desc: 'CONTADO', type: 'CONTADO', diasPago: 0, mustCollect: true, color: 'red' },
-            'C2': { desc: 'CONTADO', type: 'CONTADO', diasPago: 0, mustCollect: true, color: 'red' },
-            'C5': { desc: 'CONTADO', type: 'CONTADO', diasPago: 0, mustCollect: true, color: 'red' },
-            '02': { desc: 'CRÉDITO', type: 'CREDITO', diasPago: 30, mustCollect: false, color: 'green' },
-            'D1': { desc: 'RECIBO DOMICILIADO 0 DÍAS', type: 'DOMICILIADO', diasPago: 2, mustCollect: false, color: 'green' },
-            'D2': { desc: 'RECIBO DOMICILIADO 15 DÍAS', type: 'DOMICILIADO', diasPago: 15, mustCollect: false, color: 'green' },
-            'D3': { desc: 'RECIBO DOMICILIADO 30 DÍAS', type: 'DOMICILIADO', diasPago: 30, mustCollect: false, color: 'green' },
-            'D4': { desc: 'RECIBO DOMICILIADO 45 DÍAS', type: 'DOMICILIADO', diasPago: 45, mustCollect: false, color: 'green' },
-            'D6': { desc: 'RECIBO DOMICILIADO 60 DÍAS', type: 'DOMICILIADO', diasPago: 60, mustCollect: false, color: 'green' },
-            'D8': { desc: 'RECIBO DOMICILIADO 80 DÍAS', type: 'DOMICILIADO', diasPago: 80, mustCollect: false, color: 'green' },
-            'D9': { desc: 'RECIBO DOMICILIADO 90 DÍAS', type: 'DOMICILIADO', diasPago: 90, mustCollect: false, color: 'green' },
-            'DA': { desc: 'RECIBO DOMICILIADO 120 DÍAS', type: 'DOMICILIADO', diasPago: 120, mustCollect: false, color: 'green' },
-            'T0': { desc: 'TRANSFERENCIA', type: 'TRANSFERENCIA', diasPago: 30, mustCollect: false, canCollect: true, color: 'orange' },
-            'G1': { desc: 'GIRO 30 DÍAS', type: 'GIRO', diasPago: 30, mustCollect: false, color: 'green' },
-            'G6': { desc: 'GIRO 60 DÍAS', type: 'GIRO', diasPago: 60, mustCollect: false, color: 'green' },
-            'PG': { desc: 'PAGARÉ', type: 'PAGARE', diasPago: 30, mustCollect: false, color: 'green' },
-            'P1': { desc: 'PAGARÉ 30 DÍAS', type: 'PAGARE', diasPago: 30, mustCollect: false, color: 'green' },
-            'RP': { desc: 'REPOSICIÓN', type: 'REPOSICION', diasPago: 7, mustCollect: true, color: 'red' },
-        };
-        const DEFAULT_PAYMENT = { desc: 'CRÉDITO', type: 'CREDITO', diasPago: 30, mustCollect: false, color: 'green' };
-
         // Process rows
         const albaranes = rows.map(row => {
             const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
-            const paymentInfo = PAYMENT_TYPES[fp] || DEFAULT_PAYMENT;
+            const paymentInfo = paymentConditions[fp] || DEFAULT_PAYMENT;
+
 
             // Determine if repartidor MUST collect money
             const esCTR = paymentInfo.mustCollect;
             // Can optionally collect (e.g., transferencia clients paying cash)
             const puedeCobrarse = paymentInfo.canCollect || esCTR;
+
+            const numeroFactura = row.NUMEROFACTURA || 0;
+            const serieFactura = (row.SERIEFACTURA || '').trim();
+            const esFactura = numeroFactura > 0;
 
             return {
                 id: `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
@@ -130,12 +141,15 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 serie: row.SERIEALBARAN?.trim() || '',
                 terminal: row.TERMINALALBARAN,
                 numero: row.NUMEROALBARAN,
+                numeroFactura: numeroFactura,
+                serieFactura: serieFactura,
+                documentoTipo: esFactura ? 'FACTURA' : 'ALBARÁN',
                 codigoCliente: row.CLIENTE?.trim(),
                 nombreCliente: row.NOMBRE_CLIENTE?.trim(),
                 direccion: row.DIRECCION?.trim(),
                 poblacion: row.POBLACION?.trim(),
                 telefono: row.TELEFONO?.trim(),
-                importe: parseFloat(row.IMPORTE),
+                importe: parseFloat(row.IMPORTE) || 0,
                 formaPago: fp,
                 formaPagoDesc: paymentInfo.desc,
                 tipoPago: paymentInfo.type,
