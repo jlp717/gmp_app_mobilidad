@@ -67,9 +67,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     
-    return Scaffold(
-      backgroundColor: Colors.transparent, // Important for overlay
-      body: Container(
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
         height: size.height * 0.9,
         decoration: BoxDecoration(
           color: AppTheme.darkBase,
@@ -82,50 +82,50 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
             ),
           ],
         ),
-      child: Column(
-        children: [
-          // Drag handle
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
+        child: Column(
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          
-          // Header
-          _buildHeader(context),
-          
-          // Tabs
-          TabBar(
-            controller: _tabController,
-            indicatorColor: AppTheme.neonBlue,
-            labelColor: AppTheme.neonBlue,
-            unselectedLabelColor: AppTheme.textSecondary,
-            tabs: const [
-              Tab(text: 'PRODUCTOS'),
-              Tab(text: 'COBRO'),
-              Tab(text: 'FINALIZAR'),
-            ],
-          ),
-          
-          // Content
-          Expanded(
-            child: TabBarView(
+            
+            // Header
+            _buildHeader(context),
+            
+            // Tabs
+            TabBar(
               controller: _tabController,
-              children: [
-                _buildProductsTab(),
-                _buildPaymentTab(),
-                _buildFinalizeTab(),
+              indicatorColor: AppTheme.neonBlue,
+              labelColor: AppTheme.neonBlue,
+              unselectedLabelColor: AppTheme.textSecondary,
+              tabs: const [
+                Tab(text: 'PRODUCTOS'),
+                Tab(text: 'COBRO'),
+                Tab(text: 'FINALIZAR'),
               ],
             ),
-          ),
-        ],
-      ),
+            
+            // Content
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildProductsTab(),
+                  _buildPaymentTab(),
+                  _buildFinalizeTab(),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
