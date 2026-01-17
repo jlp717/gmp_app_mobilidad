@@ -4,7 +4,14 @@ import '../../../../core/theme/app_theme.dart';
 
 /// KPI Dashboard widget for Rutero tab
 /// Shows deliveries completed, pending payments, and weekly progress
-  final double totalMonto; // New field
+class RuteroKpiDashboard extends StatelessWidget {
+  final int totalEntregas;
+  final int entregasCompletadas;
+  final double montoACobrar;
+  final double montoOpcional;
+  final double montoCobrado;
+  final bool isLoading;
+  final double totalMonto;
 
   const RuteroKpiDashboard({
     super.key,
