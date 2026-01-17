@@ -126,6 +126,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
           ),
         ],
       ),
+      ),
     );
   }
 
