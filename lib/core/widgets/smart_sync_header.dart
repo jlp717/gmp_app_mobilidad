@@ -8,7 +8,8 @@ class SmartSyncHeader extends StatelessWidget {
   final DateTime? lastSync;
   final bool isLoading;
   final VoidCallback onSync;
-  final VoidCallback? onMonthTap; // Optional: specific for month picker interaction
+  final VoidCallback? onMonthTap;
+  final bool compact; // NEW: compact mode for smaller header
 
   const SmartSyncHeader({
     super.key,
@@ -18,12 +19,19 @@ class SmartSyncHeader extends StatelessWidget {
     this.isLoading = false,
     required this.onSync,
     this.onMonthTap,
+    this.compact = false, // Default false for backwards compatibility
   });
 
   @override
   Widget build(BuildContext context) {
+    final double vertPad = compact ? 8 : 16;
+    final double iconSize = compact ? 18 : 24;
+    final double iconPad = compact ? 6 : 10;
+    final double titleSize = compact ? 14 : 20;
+    final double subtitleSize = compact ? 11 : 12;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      padding: EdgeInsets.fromLTRB(compact ? 12 : 20, vertPad, compact ? 12 : 20, vertPad),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -37,95 +45,84 @@ class SmartSyncHeader extends StatelessWidget {
           bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2), width: 1),
         ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              // Icon (can be customized or generic)
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.neonBlue.withOpacity(0.2),
-                      AppTheme.neonPurple.withOpacity(0.2),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.sync_alt, color: AppTheme.neonBlue, size: 24), // Generic sync icon
+          // Icon
+          Container(
+            padding: EdgeInsets.all(iconPad),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.neonBlue.withOpacity(0.2),
+                  AppTheme.neonPurple.withOpacity(0.2),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    if (onMonthTap != null)
-                      GestureDetector(
-                        onTap: onMonthTap,
-                        child: Row(
-                          children: [
-                            Text(
-                              subtitle,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppTheme.neonBlue,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: 16),
-                          ],
-                        ),
-                      )
-                    else
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary.withOpacity(0.8),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              // Sync Button
-              IconButton(
-                onPressed: isLoading ? null : onSync,
-                icon: isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.neonBlue,
-                        ),
-                      )
-                    : const Icon(Icons.sync, color: AppTheme.neonBlue),
-              ),
-            ],
-          ),
-          if (lastSync != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Última sincronización: ${DateFormat('dd/MM/yy HH:mm').format(lastSync!)}',
-                  style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.7)),
-                ),
-              ),
+              borderRadius: BorderRadius.circular(compact ? 8 : 12),
             ),
+            child: Icon(Icons.local_shipping_outlined, color: AppTheme.neonBlue, size: iconSize),
+          ),
+          SizedBox(width: compact ? 8 : 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: titleSize,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                if (onMonthTap != null)
+                  GestureDetector(
+                    onTap: onMonthTap,
+                    child: Row(
+                      children: [
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: subtitleSize,
+                            color: AppTheme.neonBlue,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: compact ? 14 : 16),
+                      ],
+                    ),
+                  )
+                else
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: subtitleSize,
+                      color: AppTheme.textSecondary.withOpacity(0.8),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Sync Button
+          IconButton(
+            onPressed: isLoading ? null : onSync,
+            padding: EdgeInsets.zero,
+            constraints: BoxConstraints(minWidth: compact ? 32 : 40, minHeight: compact ? 32 : 40),
+            icon: isLoading
+                ? SizedBox(
+                    width: compact ? 18 : 24,
+                    height: compact ? 18 : 24,
+                    child: const CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.neonBlue,
+                    ),
+                  )
+                : Icon(Icons.sync, color: AppTheme.neonBlue, size: compact ? 20 : 24),
+          ),
         ],
       ),
     );
   }
 }
+

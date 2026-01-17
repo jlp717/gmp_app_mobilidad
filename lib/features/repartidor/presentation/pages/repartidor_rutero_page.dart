@@ -129,12 +129,13 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
       backgroundColor: AppTheme.darkBase,
       body: Column(
         children: [
-          // HEADER
+          // HEADER (COMPACT)
           SmartSyncHeader(
-            title: 'Rutero Reparto',
+            title: 'Rutero',
             subtitle: currentName,
             onSync: () => _loadData(),
             isLoading: entregas.isLoading || _isLoadingWeek,
+            compact: true,
           ),
 
           // WEEK NAVIGATION ROW
