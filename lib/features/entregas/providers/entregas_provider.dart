@@ -338,8 +338,13 @@ class EntregasProvider extends ChangeNotifier {
   }
 
   /// Inicializar con ID del repartidor
-  void setRepartidor(String repartidorId) {
+  void setRepartidor(String repartidorId, {bool autoReload = true}) {
+    if (_repartidorId == repartidorId) return; // No change
     _repartidorId = repartidorId;
+    print('[ENTREGAS_PROVIDER] setRepartidor: $repartidorId (autoReload: $autoReload)');
+    if (autoReload) {
+      cargarAlbaranesPendientes();
+    }
   }
 
   /// Cambiar fecha seleccionada

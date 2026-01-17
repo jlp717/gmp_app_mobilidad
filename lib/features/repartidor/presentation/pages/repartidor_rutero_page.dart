@@ -84,7 +84,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
         _lastLoadedId = targetId;
       }
       
-      entregas.setRepartidor(targetId);
+      entregas.setRepartidor(targetId, autoReload: false); // seleccionarFecha will reload
       entregas.seleccionarFecha(_selectedDate); 
       _loadWeekData(targetId);
     }
@@ -1041,8 +1041,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                            setState(() {
                              _lastLoadedId = null; // Clear to force reload
                            });
-                           entregas.setRepartidor(val);
-                           entregas.cargarAlbaranesPendientes();
+                           entregas.setRepartidor(val); // Now auto-reloads
                            _loadWeekData(val); // Also reload week data
                          }
                        },
@@ -1070,16 +1069,20 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
   }
 
   void _showDetailDialog(AlbaranEntrega albaran) {
+    final entregasProvider = Provider.of<EntregasProvider>(context, listen: false);
+    
     showModalBottomSheet(
       context: context, 
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => RuteroDetailModal(albaran: albaran),
+      builder: (ctx) => ChangeNotifierProvider.value(
+        value: entregasProvider,
+        child: RuteroDetailModal(albaran: albaran),
+      ),
     ).then((_) {
       // Refresh list to reflect changes (e.g. status update)
       if (mounted) {
-         final provider = Provider.of<EntregasProvider>(context, listen: false);
-         provider.cargarAlbaranesPendientes();
+         entregasProvider.cargarAlbaranesPendientes();
       }
     });
   }
