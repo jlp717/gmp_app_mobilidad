@@ -301,20 +301,16 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 
         const header = headers[0];
 
-        // 3. Get Items from LAC with product codes
+        // 3. Get Items from LAC (Simplified for ODBC compatibility)
         let itemsSql = `
             SELECT 
-                L.SECUENCIA AS ITEM_ID,
-                TRIM(L.CODIGOARTICULO) AS CODIGO,
-                TRIM(L.DESCRIPCION) AS DESCRIP,
-                L.CANTIDADUNIDADES AS QTY,
-                L.CANTIDADCAJAS AS CAJAS,
-                TRIM(L.UNIDADMEDIDA) AS UNIT,
-                L.IMPORTEVENTA AS TOTAL_LINEA,
-                CASE 
-                    WHEN L.CANTIDADUNIDADES <> 0 THEN ROUND(L.IMPORTEVENTA / L.CANTIDADUNIDADES, 4) 
-                    ELSE 0 
-                END AS PRICE
+                L.SECUENCIA ITEM_ID,
+                L.CODIGOARTICULO CODIGO,
+                L.DESCRIPCION DESCRIP,
+                L.CANTIDADUNIDADES QTY,
+                L.CANTIDADCAJAS CAJAS,
+                L.UNIDADMEDIDA UNIT,
+                L.IMPORTEVENTA TOTAL_LINEA
             FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
         `;
@@ -348,7 +344,7 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
                 cantidadCajas: parseFloat(i.CAJAS) || 0,
                 totalLinea: parseFloat(i.TOTAL_LINEA) || 0,
                 unidad: i.UNIT,
-                precioUnitario: parseFloat(i.PRICE || 0),
+                precioUnitario: (parseFloat(i.QTY) || 0) !== 0 ? (parseFloat(i.TOTAL_LINEA) || 0) / parseFloat(i.QTY) : 0,
                 cantidadEntregada: 0,
                 estado: 'PENDIENTE'
             })),
