@@ -383,11 +383,14 @@ class EntregasProvider extends ChangeNotifier {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
         _albaranes = lista.map((e) => AlbaranEntrega.fromJson(e)).toList();
         
-        // Parse resumen totals
+        // Parse resumen totals with improved null safety
         final resumen = response['resumen'] as Map<String, dynamic>? ?? {};
         _resumenTotalBruto = (resumen['totalBruto'] ?? 0).toDouble();
         _resumenTotalACobrar = (resumen['totalACobrar'] ?? 0).toDouble();
         _resumenTotalOpcional = (resumen['totalOpcional'] ?? 0).toDouble();
+        
+        print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada');
+        print('[ENTREGAS_PROVIDER] Resumen: bruto=$_resumenTotalBruto, aCobrar=$_resumenTotalACobrar, opcional=$_resumenTotalOpcional');
       } else {
         _error = response['error'] ?? 'Error cargando entregas';
       }
@@ -401,23 +404,41 @@ class EntregasProvider extends ChangeNotifier {
 
   /// Convenience method to get items directly
   Future<List<EntregaItem>> getAlbaranDetalle(int numero, int ejercicio, String serie, int terminal) async {
-    final detalle = await obtenerDetalleAlbaran(numero, ejercicio, serie, terminal);
-    return detalle?.items ?? [];
+    print('[ENTREGAS_PROVIDER] getAlbaranDetalle($numero, $ejercicio, $serie, $terminal)');
+    try {
+      final detalle = await obtenerDetalleAlbaran(numero, ejercicio, serie, terminal);
+      if (detalle == null) {
+        print('[ENTREGAS_PROVIDER] getAlbaranDetalle returned null');
+        return [];
+      }
+      print('[ENTREGAS_PROVIDER] getAlbaranDetalle returned ${detalle.items.length} items');
+      return detalle.items;
+    } catch (e) {
+      print('[ENTREGAS_PROVIDER] getAlbaranDetalle error: $e');
+      return [];
+    }
   }
 
   Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio, String serie, int terminal) async {
     try {
+      print('[ENTREGAS_PROVIDER] Fetching albaran detail: $numero/$ejercicio?serie=$serie&terminal=$terminal');
       // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
       final response = await ApiClient.get(
         '/entregas/albaran/$numero/$ejercicio?serie=$serie&terminal=$terminal',
       );
 
+      print('[ENTREGAS_PROVIDER] Albaran detail response: success=${response['success']}');
+      
       if (response['success'] == true && response['albaran'] != null) {
         _albaranSeleccionado = AlbaranEntrega.fromJson(response['albaran']);
+        print('[ENTREGAS_PROVIDER] Parsed albaran with ${_albaranSeleccionado?.items.length ?? 0} items');
         notifyListeners();
         return _albaranSeleccionado;
+      } else {
+        print('[ENTREGAS_PROVIDER] Albaran detail failed: ${response['error']}');
       }
     } catch (e) {
+      print('[ENTREGAS_PROVIDER] obtenerDetalleAlbaran error: $e');
       _error = 'Error obteniendo detalle: $e';
       notifyListeners();
     }

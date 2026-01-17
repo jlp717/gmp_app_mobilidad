@@ -211,6 +211,8 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         const totalACobrar = filteredAlbaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
         const totalOpcional = filteredAlbaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
 
+        logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} → albaranes=${filteredAlbaranes.length}, totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}`);
+
         res.json({
             success: true,
             albaranes: filteredAlbaranes,

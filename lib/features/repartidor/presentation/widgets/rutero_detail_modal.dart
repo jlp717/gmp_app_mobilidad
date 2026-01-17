@@ -201,13 +201,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
 
   Widget _buildProductsTab() {
     // Need to fetch details if not already loaded
-    // For now assuming we have access to lineas via provider or stored in generic object
-    // In current implementation, lines are fetched separately. 
-    // We'll use a FutureBuilder or Consumer if lines are in provider.
-    
-    // IMPORTANT: The original code fetched details on open.
-    // We'll assume the provider has a method `getAlbaranDetalle`
-    
     final provider = Provider.of<EntregasProvider>(context, listen: false);
     
     return FutureBuilder<List<EntregaItem>>(
@@ -219,17 +212,77 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
       ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue));
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: AppTheme.neonBlue),
+                SizedBox(height: 16),
+                Text('Cargando productos...', style: TextStyle(color: AppTheme.textSecondary)),
+              ],
+            ),
+          );
         }
         
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: AppTheme.error)));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error al cargar productos',
+                    style: const TextStyle(color: AppTheme.error, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${snapshot.error}',
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => setState(() {}), // Retry
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Reintentar'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.neonBlue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
         
         final lineas = snapshot.data ?? [];
         
         if (lineas.isEmpty) {
-          return const Center(child: Text('No hay líneas', style: TextStyle(color: AppTheme.textSecondary)));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inventory_2_outlined, color: AppTheme.textSecondary.withOpacity(0.5), size: 64),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No hay líneas de producto',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Albarán: ${widget.albaran.numeroAlbaran}',
+                    style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
 
         return ListView.builder(

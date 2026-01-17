@@ -1038,8 +1038,12 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                        onChanged: (val) {
                          if (val != null) {
                            filter.setVendor(val);
+                           setState(() {
+                             _lastLoadedId = null; // Clear to force reload
+                           });
                            entregas.setRepartidor(val);
                            entregas.cargarAlbaranesPendientes();
+                           _loadWeekData(val); // Also reload week data
                          }
                        },
                      ),
