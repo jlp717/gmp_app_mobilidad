@@ -256,42 +256,51 @@ router.get('/payment-conditions', async (req, res) => {
 router.get('/albaran/:numero/:ejercicio', async (req, res) => {
     try {
         const { numero, ejercicio } = req.params;
-        const serie = req.query.serie; // Optional series filter
+        const serie = req.query.serie;
+        const terminal = req.query.terminal;
 
-        // 1. Get Header - FIX: usar columnas correctas de CLI
-        let headerSql = `
-            SELECT CAC.*, 
+        // 1. Build WHERE clause
+        let whereClause = `CPC.NUMEROALBARAN = ${numero} AND CPC.EJERCICIOALBARAN = ${ejercicio}`;
+        if (serie) whereClause += ` AND CPC.SERIEALBARAN = '${serie}'`;
+        if (terminal) whereClause += ` AND CPC.TERMINALALBARAN = ${terminal}`;
+
+        // 2. Get Header from CPC (consistent with list endpoint - uses IMPORTEBRUTO)
+        const headerSql = `
+            SELECT 
+                CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
+                CPC.IMPORTEBRUTO as IMPORTE,
+                CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
+                TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
+                TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as CLIENTE_NOM, 
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIR, 
-                TRIM(COALESCE(CLI.POBLACION, '')) as POB
-            FROM DSEDAC.CAC
-            LEFT JOIN DSEDAC.CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-            WHERE CAC.NUMEROALBARAN = ${numero} AND CAC.EJERCICIOALBARAN = ${ejercicio}
+                TRIM(COALESCE(CLI.POBLACION, '')) as POB,
+                CAC.NUMEROFACTURA, CAC.SERIEFACTURA
+            FROM DSEDAC.CPC CPC
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            LEFT JOIN DSEDAC.CAC CAC ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
+                AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
+            WHERE ${whereClause}
+            FETCH FIRST 1 ROWS ONLY
         `;
-
-        if (serie) {
-            headerSql += ` AND CAC.SERIEALBARAN = '${serie}'`;
-        }
-
-        if (req.query.terminal) {
-            headerSql += ` AND CAC.TERMINALALBARAN = ${req.query.terminal}`;
-        }
-
-        headerSql += ` FETCH FIRST 1 ROWS ONLY`;
 
         const headers = await query(headerSql, false);
         if (headers.length === 0) return res.status(404).json({ success: false, error: 'Albaran not found' });
 
         const header = headers[0];
 
-        // 2. Get Items
+        // 3. Get Items from LAC with product codes
         let itemsSql = `
             SELECT 
                 L.SECUENCIA as ITEM_ID,
                 TRIM(L.CODIGOARTICULO) as CODIGO,
                 TRIM(L.DESCRIPCION) as DESC,
                 L.CANTIDADUNIDADES as QTY,
+                L.CANTIDADCAJAS as CAJAS,
                 TRIM(L.UNIDADMEDIDA) as UNIT,
+                L.IMPORTEVENTA as TOTAL_LINEA,
                 CASE 
                     WHEN L.CANTIDADUNIDADES <> 0 THEN ROUND(L.IMPORTEVENTA / L.CANTIDADUNIDADES, 4) 
                     ELSE 0 
@@ -299,36 +308,36 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
         `;
-
-        if (serie) {
-            itemsSql += ` AND L.SERIEALBARAN = '${serie}'`;
-        }
-
-        if (req.query.terminal) {
-            itemsSql += ` AND L.TERMINALALBARAN = ${req.query.terminal}`;
-        }
-
+        if (serie) itemsSql += ` AND L.SERIEALBARAN = '${serie}'`;
+        if (terminal) itemsSql += ` AND L.TERMINALALBARAN = ${terminal}`;
         itemsSql += ` ORDER BY L.SECUENCIA`;
 
         const items = await query(itemsSql, false);
 
         const albaran = {
-            id: `${header.EJERCICIOALBARAN} -${header.SERIEALBARAN || ''} -${header.NUMEROALBARAN} `,
+            id: `${header.EJERCICIOALBARAN}-${(header.SERIEALBARAN || '').trim()}-${header.TERMINALALBARAN}-${header.NUMEROALBARAN}`,
             numeroAlbaran: header.NUMEROALBARAN,
             ejercicio: header.EJERCICIOALBARAN,
+            serie: (header.SERIEALBARAN || '').trim(),
+            terminal: header.TERMINALALBARAN,
+            codigoCliente: header.CLIENTE,
+            nombreCliente: header.CLIENTE_NOM,
+            direccion: header.DIR,
+            poblacion: header.POB,
             numeroFactura: header.NUMEROFACTURA || 0,
             serieFactura: (header.SERIEFACTURA || '').trim(),
-            nombreCliente: header.CLIENTE_NOM?.trim(),
-            direccion: header.DIR?.trim(),
-            poblacion: header.POB?.trim(),
-            fecha: `${header.DIADOCUMENTO} /${header.MESDOCUMENTO}/${header.ANODOCUMENTO} `,
-            importe: parseFloat(header.IMPORTETOTAL),
+            documentoTipo: (header.NUMEROFACTURA || 0) > 0 ? 'FACTURA' : 'ALBARÁN',
+            fecha: `${header.DIADOCUMENTO}/${header.MESDOCUMENTO}/${header.ANODOCUMENTO}`,
+            importe: parseFloat(header.IMPORTE) || 0,
+            formaPago: (header.FORMA_PAGO || '').trim(),
             items: items.map(i => ({
                 itemId: i.ITEM_ID,
                 codigoArticulo: i.CODIGO,
                 descripcion: i.DESC,
-                cantidadPedida: parseFloat(i.QTY),
-                unit: i.UNIT,
+                cantidadPedida: parseFloat(i.QTY) || 0,
+                cantidadCajas: parseFloat(i.CAJAS) || 0,
+                totalLinea: parseFloat(i.TOTAL_LINEA) || 0,
+                unidad: i.UNIT,
                 precioUnitario: parseFloat(i.PRICE || 0),
                 cantidadEntregada: 0,
                 estado: 'PENDIENTE'

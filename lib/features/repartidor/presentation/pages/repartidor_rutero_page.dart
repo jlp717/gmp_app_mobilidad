@@ -373,11 +373,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
 
   Widget _buildWeeklyStrip() {
     return Container(
-      height: 60, // Reduced from 85
+      height: 55,
       color: AppTheme.surfaceColor, 
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
         itemCount: _weekDays.length,
         itemBuilder: (context, index) {
           final dayData = _weekDays[index];
@@ -390,14 +390,9 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           Color borderColor = Colors.white.withOpacity(0.1);
           Color textColor = AppTheme.textSecondary;
           
-          if (status == 'good') {
-            bgColor = AppTheme.success.withOpacity(0.1);
-            borderColor = AppTheme.success.withOpacity(0.3);
-            textColor = AppTheme.success;
-          } else if (status == 'bad') {
-            bgColor = AppTheme.error.withOpacity(0.1);
-            borderColor = AppTheme.error.withOpacity(0.3);
-            textColor = AppTheme.error;
+          if (count > 0) {
+            bgColor = AppTheme.neonBlue.withOpacity(0.05);
+            borderColor = AppTheme.neonBlue.withOpacity(0.2);
           }
 
           if (isSelected) {
@@ -409,7 +404,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           return GestureDetector(
             onTap: () => _onDaySelected(date),
             child: Container(
-              width: 46, // Reduced from 55
+              width: 50,
               margin: const EdgeInsets.only(right: 4),
               decoration: BoxDecoration(
                 color: bgColor,
@@ -425,17 +420,18 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                   Text(
                     dayData['dayName'] ?? '',
                     style: TextStyle(
-                      fontSize: 9, // Reduced from 11
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: textColor.withOpacity(isSelected ? 0.9 : 0.7),
+                      color: isSelected ? textColor : AppTheme.textSecondary,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
-                    '${dayData['day']}',
+                    '$count',
                     style: TextStyle(
-                      fontSize: 14, // Reduced from 16
+                      fontSize: 14,
                       fontWeight: FontWeight.w900,
-                      color: textColor,
+                      color: isSelected ? textColor : (count > 0 ? AppTheme.neonBlue : AppTheme.textSecondary),
                     ),
                   ),
                 ],
