@@ -1008,7 +1008,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: FutureBuilder<List<Map<String, dynamic>>>(
-        future: ApiClient.get('/repartidores').then((val) => List<Map<String, dynamic>>.from(val)),
+        future: ApiClient.getList('/repartidores').then((val) => val.map((e) => e as Map<String, dynamic>).toList()),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const SizedBox.shrink();
 
