@@ -91,7 +91,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCION,
               TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
               TRIM(COALESCE(CLI.TELEFONO1, '')) as TELEFONO,
-              CPC.IMPORTEBRUTO as IMPORTE,
+              CPC.IMPORTEBRUTO,
               TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
               TRIM(CPC.CODIGORUTA) as RUTA
@@ -149,7 +149,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 direccion: row.DIRECCION?.trim(),
                 poblacion: row.POBLACION?.trim(),
                 telefono: row.TELEFONO?.trim(),
-                importe: parseFloat(row.IMPORTE) || 0,
+                importe: parseFloat(row.IMPORTEBRUTO) || 0,
                 formaPago: fp,
                 formaPagoDesc: paymentInfo.desc,
                 tipoPago: paymentInfo.type,

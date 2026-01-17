@@ -1007,43 +1007,60 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: FutureBuilder<List<Map<String, dynamic>>>(
-        future: ApiClient.getList('/repartidores').then((val) => val.map((e) => e as Map<String, dynamic>).toList()),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const SizedBox.shrink();
+      child: Row(
+        children: [
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: ApiClient.getList('/repartidores').then((val) => val.map((e) => e as Map<String, dynamic>).toList()),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const SizedBox.shrink();
 
-          return Container(
-             height: 36, 
-             padding: const EdgeInsets.symmetric(horizontal: 12),
-             decoration: BoxDecoration(
-               color: AppTheme.darkCard,
-               borderRadius: BorderRadius.circular(12),
-               border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
-             ),
-             child: DropdownButtonHideUnderline(
-               child: DropdownButton<String>(
-                 value: filter.selectedVendor,
-                 hint: const Text('Ver como...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                 icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue),
-                 dropdownColor: AppTheme.darkCard,
-                 isExpanded: true,
-                 style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                 items: snapshot.data!.map((r) => DropdownMenuItem(
-                   value: r['code'].toString(),
-                   child: Text('${r['code']} - ${r['name']}', overflow: TextOverflow.ellipsis),
-                 )).toList(),
-                 onChanged: (val) {
-                   if (val != null) {
-                     filter.setVendor(val);
-                     // Auto-reload logic
-                     entregas.setRepartidor(val);
-                     entregas.cargarAlbaranesPendientes();
-                   }
-                 },
-               ),
-             ),
-          );
-        }
+                return Container(
+                   height: 36, 
+                   padding: const EdgeInsets.symmetric(horizontal: 12),
+                   decoration: BoxDecoration(
+                     color: AppTheme.darkCard,
+                     borderRadius: BorderRadius.circular(12),
+                     border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                   ),
+                   child: DropdownButtonHideUnderline(
+                     child: DropdownButton<String>(
+                       value: filter.selectedVendor,
+                       hint: const Text('Ver como...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                       icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue),
+                       dropdownColor: AppTheme.darkCard,
+                       isExpanded: true,
+                       style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                       items: snapshot.data!.map((r) => DropdownMenuItem(
+                         value: r['code'].toString(),
+                         child: Text('${r['code']} - ${r['name']}', overflow: TextOverflow.ellipsis),
+                       )).toList(),
+                       onChanged: (val) {
+                         if (val != null) {
+                           filter.setVendor(val);
+                           entregas.setRepartidor(val);
+                           entregas.cargarAlbaranesPendientes();
+                         }
+                       },
+                     ),
+                   ),
+                );
+              }
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: AppTheme.neonBlue),
+            tooltip: 'Recargar datos',
+            onPressed: () {
+               // Force reload logic
+               if (filter.selectedVendor != null) {
+                 entregas.setRepartidor(filter.selectedVendor!);
+                 entregas.cargarAlbaranesPendientes();
+               }
+            },
+          ),
+        ],
       ),
     );
   }

@@ -67,12 +67,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     
-    // Use ClipRRect directly on Scaffold to ensure rounded top corners and background
-    return ClipRRect(
+    return Material(
+      color: AppTheme.darkBase,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: Scaffold(
-        backgroundColor: AppTheme.darkBase, // Explicit solid color, no transparency here
-        body: Column(
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        child: Column(
           children: [
             // Drag handle area
             Container(
@@ -96,7 +96,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
             
             // Tabs
             Container(
-              color: AppTheme.darkSurface, // Distinct background for tabs
+              color: AppTheme.darkSurface, 
               child: TabBar(
                 controller: _tabController,
                 indicatorColor: AppTheme.neonBlue,
@@ -113,7 +113,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
             // Content
             Expanded(
               child: Container(
-                color: AppTheme.darkBase, // Ensure content background is dark
+                color: AppTheme.darkBase,
                 child: TabBarView(
                   controller: _tabController,
                   children: [
