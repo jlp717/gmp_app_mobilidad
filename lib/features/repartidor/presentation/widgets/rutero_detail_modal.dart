@@ -67,32 +67,26 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     
-    return Material(
-      type: MaterialType.transparency,
-      child: Container(
-        height: size.height * 0.9,
-        decoration: BoxDecoration(
-          color: AppTheme.darkBase,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.neonBlue.withOpacity(0.1),
-              blurRadius: 20,
-              spreadRadius: 5,
-            ),
-          ],
-        ),
-        child: Column(
+    // Use ClipRRect directly on Scaffold to ensure rounded top corners and background
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: Scaffold(
+        backgroundColor: AppTheme.darkBase, // Explicit solid color, no transparency here
+        body: Column(
           children: [
-            // Drag handle
-            Center(
-              child: Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(2),
+            // Drag handle area
+            Container(
+              width: double.infinity,
+              color: AppTheme.darkBase,
+              padding: const EdgeInsets.only(top: 12, bottom: 8),
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
             ),
@@ -101,27 +95,33 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
             _buildHeader(context),
             
             // Tabs
-            TabBar(
-              controller: _tabController,
-              indicatorColor: AppTheme.neonBlue,
-              labelColor: AppTheme.neonBlue,
-              unselectedLabelColor: AppTheme.textSecondary,
-              tabs: const [
-                Tab(text: 'PRODUCTOS'),
-                Tab(text: 'COBRO'),
-                Tab(text: 'FINALIZAR'),
-              ],
+            Container(
+              color: AppTheme.darkSurface, // Distinct background for tabs
+              child: TabBar(
+                controller: _tabController,
+                indicatorColor: AppTheme.neonBlue,
+                labelColor: AppTheme.neonBlue,
+                unselectedLabelColor: AppTheme.textSecondary,
+                tabs: const [
+                  Tab(text: 'PRODUCTOS'),
+                  Tab(text: 'COBRO'),
+                  Tab(text: 'FINALIZAR'),
+                ],
+              ),
             ),
             
             // Content
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildProductsTab(),
-                  _buildPaymentTab(),
-                  _buildFinalizeTab(),
-                ],
+              child: Container(
+                color: AppTheme.darkBase, // Ensure content background is dark
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildProductsTab(),
+                    _buildPaymentTab(),
+                    _buildFinalizeTab(),
+                  ],
+                ),
               ),
             ),
           ],

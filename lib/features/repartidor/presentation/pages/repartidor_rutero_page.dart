@@ -163,7 +163,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
 
           // DIRECTOR FILTER (Collapsed/Compact)
           if (auth.isDirector)
-            _buildDirectorFilter(auth, filter),
+            _buildDirectorFilter(auth, filter, entregas),
 
           // SEARCH & SORT ROW
           Padding(
@@ -1002,7 +1002,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     );
   }
 
-  Widget _buildDirectorFilter(AuthProvider auth, FilterProvider filter) {
+  Widget _buildDirectorFilter(AuthProvider auth, FilterProvider filter, EntregasProvider entregas) {
     if (!auth.isDirector) return const SizedBox.shrink();
 
     return Padding(
@@ -1035,6 +1035,9 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                  onChanged: (val) {
                    if (val != null) {
                      filter.setVendor(val);
+                     // Auto-reload logic
+                     entregas.setRepartidor(val);
+                     entregas.cargarAlbaranesPendientes();
                    }
                  },
                ),
