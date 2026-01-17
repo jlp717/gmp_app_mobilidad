@@ -67,21 +67,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     
-    return Material(
-      type: MaterialType.transparency,
-      child: Container(
-        height: size.height * 0.9, // 90% height
+    return Scaffold(
+      backgroundColor: Colors.transparent, // Important for overlay
+      body: Container(
+        height: size.height * 0.9,
         decoration: BoxDecoration(
           color: AppTheme.darkBase,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 5,
-          ),
-        ],
-      ),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.neonBlue.withOpacity(0.1),
+              blurRadius: 20,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
       child: Column(
         children: [
           // Drag handle

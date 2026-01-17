@@ -161,6 +161,10 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                 ),
              ),
 
+          // DIRECTOR FILTER (Collapsed/Compact)
+          if (auth.isDirector)
+            _buildDirectorFilter(auth, filter),
+
           // SEARCH & SORT ROW
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -169,7 +173,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                 // Search TextField
                 Expanded(
                   child: Container(
-                    height: 40,
+                    height: 36, // Reduced height
                     decoration: BoxDecoration(
                       color: AppTheme.surfaceColor,
                       borderRadius: BorderRadius.circular(10),
@@ -179,15 +183,13 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                       decoration: const InputDecoration(
                         hintText: 'Buscar cliente...',
                         hintStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-                        prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+                        prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary, size: 18),
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        contentPadding: EdgeInsets.symmetric(vertical: 8), // Adjusted
                       ),
                       style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                       onChanged: (value) {
-                        Future.delayed(const Duration(milliseconds: 500), () {
-                          entregas.setSearchQuery(value);
-                        });
+                         entregas.setSearchQuery(value);
                       },
                     ),
                   ),
@@ -195,7 +197,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                 const SizedBox(width: 8),
                 // Sort Dropdown
                 Container(
-                  height: 40,
+                  height: 36, // Reduced
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceColor,
@@ -275,7 +277,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
             entregasCompletadas: entregas.albaranes.where((a) => a.estado == EstadoEntrega.entregado).length,
             montoACobrar: entregas.resumenTotalACobrar,
             montoOpcional: entregas.resumenTotalOpcional,
-            montoCobrado: 0, // TODO: Add logic to calculate collected amount for the day
+            totalMonto: entregas.albaranes.fold(0.0, (sum, item) => sum + item.importeTotal), // Calculated Total
+            montoCobrado: 0, 
             isLoading: entregas.isLoading,
           ),
           const SizedBox(height: 6),
@@ -995,6 +998,49 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
             child: const Text('Sí, Editar', style: TextStyle(color: AppTheme.error)),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDirectorFilter(AuthProvider auth, FilterProvider filter) {
+    if (!auth.isDirector) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: ApiClient.get('/repartidores').then((val) => List<Map<String, dynamic>>.from(val)),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const SizedBox.shrink();
+
+          return Container(
+             height: 36, 
+             padding: const EdgeInsets.symmetric(horizontal: 12),
+             decoration: BoxDecoration(
+               color: AppTheme.darkCard,
+               borderRadius: BorderRadius.circular(12),
+               border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+             ),
+             child: DropdownButtonHideUnderline(
+               child: DropdownButton<String>(
+                 value: filter.selectedVendor,
+                 hint: const Text('Ver como...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                 icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue),
+                 dropdownColor: AppTheme.darkCard,
+                 isExpanded: true,
+                 style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                 items: snapshot.data!.map((r) => DropdownMenuItem(
+                   value: r['code'].toString(),
+                   child: Text('${r['code']} - ${r['name']}', overflow: TextOverflow.ellipsis),
+                 )).toList(),
+                 onChanged: (val) {
+                   if (val != null) {
+                     filter.setVendor(val);
+                   }
+                 },
+               ),
+             ),
+          );
+        }
       ),
     );
   }

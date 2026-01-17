@@ -4,13 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 
 /// KPI Dashboard widget for Rutero tab
 /// Shows deliveries completed, pending payments, and weekly progress
-class RuteroKpiDashboard extends StatelessWidget {
-  final int totalEntregas;
-  final int entregasCompletadas;
-  final double montoACobrar;
-  final double montoOpcional;
-  final double montoCobrado;
-  final bool isLoading;
+  final double totalMonto; // New field
 
   const RuteroKpiDashboard({
     super.key,
@@ -18,6 +12,7 @@ class RuteroKpiDashboard extends StatelessWidget {
     required this.entregasCompletadas,
     required this.montoACobrar,
     required this.montoOpcional,
+    required this.totalMonto, // New field
     this.montoCobrado = 0,
     this.isLoading = false,
   });
@@ -27,22 +22,12 @@ class RuteroKpiDashboard extends StatelessWidget {
     final progresoEntregas = totalEntregas > 0 
         ? entregasCompletadas / totalEntregas 
         : 0.0;
-    final progresoCobros = montoACobrar > 0 
-        ? montoCobrado / montoACobrar 
-        : 0.0;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), // Reduced vertical margin
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), // Reduced padding
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.darkSurface,
-            AppTheme.darkCard.withOpacity(0.8),
-          ],
-        ),
+        color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: AppTheme.neonBlue.withOpacity(0.3),
@@ -50,16 +35,16 @@ class RuteroKpiDashboard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
+            color: AppTheme.neonBlue.withOpacity(0.05),
+            blurRadius: 10,
+            spreadRadius: 1,
           ),
         ],
       ),
       child: isLoading
           ? const Center(
               child: SizedBox(
-                height: 60,
+                height: 40, // Reduced height
                 child: CircularProgressIndicator(
                   color: AppTheme.neonBlue,
                   strokeWidth: 2,
@@ -70,6 +55,7 @@ class RuteroKpiDashboard extends StatelessWidget {
               children: [
                 // Circular progress for deliveries
                 Expanded(
+                  flex: 2,
                   child: _buildCircularKpi(
                     label: 'Entregas',
                     value: '$entregasCompletadas/$totalEntregas',
@@ -78,13 +64,22 @@ class RuteroKpiDashboard extends StatelessWidget {
                     icon: Icons.local_shipping_outlined,
                   ),
                 ),
-                Container(
-                  width: 1,
-                  height: 60,
-                  color: AppTheme.borderColor,
-                ),
-                // Cobros obligatorios
+                Container(width: 1, height: 40, color: AppTheme.borderColor),
+                
+                // Total Load
                 Expanded(
+                  flex: 2,
+                  child: _buildLinearKpi(
+                    label: 'Total',
+                    amount: totalMonto,
+                    color: AppTheme.textPrimary,
+                    icon: Icons.functions,
+                  ),
+                ),
+                
+                // A Cobrar
+                Expanded(
+                  flex: 2,
                   child: _buildLinearKpi(
                     label: 'A Cobrar',
                     amount: montoACobrar,
@@ -92,13 +87,10 @@ class RuteroKpiDashboard extends StatelessWidget {
                     icon: Icons.payment_outlined,
                   ),
                 ),
-                Container(
-                  width: 1,
-                  height: 60,
-                  color: AppTheme.borderColor,
-                ),
-                // Cobros opcionales
+                
+                // Opcional
                 Expanded(
+                  flex: 2,
                   child: _buildLinearKpi(
                     label: 'Opcional',
                     amount: montoOpcional,
@@ -122,39 +114,37 @@ class RuteroKpiDashboard extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 56,
-          height: 56,
+          width: 40, // Reduced
+          height: 40, // Reduced
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Background circle
               CustomPaint(
-                size: const Size(56, 56),
+                size: const Size(40, 40),
                 painter: _CircularProgressPainter(
                   progress: progress,
                   color: color,
                   backgroundColor: AppTheme.borderColor,
                 ),
               ),
-              // Icon
-              Icon(icon, color: color, size: 22),
+              Icon(icon, color: color, size: 16), // Reduced
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
           value,
           style: TextStyle(
             color: AppTheme.textPrimary,
             fontWeight: FontWeight.bold,
-            fontSize: 14,
+            fontSize: 12, // Reduced
           ),
         ),
         Text(
           label,
           style: TextStyle(
             color: AppTheme.textSecondary,
-            fontSize: 10,
+            fontSize: 9, // Reduced
           ),
         ),
       ],
@@ -170,30 +160,21 @@ class RuteroKpiDashboard extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.3)),
-          ),
-          child: Icon(icon, color: color, size: 22),
-        ),
-        const SizedBox(height: 8),
+        Icon(icon, color: color, size: 18), // Icon only, no box
+        const SizedBox(height: 2),
         Text(
           '${amount.toStringAsFixed(0)}€',
           style: TextStyle(
             color: color,
             fontWeight: FontWeight.bold,
-            fontSize: 14,
+            fontSize: 12, // Reduced
           ),
         ),
         Text(
           label,
           style: TextStyle(
             color: AppTheme.textSecondary,
-            fontSize: 10,
+            fontSize: 9, // Reduced
           ),
         ),
       ],
