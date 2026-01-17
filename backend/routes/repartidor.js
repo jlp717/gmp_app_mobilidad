@@ -858,20 +858,8 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE (
-                    (OPP.ANOREPARTO = ${weekDays[0].syear} AND OPP.MESREPARTO = ${weekDays[0].smonth} AND OPP.DIAREPARTO >= ${weekDays[0].sday})
-                    OR 
-                    (OPP.ANOREPARTO = ${weekDays[6].syear} AND OPP.MESREPARTO = ${weekDays[6].smonth} AND OPP.DIAREPARTO <= ${weekDays[6].sday})
-                  )
-              -- Note: The simplified date logic above handles same-month weeks. 
-              -- For cross-month weeks, we'd need cleaner SQL date logic, 
-              -- but standard DB2/AS400 date construction can be verbose. 
-              -- Fallback to string comparison might be safer if Dates are stored as numbers:
-              AND (
-                  (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday}
-                  AND 
-                  (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) <= ${weekDays[6].syear * 10000 + weekDays[6].smonth * 100 + weekDays[6].sday}
-              )
+            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday}
+              AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) <= ${weekDays[6].syear * 10000 + weekDays[6].smonth * 100 + weekDays[6].sday}
               AND TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO
         `;

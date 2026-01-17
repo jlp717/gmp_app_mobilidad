@@ -399,7 +399,12 @@ class EntregasProvider extends ChangeNotifier {
     }
   }
 
-  /// Obtener detalle de un albarán
+  /// Convenience method to get items directly
+  Future<List<EntregaItem>> getAlbaranDetalle(int numero, int ejercicio, String serie, int terminal) async {
+    final detalle = await obtenerDetalleAlbaran(numero, ejercicio, serie, terminal);
+    return detalle?.items ?? [];
+  }
+
   Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio, String serie, int terminal) async {
     try {
       // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
