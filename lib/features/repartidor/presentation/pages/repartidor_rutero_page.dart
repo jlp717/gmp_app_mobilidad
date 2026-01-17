@@ -217,51 +217,71 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
             ),
           ),
 
-          // PAYMENT TYPE FILTER CHIPS
+          // FILTER CHIPS ROW 1: Document Type + Collection Status
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                _buildFilterChip('Todos', entregas.filterTipoPago.isEmpty, () => entregas.setFilterTipoPago(''), Colors.grey),
+                // Document type filters
+                _buildFilterChip('Todos', entregas.filterDocTipo.isEmpty && entregas.filterDebeCobrar.isEmpty, () {
+                  entregas.setFilterDocTipo('');
+                  entregas.setFilterDebeCobrar('');
+                }, Colors.grey),
                 const SizedBox(width: 6),
-                _buildFilterChip('🔴 A Cobrar', entregas.filterDebeCobrar == 'S', () => entregas.setFilterDebeCobrar(entregas.filterDebeCobrar == 'S' ? '' : 'S'), AppTheme.error),
+                _buildFilterChip('📄 Albaranes', entregas.filterDocTipo == 'ALBARAN', () => entregas.setFilterDocTipo(entregas.filterDocTipo == 'ALBARAN' ? '' : 'ALBARAN'), AppTheme.neonBlue),
                 const SizedBox(width: 6),
+                _buildFilterChip('📋 Facturas', entregas.filterDocTipo == 'FACTURA', () => entregas.setFilterDocTipo(entregas.filterDocTipo == 'FACTURA' ? '' : 'FACTURA'), AppTheme.neonPurple),
+                const SizedBox(width: 6),
+                _buildFilterChip('💳 A Cobrar', entregas.filterDebeCobrar == 'S', () => entregas.setFilterDebeCobrar(entregas.filterDebeCobrar == 'S' ? '' : 'S'), AppTheme.error),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          // FILTER CHIPS ROW 2: Payment Types
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
                 _buildFilterChip('CONTADO', entregas.filterTipoPago == 'CONTADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CONTADO' ? '' : 'CONTADO'), AppTheme.error),
                 const SizedBox(width: 6),
                 _buildFilterChip('CRÉDITO', entregas.filterTipoPago == 'CREDITO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CREDITO' ? '' : 'CREDITO'), AppTheme.success),
                 const SizedBox(width: 6),
                 _buildFilterChip('DOMICILIADO', entregas.filterTipoPago == 'DOMICILIADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'DOMICILIADO' ? '' : 'DOMICILIADO'), AppTheme.success),
                 const SizedBox(width: 6),
-                _buildFilterChip('TRANSF.', entregas.filterTipoPago == 'TRANSFERENCIA', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'TRANSFERENCIA' ? '' : 'TRANSFERENCIA'), AppTheme.warning),
+                _buildFilterChip('TRANSFERENCIA', entregas.filterTipoPago == 'TRANSFERENCIA', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'TRANSFERENCIA' ? '' : 'TRANSFERENCIA'), AppTheme.warning),
+                const SizedBox(width: 6),
+                _buildFilterChip('GIRO', entregas.filterTipoPago == 'GIRO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'GIRO' ? '' : 'GIRO'), AppTheme.success),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
           // SUMMARY BAR
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [AppTheme.darkSurface, AppTheme.surfaceColor],
               ),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.grey.shade700),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildSummaryItem('Total', entregas.resumenTotalBruto, AppTheme.textPrimary),
-                Container(width: 1, height: 30, color: Colors.grey.shade600),
+                Container(width: 1, height: 25, color: Colors.grey.shade600),
                 _buildSummaryItem('A Cobrar', entregas.resumenTotalACobrar, AppTheme.error),
-                Container(width: 1, height: 30, color: Colors.grey.shade600),
+                Container(width: 1, height: 25, color: Colors.grey.shade600),
                 _buildSummaryItem('Opcional', entregas.resumenTotalOpcional, AppTheme.warning),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
           // LIST
           Expanded(
@@ -731,36 +751,54 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                           decoration: BoxDecoration(
-                            color: _getPaymentColor(albaran.colorEstado).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
+                            color: _getPaymentColor(albaran.colorEstado).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: _getPaymentColor(albaran.colorEstado).withOpacity(0.5),
+                              color: _getPaymentColor(albaran.colorEstado).withOpacity(0.4),
                             ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                albaran.esCTR ? Icons.payments_rounded : 
-                                  (albaran.puedeCobrarse ? Icons.account_balance_wallet : Icons.credit_card),
-                                size: 16,
+                                albaran.esCTR ? Icons.account_balance_wallet_outlined : 
+                                  (albaran.puedeCobrarse ? Icons.swap_horiz : Icons.check_circle_outline),
+                                size: 14,
                                 color: _getPaymentColor(albaran.colorEstado),
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 5),
                               Text(
-                                albaran.esCTR ? '💰 COBRAR' : 
-                                  (albaran.puedeCobrarse ? 'OPCIONAL' : 'CRÉDITO'),
+                                albaran.esCTR ? 'COBRAR' : 
+                                  (albaran.puedeCobrarse ? 'OPCIONAL' : albaran.tipoPago),
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
                                   color: _getPaymentColor(albaran.colorEstado),
                                 ),
                               ),
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        // Payment days badge
+                        if (albaran.diasPago > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppTheme.darkBase,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '${albaran.diasPago}d',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
                         const SizedBox(width: 10),
                         // Payment type description
                         Expanded(

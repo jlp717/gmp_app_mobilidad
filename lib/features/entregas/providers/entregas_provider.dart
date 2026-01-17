@@ -296,6 +296,7 @@ class EntregasProvider extends ChangeNotifier {
   String _sortBy = 'default'; // 'default', 'importe_desc', 'importe_asc'
   String _filterTipoPago = ''; // 'CONTADO', 'CREDITO', 'DOMICILIADO', etc.
   String _filterDebeCobrar = ''; // 'S' or 'N'
+  String _filterDocTipo = ''; // 'ALBARAN' or 'FACTURA'
   
   // Resumen totals from API
   double _resumenTotalBruto = 0;
@@ -306,6 +307,7 @@ class EntregasProvider extends ChangeNotifier {
   String get sortBy => _sortBy;
   String get filterTipoPago => _filterTipoPago;
   String get filterDebeCobrar => _filterDebeCobrar;
+  String get filterDocTipo => _filterDocTipo;
   double get resumenTotalBruto => _resumenTotalBruto;
   double get resumenTotalACobrar => _resumenTotalACobrar;
   double get resumenTotalOpcional => _resumenTotalOpcional;
@@ -327,6 +329,11 @@ class EntregasProvider extends ChangeNotifier {
 
   void setFilterDebeCobrar(String debeCobrar) {
     _filterDebeCobrar = debeCobrar;
+    cargarAlbaranesPendientes();
+  }
+
+  void setFilterDocTipo(String docTipo) {
+    _filterDocTipo = docTipo;
     cargarAlbaranesPendientes();
   }
 
@@ -365,6 +372,9 @@ class EntregasProvider extends ChangeNotifier {
       }
       if (_filterDebeCobrar.isNotEmpty) {
         url += '&debeCobrar=$_filterDebeCobrar';
+      }
+      if (_filterDocTipo.isNotEmpty) {
+        url += '&docTipo=$_filterDocTipo';
       }
       
       final response = await ApiClient.get(url);

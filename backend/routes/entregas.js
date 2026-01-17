@@ -189,6 +189,14 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             filteredAlbaranes = filteredAlbaranes.filter(a => a.esCTR === false);
         }
 
+        // --- FILTER BY DOCUMENT TYPE (ALBARAN/FACTURA) ---
+        const filterDocTipo = req.query.docTipo; // 'ALBARAN' or 'FACTURA'
+        if (filterDocTipo === 'ALBARAN') {
+            filteredAlbaranes = filteredAlbaranes.filter(a => a.documentoTipo === 'ALBARÁN');
+        } else if (filterDocTipo === 'FACTURA') {
+            filteredAlbaranes = filteredAlbaranes.filter(a => a.documentoTipo === 'FACTURA');
+        }
+
         // --- SORTING ---
         const sortBy = req.query.sortBy || 'default'; // 'default', 'importe_asc', 'importe_desc'
         if (sortBy === 'importe_desc') {
