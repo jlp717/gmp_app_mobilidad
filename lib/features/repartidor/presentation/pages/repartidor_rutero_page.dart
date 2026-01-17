@@ -217,47 +217,28 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
             ),
           ),
 
-          // FILTER CHIPS ROW 1: Document Type + Collection Status
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
+          // COMPACT FILTER ROW
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 4,
               children: [
-                // Document type filters
-                _buildFilterChip('Todos', entregas.filterDocTipo.isEmpty && entregas.filterDebeCobrar.isEmpty, () {
+                _buildFilterChip('Todos', entregas.filterDocTipo.isEmpty && entregas.filterDebeCobrar.isEmpty && entregas.filterTipoPago.isEmpty, () {
                   entregas.setFilterDocTipo('');
                   entregas.setFilterDebeCobrar('');
+                  entregas.setFilterTipoPago('');
                 }, Colors.grey),
-                const SizedBox(width: 6),
-                _buildFilterChip('📄 Albaranes', entregas.filterDocTipo == 'ALBARAN', () => entregas.setFilterDocTipo(entregas.filterDocTipo == 'ALBARAN' ? '' : 'ALBARAN'), AppTheme.neonBlue),
-                const SizedBox(width: 6),
-                _buildFilterChip('📋 Facturas', entregas.filterDocTipo == 'FACTURA', () => entregas.setFilterDocTipo(entregas.filterDocTipo == 'FACTURA' ? '' : 'FACTURA'), AppTheme.neonPurple),
-                const SizedBox(width: 6),
-                _buildFilterChip('💳 A Cobrar', entregas.filterDebeCobrar == 'S', () => entregas.setFilterDebeCobrar(entregas.filterDebeCobrar == 'S' ? '' : 'S'), AppTheme.error),
+                _buildFilterChip('Alb', entregas.filterDocTipo == 'ALBARAN', () => entregas.setFilterDocTipo(entregas.filterDocTipo == 'ALBARAN' ? '' : 'ALBARAN'), AppTheme.neonBlue),
+                _buildFilterChip('Fac', entregas.filterDocTipo == 'FACTURA', () => entregas.setFilterDocTipo(entregas.filterDocTipo == 'FACTURA' ? '' : 'FACTURA'), AppTheme.neonPurple),
+                _buildFilterChip('Cobrar', entregas.filterDebeCobrar == 'S', () => entregas.setFilterDebeCobrar(entregas.filterDebeCobrar == 'S' ? '' : 'S'), AppTheme.error),
+                _buildFilterChip('Cred', entregas.filterTipoPago == 'CREDITO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CREDITO' ? '' : 'CREDITO'), AppTheme.success),
+                _buildFilterChip('Dom', entregas.filterTipoPago == 'DOMICILIADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'DOMICILIADO' ? '' : 'DOMICILIADO'), AppTheme.success),
+                _buildFilterChip('Ctdo', entregas.filterTipoPago == 'CONTADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CONTADO' ? '' : 'CONTADO'), AppTheme.error),
               ],
             ),
           ),
-          const SizedBox(height: 4),
-
-          // FILTER CHIPS ROW 2: Payment Types
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                _buildFilterChip('CONTADO', entregas.filterTipoPago == 'CONTADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CONTADO' ? '' : 'CONTADO'), AppTheme.error),
-                const SizedBox(width: 6),
-                _buildFilterChip('CRÉDITO', entregas.filterTipoPago == 'CREDITO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CREDITO' ? '' : 'CREDITO'), AppTheme.success),
-                const SizedBox(width: 6),
-                _buildFilterChip('DOMICILIADO', entregas.filterTipoPago == 'DOMICILIADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'DOMICILIADO' ? '' : 'DOMICILIADO'), AppTheme.success),
-                const SizedBox(width: 6),
-                _buildFilterChip('TRANSFERENCIA', entregas.filterTipoPago == 'TRANSFERENCIA', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'TRANSFERENCIA' ? '' : 'TRANSFERENCIA'), AppTheme.warning),
-                const SizedBox(width: 6),
-                _buildFilterChip('GIRO', entregas.filterTipoPago == 'GIRO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'GIRO' ? '' : 'GIRO'), AppTheme.success),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 2),
 
           // SUMMARY BAR
           Container(
@@ -393,17 +374,16 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
 
   Widget _buildWeeklyStrip() {
     return Container(
-      height: 55,
+      height: 38, // Much smaller
       color: AppTheme.surfaceColor, 
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
         itemCount: _weekDays.length,
         itemBuilder: (context, index) {
           final dayData = _weekDays[index];
           final date = DateTime.parse(dayData['date']);
           final isSelected = DateUtils.isSameDay(date, _selectedDate);
-          final status = dayData['status'];
           final count = dayData['clients'] ?? 0;
 
           Color bgColor = AppTheme.darkCard;
@@ -411,8 +391,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           Color textColor = AppTheme.textSecondary;
           
           if (count > 0) {
-            bgColor = AppTheme.neonBlue.withOpacity(0.05);
-            borderColor = AppTheme.neonBlue.withOpacity(0.2);
+            borderColor = AppTheme.neonBlue.withOpacity(0.3);
           }
 
           if (isSelected) {
@@ -424,32 +403,29 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           return GestureDetector(
             onTap: () => _onDaySelected(date),
             child: Container(
-              width: 50,
-              margin: const EdgeInsets.only(right: 4),
+              width: 42,
+              margin: const EdgeInsets.only(right: 3),
               decoration: BoxDecoration(
                 color: bgColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: borderColor, width: 1.5),
-                boxShadow: isSelected ? [
-                  BoxShadow(color: AppTheme.neonBlue.withOpacity(0.4), blurRadius: 3, offset:const Offset(0, 1))
-                ] : null
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: borderColor, width: 1),
               ),
-              child: Column(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    dayData['dayName'] ?? '',
+                    '${(dayData['dayName'] ?? '').toString().substring(0, 1)}',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: FontWeight.bold,
                       color: isSelected ? textColor : AppTheme.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(width: 2),
                   Text(
                     '$count',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 11,
                       fontWeight: FontWeight.w900,
                       color: isSelected ? textColor : (count > 0 ? AppTheme.neonBlue : AppTheme.textSecondary),
                     ),
