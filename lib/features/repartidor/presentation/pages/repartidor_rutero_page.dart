@@ -374,11 +374,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
 
   Widget _buildWeeklyStrip() {
     return Container(
-      height: 38, // Much smaller
+      height: 42,
       color: AppTheme.surfaceColor, 
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         itemCount: _weekDays.length,
         itemBuilder: (context, index) {
           final dayData = _weekDays[index];
@@ -386,48 +386,41 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
           final isSelected = DateUtils.isSameDay(date, _selectedDate);
           final count = dayData['clients'] ?? 0;
 
-          Color bgColor = AppTheme.darkCard;
-          Color borderColor = Colors.white.withOpacity(0.1);
-          Color textColor = AppTheme.textSecondary;
+          Color bgColor = count > 0 ? AppTheme.neonBlue.withOpacity(0.08) : AppTheme.darkCard;
+          Color borderColor = count > 0 ? AppTheme.neonBlue.withOpacity(0.3) : Colors.white.withOpacity(0.1);
           
-          if (count > 0) {
-            borderColor = AppTheme.neonBlue.withOpacity(0.3);
-          }
-
           if (isSelected) {
             bgColor = AppTheme.neonBlue;
             borderColor = AppTheme.neonBlue;
-            textColor = AppTheme.darkBase;
           }
 
           return GestureDetector(
             onTap: () => _onDaySelected(date),
             child: Container(
-              width: 42,
+              width: 38,
               margin: const EdgeInsets.only(right: 3),
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: borderColor, width: 1),
               ),
-              child: Row(
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    '${(dayData['dayName'] ?? '').toString().substring(0, 1)}',
+                    '${(dayData['dayName'] ?? '').toString().substring(0, 1).toUpperCase()}',
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
-                      color: isSelected ? textColor : AppTheme.textSecondary,
+                      color: isSelected ? AppTheme.darkBase : AppTheme.textSecondary,
                     ),
                   ),
-                  const SizedBox(width: 2),
                   Text(
                     '$count',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w900,
-                      color: isSelected ? textColor : (count > 0 ? AppTheme.neonBlue : AppTheme.textSecondary),
+                      color: isSelected ? AppTheme.darkBase : (count > 0 ? AppTheme.neonBlue : AppTheme.textSecondary),
                     ),
                   ),
                 ],
@@ -775,21 +768,19 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                               ),
                             ),
                           ),
-                        const SizedBox(width: 10),
-                        // Payment type description
-                        Expanded(
-                          child: Text(
-                            albaran.formaPagoDesc.isNotEmpty 
-                                ? albaran.formaPagoDesc 
-                                : albaran.formaPago,
-                            style: const TextStyle(
-                              fontSize: 11, 
-                              color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w500,
+                        // Only show description if different from tipoPago
+                        if (albaran.formaPagoDesc.isNotEmpty && 
+                            albaran.formaPagoDesc.toUpperCase() != albaran.tipoPago.toUpperCase())
+                          Expanded(
+                            child: Text(
+                              albaran.formaPagoDesc,
+                              style: const TextStyle(
+                                fontSize: 10, 
+                                color: AppTheme.textSecondary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
                       ],
                     ),
                   ],
