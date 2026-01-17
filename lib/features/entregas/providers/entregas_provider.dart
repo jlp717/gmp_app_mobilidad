@@ -338,11 +338,11 @@ class EntregasProvider extends ChangeNotifier {
   }
 
   /// Inicializar con ID del repartidor
-  void setRepartidor(String repartidorId, {bool autoReload = true}) {
-    if (_repartidorId == repartidorId) return; // No change
+  void setRepartidor(String repartidorId, {bool autoReload = true, bool forceReload = false}) {
+    final wasChanged = _repartidorId != repartidorId;
     _repartidorId = repartidorId;
-    print('[ENTREGAS_PROVIDER] setRepartidor: $repartidorId (autoReload: $autoReload)');
-    if (autoReload) {
+    print('[ENTREGAS_PROVIDER] setRepartidor: $repartidorId (changed: $wasChanged, autoReload: $autoReload, force: $forceReload)');
+    if (autoReload && (wasChanged || forceReload)) {
       cargarAlbaranesPendientes();
     }
   }

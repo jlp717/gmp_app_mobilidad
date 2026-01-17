@@ -503,22 +503,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
             },
           ),
         ),
-        // Mini bar chart
-        if (dailyCounts.any((c) => c > 0))
-          Container(
-            color: AppTheme.darkSurface,
-            padding: const EdgeInsets.only(bottom: 6),
-            child: WeeklyMiniChart(
-              dailyCounts: dailyCounts,
-              selectedIndex: selectedIndex,
-              onDayTap: (index) {
-                if (index >= 0 && index < _weekDays.length) {
-                  final date = DateTime.parse(_weekDays[index]['date']);
-                  _onDaySelected(date);
-                }
-              },
-            ),
-          ),
+        // Mini bar chart removed per user request
       ],
     );
   }
@@ -1041,7 +1026,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                            setState(() {
                              _lastLoadedId = null; // Clear to force reload
                            });
-                           entregas.setRepartidor(val); // Now auto-reloads
+                           entregas.setRepartidor(val, forceReload: true); // Force reload on filter change
                            _loadWeekData(val); // Also reload week data
                          }
                        },

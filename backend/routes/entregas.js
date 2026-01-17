@@ -304,17 +304,17 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         // 3. Get Items from LAC with product codes
         let itemsSql = `
             SELECT 
-                L.SECUENCIA as ITEM_ID,
-                TRIM(L.CODIGOARTICULO) as CODIGO,
-                TRIM(L.DESCRIPCION) as DESC,
-                L.CANTIDADUNIDADES as QTY,
-                L.CANTIDADCAJAS as CAJAS,
-                TRIM(L.UNIDADMEDIDA) as UNIT,
-                L.IMPORTEVENTA as TOTAL_LINEA,
+                L.SECUENCIA AS ITEM_ID,
+                TRIM(L.CODIGOARTICULO) AS CODIGO,
+                TRIM(L.DESCRIPCION) AS DESCRIP,
+                L.CANTIDADUNIDADES AS QTY,
+                L.CANTIDADCAJAS AS CAJAS,
+                TRIM(L.UNIDADMEDIDA) AS UNIT,
+                L.IMPORTEVENTA AS TOTAL_LINEA,
                 CASE 
                     WHEN L.CANTIDADUNIDADES <> 0 THEN ROUND(L.IMPORTEVENTA / L.CANTIDADUNIDADES, 4) 
                     ELSE 0 
-                END as PRICE
+                END AS PRICE
             FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
         `;
@@ -343,7 +343,7 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             items: items.map(i => ({
                 itemId: i.ITEM_ID,
                 codigoArticulo: i.CODIGO,
-                descripcion: i.DESC,
+                descripcion: i.DESCRIP,
                 cantidadPedida: parseFloat(i.QTY) || 0,
                 cantidadCajas: parseFloat(i.CAJAS) || 0,
                 totalLinea: parseFloat(i.TOTAL_LINEA) || 0,
