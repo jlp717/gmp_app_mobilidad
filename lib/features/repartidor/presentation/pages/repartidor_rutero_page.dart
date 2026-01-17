@@ -26,6 +26,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
   List<Map<String, dynamic>> _weekDays = [];
   bool _isLoadingWeek = false;
   String? _lastLoadedId;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -218,24 +219,48 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
             ),
           ),
 
-          // COMPACT FILTER ROW
+          // SEARCH BY ALBARAN/FACTURA NUMBER
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: Wrap(
-              spacing: 4,
-              runSpacing: 4,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
               children: [
-                _buildFilterChip('Todos', entregas.filterDocTipo.isEmpty && entregas.filterDebeCobrar.isEmpty && entregas.filterTipoPago.isEmpty, () {
-                  entregas.setFilterDocTipo('');
-                  entregas.setFilterDebeCobrar('');
-                  entregas.setFilterTipoPago('');
-                }, Colors.grey),
-                _buildFilterChip('Alb', entregas.filterDocTipo == 'ALBARAN', () => entregas.setFilterDocTipo(entregas.filterDocTipo == 'ALBARAN' ? '' : 'ALBARAN'), AppTheme.neonBlue),
-                _buildFilterChip('Fac', entregas.filterDocTipo == 'FACTURA', () => entregas.setFilterDocTipo(entregas.filterDocTipo == 'FACTURA' ? '' : 'FACTURA'), AppTheme.neonPurple),
-                _buildFilterChip('Cobrar', entregas.filterDebeCobrar == 'S', () => entregas.setFilterDebeCobrar(entregas.filterDebeCobrar == 'S' ? '' : 'S'), AppTheme.error),
-                _buildFilterChip('Cred', entregas.filterTipoPago == 'CREDITO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CREDITO' ? '' : 'CREDITO'), AppTheme.success),
-                _buildFilterChip('Dom', entregas.filterTipoPago == 'DOMICILIADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'DOMICILIADO' ? '' : 'DOMICILIADO'), AppTheme.success),
-                _buildFilterChip('Ctdo', entregas.filterTipoPago == 'CONTADO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CONTADO' ? '' : 'CONTADO'), AppTheme.error),
+                // Albaran number search
+                Expanded(
+                  child: Container(
+                    height: 32,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.darkBase,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.search, size: 16, color: AppTheme.textSecondary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                            decoration: const InputDecoration(
+                              hintText: 'Buscar nº albarán/factura...',
+                              hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onChanged: (v) => entregas.setSearchQuery(v),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Quick filters
+                _buildMiniChip('Cobrar', entregas.filterDebeCobrar == 'S', () => entregas.setFilterDebeCobrar(entregas.filterDebeCobrar == 'S' ? '' : 'S'), AppTheme.error),
+                const SizedBox(width: 4),
+                _buildMiniChip('Cred', entregas.filterTipoPago == 'CREDITO', () => entregas.setFilterTipoPago(entregas.filterTipoPago == 'CREDITO' ? '' : 'CREDITO'), AppTheme.success),
               ],
             ),
           ),
@@ -521,278 +546,149 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
     );
   }
 
-
-  Widget _buildClientCard(AlbaranEntrega albaran) {
-    // "Stapled" visual effect variables
-    final bool isPendiente = albaran.estado == EstadoEntrega.pendiente;
-    final bool isEntregado = albaran.estado == EstadoEntrega.entregado;
-    final Color statusColor = isEntregado ? AppTheme.success : (isPendiente ? AppTheme.error : Colors.orange);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      // Stack for the "Stapled" effect
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Background "Invoice" Card (The paper behind)
-          Positioned(
-            top: -4,
-            left: 4,
-            right: -4,
-            bottom: 4,
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5), // Light paper color
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: const Align(
-                alignment: Alignment.topRight,
-                child: Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Icon(Icons.receipt_long, color: Colors.grey, size: 20),
-                ),
-              ),
-            ),
+  /// Build mini chip for inline filters
+  Widget _buildMiniChip(String label, bool isSelected, VoidCallback onTap, Color color) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.2) : AppTheme.darkBase,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? color : AppTheme.borderColor, width: 1),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? color : AppTheme.textSecondary,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
           ),
-          
-          // Main "Albaran" Card
-          Card(
-            margin: EdgeInsets.zero,
-            elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            color: AppTheme.darkSurface, // Keep dark theme consistent
-            child: InkWell(
-              onTap: () {
-                 if (isEntregado) {
-                   _showEditConfirmation(albaran);
-                 } else {
-                   _showDetailDialog(albaran);
-                 }
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header: ID and Amount
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Left: ID & Label
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppTheme.darkBase,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                              ),
-                              child: Text(
-                                'ALB #${albaran.numeroAlbaran}',
-                                style: const TextStyle(
-                                  color: AppTheme.textSecondary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            if (albaran.numeroFactura > 0) ...[
-                               const SizedBox(height: 4),
-                               Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.neonBlue.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.receipt, size: 10, color: AppTheme.neonBlue),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'FAC: ${albaran.serieFactura}-${albaran.numeroFactura}',
-                                        style: const TextStyle(
-                                          color: AppTheme.neonBlue,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                               ),
-                            ],
-                            const SizedBox(height: 4),
-                            // Staple Visual (Icon)
-                            RotationTransition(
-                              turns: const AlwaysStoppedAnimation(-0.1),
-                              child: Icon(Icons.attach_file, color: Colors.grey.shade400, size: 18),
-                            ),
-                          ],
-                        ),
-                        
-                        // Right: Amount (Big & Bold)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              NumberFormat.currency(symbol: '€', locale: 'es_ES').format(albaran.importeTotal),
-                              style: TextStyle(
-                                color: statusColor, // Green or Red
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            if (isPendiente)
-                              Tooltip(
-                                message: "Estado basado en gestión interna de DSEDAC",
-                                triggerMode: TooltipTriggerMode.tap,
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      "PENDIENTE",
-                                      style: TextStyle(
-                                        color: AppTheme.textSecondary,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    
-                     // Client Info with Code
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: '${albaran.codigoCliente} ',
-                            style: const TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.neonBlue,
-                            ),
-                          ),
-                          TextSpan(
-                            text: albaran.nombreCliente,
-                            style: const TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                         Icon(Icons.location_on_outlined, size: 14, color: AppTheme.textSecondary),
-                         const SizedBox(width: 4),
-                         Expanded(
-                           child: Text(
-                             "${albaran.direccion}, ${albaran.poblacion}",
-                             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-                             maxLines: 1,
-                             overflow: TextOverflow.ellipsis,
-                           ),
-                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Payment Condition Badge - colored by backend status
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: _getPaymentColor(albaran.colorEstado).withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: _getPaymentColor(albaran.colorEstado).withOpacity(0.4),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                albaran.esCTR ? Icons.account_balance_wallet_outlined : 
-                                  (albaran.puedeCobrarse ? Icons.swap_horiz : Icons.check_circle_outline),
-                                size: 14,
-                                color: _getPaymentColor(albaran.colorEstado),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                albaran.esCTR ? 'COBRAR' : 
-                                  (albaran.puedeCobrarse ? 'OPCIONAL' : albaran.tipoPago),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: _getPaymentColor(albaran.colorEstado),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Payment days badge
-                        if (albaran.diasPago > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppTheme.darkBase,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '${albaran.diasPago}d',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: AppTheme.textSecondary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        // Only show description if different from tipoPago
-                        if (albaran.formaPagoDesc.isNotEmpty && 
-                            albaran.formaPagoDesc.toUpperCase() != albaran.tipoPago.toUpperCase())
-                          Expanded(
-                            child: Text(
-                              albaran.formaPagoDesc,
-                              style: const TextStyle(
-                                fontSize: 10, 
-                                color: AppTheme.textSecondary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
+
+  Widget _buildClientCard(AlbaranEntrega albaran) {
+    final bool isEntregado = albaran.estado == EstadoEntrega.entregado;
+    final bool isPendiente = albaran.estado == EstadoEntrega.pendiente;
+    final Color statusColor = isEntregado ? AppTheme.success : (isPendiente ? AppTheme.error : Colors.orange);
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Card(
+        margin: EdgeInsets.zero,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        color: AppTheme.darkSurface,
+        child: InkWell(
+          onTap: () {
+             if (isEntregado) {
+               _showEditConfirmation(albaran);
+             } else {
+               _showDetailDialog(albaran);
+             }
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(10.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Row 1: ID + Amount
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Left: Albaran/Factura badge
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: albaran.numeroFactura > 0 ? AppTheme.neonPurple.withOpacity(0.15) : AppTheme.darkBase,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: albaran.numeroFactura > 0 ? AppTheme.neonPurple.withOpacity(0.5) : Colors.grey.withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            albaran.numeroFactura > 0 ? 'F-${albaran.numeroFactura}' : 'A-${albaran.numeroAlbaran}',
+                            style: TextStyle(
+                              color: albaran.numeroFactura > 0 ? AppTheme.neonPurple : AppTheme.textSecondary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Right: Amount
+                    Text(
+                      NumberFormat.currency(symbol: '€', locale: 'es_ES').format(albaran.importeTotal),
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                // Row 2: Client
+                Row(
+                  children: [
+                    Text(
+                      albaran.codigoCliente.length > 6 ? albaran.codigoCliente.substring(albaran.codigoCliente.length - 4) : albaran.codigoCliente,
+                      style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 10),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        albaran.nombreCliente,
+                        style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Row 3: Address + Payment Badge
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${albaran.direccion}, ${albaran.poblacion}',
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Payment badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _getPaymentColor(albaran.colorEstado).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        albaran.esCTR ? '€' : albaran.tipoPago.substring(0, 3).toUpperCase(),
+                        style: TextStyle(
+                          color: _getPaymentColor(albaran.colorEstado),
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
 
   void _showEditConfirmation(AlbaranEntrega albaran) {
     showDialog(
