@@ -834,9 +834,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
                               Icon(Icons.euro, size: 10, color: _getPaymentColor(albaran.colorEstado)),
                             if (albaran.esCTR) const SizedBox(width: 2),
                             Text(
-                              albaran.tipoPago.length > 3 
-                                  ? albaran.tipoPago.substring(0, 3).toUpperCase() 
-                                  : albaran.tipoPago.toUpperCase(),
+                              _mapPaymentType(albaran.tipoPago), // Use helper for name
                               style: TextStyle(
                                 color: _getPaymentColor(albaran.colorEstado),
                                 fontSize: 9,
@@ -890,6 +888,20 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: cardContent,
     );
+  }
+
+  String _mapPaymentType(String code) {
+    if (code == null) return 'UNK'; 
+    final c = code.toUpperCase().trim();
+    if (c == '01' || c == 'CNT' || c == 'CONTADO') return 'CONTADO';
+    if (c.contains('REP')) return 'REPOSICIÓN';
+    if (c.contains('MEN')) return 'MENSUAL';
+    if (c.contains('CRE') || c == 'CR') return 'CRÉDITO';
+    if (c.contains('TAR')) return 'TARJETA';
+    if (c.contains('CHE')) return 'CHEQUE';
+    if (c.contains('PAG')) return 'PAGARÉ';
+    if (c.contains('TRA')) return 'TRANSF.';
+    return c;
   }
 
   void _showQuickNoteDialog(AlbaranEntrega albaran) {
