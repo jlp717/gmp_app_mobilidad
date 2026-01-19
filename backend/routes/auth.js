@@ -3,7 +3,7 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
-const authenticateToken = require('../middleware/auth');
+const authenticateToken = require('../middleware/auth'); // Ensure this is imported for /repartidores
 
 // Track failed login attempts per username (in-memory)
 const failedLoginAttempts = new Map();
