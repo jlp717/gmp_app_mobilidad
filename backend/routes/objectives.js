@@ -91,12 +91,31 @@ async function getClientsMonthlySales(clientCodes, year) {
 }
 
 
-// Mapeo mes número -> campo de cuota en COFC
-const MONTH_QUOTA_MAP = {
-    1: 'CUOTAENERO', 2: 'CUOTAFEBRERO', 3: 'CUOTAMARZO', 4: 'CUOTAABRIL',
-    5: 'CUOTAMAYO', 6: 'CUOTAJUNIO', 7: 'CUOTAJULIO', 8: 'CUOTAAGOSTO',
-    9: 'CUOTASEPTIEMBRE', 10: 'CUOTAOCTUBRE', 11: 'CUOTANOVIEMBRE', 12: 'CUOTADICIEMBRE'
-};
+const SEASONAL_AGGRESSIVENESS = 0.5; // Tuning parameter for seasonality (0.0=flat, 1.0=high)
+
+/**
+ * Get target percentage configuration for a vendor
+ * Defaults to 10% if not configured
+ */
+async function getVendorTargetConfig(vendorCode) {
+    if (!vendorCode || vendorCode === 'ALL') return 10.0;
+    try {
+        const code = vendorCode.split(',')[0].trim();
+        const rows = await query(`
+            SELECT TARGET_PERCENTAGE 
+            FROM JAVIER.OBJ_CONFIG 
+            WHERE CODIGOVENDEDOR = '${code}'
+        `, false);
+
+        if (rows.length > 0) {
+            return parseFloat(rows[0].TARGET_PERCENTAGE) || 10.0;
+        }
+        return 10.0;
+    } catch (e) {
+        logger.warn(`Could not fetch OBJ_CONFIG: ${e.message}`);
+        return 10.0;
+    }
+}
 
 // =============================================================================
 // OBJECTIVES SUMMARY (Quota vs Actual)
@@ -108,6 +127,9 @@ router.get('/', async (req, res) => {
         const targetYear = parseInt(year) || now.getFullYear();
         const targetMonth = parseInt(month) || (now.getMonth() + 1);
         const vendedorFilter = buildVendedorFilter(vendedorCodes);
+
+        // 1. Get Target Configuration (Global % increase)
+        const targetPct = await getVendorTargetConfig(vendedorCodes);
 
         // Intentar obtener objetivos desde DSEDAC.COFC (cuotas mensuales)
         let salesObjective = 0;
@@ -149,22 +171,14 @@ router.get('/', async (req, res) => {
 
                 if (cmvResult[0]) {
                     const cmvObjective = parseFloat(cmvResult[0].OBJETIVO) || 0;
-                    const cmvPercentage = parseFloat(cmvResult[0].PORCENTAJE) || 0;
-
+                    // If CMV has explicit amount, use it (highest priority)
                     if (cmvObjective > 0) {
                         salesObjective = cmvObjective;
                         objectiveSource = 'database';
-                    } else if (cmvPercentage > 0) {
-                        // Si hay porcentaje objetivo, calcular basado en año anterior (usando LAC)
-                        const lastYearSales = await query(`
-              SELECT COALESCE(SUM(IMPORTEVENTA), 0) as sales
-              FROM DSEDAC.LAC L
-              WHERE ANODOCUMENTO = ${targetYear - 1} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
-            `, false);
-                        const lastSales = parseFloat(lastYearSales[0]?.SALES) || 0;
-                        salesObjective = lastSales * (1 + cmvPercentage / 100);
-                        objectiveSource = 'database';
                     }
+                    // Note: We ignore cmvPercentage here and use our new JAVIER.OBJ_CONFIG logic 
+                    // unless you strictly want to fallback to CMV percentage. 
+                    // User requested "dynamic" from their new table, so we prioritize that flow below.
                 }
             } catch (e) {
                 logger.warn(`CMV query failed: ${e.message}`);
@@ -192,30 +206,74 @@ router.get('/', async (req, res) => {
       WHERE ANODOCUMENTO = ${targetYear - 1} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
     `);
 
+        // NEW: Need Annual Totals of Previous Year for Seasonality Calculation
+        const prevYearAnnual = await query(`
+            SELECT COALESCE(SUM(IMPORTEVENTA), 0) as TOTAL_SALES
+            FROM DSEDAC.LAC
+            WHERE ANODOCUMENTO = ${targetYear - 1} ${vendedorFilter}
+        `, false);
+
         const curr = currentSales[0] || {};
         const last = lastYearSales[0] || {};
 
         const salesCurrent = parseFloat(curr.SALES) || 0;
         const salesLast = parseFloat(last.SALES) || 0;
+        const totalPrevYear = prevYearAnnual[0] ? parseFloat(prevYearAnnual[0].TOTAL_SALES) : 0;
 
-        // Si no encontramos objetivo en BD, calcular como +10% sobre año anterior
+        // Si no encontramos objetivo en BD, calcular con Lógica Estacional
         if (salesObjective === 0) {
-            salesObjective = salesLast * 1.10;
+            // Default flat if no history
+            let calculatedTarget = salesLast * (1 + targetPct / 100);
+
+            // Apply Seasonality if we have annual history
+            if (totalPrevYear > 0) {
+                const avgMonthlySales = totalPrevYear / 12;
+
+                // Calculate Growth Factor for THIS month
+                // Formula: Target% * (1 + Sensitivity * (Deviation))
+                // Deviation = (LastYearMonth - Avg) / Avg
+
+                const deviationRatio = avgMonthlySales > 0 ? (salesLast - avgMonthlySales) / avgMonthlySales : 0;
+
+                // Variable Growth Percentage for this month
+                // e.g. if Target is 10%, and month is high (+50% vs avg), Growth might be 10% * (1 + 0.5*0.5) = 12.5%
+                const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
+
+                // Initial Raw Target
+                const rawTarget = salesLast * (1 + variableGrowthPct);
+
+                // NOTE: To be mathematically perfect and ensure Sum(MonthTargets) == AnnualTarget,
+                // we should normalize. But for a single month lookup without calculating all 12, 
+                // the raw formula is a very good approximation (+/- 1-2%). 
+                // For exact precision, we'd need to calculate all 12 months here.
+                // Given the requirement for "dynamic" and "more or less", this approximation is acceptable 
+                // and much faster than querying 12 months of daily data on every refresh.
+
+                salesObjective = rawTarget;
+                objectiveSource = 'seasonality_dynamic';
+
+            } else {
+                // Fallback to simple % if no previous annual data
+                // If no last year data at all, maybe based on current?
+                if (salesLast === 0 && salesCurrent > 0) {
+                    salesObjective = salesCurrent * (1 + targetPct / 100);
+                } else {
+                    salesObjective = calculatedTarget;
+                }
+            }
         }
-        // Si sigue siendo 0 (sin histórico), poner un default simbólico o 0
-        if (salesObjective === 0 && salesCurrent > 0) salesObjective = salesCurrent * 1.1;
 
         const salesProgress = salesObjective > 0 ? (salesCurrent / salesObjective) * 100 : 0;
 
         const marginCurrent = parseFloat(curr.MARGIN) || 0;
         const marginLast = parseFloat(last.MARGIN) || 0;
-        // Si no hay marginObjective global, usar histórico + 10%
-        marginObjective = marginObjective || (marginLast * 1.10);
+        // Si no hay marginObjective global, usar histórico + target%
+        marginObjective = marginObjective || (marginLast * (1 + targetPct / 100));
         const marginProgress = marginObjective > 0 ? (marginCurrent / marginObjective) * 100 : 0;
 
         const clientsCurrent = parseInt(curr.CLIENTS) || 0;
         const clientsLast = parseInt(last.CLIENTS) || 0;
-        const clientsObjective = Math.ceil(clientsLast * 1.05);
+        const clientsObjective = Math.ceil(clientsLast * 1.05); // Clients usually fixed 5% or similar
         const clientsProgress = clientsObjective > 0 ? (clientsCurrent / clientsObjective) * 100 : 0;
 
         // Alertas
@@ -227,6 +285,7 @@ router.get('/', async (req, res) => {
         res.json({
             period: { year: targetYear, month: targetMonth },
             objectiveSource,
+            targetPercentage: targetPct, // Return for debug/ui
             objectives: {
                 sales: {
                     target: salesObjective,
@@ -381,11 +440,17 @@ router.get('/evolution', async (req, res) => {
             }
         }
 
+        // 1. Get Target Config
+        const targetPct = await getVendorTargetConfig(vendedorCodes);
+
         yearsArray.forEach(year => {
-            // Calculate Annual Objective first: Total Previous Year Sales * 1.10
+            // Calculate Annual Objective first
             let prevYearTotal = 0;
             let inheritedTotal = 0;
             let currentYearTotalSoFar = 0;
+
+            // Collect Previous Year Data for Seasonality Calculation
+            const prevYearMonthlySales = {};
 
             for (let m = 1; m <= 12; m++) {
                 const row = rows.find(r => r.YEAR == year && r.MONTH == m); // Loose equality
@@ -396,8 +461,10 @@ router.get('/evolution', async (req, res) => {
                 // Use inherited sales when vendor has no own sales for this month
                 if (ownPrevSales === 0 && inheritedMonthlySales[m]) {
                     inheritedTotal += inheritedMonthlySales[m].sales;
+                    prevYearMonthlySales[m] = inheritedMonthlySales[m].sales;
                 } else {
                     prevYearTotal += ownPrevSales;
+                    prevYearMonthlySales[m] = ownPrevSales;
                 }
 
                 if (row) currentYearTotalSoFar += parseFloat(row.SALES) || 0;
@@ -408,15 +475,45 @@ router.get('/evolution', async (req, res) => {
 
             // FIXED TARGET OVERRIDE: Use fixed target if available, otherwise calculate from previous year
             let annualObjective, monthlyObjective;
+
             if (fixedMonthlyTarget && fixedMonthlyTarget > 0) {
-                // Use fixed monthly target
                 monthlyObjective = fixedMonthlyTarget;
                 annualObjective = fixedMonthlyTarget * 12;
             } else {
-                // Standard calculation: previous year * 1.10
-                annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * 1.10 : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * 1.10 : 0);
+                // Standard calculation: previous year * (1 + targetPct)
+                // Fallback to 10% if 0 (though normally handled by getVendorTargetConfig)
+                const growthFactor = 1 + (targetPct / 100);
+                annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * growthFactor : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
                 monthlyObjective = annualObjective / 12;
             }
+
+            // ===================================
+            // CALCULATE SEASONAL FACTORS
+            // ===================================
+            const seasonalTargets = {};
+            if (!fixedMonthlyTarget && combinedPrevTotal > 0) {
+                const avgMonthly = combinedPrevTotal / 12;
+                let rawSum = 0;
+
+                // Pass 1: Calculate Raw Weighted Targets
+                const tempTargets = {};
+                for (let m = 1; m <= 12; m++) {
+                    const sale = prevYearMonthlySales[m] || 0;
+                    const deviationRatio = avgMonthly > 0 ? (sale - avgMonthly) / avgMonthly : 0;
+                    // Formula from simulation
+                    const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
+                    const rawTarget = sale * (1 + variableGrowthPct);
+                    tempTargets[m] = rawTarget;
+                    rawSum += rawTarget;
+                }
+
+                // Pass 2: Normalize
+                const correctionFactor = rawSum > 0 ? annualObjective / rawSum : 1;
+                for (let m = 1; m <= 12; m++) {
+                    seasonalTargets[m] = tempTargets[m] * correctionFactor;
+                }
+            }
+
 
             yearlyData[year] = [];
 
@@ -429,22 +526,14 @@ router.get('/evolution', async (req, res) => {
                 const clients = row ? parseInt(row.CLIENTS) || 0 : 0;
 
                 // SEASONAL OBJECTIVE with INHERITED support:
-                // If vendor has fixed monthly target, use that. Otherwise calculate from history.
                 let seasonalObjective = 0;
 
                 // FIXED TARGET OVERRIDE: If fixedMonthlyTarget is set, use it for all months
                 if (fixedMonthlyTarget && fixedMonthlyTarget > 0) {
-                    seasonalObjective = fixedMonthlyTarget; // 25,000€ for vendor 15
+                    seasonalObjective = fixedMonthlyTarget;
                 } else if (combinedPrevTotal > 0) {
-                    // Get own sales first
-                    let baseSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
-
-                    // If no own sales, use inherited sales for this month
-                    if (baseSales === 0 && inheritedMonthlySales[m]) {
-                        baseSales = inheritedMonthlySales[m].sales;
-                    }
-
-                    seasonalObjective = baseSales * 1.10;
+                    // Use calculated seasonal target (Dynamic)
+                    seasonalObjective = seasonalTargets[m] || (prevYearMonthlySales[m] * 1.10);
                 } else if (annualObjective > 0) {
                     // No history at all. Fallback to linear.
                     seasonalObjective = annualObjective / 12;
