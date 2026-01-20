@@ -93,11 +93,13 @@ router.post('/login', loginLimiter, async (req, res) => {
         let pinRecord = await query(`
             SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
                    TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
-                   V.TIPOVENDEDOR, X.JEFEVENTASSN
+                   V.TIPOVENDEDOR, X.JEFEVENTASSN,
+                   E.HIDE_COMMISSIONS
             FROM DSEDAC.VDPL1 P
             JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
             JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
             LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+            LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON P.CODIGOVENDEDOR = E.CODIGOVENDEDOR
             WHERE TRIM(P.CODIGOVENDEDOR) = '${safeUser}'
             FETCH FIRST 1 ROWS ONLY
         `, false);
@@ -112,11 +114,13 @@ router.post('/login', loginLimiter, async (req, res) => {
             const nameSearch = await query(`
                 SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
                        TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
-                       V.TIPOVENDEDOR, X.JEFEVENTASSN
+                       V.TIPOVENDEDOR, X.JEFEVENTASSN,
+                       E.HIDE_COMMISSIONS
                 FROM DSEDAC.VDD D
                 JOIN DSEDAC.VDPL1 P ON D.CODIGOVENDEDOR = P.CODIGOVENDEDOR
                 JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
                 LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+                LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON D.CODIGOVENDEDOR = E.CODIGOVENDEDOR
                 WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%${safeUser.replace(/\s/g, '')}%'
                 FETCH FIRST 1 ROWS ONLY
             `, false);
@@ -215,10 +219,13 @@ router.post('/login', loginLimiter, async (req, res) => {
                 // Add Repartidor specific fields
                 isRepartidor: isRepartidor,
                 codigoConductor: codigoConductor,
-                matricula: matriculaVehiculo
+                matricula: matriculaVehiculo,
+                // NEW: Commission Visibility
+                showCommissions: vendor.HIDE_COMMISSIONS !== 'Y'
             },
             role: finalRole, // Root level role for easier access
             isRepartidor: isRepartidor, // Root level flag
+            showCommissions: vendor.HIDE_COMMISSIONS !== 'Y', // Root level flag
             vendedorCodes: vendedorCodes,
             token: token
         };

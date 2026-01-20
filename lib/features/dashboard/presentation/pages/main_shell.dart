@@ -200,11 +200,14 @@ class _MainShellState extends State<MainShell> {
       color: Colors.orange,
     ));
     
-    // Comisiones - visible for all EXCEPT specific commercials (80, 13, 3)
-    final restrictedCodes = ['80', '13', '3'];
-    final shouldHideCommissions = !isJefeVentas && vendorCodes.any((c) => restrictedCodes.contains(c.trim()));
+    // Comisiones - visible based on DB flag (user.showCommissions)
+    // Formerly hardcoded for 80, 13, 3, etc.
+    final showCommissions = user?.showCommissions ?? true; // Default true if legacy
     
-    if (!shouldHideCommissions) {
+    // Also hidden if hardcoded restrictedCodes matched? NO, replacing logic entirely as requested.
+    // "No hardcoding" -> Rely purely on DB flag.
+    
+    if (showCommissions || isJefeVentas) {
       items.add(_NavItem(
         icon: Icons.euro_outlined,
         selectedIcon: Icons.euro,

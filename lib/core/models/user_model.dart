@@ -15,6 +15,7 @@ class UserModel extends Equatable {
   final String? tipoVendedor; // TIPOVENDEDOR
   final String role; // JEFE, COMERCIAL, REPARTIDOR
   final String? codigoConductor; // Para repartidores
+  final bool showCommissions; // NEW: DB-driven visibility
 
   const UserModel({
     required this.id,
@@ -27,6 +28,7 @@ class UserModel extends Equatable {
     this.tipoVendedor,
     required this.role,
     this.codigoConductor,
+    this.showCommissions = true, // Default true
   });
 
   // Role helpers
@@ -59,6 +61,7 @@ class UserModel extends Equatable {
       tipoVendedor: json['tipoVendedor'],
       role: json['role'] ?? 'COMERCIAL',
       codigoConductor: json['codigoConductor'],
+      showCommissions: json['showCommissions'] ?? true, // Parse logic
     );
   }
 
@@ -74,6 +77,7 @@ class UserModel extends Equatable {
       'tipoVendedor': tipoVendedor,
       'role': role,
       'codigoConductor': codigoConductor,
+      'showCommissions': showCommissions,
     };
   }
 
@@ -88,6 +92,7 @@ class UserModel extends Equatable {
     String? tipoVendedor,
     String? role,
     String? codigoConductor,
+    bool? showCommissions,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -100,6 +105,7 @@ class UserModel extends Equatable {
       tipoVendedor: tipoVendedor ?? this.tipoVendedor,
       role: role ?? this.role,
       codigoConductor: codigoConductor ?? this.codigoConductor,
+      showCommissions: showCommissions ?? this.showCommissions,
     );
   }
 
@@ -115,6 +121,7 @@ class UserModel extends Equatable {
         tipoVendedor,
         role,
         codigoConductor,
+        showCommissions,
       ];
   static bool _parseBool(dynamic value) {
     if (value == null) return false;
