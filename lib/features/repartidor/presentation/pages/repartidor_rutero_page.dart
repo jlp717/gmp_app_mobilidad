@@ -600,6 +600,14 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               itemBuilder: (context, index) {
                 final albaran = provider.albaranes[index];
                 
+                // Client-side AI Heuristic for Card
+                String? cardAiSuggestion;
+                if (albaran.esCTR && albaran.importeTotal > 500) {
+                   cardAiSuggestion = 'Cobro prioritario alto valor';
+                } else if (albaran.esCTR) {
+                   cardAiSuggestion = 'Cobro obligatorio';
+                }
+                
                 return Column(
                   children: [
                     SmartDeliveryCard(
@@ -607,12 +615,13 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
                       onTap: () => _showDetailDialog(albaran),
                       onSwipeComplete: () => _handleQuickComplete(albaran),
                       onSwipeNote: () => _showQuickNoteDialog(albaran),
+                      aiSuggestion: cardAiSuggestion,
                     ),
                     if (index < provider.albaranes.length - 1)
                       Divider(
                         height: 1,
                         thickness: 1,
-                        color: AppTheme.borderColor.withOpacity(0.5), // Increased visibility
+                        color: AppTheme.borderColor.withOpacity(0.5),
                         indent: 16,
                         endIndent: 16,
                       ),
