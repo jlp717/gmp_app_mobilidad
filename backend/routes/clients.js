@@ -23,18 +23,40 @@ const getClientsHandler = async (req, res) => {
     let searchFilter = '';
     if (search) {
       const safeSearch = search.replace(/'/g, "''").trim().toUpperCase();
-      searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE '%${safeSearch}%' 
+      searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE '%${safeSearch}%'
                       OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeSearch}%'
                       OR C.CODIGOCLIENTE LIKE '%${safeSearch}%'
                       OR UPPER(C.POBLACION) LIKE '%${safeSearch}%'
                       OR C.NIF LIKE '%${safeSearch}%')`;
     }
 
-    // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
+    // Build route filter: include clients from vendor's routes (even without sales)
+    // Routes are determined by vendor's historical sales (routes with >= 5 clients)
+    let routeFilter = '';
+    if (vendedorCodes) {
+      const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
+      routeFilter = `
+        OR C.CODIGORUTA IN (
+          SELECT DISTINCT CLI_INNER.CODIGORUTA
+          FROM DSED.LACLAE LAC_INNER
+          JOIN DSEDAC.CLI CLI_INNER ON LAC_INNER.LCCDCL = CLI_INNER.CODIGOCLIENTE
+          WHERE LAC_INNER.LCCDVD IN (${vendorList})
+            AND LAC_INNER.TPDC = 'LAC'
+            AND LAC_INNER.LCAADC >= ${MIN_YEAR}
+            AND CLI_INNER.CODIGORUTA IS NOT NULL
+            AND CLI_INNER.CODIGORUTA <> ''
+          GROUP BY CLI_INNER.CODIGORUTA
+          HAVING COUNT(DISTINCT LAC_INNER.LCCDCL) >= 5
+        )
+      `;
+    }
+
+    // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT
+    // Now includes clients from vendor's routes even if they have no sales yet
     const clients = await query(`
       SELECT
-        C.CODIGOCLIENTE as code, 
-        MAX(COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE))) as name, 
+        C.CODIGOCLIENTE as code,
+        MAX(COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE))) as name,
         MAX(C.NIF) as nif,
         MAX(C.DIRECCION) as address, MAX(C.POBLACION) as city, MAX(C.PROVINCIA) as province,
         MAX(C.CODIGOPOSTAL) as postalCode, MAX(C.TELEFONO1) as phone, MAX(C.TELEFONO2) as phone2,
@@ -47,7 +69,7 @@ const getClientsHandler = async (req, res) => {
         MAX(TRIM(V.NOMBREVENDEDOR)) as vendorName
       FROM DSEDAC.CLI C
       LEFT JOIN(
-        SELECT 
+        SELECT
             Stats.LCCDCL as CODIGOCLIENTEALBARAN,
             LastV.LCCDVD as LAST_VENDOR,
             Stats.TOTAL_PURCHASES,
@@ -60,7 +82,7 @@ const getClientsHandler = async (req, res) => {
                 SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
                 COUNT(DISTINCT LCAADC || '-' || LCMMDC || '-' || LCDDDC) as NUM_ORDERS,
                 MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
-            FROM DSED.LACLAE 
+            FROM DSED.LACLAE
             WHERE LCAADC >= ${MIN_YEAR}
               AND TPDC = 'LAC'
               AND LCTPVT IN ('CC', 'VC')
@@ -86,7 +108,7 @@ const getClientsHandler = async (req, res) => {
       ) S ON C.CODIGOCLIENTE = S.CODIGOCLIENTEALBARAN
       LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
-        AND S.LAST_VENDOR IS NOT NULL -- CRITICAL: Only show clients with sales for this vendor
+        AND (S.LAST_VENDOR IS NOT NULL ${routeFilter})
         ${searchFilter}
       GROUP BY C.CODIGOCLIENTE
       ORDER BY COALESCE(MAX(S.TOTAL_PURCHASES), 0) DESC
