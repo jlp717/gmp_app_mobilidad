@@ -303,10 +303,7 @@ class EntregasProvider extends ChangeNotifier {
   double _resumenTotalACobrar = 0;
   double _resumenTotalOpcional = 0;
 
-  // Real Gamification & AI
-  int _streakDays = 0;
-  String _currentLevel = 'BRONCE';
-  double _levelProgress = 0.0;
+  // AI suggestion
   String? _aiSuggestion;
 
   String get searchQuery => _searchQuery;
@@ -318,10 +315,7 @@ class EntregasProvider extends ChangeNotifier {
   double get resumenTotalACobrar => _resumenTotalACobrar;
   double get resumenTotalOpcional => _resumenTotalOpcional;
   
-  // Getters for Gamification
-  int get streakDays => _streakDays;
-  String get currentLevel => _currentLevel;
-  double get levelProgress => _levelProgress;
+  // Getter for AI
   String? get aiSuggestion => _aiSuggestion;
 
   void setSearchQuery(String query) {
@@ -406,15 +400,10 @@ class EntregasProvider extends ChangeNotifier {
         _resumenTotalACobrar = (resumen['totalACobrar'] ?? 0).toDouble();
         _resumenTotalOpcional = (resumen['totalOpcional'] ?? 0).toDouble();
         
-        // Parse Gamification & AI
-        final gamification = response['gamification'] as Map<String, dynamic>? ?? {};
-        _streakDays = gamification['streakDays'] ?? 0;
-        _currentLevel = gamification['level'] ?? 'BRONCE';
-        _levelProgress = (gamification['progress'] ?? 0).toDouble();
+        // Parse AI Suggestion
         _aiSuggestion = response['aiSuggestion']; // can be null
         
         print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada');
-        print('[ENTREGAS_PROVIDER] Gamification: Level=$_currentLevel, Streak=$_streakDays');
       } else {
         _error = response['error'] ?? 'Error cargando entregas';
       }

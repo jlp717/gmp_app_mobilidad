@@ -17,11 +17,6 @@ class HolographicKpiDashboard extends StatefulWidget {
   final double montoCobrado;
   final bool isLoading;
   
-  // Gamification data
-  final int streakDays;
-  final String currentLevel;
-  final double levelProgress;
-  
   // AI suggestion (optional)
   final String? aiSuggestion;
   final VoidCallback? onAiAction;
@@ -35,9 +30,6 @@ class HolographicKpiDashboard extends StatefulWidget {
     required this.totalMonto,
     this.montoCobrado = 0,
     this.isLoading = false,
-    this.streakDays = 0,
-    this.currentLevel = 'BRONCE',
-    this.levelProgress = 0.0,
     this.aiSuggestion,
     this.onAiAction,
   });
@@ -188,9 +180,6 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         ),
         
         const SizedBox(height: 12),
-        
-        // Gamification bar
-        _buildGamificationBar(),
         
         // AI Suggestion (if present)
         if (widget.aiSuggestion != null) ...[
@@ -361,82 +350,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
       },
     );
   }
-  Widget _buildGamificationBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.darkBase.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppTheme.borderColor,
-        ),
-      ),
-      child: Row(
-        children: [
-          // Streak badge
-          if (widget.streakDays > 0) ...[
-            _buildBadge(
-              icon: Icons.local_fire_department,
-              value: '${widget.streakDays}',
-              label: 'Racha',
-              color: Colors.orange,
-            ),
-            const SizedBox(width: 12),
-          ],
-          
-          // Level indicator
-          _buildBadge(
-            icon: _getLevelIcon(widget.currentLevel),
-            value: widget.currentLevel,
-            label: 'Nivel',
-            color: _getLevelColor(widget.currentLevel),
-          ),
-          
-          const SizedBox(width: 12),
-          
-          // Level progress
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Próximo nivel',
-                  style: TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontSize: 9,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: widget.levelProgress,
-                    backgroundColor: AppTheme.borderColor,
-                    valueColor: AlwaysStoppedAnimation(
-                      _getLevelColor(widget.currentLevel),
-                    ),
-                    minHeight: 6,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(width: 12),
-          
-          // Progress percentage
-          Text(
-            '${(widget.levelProgress * 100).toInt()}%',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildBadge({
     required IconData icon,
@@ -539,39 +453,6 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     );
   }
 
-  IconData _getLevelIcon(String level) {
-    switch (level.toUpperCase()) {
-      case 'BRONCE':
-        return Icons.workspace_premium;
-      case 'PLATA':
-        return Icons.star_border;
-      case 'ORO':
-        return Icons.star;
-      case 'PLATINO':
-        return Icons.auto_awesome;
-      case 'DIAMANTE':
-        return Icons.diamond;
-      default:
-        return Icons.military_tech;
-    }
-  }
-
-  Color _getLevelColor(String level) {
-    switch (level.toUpperCase()) {
-      case 'BRONCE':
-        return const Color(0xFFCD7F32);
-      case 'PLATA':
-        return const Color(0xFFC0C0C0);
-      case 'ORO':
-        return const Color(0xFFFFD700);
-      case 'PLATINO':
-        return const Color(0xFFE5E4E2);
-      case 'DIAMANTE':
-        return const Color(0xFFB9F2FF);
-      default:
-        return AppTheme.textSecondary;
-    }
-  }
 }
 
 /// Custom painter for holographic ring progress

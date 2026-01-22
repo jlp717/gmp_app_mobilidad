@@ -331,8 +331,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 totalACobrar: Math.round(totalACobrar * 100) / 100,
                 totalOpcional: Math.round(totalOpcional * 100) / 100
             },
-            // --- NEW: Real Gamification & AI Data ---
-            gamification: await getGamificationStats(repartidorId),
+            // --- AI Suggestions (Professional) ---
             aiSuggestion: getSmartSuggestions(filteredAlbaranes)
         });
     } catch (error) {
@@ -413,21 +412,18 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         const header = headers[0];
 
         // 3. Get Items from LAC (Simplified for ODBC compatibility - NO ALIASES)
+        // 3. Get Items from LAC (Super Simplified for ODBC)
+        // Removed L alias completely to avoid "Error executing sql"
         let itemsSql = `
-            SELECT 
-                L.SECUENCIA,
-                L.CODIGOARTICULO,
-                L.DESCRIPCION,
-                L.CANTIDADUNIDADES,
-                L.CANTIDADCAJAS,
-                L.UNIDADMEDIDA,
-                L.IMPORTEVENTA
-            FROM DSEDAC.LAC L
-            WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
+            SELECT *
+            FROM DSEDAC.LAC
+            WHERE NUMEROALBARAN = ${numero} AND EJERCICIOALBARAN = ${ejercicio}
         `;
-        if (serie) itemsSql += ` AND L.SERIEALBARAN = '${serie}'`;
-        if (terminal) itemsSql += ` AND L.TERMINALALBARAN = ${terminal}`;
-        itemsSql += ` ORDER BY L.SECUENCIA`;
+        if (serie) itemsSql += ` AND SERIEALBARAN = '${serie}'`;
+        if (terminal) itemsSql += ` AND TERMINALALBARAN = ${terminal}`;
+
+        // Note: We use * because listing columns explicitly was failing. 
+        // We will map carefully below.
 
         const items = await query(itemsSql, false);
 
