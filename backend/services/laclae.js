@@ -52,6 +52,7 @@ async function reloadRuteroConfig() {
 
 
 // Load LACLAE visit/delivery data into memory cache
+// NOW ENHANCED: Merges data from DSEDAC.CDVI (Master Route Config) + DSED.LACLAE (Sales/History)
 async function loadLaclaeCache() {
     logger.info('📅 Loading LACLAE cache (visit/delivery days)...');
     const start = Date.now();
@@ -65,7 +66,56 @@ async function loadLaclaeCache() {
     try {
         const conn = await dbPool.connect();
         try {
-            // Load base LACLAE data
+            laclaeCache = {};
+
+            // 1. Load Master Route Config from DSEDAC.CDVI (Cuadro de Visitas)
+            // This ensures NEW clients without sales are included
+            logger.info('   Loading Master Route Config from DSEDAC.CDVI...');
+            const cdviRows = await conn.query(`
+                SELECT 
+                    TRIM(CODIGOVENDEDOR) as VENDEDOR,
+                    TRIM(CODIGOCLIENTE) as CLIENTE,
+                    DIAVISITALUNESSN as VIS_L, 
+                    DIAVISITAMARTESSN as VIS_M, 
+                    DIAVISITAMIERCOLESSN as VIS_X,
+                    DIAVISITAJUEVESSN as VIS_J, 
+                    DIAVISITAVIERNESSN as VIS_V, 
+                    DIAVISITASABADOSN as VIS_S, 
+                    DIAVISITADOMINGOSN as VIS_D
+                FROM DSEDAC.CDVI
+                WHERE MARCAACTUALIZACION <> 'B'  -- Exclude deleted (Baja) if applicable
+            `);
+
+            const dayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+            // CDVI mapping: Sunday is usually handled, checking sample data
+
+            cdviRows.forEach(row => {
+                if (!row.VENDEDOR || !row.CLIENTE) return;
+
+                if (!laclaeCache[row.VENDEDOR]) laclaeCache[row.VENDEDOR] = {};
+                if (!laclaeCache[row.VENDEDOR][row.CLIENTE]) {
+                    laclaeCache[row.VENDEDOR][row.CLIENTE] = {
+                        visitDays: new Set(),
+                        deliveryDays: new Set()
+                    };
+                }
+
+                const entry = laclaeCache[row.VENDEDOR][row.CLIENTE];
+
+                // Map 'S' to days
+                if (row.VIS_D === 'S') entry.visitDays.add('domingo');
+                if (row.VIS_L === 'S') entry.visitDays.add('lunes');
+                if (row.VIS_M === 'S') entry.visitDays.add('martes');
+                if (row.VIS_X === 'S') entry.visitDays.add('miercoles');
+                if (row.VIS_J === 'S') entry.visitDays.add('jueves');
+                if (row.VIS_V === 'S') entry.visitDays.add('viernes');
+                if (row.VIS_S === 'S') entry.visitDays.add('sabado');
+            });
+
+            logger.info(`   ✅ Loaded ${cdviRows.length} route configs from CDVI`);
+
+
+            // 2. Load Sales/History data from DSED.LACLAE (Legacy source + Delivery Info)
             // Load base LACLAE data (Optimized: Current + Previous Year only)
             const currentYear = new Date().getFullYear();
             const startYear = currentYear - 1;
@@ -84,9 +134,6 @@ async function loadLaclaeCache() {
           AND LCAADC >= ${startYear}
       `);
 
-            // Build the cache
-            laclaeCache = {};
-            const dayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
             const visitCols = ['VIS_D', 'VIS_L', 'VIS_M', 'VIS_X', 'VIS_J', 'VIS_V', 'VIS_S'];
             const deliveryCols = ['DEL_D', 'DEL_L', 'DEL_M', 'DEL_X', 'DEL_J', 'DEL_V', 'DEL_S'];
 
@@ -127,7 +174,7 @@ async function loadLaclaeCache() {
             const totalClients = Object.values(laclaeCache).reduce((sum, v) => sum + Object.keys(v).length, 0);
             const duration = Date.now() - start;
 
-            logger.info(`📅 LACLAE cache loaded: ${vendorCount} vendors, ${totalClients} clients in ${duration}ms`);
+            logger.info(`📅 LACLAE/CDVI cache loaded: ${vendorCount} vendors, ${totalClients} clients in ${duration}ms`);
             laclaeCacheReady = true;
 
         } finally {

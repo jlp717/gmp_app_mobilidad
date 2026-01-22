@@ -165,25 +165,43 @@ const getClientsHandler = async (req, res) => {
         if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
         if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
 
-        // Build visit days from query results
-        const visitDays = [];
-        const visitDaysShort = [];
-        if (c.VISL === 'S') { visitDays.push('lunes'); visitDaysShort.push('L'); }
-        if (c.VISM === 'S') { visitDays.push('martes'); visitDaysShort.push('M'); }
-        if (c.VISX === 'S') { visitDays.push('miercoles'); visitDaysShort.push('X'); }
-        if (c.VISJ === 'S') { visitDays.push('jueves'); visitDaysShort.push('J'); }
-        if (c.VISV === 'S') { visitDays.push('viernes'); visitDaysShort.push('V'); }
-        if (c.VISS === 'S') { visitDays.push('sabado'); visitDaysShort.push('S'); }
+        // ENHANCED: Get visit days from Cache (Source of Truth: CDVI + LACLAE)
+        // This fixes empty days for clients without sales
+        let visitDays = [];
+        let visitDaysShort = '';
+        let deliveryDays = [];
+        let deliveryDaysShort = '';
+        let assignedVendor = c.VENDORCODE?.trim();
 
-        // Build delivery days from query results
-        const deliveryDays = [];
-        const deliveryDaysShort = [];
-        if (c.DELL === 'S') { deliveryDays.push('lunes'); deliveryDaysShort.push('L'); }
-        if (c.DELM === 'S') { deliveryDays.push('martes'); deliveryDaysShort.push('M'); }
-        if (c.DELX === 'S') { deliveryDays.push('miercoles'); deliveryDaysShort.push('X'); }
-        if (c.DELJ === 'S') { deliveryDays.push('jueves'); deliveryDaysShort.push('J'); }
-        if (c.DELV === 'S') { deliveryDays.push('viernes'); deliveryDaysShort.push('V'); }
-        if (c.DELS === 'S') { deliveryDays.push('sabado'); deliveryDaysShort.push('S'); }
+        const cachedDays = getClientDays(assignedVendor, c.CODE?.trim());
+
+        if (cachedDays) {
+          // Cache hit - use robust data
+          visitDays = cachedDays.visitDays;
+          visitDaysShort = cachedDays.visitDaysShort;
+          deliveryDays = cachedDays.deliveryDays;
+          deliveryDaysShort = cachedDays.deliveryDaysShort;
+
+          // If we found the client in a vendor's cache but had no vendor in SQL (no sales), update it
+          if (!assignedVendor && cachedDays.foundVendor) {
+            assignedVendor = cachedDays.foundVendor;
+          }
+        } else {
+          // Fallback to SQL columns (Legacy)
+          if (c.VISL === 'S') { visitDays.push('lunes'); visitDaysShort += 'L'; }
+          if (c.VISM === 'S') { visitDays.push('martes'); visitDaysShort += 'M'; }
+          if (c.VISX === 'S') { visitDays.push('miercoles'); visitDaysShort += 'X'; }
+          if (c.VISJ === 'S') { visitDays.push('jueves'); visitDaysShort += 'J'; }
+          if (c.VISV === 'S') { visitDays.push('viernes'); visitDaysShort += 'V'; }
+          if (c.VISS === 'S') { visitDays.push('sabado'); visitDaysShort += 'S'; }
+
+          if (c.DELL === 'S') { deliveryDays.push('lunes'); deliveryDaysShort += 'L'; }
+          if (c.DELM === 'S') { deliveryDays.push('martes'); deliveryDaysShort += 'M'; }
+          if (c.DELX === 'S') { deliveryDays.push('miercoles'); deliveryDaysShort += 'X'; }
+          if (c.DELJ === 'S') { deliveryDays.push('jueves'); deliveryDaysShort += 'J'; }
+          if (c.DELV === 'S') { deliveryDays.push('viernes'); deliveryDaysShort += 'V'; }
+          if (c.DELS === 'S') { deliveryDays.push('sabado'); deliveryDaysShort += 'S'; }
+        }
 
         return {
           code: c.CODE?.trim(),
@@ -202,14 +220,14 @@ const getClientsHandler = async (req, res) => {
           totalMargin: formatCurrency(c.TOTALMARGIN),
           numOrders: parseInt(c.NUMORDERS) || 0,
           lastPurchase: formatDateFromInt(c.LASTDATEINT),
-          vendorName: c.VENDORNAME?.trim(),
-          vendorCode: c.VENDORCODE?.trim(),
+          vendorName: c.VENDORNAME?.trim(), // SQL might be null, but UI might fetch name if code exists
+          vendorCode: assignedVendor,
 
-          // Visit & Delivery Days (from DB query)
+          // Visit & Delivery Days
           visitDays: visitDays,
-          visitDaysShort: visitDaysShort.join(''),
+          visitDaysShort: visitDaysShort,
           deliveryDays: deliveryDays,
-          deliveryDaysShort: deliveryDaysShort.join('')
+          deliveryDaysShort: deliveryDaysShort
         };
       }),
       hasMore: clients.length === parseInt(limit)
