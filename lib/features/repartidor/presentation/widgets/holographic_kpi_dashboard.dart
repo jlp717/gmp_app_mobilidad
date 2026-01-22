@@ -18,12 +18,6 @@ class HolographicKpiDashboard extends StatefulWidget {
   final bool isLoading;
   
   // Gamification data
-  const HolographicKpiDashboard({
-    super.key,
-    required this.totalEntregas,
-    required this.entregasCompletadas,
-    required this.montoACobrar,
-    required this.montoOpcional,
   final int streakDays;
   final String currentLevel;
   final double levelProgress;
