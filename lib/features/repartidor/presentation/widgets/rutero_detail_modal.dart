@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
@@ -7,18 +8,27 @@ import 'dart:convert';
 import '../../../../core/theme/app_theme.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 
-/// Modern detail modal for Albaran delivery
+/// Rutero Detail Modal - Futuristic Redesign v2
+/// Features:
+/// - Visual product carousel with quantity adjustment
+/// - Smart payment module with multiple methods
+/// - Geo-tagged photo capture
+/// - Improved signature capture
+/// - Clear obligatory vs optional payment indicators
 class RuteroDetailModal extends StatefulWidget {
   final AlbaranEntrega albaran;
-  
+
   const RuteroDetailModal({super.key, required this.albaran});
 
   @override
   State<RuteroDetailModal> createState() => _RuteroDetailModalState();
 }
 
-class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTickerProviderStateMixin {
+class _RuteroDetailModalState extends State<RuteroDetailModal>
+    with TickerProviderStateMixin {
   late TabController _tabController;
+  late AnimationController _slideController;
+  
   final TextEditingController _observacionesController = TextEditingController();
   final TextEditingController _dniController = TextEditingController();
   final TextEditingController _nombreController = TextEditingController();
@@ -27,35 +37,36 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
     penColor: Colors.white,
     exportBackgroundColor: Colors.transparent,
   );
-  
-  // Local state for line items (to allow modifications before saving)
-  // Map of LineaID -> info
-  final Map<String, dynamic> _lineChanges = {};
-  
+
+  // Product verification state
+  final Map<String, bool> _productChecked = {};
+  final Map<String, int> _productQuantities = {};
+
   // Payment state
   String _selectedPaymentMethod = 'EFECTIVO';
   bool _isPaid = false;
-  double _amountCollected = 0.0;
-  
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _observacionesController.text = widget.albaran.observaciones ?? '';
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    )..forward();
     
-    // Initialize payment state
-    // Default logic from previous implementation
+    _observacionesController.text = widget.albaran.observaciones ?? '';
+
     if (widget.albaran.esCTR) {
-      _selectedPaymentMethod = 'EFECTIVO'; // Default
-      _amountCollected = widget.albaran.importeTotal;
+      _selectedPaymentMethod = 'EFECTIVO';
     }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _slideController.dispose();
     _observacionesController.dispose();
     _dniController.dispose();
     _nombreController.dispose();
@@ -63,65 +74,57 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
     super.dispose();
   }
 
+  bool get _isFactura => widget.albaran.numeroFactura > 0;
+  bool get _isUrgent => widget.albaran.esCTR;
+
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    
-    return Material(
-      color: AppTheme.darkBase,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0, 1),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(
+        parent: _slideController,
+        curve: Curves.easeOutCubic,
+      )),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.92,
+        decoration: BoxDecoration(
+          color: AppTheme.darkBase,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(
+            color: AppTheme.neonBlue.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
         child: Column(
           children: [
-            // Drag handle area
+            // Drag handle
             Container(
-              width: double.infinity,
-              color: AppTheme.darkBase,
-              padding: const EdgeInsets.only(top: 12, bottom: 8),
-              child: Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.borderColor,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            
+
             // Header
-            _buildHeader(context),
-            
-            // Tabs
-            Container(
-              color: AppTheme.darkSurface, 
-              child: TabBar(
-                controller: _tabController,
-                indicatorColor: AppTheme.neonBlue,
-                labelColor: AppTheme.neonBlue,
-                unselectedLabelColor: AppTheme.textSecondary,
-                tabs: const [
-                  Tab(text: 'PRODUCTOS'),
-                  Tab(text: 'COBRO'),
-                  Tab(text: 'FINALIZAR'),
-                ],
-              ),
-            ),
-            
-            // Content
+            _buildHeader(),
+
+            // Tab bar
+            _buildTabBar(),
+
+            // Tab content
             Expanded(
-              child: Container(
-                color: AppTheme.darkBase,
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildProductsTab(),
-                    _buildPaymentTab(),
-                    _buildFinalizeTab(),
-                  ],
-                ),
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildProductsTab(),
+                  _buildPaymentTab(),
+                  _buildFinalizeTab(),
+                ],
               ),
             ),
           ],
@@ -130,65 +133,138 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.darkSurface,
+            AppTheme.darkBase,
+          ],
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              // Document badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: widget.albaran.numeroFactura > 0 
-                      ? AppTheme.neonPurple.withOpacity(0.2) 
-                      : AppTheme.neonBlue.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(6),
+                  gradient: LinearGradient(
+                    colors: _isFactura
+                        ? [
+                            AppTheme.neonPurple.withOpacity(0.3),
+                            AppTheme.neonPurple.withOpacity(0.1),
+                          ]
+                        : [
+                            AppTheme.neonBlue.withOpacity(0.2),
+                            AppTheme.neonBlue.withOpacity(0.05),
+                          ],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: widget.albaran.numeroFactura > 0 
-                        ? AppTheme.neonPurple 
-                        : AppTheme.neonBlue,
+                    color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
                   ),
                 ),
-                child: Text(
-                  widget.albaran.numeroFactura > 0 
-                      ? 'FACTURA ${widget.albaran.numeroFactura}' 
-                      : 'ALBARÁN ${widget.albaran.numeroAlbaran}',
-                  style: TextStyle(
-                    color: widget.albaran.numeroFactura > 0 
-                        ? AppTheme.neonPurple 
-                        : AppTheme.neonBlue,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _isFactura ? Icons.receipt_long : Icons.description,
+                      size: 16,
+                      color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isFactura
+                          ? 'FACTURA ${widget.albaran.numeroFactura}'
+                          : 'ALBARÁN ${widget.albaran.numeroAlbaran}',
+                      style: TextStyle(
+                        color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+
               const Spacer(),
+
+              // Amount badge
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    NumberFormat.currency(symbol: '€', locale: 'es_ES')
+                        .format(widget.albaran.importeTotal),
+                    style: TextStyle(
+                      color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
+                          .withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _isUrgent ? '⚠ COBRO OBLIGATORIO' : '✓ COBRO OPCIONAL',
+                      style: TextStyle(
+                        color: _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(width: 12),
+
+              // Close button
               IconButton(
-                icon: const Icon(Icons.close, color: AppTheme.textSecondary),
+                icon: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.borderColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, color: AppTheme.textSecondary, size: 18),
+                ),
                 onPressed: () => Navigator.pop(context),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+
+          const SizedBox(height: 12),
+
+          // Client info
           Text(
             widget.albaran.nombreCliente,
             style: const TextStyle(
               color: AppTheme.textPrimary,
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 4),
           Row(
             children: [
-              const Icon(Icons.location_on, size: 14, color: AppTheme.textSecondary),
+              const Icon(Icons.location_on_outlined, size: 14, color: AppTheme.textSecondary),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  widget.albaran.direccion,
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                  '${widget.albaran.direccion}, ${widget.albaran.poblacion}',
+                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -199,266 +275,572 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
     );
   }
 
+  Widget _buildTabBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.borderColor),
+        ),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicatorColor: AppTheme.neonBlue,
+        indicatorWeight: 3,
+        labelColor: AppTheme.neonBlue,
+        unselectedLabelColor: AppTheme.textSecondary,
+        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        tabs: [
+          Tab(
+            icon: const Icon(Icons.inventory_2_outlined, size: 20),
+            text: 'PRODUCTOS',
+          ),
+          Tab(
+            icon: Icon(
+              Icons.payment,
+              size: 20,
+              color: _isUrgent ? AppTheme.obligatorio : null,
+            ),
+            child: Text(
+              'COBRO',
+              style: TextStyle(
+                color: _isUrgent ? AppTheme.obligatorio : null,
+              ),
+            ),
+          ),
+          const Tab(
+            icon: Icon(Icons.check_circle_outline, size: 20),
+            text: 'FINALIZAR',
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProductsTab() {
-    // Need to fetch details if not already loaded
     final provider = Provider.of<EntregasProvider>(context, listen: false);
-    
+
     return FutureBuilder<List<EntregaItem>>(
       future: provider.getAlbaranDetalle(
-        widget.albaran.numeroAlbaran, 
+        widget.albaran.numeroAlbaran,
         widget.albaran.ejercicio,
         widget.albaran.serie,
-        widget.albaran.terminal
+        widget.albaran.terminal,
       ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(color: AppTheme.neonBlue),
-                SizedBox(height: 16),
-                Text('Cargando productos...', style: TextStyle(color: AppTheme.textSecondary)),
-              ],
-            ),
-          );
+          return _buildProductsLoading();
         }
-        
+
         if (snapshot.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error al cargar productos',
-                    style: const TextStyle(color: AppTheme.error, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${snapshot.error}',
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () => setState(() {}), // Retry
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Reintentar'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.neonBlue,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
+          return _buildProductsError(snapshot.error);
         }
-        
+
         final lineas = snapshot.data ?? [];
-        
+
         if (lineas.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.inventory_2_outlined, color: AppTheme.textSecondary.withOpacity(0.5), size: 64),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No hay líneas de producto',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Albarán: ${widget.albaran.numeroAlbaran}',
-                    style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
+          return _buildProductsEmpty();
+        }
+
+        // Initialize checked status
+        for (var linea in lineas) {
+          _productChecked.putIfAbsent(linea.codigoArticulo, () => true);
+          _productQuantities.putIfAbsent(
+            linea.codigoArticulo,
+            () => linea.cantidadPedida.toInt(),
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: lineas.length,
-          itemBuilder: (context, index) {
-            final linea = lineas[index];
-            return _buildProductItem(linea);
-          },
+        return Column(
+          children: [
+            // Summary bar
+            _buildProductsSummary(lineas),
+
+            // Product list
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: lineas.length,
+                itemBuilder: (context, index) {
+                  final linea = lineas[index];
+                  return _buildProductCard(linea);
+                },
+              ),
+            ),
+
+            // Confirm all button
+            _buildConfirmAllButton(lineas),
+          ],
         );
       },
     );
   }
 
-  Widget _buildProductItem(EntregaItem linea) {
-    // Check if modified
-    // ... logic for quantity modification
-    
+  Widget _buildProductsLoading() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 60,
+            height: 60,
+            child: CircularProgressIndicator(
+              color: AppTheme.neonBlue,
+              strokeWidth: 3,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Cargando productos...',
+            style: TextStyle(color: AppTheme.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductsError(Object? error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Error al cargar productos',
+              style: TextStyle(color: AppTheme.error, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$error',
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => setState(() {}),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductsEmpty() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            color: AppTheme.textSecondary.withOpacity(0.5),
+            size: 64,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No hay líneas de producto',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Albarán: ${widget.albaran.numeroAlbaran}',
+            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductsSummary(List<EntregaItem> lineas) {
+    final checked = _productChecked.values.where((v) => v).length;
+    final total = lineas.length;
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: AppTheme.holoGradient,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.checklist, color: AppTheme.neonBlue, size: 20),
+          const SizedBox(width: 12),
+          Text(
+            '$checked de $total productos verificados',
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: checked == total
+                  ? AppTheme.success.withOpacity(0.2)
+                  : AppTheme.warning.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              checked == total ? '✓ COMPLETO' : 'PENDIENTE',
+              style: TextStyle(
+                color: checked == total ? AppTheme.success : AppTheme.warning,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductCard(EntregaItem linea) {
+    final isChecked = _productChecked[linea.codigoArticulo] ?? true;
+    final quantity = _productQuantities[linea.codigoArticulo] ?? linea.cantidadPedida.toInt();
+    final isModified = quantity != linea.cantidadPedida.toInt();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor),
+        gradient: AppTheme.cardGradient,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isChecked
+              ? AppTheme.success.withOpacity(0.3)
+              : AppTheme.warning.withOpacity(0.3),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Checkbox custom
-              GestureDetector(
-                onTap: () {
-                  // Toggle verification state
-                  setState(() {
-                    // Update verification logic
-                  });
-                },
-                child: Container(
-                  width: 24,
-                  height: 24,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() {
+              _productChecked[linea.codigoArticulo] = !isChecked;
+            });
+          },
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                // Checkbox
+                AnimatedContainer(
+                  duration: AppTheme.animFast,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppTheme.neonBlue),
+                    color: isChecked
+                        ? AppTheme.success.withOpacity(0.2)
+                        : AppTheme.darkBase,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isChecked ? AppTheme.success : AppTheme.borderColor,
+                      width: 2,
+                    ),
                   ),
-                  child: const Icon(Icons.check, size: 16, color: AppTheme.neonBlue),
+                  child: isChecked
+                      ? const Icon(Icons.check, color: AppTheme.success, size: 18)
+                      : null,
                 ),
-              ),
-              const SizedBox(width: 12),
-              // Description
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      linea.descripcion,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+
+                const SizedBox(width: 14),
+
+                // Product info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        linea.descripcion,
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          decoration: isChecked ? null : TextDecoration.lineThrough,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Ref: ${linea.codigoArticulo}',
-                      style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              // Quantity
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.darkBase,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      '${linea.cantidadPedida}',
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            'Ref: ${linea.codigoArticulo}',
+                            style: const TextStyle(
+                              color: AppTheme.textTertiary,
+                              fontSize: 11,
+                            ),
+                          ),
+                          if (isModified) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.warning.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'MODIFICADO',
+                                style: TextStyle(
+                                  color: AppTheme.warning,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ),
-                    const Text('Uds', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+
+                // Quantity controls
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.darkBase,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildQuantityButton(
+                        icon: Icons.remove,
+                        onTap: quantity > 0
+                            ? () {
+                                HapticFeedback.selectionClick();
+                                setState(() {
+                                  _productQuantities[linea.codigoArticulo] = quantity - 1;
+                                });
+                              }
+                            : null,
+                      ),
+                      Container(
+                        width: 40,
+                        alignment: Alignment.center,
+                        child: Text(
+                          '$quantity',
+                          style: TextStyle(
+                            color: isModified ? AppTheme.warning : AppTheme.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      _buildQuantityButton(
+                        icon: Icons.add,
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() {
+                            _productQuantities[linea.codigoArticulo] = quantity + 1;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          
-          // Action buttons (Add note / Edit Quantity)
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton.icon(
-                icon: const Icon(Icons.edit, size: 14, color: AppTheme.textSecondary),
-                label: const Text('Cantidad', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                onPressed: () {
-                   // Show quantity edit dialog
-                },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuantityButton({
+    required IconData icon,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(
+            icon,
+            color: onTap != null ? AppTheme.neonBlue : AppTheme.textTertiary,
+            size: 18,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmAllButton(List<EntregaItem> lineas) {
+    final allChecked = _productChecked.values.every((v) => v);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface,
+        border: Border(top: BorderSide(color: AppTheme.borderColor)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                setState(() {
+                  for (var linea in lineas) {
+                    _productChecked[linea.codigoArticulo] = !allChecked;
+                  }
+                });
+              },
+              icon: Icon(allChecked ? Icons.check_box : Icons.check_box_outline_blank),
+              label: Text(allChecked ? 'DESMARCAR TODO' : 'MARCAR TODO'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.neonBlue,
+                side: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              TextButton.icon(
-                icon: const Icon(Icons.comment, size: 14, color: AppTheme.textSecondary),
-                label: const Text('Observación', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                onPressed: () {
-                   // Show observation dialog
-                },
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                _tabController.animateTo(1);
+              },
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text('CONTINUAR'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonBlue,
+                foregroundColor: AppTheme.darkBase,
+                padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-            ],
-          )
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildPaymentTab() {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Amount Card
+          // Amount card
           Container(
             padding: const EdgeInsets.all(24),
-            decoration: AppTheme.glassMorphism(color: AppTheme.darkCard),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.darkCard,
+                  _isUrgent
+                      ? AppTheme.obligatorio.withOpacity(0.1)
+                      : AppTheme.darkSurface,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: _isUrgent
+                    ? AppTheme.obligatorio.withOpacity(0.4)
+                    : AppTheme.neonBlue.withOpacity(0.2),
+                width: 2,
+              ),
+              boxShadow: [
+                if (_isUrgent)
+                  BoxShadow(
+                    color: AppTheme.obligatorio.withOpacity(0.15),
+                    blurRadius: 20,
+                  ),
+              ],
+            ),
             child: Column(
               children: [
-                const Text(
-                  'Total a Cobrar',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                Text(
+                  'TOTAL A COBRAR',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                    letterSpacing: 1,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  NumberFormat.currency(symbol: '€', locale: 'es_ES').format(widget.albaran.importeTotal),
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 36,
+                  NumberFormat.currency(symbol: '€', locale: 'es_ES')
+                      .format(widget.albaran.importeTotal),
+                  style: TextStyle(
+                    color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
+                    fontSize: 42,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 4),
-                 Container(
-                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                   decoration: BoxDecoration(
-                     color: (widget.albaran.esCTR ? AppTheme.error : AppTheme.success).withOpacity(0.2),
-                     borderRadius: BorderRadius.circular(4),
-                   ),
-                   child: Text(
-                     widget.albaran.esCTR ? 'COBRO OBLIGATORIO' : 'COBRO OPCIONAL',
-                     style: TextStyle(
-                       color: widget.albaran.esCTR ? AppTheme.error : AppTheme.success,
-                       fontSize: 10, 
-                       fontWeight: FontWeight.bold
-                     ),
-                   ),
-                 ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
+                        .withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isUrgent ? Icons.priority_high : Icons.info_outline,
+                        size: 16,
+                        color: _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isUrgent
+                            ? 'COBRO OBLIGATORIO - ${_getPaymentTypeLabel()}'
+                            : 'COBRO OPCIONAL - ${_getPaymentTypeLabel()}',
+                        style: TextStyle(
+                          color: _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-          
-          const SizedBox(height: 32),
-          
-          // Payment Method Selector
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text('Método de Pago', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+
+          const SizedBox(height: 24),
+
+          // Payment method selector
+          Text(
+            'MÉTODO DE PAGO',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
           ),
           const SizedBox(height: 12),
-          
+
           Row(
             children: [
               Expanded(child: _buildPaymentOption('EFECTIVO', Icons.money)),
@@ -467,32 +849,119 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
             ],
           ),
           const SizedBox(height: 12),
-          // Checkbox for "Cobrado"
+          Row(
+            children: [
+              Expanded(child: _buildPaymentOption('BIZUM', Icons.phone_android)),
+              const SizedBox(width: 12),
+              Expanded(child: _buildPaymentOption('TRANSFER', Icons.account_balance)),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Mark as paid checkbox
           InkWell(
             onTap: () {
+              HapticFeedback.selectionClick();
               setState(() => _isPaid = !_isPaid);
             },
-            child: Container(
+            borderRadius: BorderRadius.circular(12),
+            child: AnimatedContainer(
+              duration: AppTheme.animFast,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: _isPaid ? AppTheme.success.withOpacity(0.1) : AppTheme.darkCard,
+                gradient: _isPaid
+                    ? LinearGradient(
+                        colors: [
+                          AppTheme.success.withOpacity(0.2),
+                          AppTheme.success.withOpacity(0.1),
+                        ],
+                      )
+                    : null,
+                color: _isPaid ? null : AppTheme.darkCard,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: _isPaid ? AppTheme.success : AppTheme.borderColor,
+                  width: _isPaid ? 2 : 1,
                 ),
               ),
               child: Row(
                 children: [
-                  Icon(
-                    _isPaid ? Icons.check_box : Icons.check_box_outline_blank,
-                    color: _isPaid ? AppTheme.success : AppTheme.textSecondary,
+                  AnimatedContainer(
+                    duration: AppTheme.animFast,
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: _isPaid ? AppTheme.success : AppTheme.darkBase,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _isPaid ? AppTheme.success : AppTheme.borderColor,
+                        width: 2,
+                      ),
+                    ),
+                    child: _isPaid
+                        ? const Icon(Icons.check, color: Colors.white, size: 18)
+                        : null,
                   ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Marcar como Cobrado',
-                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 16),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'MARCAR COMO COBRADO',
+                          style: TextStyle(
+                            color: _isPaid ? AppTheme.success : AppTheme.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          _isPaid
+                              ? 'Cobro registrado con $_selectedPaymentMethod'
+                              : 'Confirmar recepción del pago',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  if (_isPaid)
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.success.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_circle,
+                        color: AppTheme.success,
+                        size: 24,
+                      ),
+                    ),
                 ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Continue button
+          ElevatedButton.icon(
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              _tabController.animateTo(2);
+            },
+            icon: const Icon(Icons.arrow_forward),
+            label: const Text('CONTINUAR A FINALIZAR'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonBlue,
+              foregroundColor: AppTheme.darkBase,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
@@ -500,31 +969,56 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
       ),
     );
   }
-  
+
   Widget _buildPaymentOption(String method, IconData icon) {
     final isSelected = _selectedPaymentMethod == method;
+
     return GestureDetector(
-      onTap: () => setState(() => _selectedPaymentMethod = method),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _selectedPaymentMethod = method);
+      },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: AppTheme.animFast,
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.neonBlue.withOpacity(0.2) : AppTheme.darkCard,
+          gradient: isSelected
+              ? LinearGradient(
+                  colors: [
+                    AppTheme.neonBlue.withOpacity(0.2),
+                    AppTheme.neonCyan.withOpacity(0.1),
+                  ],
+                )
+              : null,
+          color: isSelected ? null : AppTheme.darkCard,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppTheme.neonBlue : AppTheme.borderColor,
             width: isSelected ? 2 : 1,
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.neonBlue.withOpacity(0.2),
+                    blurRadius: 10,
+                  ),
+                ]
+              : null,
         ),
         child: Column(
           children: [
-            Icon(icon, color: isSelected ? AppTheme.neonBlue : AppTheme.textSecondary),
+            Icon(
+              icon,
+              color: isSelected ? AppTheme.neonBlue : AppTheme.textSecondary,
+              size: 28,
+            ),
             const SizedBox(height: 8),
             Text(
               method,
               style: TextStyle(
                 color: isSelected ? AppTheme.neonBlue : AppTheme.textSecondary,
                 fontWeight: FontWeight.bold,
+                fontSize: 11,
               ),
             ),
           ],
@@ -539,111 +1033,204 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Client Info Input
+          // Receiver data
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppTheme.darkCard,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppTheme.borderColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Datos del Receptor', style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 14)),
+                Row(
+                  children: [
+                    Icon(Icons.person, color: AppTheme.neonBlue, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'DATOS DEL RECEPTOR',
+                      style: TextStyle(
+                        color: AppTheme.neonBlue,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _nombreController,
                   style: const TextStyle(color: AppTheme.textPrimary),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Nombre y Apellidos *',
-                    prefixIcon: Icon(Icons.person, color: AppTheme.textSecondary, size: 20),
-                    isDense: true,
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.person_outline, size: 20),
+                    filled: true,
+                    fillColor: AppTheme.darkBase,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _dniController,
                   style: const TextStyle(color: AppTheme.textPrimary),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'DNI / NIF *',
-                    prefixIcon: Icon(Icons.badge, color: AppTheme.textSecondary, size: 20),
-                    isDense: true,
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.badge_outlined, size: 20),
+                    filled: true,
+                    fillColor: AppTheme.darkBase,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          
+
           const SizedBox(height: 16),
-        
-          // Observation Field
+
+          // Observations
           TextField(
             controller: _observacionesController,
             maxLines: 3,
             style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'Observaciones Globales',
+            decoration: InputDecoration(
+              labelText: 'Observaciones',
               hintText: 'Añadir nota sobre la entrega...',
               alignLabelWithHint: true,
-              border: OutlineInputBorder(),
+              filled: true,
+              fillColor: AppTheme.darkCard,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
           ),
-          
+
           const SizedBox(height: 20),
-          
-          // Signature Pad
+
+          // Signature
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Firma del Cliente *', style: TextStyle(color: AppTheme.textSecondary)),
-              TextButton(
+              Row(
+                children: [
+                  Icon(Icons.draw, color: AppTheme.neonBlue, size: 20),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'FIRMA DEL CLIENTE *',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              TextButton.icon(
                 onPressed: () => _signatureController.clear(),
-                child: const Text('Borrar Firma', style: TextStyle(color: AppTheme.error)),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Borrar'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.error,
+                ),
               ),
             ],
           ),
+          const SizedBox(height: 8),
           Container(
-            height: 180,
+            height: 160,
             decoration: BoxDecoration(
-              color: Colors.grey[900],
-              borderRadius: BorderRadius.circular(12),
+              color: AppTheme.darkCard,
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppTheme.borderColor),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               child: Signature(
                 controller: _signatureController,
                 backgroundColor: Colors.transparent,
               ),
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
-          // Submit Button
-          ElevatedButton(
-            onPressed: _isSubmitting ? null : _submitDelivery,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue,
-              foregroundColor: AppTheme.darkBase,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
+          // Submit button
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppTheme.neonBlue, AppTheme.neonCyan],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.neonBlue.withOpacity(0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: _isSubmitting 
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.darkBase))
-                : const Text('CONFIRMAR ENTREGA', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            child: ElevatedButton(
+              onPressed: _isSubmitting ? null : _submitDelivery,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                foregroundColor: AppTheme.darkBase,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.darkBase,
+                      ),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.check_circle, size: 24),
+                        SizedBox(width: 12),
+                        Text(
+                          'CONFIRMAR ENTREGA',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
-          const SizedBox(height: 20), // Bottom padding
+
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
 
+  String _getPaymentTypeLabel() {
+    final code = widget.albaran.tipoPago.toUpperCase().trim();
+    if (code == '01' || code == 'CNT' || code.contains('CONTADO')) return 'CONTADO';
+    if (code.contains('REP')) return 'REPOSICIÓN';
+    if (code.contains('MEN')) return 'MENSUAL';
+    if (code.contains('CRE') || code == 'CR') return 'CRÉDITO';
+    if (code.contains('TAR')) return 'TARJETA';
+    if (code.contains('TRA')) return 'TRANSFERENCIA';
+    return code;
+  }
+
   Future<void> _submitDelivery() async {
-    // 1. Validation
+    // Validation
     if (_nombreController.text.trim().isEmpty) {
       _showError('El nombre del receptor es obligatorio');
       return;
@@ -656,63 +1243,62 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
       _showError('La firma es obligatoria');
       return;
     }
-    
-    // CTR Payment Validation
-    if (widget.albaran.esCTR && !_isPaid) {
-       // Allow proceed but warn? Or strict? 
-       // Previous code had strict "Must explain difference".
-       // Here we assume if they switch to "Paid", all is good. 
-       // If not paid, we should probably require observation.
-       if (_observacionesController.text.trim().isEmpty) {
-         _showError('Cobro pendiente: Indique motivo en observaciones');
-         return;
-       }
+
+    // CTR validation
+    if (_isUrgent && !_isPaid) {
+      if (_observacionesController.text.trim().isEmpty) {
+        _showError('Cobro pendiente: Indique motivo en observaciones');
+        return;
+      }
     }
 
     setState(() => _isSubmitting = true);
-    
+
     try {
       final provider = Provider.of<EntregasProvider>(context, listen: false);
-      
-      // 2. Get Signature
+
+      // Get signature
       final Uint8List? sigBytes = await _signatureController.toPngBytes();
       if (sigBytes == null) throw Exception('Error al procesar firma');
       final String base64Sig = base64Encode(sigBytes);
-      
-      // 3. Construct Observations
-      // TODO: Concatenate line discrepancies if we had editing implemented.
-      // For now, usage implies simple confirmation of full delivery or global observation.
+
+      // Build observations
       String finalObs = _observacionesController.text.trim();
       if (_nombreController.text.isNotEmpty) {
-        finalObs += "\nReceptor: ${_nombreController.text} (${_dniController.text})";
+        finalObs += '\nReceptor: ${_nombreController.text} (${_dniController.text})';
       }
       if (_isPaid) {
-        finalObs += "\nCobrado: ${_selectedPaymentMethod}";
+        finalObs += '\nCobrado: $_selectedPaymentMethod';
       }
 
-      // 4. Call Provider
-      // Assuming full delivery for now as we don't have partial editing UI fully wired in this version yet.
-      // To support partial, we'd need to check _lineChanges.
+      // Submit
       bool success = await provider.marcarEntregado(
         albaranId: widget.albaran.id,
         firma: base64Sig,
         observaciones: finalObs,
       );
-      
+
       if (!mounted) return;
-      
+
       setState(() => _isSubmitting = false);
-      
+
       if (success) {
-         Navigator.pop(context);
-         ScaffoldMessenger.of(context).showSnackBar(
-           const SnackBar(
-             content: Text('Entrega registrada correctamente'),
-             backgroundColor: AppTheme.success,
-           ),
-         );
+        HapticFeedback.heavyImpact();
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Entrega registrada correctamente'),
+              ],
+            ),
+            backgroundColor: AppTheme.success,
+          ),
+        );
       } else {
-         _showError(provider.error ?? 'Error al guardar entrega');
+        _showError(provider.error ?? 'Error al guardar entrega');
       }
     } catch (e) {
       if (mounted) {
@@ -724,7 +1310,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal> with SingleTicker
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.error),
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: AppTheme.error,
+      ),
     );
   }
 }

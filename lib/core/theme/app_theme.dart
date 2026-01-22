@@ -18,17 +18,34 @@ class AppTheme {
   // Added for compatibility
   static const Color surfaceColor = darkSurface;
 
-  // Neon accents
+  // Neon accents (Primary palette - cian/azul)
   static const Color neonBlue = Color(0xFF00D4FF);
   static const Color neonGreen = Color(0xFF00FF88);
   static const Color neonPurple = Color(0xFFBB86FC);
-  static const Color neonPink = Color(0xFFFF6B9D);  // Pink for rutero
+  static const Color neonPink = Color(0xFFFF6B9D);
+  
+  // NEW: Extended Neon palette for futuristic UI
+  static const Color neonCyan = Color(0xFF00FFFF);
+  static const Color neonTeal = Color(0xFF00CED1);
+  static const Color neonElectric = Color(0xFF7DF9FF);
+  static const Color holoBlue = Color(0xFF1E90FF);
+  
+  // NEW: Glow intensities
+  static const Color glowIntense = Color(0xFF00D4FF);
+  static const Color glowMedium = Color(0xFF0099CC);
+  static const Color glowSubtle = Color(0xFF006699);
 
   // Status colors
   static const Color success = Color(0xFF00FF88); // Green for positive
   static const Color error = Color(0xFFFF3B5C);   // Red for negative
   static const Color warning = Color(0xFFFFAA00);
   static const Color info = Color(0xFF00D4FF);
+  
+  // NEW: Payment status colors
+  static const Color obligatorio = Color(0xFFFF3B5C); // Red - must collect
+  static const Color opcional = Color(0xFFFFAA00);    // Orange - optional
+  static const Color cobrado = Color(0xFF00FF88);     // Green - paid
+  static const Color credito = Color(0xFF00D4FF);     // Blue - credit
 
   // Text colors
   static const Color textPrimary = Color(0xFFFFFFFF);
@@ -46,6 +63,65 @@ class AppTheme {
     Color(0xFF10B981),
     Color(0xFFF59E0B),
   ];
+
+  // ============================================================================
+  // GRADIENTS - Holographic & Futuristic
+  // ============================================================================
+  
+  /// Holographic gradient for premium cards
+  static LinearGradient get holoGradient => LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      neonCyan.withOpacity(0.15),
+      neonBlue.withOpacity(0.1),
+      neonPurple.withOpacity(0.1),
+      neonCyan.withOpacity(0.15),
+    ],
+    stops: const [0.0, 0.35, 0.65, 1.0],
+  );
+  
+  /// Scanner effect gradient (for animated elements)
+  static LinearGradient get scannerGradient => const LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Colors.transparent,
+      neonCyan,
+      Colors.transparent,
+    ],
+    stops: [0.0, 0.5, 1.0],
+  );
+  
+  /// Card gradient for delivery cards
+  static LinearGradient get cardGradient => LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      darkSurface,
+      darkCard.withOpacity(0.8),
+    ],
+  );
+  
+  /// Urgent indicator gradient (red pulse)
+  static LinearGradient get urgentGradient => LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [
+      error.withOpacity(0.3),
+      error.withOpacity(0.1),
+    ],
+  );
+  
+  /// Success indicator gradient
+  static LinearGradient get successGradient => LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [
+      success.withOpacity(0.3),
+      success.withOpacity(0.1),
+    ],
+  );
 
   // ============================================================================
   // THEME DATA
@@ -145,10 +221,113 @@ class AppTheme {
       BoxShadow(color: color.withOpacity(0.1), blurRadius: 40, spreadRadius: 5),
     ],
   );
+  
+  /// NEW: Holographic card decoration with gradient
+  static BoxDecoration holoCard({Color? glowColor}) => BoxDecoration(
+    gradient: cardGradient,
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(
+      color: (glowColor ?? neonBlue).withOpacity(0.3),
+      width: 1.5,
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: (glowColor ?? neonBlue).withOpacity(0.15),
+        blurRadius: 12,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
+  
+  /// NEW: Urgent card decoration (for obligatory payments)
+  static BoxDecoration urgentCard() => BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        darkSurface,
+        error.withOpacity(0.1),
+      ],
+    ),
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: error.withOpacity(0.5), width: 2),
+    boxShadow: [
+      BoxShadow(
+        color: error.withOpacity(0.2),
+        blurRadius: 16,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
+  
+  /// NEW: Success card decoration (for completed items)
+  static BoxDecoration successCard() => BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        darkSurface,
+        success.withOpacity(0.08),
+      ],
+    ),
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: success.withOpacity(0.4), width: 1.5),
+  );
+  
+  /// NEW: Factura card decoration (purple tint for invoices)
+  static BoxDecoration facturaCard() => BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        darkSurface,
+        neonPurple.withOpacity(0.1),
+      ],
+    ),
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: neonPurple.withOpacity(0.4), width: 1.5),
+    boxShadow: [
+      BoxShadow(
+        color: neonPurple.withOpacity(0.15),
+        blurRadius: 12,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
+  
+  /// NEW: Floating action button glow
+  static BoxDecoration fabGlow() => BoxDecoration(
+    shape: BoxShape.circle,
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [neonBlue, neonCyan],
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: neonBlue.withOpacity(0.4),
+        blurRadius: 20,
+        spreadRadius: 2,
+      ),
+    ],
+  );
+  
+  /// NEW: Subtle pulsing border animation colors
+  static List<Color> get pulsingBorderColors => [
+    neonBlue.withOpacity(0.3),
+    neonCyan.withOpacity(0.5),
+    neonBlue.withOpacity(0.3),
+  ];
 
   // Spacing constants (tablet-optimized)
   static const double paddingS = 12.0;
   static const double paddingM = 16.0;
   static const double paddingL = 24.0;
   static const double paddingXL = 32.0;
+  
+  // NEW: Animation durations
+  static const Duration animFast = Duration(milliseconds: 150);
+  static const Duration animNormal = Duration(milliseconds: 300);
+  static const Duration animSlow = Duration(milliseconds: 500);
+  static const Duration animPulse = Duration(milliseconds: 1500);
 }
