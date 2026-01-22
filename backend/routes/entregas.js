@@ -132,6 +132,11 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             let esCTR = paymentInfo.mustCollect;
             let puedeCobrarse = paymentInfo.canCollect;
 
+            // Debug specific rows to see why logic fails
+            if (rows.length < 5 || Math.random() < 0.05) {
+                logger.info(`[ENTREGAS_DEBUG] Albaran: ${row.NUMEROALBARAN}, FP: '${fp}', Info: ${JSON.stringify(paymentInfo)}, esCTR: ${esCTR}`);
+            }
+
             if (!paymentInfo.mustCollect && !paymentInfo.canCollect && paymentInfo === DEFAULT_PAYMENT) {
                 if (fp === 'CTR' || fp.includes('CONTADO') || fp.includes('METALICO')) {
                     esCTR = true;
@@ -314,16 +319,16 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 
         const header = headers[0];
 
-        // 3. Get Items from LAC (Simplified for ODBC compatibility)
+        // 3. Get Items from LAC (Simplified for ODBC compatibility - NO ALIASES)
         let itemsSql = `
             SELECT 
-                L.SECUENCIA AS ITEM_ID,
-                L.CODIGOARTICULO AS CODIGO,
-                L.DESCRIPCION AS DESCRIP,
-                L.CANTIDADUNIDADES AS QTY,
-                L.CANTIDADCAJAS AS CAJAS,
-                L.UNIDADMEDIDA AS UNIT,
-                L.IMPORTEVENTA AS TOTAL_LINEA
+                L.SECUENCIA,
+                L.CODIGOARTICULO,
+                L.DESCRIPCION,
+                L.CANTIDADUNIDADES,
+                L.CANTIDADCAJAS,
+                L.UNIDADMEDIDA,
+                L.IMPORTEVENTA
             FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
         `;
@@ -350,14 +355,14 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             importe: parseFloat(header.IMPORTE) || 0,
             formaPago: (header.FORMA_PAGO || '').trim(),
             items: items.map(i => ({
-                itemId: i.ITEM_ID,
-                codigoArticulo: i.CODIGO,
-                descripcion: i.DESCRIP,
-                cantidadPedida: parseFloat(i.QTY) || 0,
-                cantidadCajas: parseFloat(i.CAJAS) || 0,
-                totalLinea: parseFloat(i.TOTAL_LINEA) || 0,
-                unidad: i.UNIT,
-                precioUnitario: (parseFloat(i.QTY) || 0) !== 0 ? (parseFloat(i.TOTAL_LINEA) || 0) / parseFloat(i.QTY) : 0,
+                itemId: i.SECUENCIA,
+                codigoArticulo: i.CODIGOARTICULO,
+                descripcion: i.DESCRIPCION,
+                cantidadPedida: parseFloat(i.CANTIDADUNIDADES) || 0,
+                cantidadCajas: parseFloat(i.CANTIDADCAJAS) || 0,
+                totalLinea: parseFloat(i.IMPORTEVENTA) || 0,
+                unidad: i.UNIDADMEDIDA,
+                precioUnitario: (parseFloat(i.CANTIDADUNIDADES) || 0) !== 0 ? (parseFloat(i.IMPORTEVENTA) || 0) / parseFloat(i.CANTIDADUNIDADES) : 0,
                 cantidadEntregada: 0,
                 estado: 'PENDIENTE'
             })),
