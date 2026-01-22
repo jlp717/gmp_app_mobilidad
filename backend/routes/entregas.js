@@ -242,6 +242,17 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             const serieFactura = (row.SERIEFACTURA || '').trim();
             const esFactura = numeroFactura > 0;
 
+            // Robust Money Parser
+            const parseMoney = (val) => {
+                if (!val) return 0;
+                if (typeof val === 'number') return val;
+                // Replace comma with dot, remove non-numeric chars except dot and minus
+                const cleaned = val.toString().replace(',', '.').replace(/[^\d.-]/g, '');
+                return parseFloat(cleaned) || 0;
+            };
+
+            const importeParsed = parseMoney(row.IMPORTEBRUTO);
+
             return {
                 id: `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
                 subempresa: row.SUBEMPRESAALBARAN,
