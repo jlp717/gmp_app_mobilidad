@@ -16,7 +16,7 @@ class SmartDeliveryCard extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback? onSwipeComplete;
   final VoidCallback? onSwipeNote;
-  final VoidCallback? onSwipeNote;
+  final String? aiSuggestion; // Restore AI suggestion
 
   const SmartDeliveryCard({
     super.key,
@@ -24,6 +24,7 @@ class SmartDeliveryCard extends StatefulWidget {
     required this.onTap,
     this.onSwipeComplete,
     this.onSwipeNote,
+    this.aiSuggestion,
   });
 
   @override
@@ -192,6 +193,12 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                     
                     // Client info
                     _buildClientInfo(),
+                    
+                    // AI Suggestion (if present)
+                    if (widget.aiSuggestion != null) ...[
+                      const SizedBox(height: 10),
+                      _buildAiSuggestion(),
+                    ],
                     
                     const SizedBox(height: 10),
                     
@@ -397,6 +404,46 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   }
 
 
+
+  Widget _buildAiSuggestion() {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.neonPurple.withOpacity(0.08),
+            AppTheme.neonBlue.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppTheme.neonPurple.withOpacity(0.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.auto_awesome,
+            size: 16,
+            color: AppTheme.neonPurple,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              widget.aiSuggestion!,
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildQuickActions() {
     return Row(

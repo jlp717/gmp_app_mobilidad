@@ -24,6 +24,96 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage: storage });
+const moment = require('moment'); // Ensure moment is available
+
+// --- HELPER: Get Gamification Stats (Real DB) ---
+async function getGamificationStats(repartidorId) {
+    try {
+        const currentYear = new Date().getFullYear();
+
+        // 1. Level: Count total deliveries this year
+        const levelSql = `
+            SELECT COUNT(*) as TOTAL
+            FROM DSEDAC.CPC
+            WHERE TRIM(CODIGOREPARTIDOR) = '${repartidorId}'
+              AND ANODOCUMENTO = ${currentYear}
+        `;
+        const levelResult = await query(levelSql, false);
+        const totalDeliveries = levelResult[0]?.TOTAL || 0;
+
+        let level = 'BRONCE';
+        let nextLevel = 'PLATA';
+        let progress = 0.0;
+
+        if (totalDeliveries < 100) {
+            level = 'BRONCE';
+            nextLevel = 'PLATA';
+            progress = totalDeliveries / 100;
+        } else if (totalDeliveries < 500) {
+            level = 'PLATA';
+            nextLevel = 'ORO';
+            progress = (totalDeliveries - 100) / 400;
+        } else if (totalDeliveries < 2000) {
+            level = 'ORO';
+            nextLevel = 'PLATINO';
+            progress = (totalDeliveries - 500) / 1500;
+        } else {
+            level = 'PLATINO';
+            nextLevel = 'DIAMANTE';
+            progress = 1.0;
+        }
+
+        // 2. Streak: Check last 7 days activity
+        const streakSql = `
+            SELECT DISTINCT DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
+            FROM DSEDAC.CPC
+            WHERE TRIM(CODIGOREPARTIDOR) = '${repartidorId}'
+              AND CONCAT(ANODOCUMENTO, CONCAT(RIGHT('0' || MESDOCUMENTO, 2), RIGHT('0' || DIADOCUMENTO, 2))) >= 
+                  '${moment().subtract(7, 'days').format('YYYYMMDD')}'
+        `;
+        const streakResult = await query(streakSql, false);
+        const streakDays = streakResult.length; // Approximate active days in last week
+
+        return { level, nextLevel, progress, streakDays, totalDeliveries };
+    } catch (e) {
+        logger.error(`Error calculating gamification: ${e.message}`);
+        return { level: 'BRONCE', nextLevel: 'PLATA', progress: 0, streakDays: 0, totalDeliveries: 0 };
+    }
+}
+
+// --- HELPER: Get Heuristic AI Suggestions ---
+function getSmartSuggestions(albaranes) {
+    const suggestions = [];
+
+    // 1. Cash Alert
+    const totalCash = albaranes
+        .filter(a => a.esCTR)
+        .reduce((sum, a) => sum + (a.importe || 0), 0);
+
+    if (totalCash > 1000) {
+        suggestions.push(`⚠️ Llevas ${totalCash.toFixed(0)}€ en efectivo. Considera hacer un ingreso.`);
+    } else if (totalCash > 500) {
+        suggestions.push(`ℹ️ Acumulas ${totalCash.toFixed(0)}€ en cobros.`);
+    }
+
+    // 2. Urgent Deliveries
+    const urgentCount = albaranes.filter(a => a.esCTR).length;
+    if (urgentCount > 3) {
+        suggestions.push(`🔥 Tienes ${urgentCount} clientes con cobro obligatorio prioritario.`);
+    }
+
+    // 3. Efficiency (Duplicate clients)
+    const clientCounts = {};
+    albaranes.forEach(a => {
+        clientCounts[a.nombreCliente] = (clientCounts[a.nombreCliente] || 0) + 1;
+    });
+    const multiDrop = Object.entries(clientCounts).find(([_, count]) => count > 1);
+    if (multiDrop) {
+        suggestions.push(`📦 ${multiDrop[0]} tiene ${multiDrop[1]} entregas. ¡Agrúpalas!`);
+    }
+
+    return suggestions.length > 0 ? suggestions[0] : null; // Return top suggestion
+}
 
 // ===================================
 // GET /pendientes/:repartidorId
@@ -240,7 +330,10 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 totalBruto: Math.round(totalBruto * 100) / 100,
                 totalACobrar: Math.round(totalACobrar * 100) / 100,
                 totalOpcional: Math.round(totalOpcional * 100) / 100
-            }
+            },
+            // --- NEW: Real Gamification & AI Data ---
+            gamification: await getGamificationStats(repartidorId),
+            aiSuggestion: getSmartSuggestions(filteredAlbaranes)
         });
     } catch (error) {
         logger.error(`Error in /pendientes: ${error.message}`);

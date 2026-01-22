@@ -24,9 +24,28 @@ class HolographicKpiDashboard extends StatefulWidget {
     required this.entregasCompletadas,
     required this.montoACobrar,
     required this.montoOpcional,
+  final int streakDays;
+  final String currentLevel;
+  final double levelProgress;
+  
+  // AI suggestion (optional)
+  final String? aiSuggestion;
+  final VoidCallback? onAiAction;
+
+  const HolographicKpiDashboard({
+    super.key,
+    required this.totalEntregas,
+    required this.entregasCompletadas,
+    required this.montoACobrar,
+    required this.montoOpcional,
     required this.totalMonto,
     this.montoCobrado = 0,
     this.isLoading = false,
+    this.streakDays = 0,
+    this.currentLevel = 'BRONCE',
+    this.levelProgress = 0.0,
+    this.aiSuggestion,
+    this.onAiAction,
   });
 
   @override
@@ -173,6 +192,17 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
             ),
           ],
         ),
+        
+        const SizedBox(height: 12),
+        
+        // Gamification bar
+        _buildGamificationBar(),
+        
+        // AI Suggestion (if present)
+        if (widget.aiSuggestion != null) ...[
+          const SizedBox(height: 12),
+          _buildAiSuggestion(),
+        ],
       ],
     );
   }
@@ -336,6 +366,217 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         );
       },
     );
+  }
+  Widget _buildGamificationBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.darkBase.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppTheme.borderColor,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Streak badge
+          if (widget.streakDays > 0) ...[
+            _buildBadge(
+              icon: Icons.local_fire_department,
+              value: '${widget.streakDays}',
+              label: 'Racha',
+              color: Colors.orange,
+            ),
+            const SizedBox(width: 12),
+          ],
+          
+          // Level indicator
+          _buildBadge(
+            icon: _getLevelIcon(widget.currentLevel),
+            value: widget.currentLevel,
+            label: 'Nivel',
+            color: _getLevelColor(widget.currentLevel),
+          ),
+          
+          const SizedBox(width: 12),
+          
+          // Level progress
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Próximo nivel',
+                  style: TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 9,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: widget.levelProgress,
+                    backgroundColor: AppTheme.borderColor,
+                    valueColor: AlwaysStoppedAnimation(
+                      _getLevelColor(widget.currentLevel),
+                    ),
+                    minHeight: 6,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(width: 12),
+          
+          // Progress percentage
+          Text(
+            '${(widget.levelProgress * 100).toInt()}%',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadge({
+    required IconData icon,
+    required String value,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: color.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiSuggestion() {
+    return GestureDetector(
+      onTap: widget.onAiAction,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.neonPurple.withOpacity(0.1),
+              AppTheme.neonBlue.withOpacity(0.1),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppTheme.neonPurple.withOpacity(0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.neonPurple.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.auto_awesome,
+                color: AppTheme.neonPurple,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'ANÁLISIS INTELIGENTE',
+                    style: TextStyle(
+                      color: AppTheme.neonPurple,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.aiSuggestion!,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 12,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: AppTheme.neonPurple,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getLevelIcon(String level) {
+    switch (level.toUpperCase()) {
+      case 'BRONCE':
+        return Icons.workspace_premium;
+      case 'PLATA':
+        return Icons.star_border;
+      case 'ORO':
+        return Icons.star;
+      case 'PLATINO':
+        return Icons.auto_awesome;
+      case 'DIAMANTE':
+        return Icons.diamond;
+      default:
+        return Icons.military_tech;
+    }
+  }
+
+  Color _getLevelColor(String level) {
+    switch (level.toUpperCase()) {
+      case 'BRONCE':
+        return const Color(0xFFCD7F32);
+      case 'PLATA':
+        return const Color(0xFFC0C0C0);
+      case 'ORO':
+        return const Color(0xFFFFD700);
+      case 'PLATINO':
+        return const Color(0xFFE5E4E2);
+      case 'DIAMANTE':
+        return const Color(0xFFB9F2FF);
+      default:
+        return AppTheme.textSecondary;
+    }
   }
 }
 

@@ -36,6 +36,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   String? _lastLoadedId;
   final TextEditingController _searchController = TextEditingController();
   
+  late AnimationController _listAnimController;
+
   @override
   void initState() {
     super.initState();
@@ -228,6 +230,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               (sum, item) => sum + item.importeTotal,
             ),
             isLoading: entregas.isLoading,
+            streakDays: entregas.streakDays,
+            currentLevel: entregas.currentLevel,
+            levelProgress: entregas.levelProgress,
+            aiSuggestion: entregas.aiSuggestion,
+            onAiAction: () => _showAiDetail(context, entregas.aiSuggestion),
           ),
 
           // CLIENT LIST
@@ -676,6 +683,32 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               side: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5)),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAiDetail(BuildContext context, String? suggestion) {
+    if (suggestion == null) return;
+    HapticFeedback.mediumImpact();
+    // Simple alert dialog for now
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        title: Row(
+          children: const [
+            Icon(Icons.auto_awesome, color: AppTheme.neonPurple),
+            SizedBox(width: 10),
+            Text('Análisis Inteligente', style: TextStyle(color: AppTheme.neonPurple)),
+          ],
+        ),
+        content: Text(suggestion, style: const TextStyle(color: AppTheme.textPrimary)),
+        actions: [
+          TextButton(
+            child: const Text('Entendido'),
+            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),

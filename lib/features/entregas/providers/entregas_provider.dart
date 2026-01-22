@@ -303,6 +303,12 @@ class EntregasProvider extends ChangeNotifier {
   double _resumenTotalACobrar = 0;
   double _resumenTotalOpcional = 0;
 
+  // Real Gamification & AI
+  int _streakDays = 0;
+  String _currentLevel = 'BRONCE';
+  double _levelProgress = 0.0;
+  String? _aiSuggestion;
+
   String get searchQuery => _searchQuery;
   String get sortBy => _sortBy;
   String get filterTipoPago => _filterTipoPago;
@@ -311,6 +317,12 @@ class EntregasProvider extends ChangeNotifier {
   double get resumenTotalBruto => _resumenTotalBruto;
   double get resumenTotalACobrar => _resumenTotalACobrar;
   double get resumenTotalOpcional => _resumenTotalOpcional;
+  
+  // Getters for Gamification
+  int get streakDays => _streakDays;
+  String get currentLevel => _currentLevel;
+  double get levelProgress => _levelProgress;
+  String? get aiSuggestion => _aiSuggestion;
 
   void setSearchQuery(String query) {
     _searchQuery = query;
@@ -388,14 +400,21 @@ class EntregasProvider extends ChangeNotifier {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
         _albaranes = lista.map((e) => AlbaranEntrega.fromJson(e)).toList();
         
-        // Parse resumen totals with improved null safety
+        // Parse resumen totals
         final resumen = response['resumen'] as Map<String, dynamic>? ?? {};
         _resumenTotalBruto = (resumen['totalBruto'] ?? 0).toDouble();
         _resumenTotalACobrar = (resumen['totalACobrar'] ?? 0).toDouble();
         _resumenTotalOpcional = (resumen['totalOpcional'] ?? 0).toDouble();
         
+        // Parse Gamification & AI
+        final gamification = response['gamification'] as Map<String, dynamic>? ?? {};
+        _streakDays = gamification['streakDays'] ?? 0;
+        _currentLevel = gamification['level'] ?? 'BRONCE';
+        _levelProgress = (gamification['progress'] ?? 0).toDouble();
+        _aiSuggestion = response['aiSuggestion']; // can be null
+        
         print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada');
-        print('[ENTREGAS_PROVIDER] Resumen: bruto=$_resumenTotalBruto, aCobrar=$_resumenTotalACobrar, opcional=$_resumenTotalOpcional');
+        print('[ENTREGAS_PROVIDER] Gamification: Level=$_currentLevel, Streak=$_streakDays');
       } else {
         _error = response['error'] ?? 'Error cargando entregas';
       }
