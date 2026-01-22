@@ -17,9 +17,7 @@ class HolographicKpiDashboard extends StatefulWidget {
   final double montoCobrado;
   final bool isLoading;
   
-  // AI suggestion (optional)
-  final String? aiSuggestion;
-  final VoidCallback? onAiAction;
+
 
   const HolographicKpiDashboard({
     super.key,
@@ -30,8 +28,6 @@ class HolographicKpiDashboard extends StatefulWidget {
     required this.totalMonto,
     this.montoCobrado = 0,
     this.isLoading = false,
-    this.aiSuggestion,
-    this.onAiAction,
   });
 
   @override
@@ -101,8 +97,8 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 8), // Reduced vertical margin
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), // Compact padding
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -181,11 +177,12 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         
         const SizedBox(height: 12),
         
-        // AI Suggestion (if present)
-        if (widget.aiSuggestion != null) ...[
-          const SizedBox(height: 12),
-          _buildAiSuggestion(),
-        ],
+        if (widget.isLoading)
+          const LinearProgressIndicator(
+            backgroundColor: Colors.transparent,
+            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.neonBlue),
+            minHeight: 2,
+          ),
       ],
     );
   }

@@ -321,6 +321,11 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 
         logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} → albaranes=${filteredAlbaranes.length}, totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}`);
 
+        // Debug first row importe to see why it fails
+        if (rows.length > 0) {
+            logger.info(`[ENTREGAS_DEBUG] First Row Importe: Raw='${rows[0].IMPORTEBRUTO}', Parsed=${parseFloat(rows[0].IMPORTEBRUTO)}, esCTR=${albaranes[0].esCTR}`);
+        }
+
         res.json({
             success: true,
             albaranes: filteredAlbaranes,
@@ -330,9 +335,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 totalBruto: Math.round(totalBruto * 100) / 100,
                 totalACobrar: Math.round(totalACobrar * 100) / 100,
                 totalOpcional: Math.round(totalOpcional * 100) / 100
-            },
-            // --- AI Suggestions (Professional) ---
-            aiSuggestion: getSmartSuggestions(filteredAlbaranes)
+            }
         });
     } catch (error) {
         logger.error(`Error in /pendientes: ${error.message}`);

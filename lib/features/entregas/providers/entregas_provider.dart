@@ -303,9 +303,6 @@ class EntregasProvider extends ChangeNotifier {
   double _resumenTotalACobrar = 0;
   double _resumenTotalOpcional = 0;
 
-  // AI suggestion
-  String? _aiSuggestion;
-
   String get searchQuery => _searchQuery;
   String get sortBy => _sortBy;
   String get filterTipoPago => _filterTipoPago;
@@ -315,9 +312,6 @@ class EntregasProvider extends ChangeNotifier {
   double get resumenTotalACobrar => _resumenTotalACobrar;
   double get resumenTotalOpcional => _resumenTotalOpcional;
   
-  // Getter for AI
-  String? get aiSuggestion => _aiSuggestion;
-
   void setSearchQuery(String query) {
     _searchQuery = query;
     cargarAlbaranesPendientes();
@@ -399,9 +393,6 @@ class EntregasProvider extends ChangeNotifier {
         _resumenTotalBruto = (resumen['totalBruto'] ?? 0).toDouble();
         _resumenTotalACobrar = (resumen['totalACobrar'] ?? 0).toDouble();
         _resumenTotalOpcional = (resumen['totalOpcional'] ?? 0).toDouble();
-        
-        // Parse AI Suggestion
-        _aiSuggestion = response['aiSuggestion']; // can be null
         
         print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada');
       } else {

@@ -229,9 +229,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               0.0,
               (sum, item) => sum + item.importeTotal,
             ),
+            totalMonto: entregas.albaranes.fold(
+              0.0,
+              (sum, item) => sum + item.importeTotal,
+            ),
             isLoading: entregas.isLoading,
-            aiSuggestion: entregas.aiSuggestion,
-            onAiAction: () => _showAiDetail(context, entregas.aiSuggestion),
           ),
 
           // CLIENT LIST
@@ -592,18 +594,10 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               curve: Curves.easeOutCubic,
             )),
             child: ListView.builder(
-              padding: const EdgeInsets.only(top: 8, bottom: 100),
+              padding: const EdgeInsets.only(top: 4, bottom: 100), // Reduced top padding
               itemCount: provider.albaranes.length,
               itemBuilder: (context, index) {
                 final albaran = provider.albaranes[index];
-                
-                // Client-side AI Heuristic for Card
-                String? cardAiSuggestion;
-                if (albaran.esCTR && albaran.importeTotal > 500) {
-                   cardAiSuggestion = 'Cobro prioritario alto valor';
-                } else if (albaran.esCTR) {
-                   cardAiSuggestion = 'Cobro obligatorio';
-                }
                 
                 return Column(
                   children: [
@@ -612,15 +606,14 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
                       onTap: () => _showDetailDialog(albaran),
                       onSwipeComplete: () => _handleQuickComplete(albaran),
                       onSwipeNote: () => _showQuickNoteDialog(albaran),
-                      aiSuggestion: cardAiSuggestion,
                     ),
                     if (index < provider.albaranes.length - 1)
                       Divider(
                         height: 1,
                         thickness: 1,
-                        color: AppTheme.borderColor.withOpacity(0.5),
-                        indent: 16,
-                        endIndent: 16,
+                        color: AppTheme.borderColor.withOpacity(0.3),
+                        indent: 12, // Tighter indent
+                        endIndent: 12,
                       ),
                   ],
                 );
