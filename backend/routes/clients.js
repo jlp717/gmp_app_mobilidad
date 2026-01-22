@@ -51,6 +51,8 @@ const getClientsHandler = async (req, res) => {
 
     // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT
     // Now includes clients from vendor's routes even if they have no sales yet
+    // For clients without sales, we get the predominant vendor of their route
+    // Also includes visit/delivery days from LACLAE
     const clients = await query(`
       SELECT
         C.CODIGOCLIENTE as code,
@@ -64,7 +66,12 @@ const getClientsHandler = async (req, res) => {
         COALESCE(MAX(S.LAST_PURCHASE_DATE), 0) as lastDateInt,
         COALESCE(MAX(S.TOTAL_MARGIN), 0) as totalMargin,
         MAX(C.ANOBAJA) as yearInactive,
-        MAX(TRIM(V.NOMBREVENDEDOR)) as vendorName
+        COALESCE(MAX(TRIM(V.NOMBREVENDEDOR)), MAX(TRIM(RV.NOMBREVENDEDOR))) as vendorName,
+        COALESCE(MAX(S.LAST_VENDOR), MAX(RV.CODIGOVENDEDOR)) as vendorCode,
+        MAX(D.VIS_L) as visL, MAX(D.VIS_M) as visM, MAX(D.VIS_X) as visX,
+        MAX(D.VIS_J) as visJ, MAX(D.VIS_V) as visV, MAX(D.VIS_S) as visS,
+        MAX(D.DEL_L) as delL, MAX(D.DEL_M) as delM, MAX(D.DEL_X) as delX,
+        MAX(D.DEL_J) as delJ, MAX(D.DEL_V) as delV, MAX(D.DEL_S) as delS
       FROM DSEDAC.CLI C
       LEFT JOIN(
         SELECT
@@ -105,6 +112,33 @@ const getClientsHandler = async (req, res) => {
         ) LastV ON Stats.LCCDCL = LastV.LCCDCL
       ) S ON C.CODIGOCLIENTE = S.CODIGOCLIENTEALBARAN
       LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
+      LEFT JOIN (
+        SELECT CODIGORUTA, CODIGOVENDEDOR, NOMBREVENDEDOR
+        FROM (
+          SELECT
+            CLI_R.CODIGORUTA,
+            LAC_R.R1_T8CDVD as CODIGOVENDEDOR,
+            VDD_R.NOMBREVENDEDOR,
+            ROW_NUMBER() OVER(PARTITION BY CLI_R.CODIGORUTA ORDER BY COUNT(*) DESC) as RN
+          FROM DSED.LACLAE LAC_R
+          JOIN DSEDAC.CLI CLI_R ON LAC_R.LCCDCL = CLI_R.CODIGOCLIENTE
+          JOIN DSEDAC.VDD VDD_R ON LAC_R.R1_T8CDVD = VDD_R.CODIGOVENDEDOR
+          WHERE LAC_R.LCAADC >= ${MIN_YEAR}
+            AND LAC_R.TPDC = 'LAC'
+            AND CLI_R.CODIGORUTA IS NOT NULL
+          GROUP BY CLI_R.CODIGORUTA, LAC_R.R1_T8CDVD, VDD_R.NOMBREVENDEDOR
+        ) WHERE RN = 1
+      ) RV ON C.CODIGORUTA = RV.CODIGORUTA AND S.LAST_VENDOR IS NULL
+      LEFT JOIN (
+        SELECT LCCDCL,
+          MAX(R1_T8DIVL) as VIS_L, MAX(R1_T8DIVM) as VIS_M, MAX(R1_T8DIVX) as VIS_X,
+          MAX(R1_T8DIVJ) as VIS_J, MAX(R1_T8DIVV) as VIS_V, MAX(R1_T8DIVS) as VIS_S,
+          MAX(R1_T8DIRL) as DEL_L, MAX(R1_T8DIRM) as DEL_M, MAX(R1_T8DIRX) as DEL_X,
+          MAX(R1_T8DIRJ) as DEL_J, MAX(R1_T8DIRV) as DEL_V, MAX(R1_T8DIRS) as DEL_S
+        FROM DSED.LACLAE
+        WHERE LCAADC >= ${MIN_YEAR} AND R1_T8CDVD IS NOT NULL
+        GROUP BY LCCDCL
+      ) D ON C.CODIGOCLIENTE = D.LCCDCL
       WHERE C.ANOBAJA = 0
         AND (S.LAST_VENDOR IS NOT NULL ${routeFilter})
         ${searchFilter}
@@ -131,7 +165,25 @@ const getClientsHandler = async (req, res) => {
         if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
         if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
 
-        const clientDays = getClientDays(null, c.CODE?.trim());
+        // Build visit days from query results
+        const visitDays = [];
+        const visitDaysShort = [];
+        if (c.VISL === 'S') { visitDays.push('lunes'); visitDaysShort.push('L'); }
+        if (c.VISM === 'S') { visitDays.push('martes'); visitDaysShort.push('M'); }
+        if (c.VISX === 'S') { visitDays.push('miercoles'); visitDaysShort.push('X'); }
+        if (c.VISJ === 'S') { visitDays.push('jueves'); visitDaysShort.push('J'); }
+        if (c.VISV === 'S') { visitDays.push('viernes'); visitDaysShort.push('V'); }
+        if (c.VISS === 'S') { visitDays.push('sabado'); visitDaysShort.push('S'); }
+
+        // Build delivery days from query results
+        const deliveryDays = [];
+        const deliveryDaysShort = [];
+        if (c.DELL === 'S') { deliveryDays.push('lunes'); deliveryDaysShort.push('L'); }
+        if (c.DELM === 'S') { deliveryDays.push('martes'); deliveryDaysShort.push('M'); }
+        if (c.DELX === 'S') { deliveryDays.push('miercoles'); deliveryDaysShort.push('X'); }
+        if (c.DELJ === 'S') { deliveryDays.push('jueves'); deliveryDaysShort.push('J'); }
+        if (c.DELV === 'S') { deliveryDays.push('viernes'); deliveryDaysShort.push('V'); }
+        if (c.DELS === 'S') { deliveryDays.push('sabado'); deliveryDaysShort.push('S'); }
 
         return {
           code: c.CODE?.trim(),
@@ -151,12 +203,13 @@ const getClientsHandler = async (req, res) => {
           numOrders: parseInt(c.NUMORDERS) || 0,
           lastPurchase: formatDateFromInt(c.LASTDATEINT),
           vendorName: c.VENDORNAME?.trim(),
+          vendorCode: c.VENDORCODE?.trim(),
 
-          // Visit & Delivery Days
-          visitDays: clientDays?.visitDays || [],
-          visitDaysShort: clientDays?.visitDaysShort || '',
-          deliveryDays: clientDays?.deliveryDays || [],
-          deliveryDaysShort: clientDays?.deliveryDaysShort || ''
+          // Visit & Delivery Days (from DB query)
+          visitDays: visitDays,
+          visitDaysShort: visitDaysShort.join(''),
+          deliveryDays: deliveryDays,
+          deliveryDaysShort: deliveryDaysShort.join('')
         };
       }),
       hasMore: clients.length === parseInt(limit)
