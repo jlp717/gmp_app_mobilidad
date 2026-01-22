@@ -32,6 +32,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   final TextEditingController _observacionesController = TextEditingController();
   final TextEditingController _dniController = TextEditingController();
   final TextEditingController _nombreController = TextEditingController();
+  final FocusNode _dniFocus = FocusNode();
+  final FocusNode _nombreFocus = FocusNode();
+  
   final SignatureController _signatureController = SignatureController(
     penStrokeWidth: 3,
     penColor: Colors.white,
@@ -41,6 +44,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   // Product verification state
   final Map<String, bool> _productChecked = {};
   final Map<String, int> _productQuantities = {};
+  
+  // Data state
+  List<EntregaItem> _items = [];
+  bool _isLoadingItems = true;
+  String? _itemsError;
+  
+  // Helpers
+  List<String> _suggestedNames = [];
+  List<String> _suggestedDnis = [];
 
   // Payment state
   String _selectedPaymentMethod = 'EFECTIVO';
@@ -61,6 +73,63 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (widget.albaran.esCTR) {
       _selectedPaymentMethod = 'EFECTIVO';
     }
+    
+    _loadItems();
+    _loadSignerSuggestions();
+  }
+
+  Future<void> _loadItems() async {
+    try {
+      final provider = Provider.of<EntregasProvider>(context, listen: false);
+      final items = await provider.getAlbaranDetalle(
+        widget.albaran.numeroAlbaran,
+        widget.albaran.ejercicio,
+        widget.albaran.serie,
+        widget.albaran.terminal,
+      );
+      
+      if (mounted) {
+        setState(() {
+          _items = items;
+          _isLoadingItems = false;
+          
+          for (var item in items) {
+             if (!_productChecked.containsKey(item.codigoArticulo)) {
+                _productChecked[item.codigoArticulo] = true;
+                _productQuantities[item.codigoArticulo] = item.cantidadPedida.toInt();
+             }
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _itemsError = e.toString();
+          _isLoadingItems = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadSignerSuggestions() async {
+    try {
+      final codigoCliente = widget.albaran.codigoCliente;
+      if (codigoCliente == null) return;
+      
+      final response = await ApiClient.get('/entregas/signers/$codigoCliente');
+      if (response['success'] == true && mounted) {
+        final signers = response['signers'] as List;
+        setState(() {
+          _suggestedDnis = signers.map((s) => s['DNI'].toString().trim()).toList();
+          // Store names map or just list? For now just names list for autocomplete if needed
+          _suggestedNames = signers.map((s) => s['NOMBRE'].toString().trim()).toList();
+          
+          // Pre-fill if only 1 recent signer? No, better let user choose.
+        });
+      }
+    } catch (e) {
+      print('Error loading signers: $e');
+    }
   }
 
   @override
@@ -70,6 +139,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _observacionesController.dispose();
     _dniController.dispose();
     _nombreController.dispose();
+    _dniFocus.dispose();
+    _nombreFocus.dispose();
     _signatureController.dispose();
     super.dispose();
   }
@@ -120,6 +191,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Expanded(
               child: TabBarView(
                 controller: _tabController,
+                physics: const NeverScrollableScrollPhysics(), // Prevent swipe conflict with signature
                 children: [
                   _buildProductsTab(),
                   _buildPaymentTab(),
@@ -318,61 +390,38 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Widget _buildProductsTab() {
-    final provider = Provider.of<EntregasProvider>(context, listen: false);
+    if (_isLoadingItems) {
+      return _buildProductsLoading();
+    }
 
-    return FutureBuilder<List<EntregaItem>>(
-      future: provider.getAlbaranDetalle(
-        widget.albaran.numeroAlbaran,
-        widget.albaran.ejercicio,
-        widget.albaran.serie,
-        widget.albaran.terminal,
-      ),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildProductsLoading();
-        }
+    if (_itemsError != null) {
+      return _buildProductsError(_itemsError);
+    }
 
-        if (snapshot.hasError) {
-          return _buildProductsError(snapshot.error);
-        }
+    if (_items.isEmpty) {
+      return _buildProductsEmpty();
+    }
 
-        final lineas = snapshot.data ?? [];
+    return Column(
+      children: [
+        // Summary bar
+        _buildProductsSummary(_items),
 
-        if (lineas.isEmpty) {
-          return _buildProductsEmpty();
-        }
+        // Product list
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _items.length,
+            itemBuilder: (context, index) {
+              final linea = _items[index];
+              return _buildProductCard(linea);
+            },
+          ),
+        ),
 
-        // Initialize checked status
-        for (var linea in lineas) {
-          _productChecked.putIfAbsent(linea.codigoArticulo, () => true);
-          _productQuantities.putIfAbsent(
-            linea.codigoArticulo,
-            () => linea.cantidadPedida.toInt(),
-          );
-        }
-
-        return Column(
-          children: [
-            // Summary bar
-            _buildProductsSummary(lineas),
-
-            // Product list
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: lineas.length,
-                itemBuilder: (context, index) {
-                  final linea = lineas[index];
-                  return _buildProductCard(linea);
-                },
-              ),
-            ),
-
-            // Confirm all button
-            _buildConfirmAllButton(lineas),
-          ],
-        );
-      },
+        // Confirm all button
+        _buildConfirmAllButton(_items),
+      ],
     );
   }
 
@@ -1060,32 +1109,126 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   ],
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: _nombreController,
-                  style: const TextStyle(color: AppTheme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: 'Nombre y Apellidos *',
-                    prefixIcon: const Icon(Icons.person_outline, size: 20),
-                    filled: true,
-                    fillColor: AppTheme.darkBase,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+                const SizedBox(height: 16),
+                
+                // Name Autocomplete
+                RawAutocomplete<String>(
+                  textEditingController: _nombreController,
+                  focusNode: _nombreFocus,
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return const Iterable<String>.empty();
+                    }
+                    return _suggestedNames.where((String option) {
+                      return option.toUpperCase().contains(textEditingValue.text.toUpperCase());
+                    });
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                     return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onEditingComplete: onEditingComplete,
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: 'Nombre y Apellidos *',
+                        prefixIcon: const Icon(Icons.person_outline, size: 20),
+                        filled: true,
+                        fillColor: AppTheme.darkBase,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        color: AppTheme.darkCard,
+                        child: SizedBox(
+                          height: 200.0,
+                          width: MediaQuery.of(context).size.width - 80, // Adjust width
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(8.0),
+                            itemCount: options.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final String option = options.elementAt(index);
+                              return ListTile(
+                                tileColor: AppTheme.darkBase,
+                                title: Text(option, style: const TextStyle(color: AppTheme.textPrimary)),
+                                onTap: () {
+                                  onSelected(option);
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
+                
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _dniController,
-                  style: const TextStyle(color: AppTheme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: 'DNI / NIF *',
-                    prefixIcon: const Icon(Icons.badge_outlined, size: 20),
-                    filled: true,
-                    fillColor: AppTheme.darkBase,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+                
+                // DNI Autocomplete
+                RawAutocomplete<String>(
+                  textEditingController: _dniController,
+                  focusNode: _dniFocus,
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return const Iterable<String>.empty();
+                    }
+                    return _suggestedDnis.where((String option) {
+                      return option.toUpperCase().contains(textEditingValue.text.toUpperCase());
+                    });
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                     return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onEditingComplete: onEditingComplete,
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: 'DNI / NIF *',
+                        prefixIcon: const Icon(Icons.badge_outlined, size: 20),
+                        filled: true,
+                        fillColor: AppTheme.darkBase,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        color: AppTheme.darkCard,
+                        child: SizedBox(
+                          height: 200.0,
+                          width: MediaQuery.of(context).size.width - 80,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(8.0),
+                            itemCount: options.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final String option = options.elementAt(index);
+                              return ListTile(
+                                tileColor: AppTheme.darkBase,
+                                title: Text(option, style: const TextStyle(color: AppTheme.textPrimary)),
+                                onTap: () {
+                                  onSelected(option);
+                                  // Try to auto-fill regular name if possible? 
+                                  // For now keeping it simple.
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -1276,6 +1419,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         albaranId: widget.albaran.id,
         firma: base64Sig,
         observaciones: finalObs,
+        clientCode: widget.albaran.codigoCliente,
+        dni: _dniController.text.trim(),
+        nombre: _nombreController.text.trim(),
       );
 
       if (!mounted) return;

@@ -495,7 +495,7 @@ router.post('/uploads/photo', upload.single('photo'), (req, res) => {
 // ===================================
 router.post('/uploads/signature', async (req, res) => {
     try {
-        const { entregaId, firma } = req.body; // firma is base64
+        const { entregaId, firma, clientCode, dni, nombre } = req.body; // firma is base64
         if (!firma) return res.status(400).json({ success: false, error: 'No signature' });
 
         // Save base64 to file
@@ -505,9 +505,51 @@ router.post('/uploads/signature', async (req, res) => {
 
         require('fs').writeFileSync(filePath, base64Data, 'base64');
 
+        // Save Signer Info (Upsert)
+        if (clientCode && dni) {
+            try {
+                // Upsert logic (Delete + Insert is safest fallback)
+                await queryWithParams(`
+                    DELETE FROM JAVIER.CLIENT_SIGNERS 
+                    WHERE CODIGOCLIENTE = ? AND DNI = ?
+                `, [clientCode, dni], false, false);
+
+                await queryWithParams(`
+                    INSERT INTO JAVIER.CLIENT_SIGNERS (CODIGOCLIENTE, DNI, NOMBRE, LAST_USED, USAGE_COUNT)
+                    VALUES (?, ?, ?, CURRENT DATE, 1)
+                `, [clientCode, dni, nombre], false, true);
+
+                logger.info(`[SIGN] Saved signer info for client ${clientCode}: ${dni} - ${nombre}`);
+            } catch (dbError) {
+                logger.warn(`[SIGN] Failed to save signer info: ${dbError.message}`);
+                // Don't fail the request just for this
+            }
+        }
+
         res.json({ success: true, path: filePath });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ===================================
+// GET /signers/:clientCode
+// ===================================
+router.get('/signers/:clientCode', async (req, res) => {
+    try {
+        const { clientCode } = req.params;
+        const rows = await queryWithParams(`
+            SELECT DNI, NOMBRE
+            FROM JAVIER.CLIENT_SIGNERS
+            WHERE CODIGOCLIENTE = ?
+            ORDER BY LAST_USED DESC
+            FETCH FIRST 5 ROWS ONLY
+        `, [clientCode]);
+
+        res.json({ success: true, signers: rows });
+    } catch (error) {
+        logger.error(`Error get signers: ${error.message}`);
+        res.json({ success: true, signers: [] }); // Fail graceful
     }
 });
 

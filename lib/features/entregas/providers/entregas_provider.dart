@@ -453,16 +453,45 @@ class EntregasProvider extends ChangeNotifier {
   Future<bool> marcarEntregado({
     required String albaranId,
     String? observaciones,
-    String? firma,
+    String? firma, // base64
     List<String>? fotos,
     double? latitud,
     double? longitud,
+    // Signer info
+    String? clientCode,
+    String? dni,
+    String? nombre,
   }) async {
+    String? firmaPath;
+    
+    // 1. Upload signature if exists
+    if (firma != null) {
+      try {
+        print('[ENTREGAS_PROVIDER] Uploading signature...');
+        final res = await ApiClient.post('/entregas/uploads/signature', {
+           'entregaId': albaranId,
+           'firma': firma,
+           'clientCode': clientCode,
+           'dni': dni,
+           'nombre': nombre,
+        });
+        if (res['success'] == true) {
+           firmaPath = res['path'];
+           print('[ENTREGAS_PROVIDER] Signature saved: $firmaPath');
+        }
+      } catch (e) {
+        print('[ENTREGAS_PROVIDER] Error uploading signature: $e');
+        // Continue? Or fail? Let's continue but log it.
+        // Actually if signature fails, we should probably warn, but for now continue.
+      }
+    }
+
+    // 2. Update status
     return await _actualizarEstado(
       itemId: albaranId,
       estado: EstadoEntrega.entregado,
       observaciones: observaciones,
-      firma: firma,
+      firma: firmaPath, // Send path, not base64
       fotos: fotos,
       latitud: latitud,
       longitud: longitud,

@@ -229,10 +229,6 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               0.0,
               (sum, item) => sum + item.importeTotal,
             ),
-            totalMonto: entregas.albaranes.fold(
-              0.0,
-              (sum, item) => sum + item.importeTotal,
-            ),
             isLoading: entregas.isLoading,
           ),
 

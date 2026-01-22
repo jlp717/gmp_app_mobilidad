@@ -382,73 +382,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     );
   }
 
-  Widget _buildAiSuggestion() {
-    return GestureDetector(
-      onTap: widget.onAiAction,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppTheme.neonPurple.withOpacity(0.1),
-              AppTheme.neonBlue.withOpacity(0.1),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: AppTheme.neonPurple.withOpacity(0.3),
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.neonPurple.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.auto_awesome,
-                color: AppTheme.neonPurple,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'ANÁLISIS INTELIGENTE',
-                    style: TextStyle(
-                      color: AppTheme.neonPurple,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.aiSuggestion!,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 12,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right,
-              color: AppTheme.neonPurple,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
 }
 
