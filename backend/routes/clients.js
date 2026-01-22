@@ -31,7 +31,7 @@ const getClientsHandler = async (req, res) => {
     }
 
     // Build route filter: include clients from vendor's routes (even without sales)
-    // Routes are determined by vendor's historical sales (routes with >= 5 clients)
+    // If vendor has ANY sales in a route, show ALL clients from that route
     let routeFilter = '';
     if (vendedorCodes) {
       const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
@@ -45,8 +45,6 @@ const getClientsHandler = async (req, res) => {
             AND LAC_INNER.LCAADC >= ${MIN_YEAR}
             AND CLI_INNER.CODIGORUTA IS NOT NULL
             AND CLI_INNER.CODIGORUTA <> ''
-          GROUP BY CLI_INNER.CODIGORUTA
-          HAVING COUNT(DISTINCT LAC_INNER.LCCDCL) >= 5
         )
       `;
     }

@@ -4,18 +4,25 @@ import '../api/api_client.dart';
 import '../api/api_config.dart';
 import '../models/user_model.dart';
 import 'dart:convert';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// Authentication provider with role detection
 class AuthProvider with ChangeNotifier {
   UserModel? _currentUser;
   bool _isLoading = false;
   String? _error;
+  bool _initialized = false;
+  bool _updateAvailable = false;
+  String _updateMessage = '';
   List<String> _vendedorCodes = [];
 
   UserModel? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isAuthenticated => _currentUser != null;
+  bool get isInitialized => _initialized;
+  bool get updateAvailable => _updateAvailable;
+  String get updateMessage => _updateMessage;
   bool get isDirector => _currentUser?.isDirector ?? false;
   List<String> get vendedorCodes => _vendedorCodes;
 

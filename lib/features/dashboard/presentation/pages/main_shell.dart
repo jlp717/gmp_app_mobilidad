@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
@@ -41,8 +42,50 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    // Verify connection on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authProvider = context.read<AuthProvider>();
+      _checkConnection();
+      _checkForUpdates();
+    });
+  }
+  
+  void _checkForUpdates() {
+     final auth = context.read<AuthProvider>();
+     if (auth.updateAvailable) {
+        showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+                title: const Text('Actualización Disponible'),
+                content: Text(auth.updateMessage.isNotEmpty ? auth.updateMessage : 'Hay una nueva versión de la app.'),
+                backgroundColor: AppTheme.darkCard,
+                titleTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                contentTextStyle: const TextStyle(color: Colors.white70),
+                actions: [
+                    TextButton(
+                        onPressed: () {
+                             // Dismiss (optional) or force?
+                             // User asked to notify, not necessarily block.
+                             Navigator.pop(context);
+                        },
+                        child: const Text('Más tarde'),
+                    ),
+                    ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonGreen),
+                        onPressed: () {
+                             // Open Play Store
+                            launchUrl(Uri.parse('https://play.google.com/store/apps/details?id=com.maripepa.gmp_app_mobilidad'), mode: LaunchMode.externalApplication);
+                        },
+                        child: const Text('ACTUALIZAR', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                    ),
+                ],
+            ),
+        );
+     }
+  }
+
+  Future<void> _checkConnection() async {
+    final authProvider = context.read<AuthProvider>();
       if (authProvider.currentUser != null) {
         final now = DateTime.now();
         
@@ -66,7 +109,6 @@ class _MainShellState extends State<MainShell> {
           });
         }
       }
-    });
   }
 
   // Show futuristic logout confirmation modal

@@ -49,6 +49,13 @@ android {
         multiDexEnabled = true
     }
 
+    packagingOptions {
+        doNotStrip("*/armeabi-v7a/*.so")
+        doNotStrip("*/arm64-v8a/*.so")
+        doNotStrip("*/x86/*.so")
+        doNotStrip("*/x86_64/*.so")
+    }
+
     buildTypes {
         release {
             // Disabled due to NDK strip issue on Windows - AAB is still valid
@@ -58,6 +65,9 @@ android {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug")
+            }
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
             }
         }
     }

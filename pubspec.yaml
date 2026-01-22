@@ -1,7 +1,7 @@
 name: gmp_app_mobilidad
 description: "Ultimate Sales Analytics - Ultra-Modern Tablet App for Sales Directors & Representatives"
 publish_to: 'none'
-version: 3.0.0+1
+version: 3.0.1+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -55,6 +55,7 @@ dependencies:
   share_plus: ^7.2.1           # Email/WhatsApp sharing
   pdf: ^3.10.7                 # PDF document generation
   printing: ^5.11.1            # PDF preview/print support
+  package_info_plus: ^9.0.0
 
 dev_dependencies:
   flutter_test:

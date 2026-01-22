@@ -227,7 +227,10 @@ router.post('/login', loginLimiter, async (req, res) => {
             isRepartidor: isRepartidor, // Root level flag
             showCommissions: vendor.HIDE_COMMISSIONS !== 'Y', // Root level flag
             vendedorCodes: vendedorCodes,
-            token: token
+            token: token,
+            // NEW: Update Notification
+            latestVersion: '3.0.1',
+            updateMessage: 'Nueva versión disponible. ¡Actualiza para ver los nuevos objetivos!'
         };
 
         logger.info(`✅ Login successful: ${vendedorCode} - ${vendedorName} (${response.user.role})`);
