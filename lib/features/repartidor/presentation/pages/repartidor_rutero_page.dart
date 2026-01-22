@@ -36,15 +36,6 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   String? _lastLoadedId;
   final TextEditingController _searchController = TextEditingController();
   
-  // Gamification state (will be loaded from backend)
-  int _streakDays = 0;
-  String _currentLevel = 'BRONCE';
-  double _levelProgress = 0.0;
-  String? _aiSuggestion;
-  
-  // Animation controllers
-  late AnimationController _listAnimController;
-
   @override
   void initState() {
     super.initState();
@@ -55,7 +46,6 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
-      _loadGamificationData();
       _listAnimController.forward();
     });
   }
@@ -131,18 +121,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
     }
   }
 
-  Future<void> _loadGamificationData() async {
-    // TODO: Load from backend when endpoint is ready
-    // For now, simulate some data
-    if (mounted) {
-      setState(() {
-        _streakDays = 3; // Simulated
-        _currentLevel = 'PLATA';
-        _levelProgress = 0.65;
-        _aiSuggestion = '2 clientes cercanos con cobro pendiente';
-      });
-    }
-  }
+
 
   void _onDaySelected(DateTime date) {
     HapticFeedback.selectionClick();
@@ -249,11 +228,6 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               (sum, item) => sum + item.importeTotal,
             ),
             isLoading: entregas.isLoading,
-            streakDays: _streakDays,
-            currentLevel: _currentLevel,
-            levelProgress: _levelProgress,
-            aiSuggestion: _aiSuggestion,
-            onAiAction: () => _showAiSuggestions(context),
           ),
 
           // CLIENT LIST
@@ -619,18 +593,23 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               itemBuilder: (context, index) {
                 final albaran = provider.albaranes[index];
                 
-                // Generate AI suggestion for some items (demo)
-                String? aiSuggestion;
-                if (albaran.esCTR && albaran.importeTotal > 500) {
-                  aiSuggestion = 'Cobro prioritario - importe elevado';
-                }
-                
-                return SmartDeliveryCard(
-                  albaran: albaran,
-                  onTap: () => _showDetailDialog(albaran),
-                  onSwipeComplete: () => _handleQuickComplete(albaran),
-                  onSwipeNote: () => _showQuickNoteDialog(albaran),
-                  aiSuggestion: aiSuggestion,
+                return Column(
+                  children: [
+                    SmartDeliveryCard(
+                      albaran: albaran,
+                      onTap: () => _showDetailDialog(albaran),
+                      onSwipeComplete: () => _handleQuickComplete(albaran),
+                      onSwipeNote: () => _showQuickNoteDialog(albaran),
+                    ),
+                    if (index < provider.albaranes.length - 1)
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: AppTheme.borderColor.withOpacity(0.5), // Increased visibility
+                        indent: 16,
+                        endIndent: 16,
+                      ),
+                  ],
                 );
               },
             ),

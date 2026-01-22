@@ -122,13 +122,26 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         // Process rows
         const albaranes = rows.map(row => {
             const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
-            const paymentInfo = paymentConditions[fp] || DEFAULT_PAYMENT;
 
+            // Try robust matching
+            let paymentInfo = paymentConditions[fp] || paymentConditions[parseInt(fp).toString()]; // Try '01' vs '1'
+            if (!paymentInfo) paymentInfo = DEFAULT_PAYMENT;
 
             // Determine if repartidor MUST collect money
-            const esCTR = paymentInfo.mustCollect;
-            // Can optionally collect (e.g., transferencia clients paying cash)
-            const puedeCobrarse = paymentInfo.canCollect || esCTR;
+            // Fallback: If DB config is default/false, check string patterns (Legacy Logic)
+            let esCTR = paymentInfo.mustCollect;
+            let puedeCobrarse = paymentInfo.canCollect;
+
+            if (!paymentInfo.mustCollect && !paymentInfo.canCollect && paymentInfo === DEFAULT_PAYMENT) {
+                if (fp === 'CTR' || fp.includes('CONTADO') || fp.includes('METALICO')) {
+                    esCTR = true;
+                    puedeCobrarse = true;
+                } else if (fp.includes('REP') || fp.includes('MENSUAL')) {
+                    // Check specific logic? Assume optional for now or none
+                }
+            }
+            // Ensure consistency
+            if (esCTR) puedeCobrarse = true;
 
             const numeroFactura = row.NUMEROFACTURA || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
@@ -304,13 +317,13 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         // 3. Get Items from LAC (Simplified for ODBC compatibility)
         let itemsSql = `
             SELECT 
-                L.SECUENCIA ITEM_ID,
-                L.CODIGOARTICULO CODIGO,
-                L.DESCRIPCION DESCRIP,
-                L.CANTIDADUNIDADES QTY,
-                L.CANTIDADCAJAS CAJAS,
-                L.UNIDADMEDIDA UNIT,
-                L.IMPORTEVENTA TOTAL_LINEA
+                L.SECUENCIA AS ITEM_ID,
+                L.CODIGOARTICULO AS CODIGO,
+                L.DESCRIPCION AS DESCRIP,
+                L.CANTIDADUNIDADES AS QTY,
+                L.CANTIDADCAJAS AS CAJAS,
+                L.UNIDADMEDIDA AS UNIT,
+                L.IMPORTEVENTA AS TOTAL_LINEA
             FROM DSEDAC.LAC L
             WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
         `;
