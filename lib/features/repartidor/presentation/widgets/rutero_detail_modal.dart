@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'dart:typed_data';
 import 'dart:convert';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/network/api_client.dart';
+import '../../../../core/api/api_client.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 
 /// Rutero Detail Modal - Futuristic Redesign v2

@@ -244,11 +244,27 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 
             // Robust Money Parser
             const parseMoney = (val) => {
-                if (!val) return 0;
+                if (val === null || val === undefined) return 0;
                 if (typeof val === 'number') return val;
-                // Replace comma with dot, remove non-numeric chars except dot and minus
-                const cleaned = val.toString().replace(',', '.').replace(/[^\d.-]/g, '');
-                return parseFloat(cleaned) || 0;
+
+                // Convert to string
+                const str = val.toString();
+
+                // If it looks like '1.200,50' (European): remove dots, replace comma with dot
+                if (str.includes(',') && str.includes('.')) {
+                    // Assume dot is thousand separator if it appears before comma
+                    if (str.indexOf('.') < str.indexOf(',')) {
+                        return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
+                    }
+                }
+
+                // If it has only comma '120,50', replace with dot
+                if (str.includes(',') && !str.includes('.')) {
+                    return parseFloat(str.replace(',', '.')) || 0;
+                }
+
+                // If it has only dot '120.50' or '1200', just parse
+                return parseFloat(str) || 0;
             };
 
             const importeParsed = parseMoney(row.IMPORTEBRUTO);
