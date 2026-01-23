@@ -52,6 +52,13 @@ const getClientsHandler = async (req, res) => {
             WHERE OWNER.CODIGOCLIENTE = C.CODIGOCLIENTE
               AND OWNER.CODIGOVENDEDOR NOT IN (${vendorList})
         )
+        AND (
+             -- Show if it has an entry in CDVI (Explicit Owner = Me, guaranteed by NOT EXISTS above)
+             (SELECT COUNT(*) FROM DSEDAC.CDVI O WHERE O.CODIGOCLIENTE = C.CODIGOCLIENTE) > 0
+             OR
+             -- Show if Orphan (No CDVI) AND Route Dominant Vendor is Me
+             RV.CODIGOVENDEDOR IN (${vendorList})
+        )
       `;
     }
 
