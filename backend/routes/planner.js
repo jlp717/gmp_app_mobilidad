@@ -402,6 +402,15 @@ router.post('/rutero/config', async (req, res) => {
 
         await conn.commit();
 
+        // Invalidate cache for this vendor's config to ensure immediate updates
+        try {
+            const cachePattern = `rutero:config:v2:${vendedor}:*`;
+            await deleteCachePattern(cachePattern);
+            logger.info(`♻️ Cache invalidated for pattern: ${cachePattern}`);
+        } catch (cacheErr) {
+            logger.warn(`Cache invalidation failed: ${cacheErr.message}`);
+        }
+
         try {
             for (const item of orden) {
                 if (item.cliente) {
