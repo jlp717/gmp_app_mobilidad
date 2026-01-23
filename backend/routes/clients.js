@@ -47,6 +47,11 @@ const getClientsHandler = async (req, res) => {
             AND CLI_INNER.CODIGORUTA <> ''
             AND (CLI_INNER.ANOBAJA = 0 OR CLI_INNER.ANOBAJA IS NULL)
         )
+        AND NOT EXISTS (
+            SELECT 1 FROM DSEDAC.CDVI OWNER
+            WHERE OWNER.CODIGOCLIENTE = C.CODIGOCLIENTE
+              AND OWNER.CODIGOVENDEDOR NOT IN (${vendorList})
+        )
       `;
     }
 
