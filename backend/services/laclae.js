@@ -187,7 +187,7 @@ async function loadLaclaeCache() {
 }
 
 // Get clients for a day from cache
-function getClientsForDay(vendedorCodes, day, role = 'comercial') {
+function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverrides = false) {
     if (!laclaeCacheReady) return null; // Use fallback
 
     const dayLower = day.toLowerCase();
@@ -204,16 +204,20 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial') {
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
             const days = isDelivery ? data.deliveryDays : data.visitDays;
 
-            // Check override
-            const override = configClients[clientCode];
-
             let shouldInclude = false;
 
-            if (override) {
-                // If overridden, ONLY appear if override day matches
-                if (override.day === dayLower) shouldInclude = true;
+            if (!ignoreOverrides) {
+                // Check override
+                const override = configClients[clientCode];
+                if (override) {
+                    // If overridden, ONLY appear if override day matches
+                    if (override.day === dayLower) shouldInclude = true;
+                } else {
+                    // No override, use natural days
+                    if (days.includes(dayLower)) shouldInclude = true;
+                }
             } else {
-                // No override, use natural days
+                // Ignore overrides - PURE NATURAL ROUTE
                 if (days.includes(dayLower)) shouldInclude = true;
             }
 
@@ -222,14 +226,15 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial') {
             }
         });
 
-        // 2. Add clients that exist ONLY in RuteroConfig (orphan overrides? rare but possible)
-        // or clients that were missed above because they aren't in LACLAE cache for this vendor?
-        // Let's iterate configClients ensuring we catch anyone moved TO this day
-        Object.entries(configClients).forEach(([clientCode, cfg]) => {
-            if (cfg.day === dayLower) {
-                finalClients.add(clientCode);
-            }
-        });
+        // 2. Add clients that exist ONLY in RuteroConfig (orphan overrides)
+        // ONLY if NOT ignoring overrides
+        if (!ignoreOverrides) {
+            Object.entries(configClients).forEach(([clientCode, cfg]) => {
+                if (cfg.day === dayLower) {
+                    finalClients.add(clientCode);
+                }
+            });
+        }
     });
 
     return Array.from(finalClients);

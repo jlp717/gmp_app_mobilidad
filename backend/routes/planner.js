@@ -3,7 +3,8 @@ const router = express.Router();
 const logger = require('../middleware/logger');
 const { query, getPool } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
-const { TTL } = require('../services/redis-cache');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL, deleteCachePattern } = require('../services/redis-cache');
 const {
     getCurrentDate,
     buildVendedorFilter,
@@ -559,7 +560,9 @@ router.get('/rutero/positions/:day', async (req, res) => {
 router.get('/rutero/day/:day', async (req, res) => {
     try {
         const { day } = req.params;
-        const { vendedorCodes, year, role, month, week } = req.query; // Added month, week
+        const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query; // Added ignoreOverrides
+        const shouldIgnoreOverrides = ignoreOverrides === 'true';
+
         const now = getCurrentDate();
         const currentYear = parseInt(year) || now.getFullYear();
         const previousYear = currentYear - 1;
@@ -574,12 +577,12 @@ router.get('/rutero/day/:day', async (req, res) => {
         if (month && week) {
             const m = parseInt(month);
             const w = parseInt(week);
-            
+
             // Calculate the Sunday that ends the PREVIOUS week (completed weeks)
             // If viewing week 1, there are no completed weeks yet -> use Jan 1
             // If viewing week 2, use end of week 1
             // If viewing week 3, use end of week 2, etc.
-            
+
             const firstDayOfMonth = new Date(currentYear, m - 1, 1);
             // Find first Sunday of month (or end of first week)
             let daysUntilSunday = (7 - firstDayOfMonth.getDay()) % 7;
@@ -606,7 +609,7 @@ router.get('/rutero/day/:day', async (req, res) => {
             const d = dayOfWeek === 0 ? 7 : dayOfWeek;
             referenceDate = new Date(today);
             referenceDate.setDate(today.getDate() - d);
-            
+
             // Calculate completed weeks from start of year
             const startOfYear = new Date(currentYear, 0, 1);
             completedWeeks = Math.floor((referenceDate - startOfYear) / (7 * 86400000)) + 1;
@@ -635,7 +638,8 @@ router.get('/rutero/day/:day', async (req, res) => {
         }
 
         // 1. Get client codes for the selected day from CACHE (Fast)
-        let dayClientCodes = getClientsForDay(vendedorCodes, day, role || 'comercial');
+        // Pass ignoreOverrides flag
+        let dayClientCodes = getClientsForDay(vendedorCodes, day, role || 'comercial', shouldIgnoreOverrides);
 
         if (!dayClientCodes) {
             logger.warn(`[RUTERO DAY] Cache not ready`);
@@ -670,6 +674,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 TELEFONO2 as PHONE2
             FROM DSEDAC.CLI
             WHERE CODIGOCLIENTE IN (${safeClientFilter})
+              AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
         `;
         const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:v2:${clientsHash}`, TTL.LONG);
 
@@ -793,7 +798,9 @@ router.get('/rutero/day/:day', async (req, res) => {
         // Retrieve custom order from cache if possible, or query
         const primaryVendor = vendedorCodes ? vendedorCodes.split(',')[0].trim() : '';
         let orderMap = new Map();
-        if (primaryVendor) {
+
+        // Only load custom order if NOT ignoring overrides
+        if (primaryVendor && !shouldIgnoreOverrides) {
             const configRows = await cachedQuery(query, `
                 SELECT CLIENTE, ORDEN 
                 FROM JAVIER.RUTERO_CONFIG 
@@ -1066,10 +1073,10 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         // Group by month and calculate comparisons
         const monthMap = {};
         for (let m = 1; m <= 12; m++) {
-            monthMap[m] = { 
-                month: m, 
-                currentYear: 0, 
-                lastYear: 0 
+            monthMap[m] = {
+                month: m,
+                currentYear: 0,
+                lastYear: 0
             };
         }
 
@@ -1085,8 +1092,8 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
 
         // Build monthlyData array with variations
         const monthlyData = Object.values(monthMap).map(m => {
-            const variation = m.lastYear > 0 
-                ? ((m.currentYear - m.lastYear) / m.lastYear) * 100 
+            const variation = m.lastYear > 0
+                ? ((m.currentYear - m.lastYear) / m.lastYear) * 100
                 : (m.currentYear > 0 ? 100 : 0);
             return {
                 month: m.month,
@@ -1101,8 +1108,8 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         // Calculate yearly totals
         const totalCurrentYear = Object.values(monthMap).reduce((sum, m) => sum + m.currentYear, 0);
         const totalLastYear = Object.values(monthMap).reduce((sum, m) => sum + m.lastYear, 0);
-        const totalVariation = totalLastYear > 0 
-            ? ((totalCurrentYear - totalLastYear) / totalLastYear) * 100 
+        const totalVariation = totalLastYear > 0
+            ? ((totalCurrentYear - totalLastYear) / totalLastYear) * 100
             : (totalCurrentYear > 0 ? 100 : 0);
 
         // Determine if client is NEW (no sales in entire previous year)

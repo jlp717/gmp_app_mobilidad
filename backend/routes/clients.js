@@ -45,6 +45,7 @@ const getClientsHandler = async (req, res) => {
             AND LAC_INNER.LCAADC >= ${MIN_YEAR}
             AND CLI_INNER.CODIGORUTA IS NOT NULL
             AND CLI_INNER.CODIGORUTA <> ''
+            AND (CLI_INNER.ANOBAJA = 0 OR CLI_INNER.ANOBAJA IS NULL)
         )
       `;
     }
