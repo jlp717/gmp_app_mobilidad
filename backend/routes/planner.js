@@ -684,6 +684,11 @@ router.get('/rutero/day/:day', async (req, res) => {
             FROM DSEDAC.CLI
             WHERE CODIGOCLIENTE IN (${safeClientFilter})
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
+              AND NOT EXISTS (
+                  SELECT 1 FROM DSEDAC.CDVI OWNER
+                  WHERE OWNER.CODIGOCLIENTE = DSEDAC.CLI.CODIGOCLIENTE
+                    AND OWNER.CODIGOVENDEDOR NOT IN (${vendedorCodes ? vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',') : "''"})
+              )
         `;
         const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:v2:${clientsHash}`, TTL.LONG);
 
