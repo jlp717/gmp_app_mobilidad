@@ -411,6 +411,12 @@ router.post('/rutero/config', async (req, res) => {
         }
 
         try {
+            // Determine who modified (if req.user exists from auth middleware)
+            const modifier = req.user ? req.user.codigovendedor : 'SYSTEM';
+            const logDetail = modifier !== vendedor
+                ? `Reordenado por ${modifier} (Jefe/Admin) para ${vendedor}`
+                : `Reordenado por propietario`;
+
             for (const item of orden) {
                 if (item.cliente) {
                     await conn.query(`
@@ -418,7 +424,7 @@ router.post('/rutero/config', async (req, res) => {
                         (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES)
                         VALUES ('${vendedor}', 'REORDENAMIENTO', '${dia}', '${dia}', '${item.cliente}', 
                                 '', NULL, ${parseInt(item.posicion) || 0}, 
-                                'Reordenado en ${dia} a posición ${item.posicion}')
+                                '${logDetail} a posición ${item.posicion}')
                     `);
                 }
             }
@@ -427,6 +433,7 @@ router.post('/rutero/config', async (req, res) => {
         }
 
         await reloadRuteroConfig();
+        logger.info(`✅ Planner config updated for vendor ${vendedor} (by ${req.user ? req.user.codigovendedor : 'unknown'})`);
 
         try {
             let clientNamesMap = {};
