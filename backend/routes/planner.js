@@ -412,7 +412,7 @@ router.post('/rutero/config', async (req, res) => {
 
         try {
             // Determine who modified (if req.user exists from auth middleware)
-            const modifier = req.user ? req.user.codigovendedor : 'SYSTEM';
+            const modifier = req.user ? (req.user.code || req.user.codigovendedor || 'UNK') : 'SYSTEM';
             const logDetail = modifier !== vendedor
                 ? `Reordenado por ${modifier} (Jefe/Admin) para ${vendedor}`
                 : `Reordenado por propietario`;
@@ -576,7 +576,11 @@ router.get('/rutero/day/:day', async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query; // Added ignoreOverrides
-        const shouldIgnoreOverrides = ignoreOverrides === 'true';
+        const shouldIgnoreOverrides = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
+
+        if (shouldIgnoreOverrides) {
+            logger.info(`[RUTERO DAY] Ignoring overrides for ${vendedorCodes} on ${day}`);
+        }
 
         const now = getCurrentDate();
         const currentYear = parseInt(year) || now.getFullYear();
