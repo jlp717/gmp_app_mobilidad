@@ -3,7 +3,6 @@ const router = express.Router();
 const logger = require('../middleware/logger');
 const { query, getPool } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
-const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, deleteCachePattern } = require('../services/redis-cache');
 const {
     getCurrentDate,
