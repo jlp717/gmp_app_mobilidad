@@ -825,12 +825,15 @@ router.get('/rutero/day/:day', async (req, res) => {
 
         // Only load custom order if NOT ignoring overrides
         if (primaryVendor && !shouldIgnoreOverrides) {
-            const configRows = await cachedQuery(query, `
+            // Direct query (No Cache) to ensure instant updates
+            const configRows = await query(`
                 SELECT CLIENTE, ORDEN 
                 FROM JAVIER.RUTERO_CONFIG 
                 WHERE VENDEDOR = '${primaryVendor}' AND DIA = '${day.toLowerCase()}'
-             `, `rutero:config:v2:${primaryVendor}:${day.toLowerCase()}`, TTL.SHORT);
+             `, false); // false = no debug log clutter
+
             configRows.forEach(r => orderMap.set(r.CLIENTE.trim(), r.ORDEN));
+            logger.info(`[RUTERO SORT] Loaded ${configRows.length} overrides for ${primaryVendor}/${day}`);
         }
 
         const clients = currentYearRows.map(r => {
