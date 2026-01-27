@@ -9,6 +9,8 @@ const {
   MIN_YEAR,
   LACLAE_SALES_FILTER
 } = require('../utils/common');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const { getClientDays } = require('../services/laclae');
 
 
