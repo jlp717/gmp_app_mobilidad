@@ -229,8 +229,20 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
 
             if (shouldInclude) {
                 finalClients.add(clientCode);
+                if (String(clientCode).includes('9046')) {
+                    const daysStr = days.join(',');
+                    console.log(`✅ MATCH 9046: Day '${dayLower}' in [${daysStr}] -> ADDED`);
+                }
+            } else {
+                if (String(clientCode).includes('9046')) {
+                    const daysStr = days.join(',');
+                    const ovInfo = configClients[clientCode] ? `Override: ${configClients[clientCode].day}` : 'No Override';
+                    console.log(`❌ SKIP 9046: Day '${dayLower}' NOT in [${daysStr}] (${ovInfo})`);
+                }
             }
         });
+
+        console.log(`📊 getClientsForDay('${vendedor}', '${day}'): Found ${finalClients.size} so far`);
 
         // 2. Add clients that exist ONLY in RuteroConfig (orphan overrides)
         // ONLY if NOT ignoring overrides
