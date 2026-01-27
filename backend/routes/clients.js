@@ -68,7 +68,11 @@ const getClientsHandler = async (req, res) => {
     // Now includes clients from vendor's routes even if they have no sales yet
     // For clients without sales, we get the predominant vendor of their route
     // Also includes visit/delivery days from LACLAE
-    const clients = await query(`
+    // Generate Cache Key
+    const cacheKey = `clients:list:v3:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${limit}:${offset}`;
+
+    // Execute with Cache (5 minutes TTL)
+    const clients = await cachedQuery(query, `
       SELECT
         C.CODIGOCLIENTE as code,
         MAX(COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE))) as name,
