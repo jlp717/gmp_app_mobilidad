@@ -102,14 +102,14 @@ async function loadLaclaeCache() {
 
                 const entry = laclaeCache[row.VENDEDOR][row.CLIENTE];
 
-                // Map 'S' to days
-                if (row.VIS_D === 'S') entry.visitDays.add('domingo');
-                if (row.VIS_L === 'S') entry.visitDays.add('lunes');
-                if (row.VIS_M === 'S') entry.visitDays.add('martes');
-                if (row.VIS_X === 'S') entry.visitDays.add('miercoles');
-                if (row.VIS_J === 'S') entry.visitDays.add('jueves');
-                if (row.VIS_V === 'S') entry.visitDays.add('viernes');
-                if (row.VIS_S === 'S') entry.visitDays.add('sabado');
+                // Map 'S' to days (Handle 'S ' with trim)
+                if (String(row.VIS_D).trim() === 'S') entry.visitDays.add('domingo');
+                if (String(row.VIS_L).trim() === 'S') entry.visitDays.add('lunes');
+                if (String(row.VIS_M).trim() === 'S') entry.visitDays.add('martes');
+                if (String(row.VIS_X).trim() === 'S') entry.visitDays.add('miercoles');
+                if (String(row.VIS_J).trim() === 'S') entry.visitDays.add('jueves');
+                if (String(row.VIS_V).trim() === 'S') entry.visitDays.add('viernes');
+                if (String(row.VIS_S).trim() === 'S') entry.visitDays.add('sabado');
             });
 
             logger.info(`   ✅ Loaded ${cdviRows.length} route configs from CDVI`);
