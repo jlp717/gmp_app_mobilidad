@@ -165,7 +165,7 @@ const getClientsHandler = async (req, res) => {
       ORDER BY COALESCE(MAX(S.TOTAL_PURCHASES), 0) DESC
       OFFSET ${parseInt(offset)} ROWS
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `);
+    `, cacheKey, TTL.MEDIUM);
 
 
     const formatDateFromInt = (dateInt) => {
