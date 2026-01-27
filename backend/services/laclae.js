@@ -110,6 +110,10 @@ async function loadLaclaeCache() {
                 if (String(row.VIS_J).trim() === 'S') entry.visitDays.add('jueves');
                 if (String(row.VIS_V).trim() === 'S') entry.visitDays.add('viernes');
                 if (String(row.VIS_S).trim() === 'S') entry.visitDays.add('sabado');
+
+                if (row.CLIENTE === '4300009046') {
+                    logger.info(`🔍 DEBUG 9046: Vend '${row.VENDEDOR}' Flags L:${row.VIS_L} V:${row.VIS_V} -> Days: ${Array.from(entry.visitDays).join(',')}`);
+                }
             });
 
             logger.info(`   ✅ Loaded ${cdviRows.length} route configs from CDVI`);
