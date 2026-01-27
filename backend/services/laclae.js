@@ -114,6 +114,50 @@ async function loadLaclaeCache() {
 
             logger.info(`   ✅ Loaded ${cdviRows.length} route configs from CDVI`);
 
+            // 1.5. SYNC WITH MASTER DATA (CLI) - CRITICAL FIX
+            // Ensure clients are in the bucket of their ACTUAL current owner in CLI, 
+            // even if CDVI/LACLAE has an old vendor code.
+            logger.info('   Syncing ownership with DSEDAC.CLI...');
+            const cliRows = await conn.query(`
+                SELECT TRIM(CODIGOCLIENTE) as C, TRIM(CODIGOVENDEDOR) as V
+                FROM DSEDAC.CLI
+                WHERE (ANOBAJA = 0 OR ANOBAJA IS NULL)
+                  AND CODIGOVENDEDOR IS NOT NULL AND CODIGOVENDEDOR <> ''
+            `);
+
+            let movedCount = 0;
+            cliRows.forEach(row => {
+                const clientCode = row.C;
+                const correctVendor = row.V;
+
+                // Find where this client currently resides in cache
+                let foundOldVendor = null;
+                for (const [vCode, clients] of Object.entries(laclaeCache)) {
+                    if (clients[clientCode]) {
+                        foundOldVendor = vCode;
+                        break;
+                    }
+                }
+
+                if (foundOldVendor && foundOldVendor !== correctVendor) {
+                    // MOVE CLIENT to correct vendor bucket
+                    if (!laclaeCache[correctVendor]) laclaeCache[correctVendor] = {};
+
+                    // Copy data
+                    laclaeCache[correctVendor][clientCode] = laclaeCache[foundOldVendor][clientCode];
+
+                    // Delete from old (optional, but cleaner)
+                    delete laclaeCache[foundOldVendor][clientCode];
+                    movedCount++;
+                } else if (!foundOldVendor) {
+                    // Client not in CDVI/LACLAE but exists in CLI?
+                    // It won't have visit days, so no point adding it to Planner Cache yet 
+                    // (Planner needs visit days).
+                    // Just leave it.
+                }
+            });
+            logger.info(`   🔄 Reassigned ${movedCount} clients to correct CLI vendor`);
+
 
             // 2. Load Sales/History data from DSED.LACLAE (Legacy source + Delivery Info)
             // Load base LACLAE data (Optimized: Current + Previous Year only)
@@ -121,8 +165,9 @@ async function loadLaclaeCache() {
             const startYear = currentYear - 1;
 
             const rows = await conn.query(`
-        SELECT DISTINCT
-          R1_T8CDVD as VENDEDOR,
+            SELECT DISTINCT
+              R1_T8CDVD as VENDEDOR,
+            // ... (continue with LACLAE query)
           LCCDCL as CLIENTE,
           R1_T8DIVL as VIS_L, R1_T8DIVM as VIS_M, R1_T8DIVX as VIS_X,
           R1_T8DIVJ as VIS_J, R1_T8DIVV as VIS_V, R1_T8DIVS as VIS_S, R1_T8DIVD as VIS_D,
