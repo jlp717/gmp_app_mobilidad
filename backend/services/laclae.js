@@ -229,15 +229,14 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
 
             if (shouldInclude) {
                 finalClients.add(clientCode);
-                if (String(clientCode).includes('9046')) {
-                    const daysStr = days.join(',');
-                    console.log(`✅ MATCH 9046: Day '${dayLower}' in [${daysStr}] -> ADDED`);
+                if (['9046', '10334', '10203'].some(c => String(clientCode).includes(c))) {
+                    console.log(`✅ MATCH ${clientCode}: Day '${dayLower}' in [${days.join(',')}] -> ADDED`);
                 }
             } else {
-                if (String(clientCode).includes('9046')) {
+                if (['9046', '10334', '10203'].some(c => String(clientCode).includes(c))) {
                     const daysStr = days.join(',');
                     const ovInfo = configClients[clientCode] ? `Override: ${configClients[clientCode].day}` : 'No Override';
-                    console.log(`❌ SKIP 9046: Day '${dayLower}' NOT in [${daysStr}] (${ovInfo})`);
+                    console.log(`❌ SKIP ${clientCode}: Day '${dayLower}' NOT in [${daysStr}] (${ovInfo})`);
                 }
             }
         });
