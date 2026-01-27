@@ -696,7 +696,7 @@ router.get('/rutero/day/:day', async (req, res) => {
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
               -- (Removed NOT EXISTS filter: Shared clients must be visible)
         `;
-        const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:v2:${clientsHash}`, TTL.LONG);
+        const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG);
 
         // B. Current Sales (Heavy)
         const currentSalesSql = `
@@ -786,7 +786,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 WHERE CODIGO IN (${safeClientFilter})
                   AND LATITUD IS NOT NULL AND LATITUD <> 0
             `;
-            const gpsResult = await cachedQuery(query, gpsSql, `rutero:gps:v2:${clientsHash}`, TTL.LONG);
+            const gpsResult = await cachedQuery(query, gpsSql, `rutero:gps:v3:${clientsHash}`, TTL.LONG);
             gpsResult.forEach(g => {
                 gpsMap.set(g.CODIGO?.trim() || '', {
                     lat: parseFloat(g.LATITUD) || null,
