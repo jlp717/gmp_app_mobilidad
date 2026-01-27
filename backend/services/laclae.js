@@ -26,8 +26,11 @@ async function loadRuteroConfigCache(conn) {
             if (!r.VENDEDOR || !r.CLIENTE) return;
             if (!ruteroConfigCache[r.VENDEDOR]) ruteroConfigCache[r.VENDEDOR] = {};
 
-            ruteroConfigCache[r.VENDEDOR][r.CLIENTE] = {
-                day: r.DIA?.toLowerCase(),
+            if (!ruteroConfigCache[r.VENDEDOR][r.CLIENTE]) {
+                ruteroConfigCache[r.VENDEDOR][r.CLIENTE] = {};
+            }
+            // Store by DAY
+            ruteroConfigCache[r.VENDEDOR][r.CLIENTE][r.DIA?.toLowerCase()] = {
                 order: r.ORDEN
             };
         });
@@ -213,13 +216,18 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
             let shouldInclude = false;
 
             if (!ignoreOverrides) {
-                // Check override
-                const override = configClients[clientCode];
-                if (override) {
-                    // If overridden, ONLY appear if override day matches
-                    if (override.day === dayLower) shouldInclude = true;
+                // Check override FOR THIS DAY SPECIFICALLY
+                const clientOverrides = configClients[clientCode] || {};
+                const overrideForDay = clientOverrides[dayLower];
+
+                if (overrideForDay) {
+                    // Clearly overridden for this day -> INCLUDE
+                    shouldInclude = true;
                 } else {
-                    // No override, use natural days
+                    // No override for this specific day.
+                    // CHECK: Does the user expect this day to be blocked if another day has an override?
+                    // Previous logic: YES. New logic: NO (Additive/Fallback behaviors).
+                    // If we have Natural Visit Day AND no specific override blocking it -> INCLUDE
                     if (days.includes(dayLower)) shouldInclude = true;
                 }
             } else {
@@ -229,15 +237,6 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
 
             if (shouldInclude) {
                 finalClients.add(clientCode);
-                if (['9046', '10334', '10203'].some(c => String(clientCode).includes(c))) {
-                    console.log(`✅ MATCH ${clientCode}: Day '${dayLower}' in [${days.join(',')}] -> ADDED`);
-                }
-            } else {
-                if (['9046', '10334', '10203'].some(c => String(clientCode).includes(c))) {
-                    const daysStr = days.join(',');
-                    const ovInfo = configClients[clientCode] ? `Override: ${configClients[clientCode].day}` : 'No Override';
-                    console.log(`❌ SKIP ${clientCode}: Day '${dayLower}' NOT in [${daysStr}] (${ovInfo})`);
-                }
             }
         });
 
@@ -247,7 +246,8 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
         // ONLY if NOT ignoring overrides
         if (!ignoreOverrides) {
             Object.entries(configClients).forEach(([clientCode, cfg]) => {
-                if (cfg.day === dayLower) {
+                const clientOverrides = configClients[clientCode] || {};
+                if (clientOverrides[dayLower]) {
                     finalClients.add(clientCode);
                 }
             });
@@ -278,29 +278,34 @@ function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
             const days = isDelivery ? data.deliveryDays : data.visitDays;
 
             // Check if this client has an override
-            const override = configClients[clientCode];
+            // Check if this client has ANY overrides
+            const clientOverrides = configClients[clientCode] || {};
+            const overrideDays = Object.keys(clientOverrides);
 
-            if (override) {
-                // Client has override - only count on override day
-                const overrideDay = override.day;
-                if (counts.hasOwnProperty(overrideDay)) {
-                    clientsSet[overrideDay].add(clientCode);
+            // 1. Add overrides
+            overrideDays.forEach(day => {
+                if (counts.hasOwnProperty(day)) {
+                    clientsSet[day].add(clientCode);
                 }
-            } else {
-                // No override - use natural days from LACLAE
-                days.forEach(day => {
-                    if (counts.hasOwnProperty(day)) {
-                        clientsSet[day].add(clientCode);
-                    }
-                });
-            }
+            });
+
+            // 2. Add Natural Days (IF NOT OVERRIDDEN on that day? Or additive?)
+            // Fallback logic says: If no override for day, allow natural.
+            days.forEach(day => {
+                if (counts.hasOwnProperty(day) && !clientOverrides[day]) {
+                    clientsSet[day].add(clientCode);
+                }
+            });
         });
 
         // Also add clients that exist ONLY in RuteroConfig (orphan overrides)
-        Object.entries(configClients).forEach(([clientCode, cfg]) => {
-            if (counts.hasOwnProperty(cfg.day)) {
-                clientsSet[cfg.day].add(clientCode);
-            }
+        // Also add clients that exist ONLY in RuteroConfig (orphans)
+        Object.entries(configClients).forEach(([clientCode, overrides]) => {
+            Object.keys(overrides).forEach(day => {
+                if (counts.hasOwnProperty(day)) {
+                    clientsSet[day].add(clientCode);
+                }
+            });
         });
     });
 
@@ -423,9 +428,16 @@ function getClientCurrentDay(vendedor, clientCode) {
     const clientStr = String(clientCode).trim();
 
     // 1. Buscar override en RUTERO_CONFIG
+    // 1. Buscar overrides en RUTERO_CONFIG
     const configClients = ruteroConfigCache[vendedorStr] || {};
-    if (configClients[clientStr]) {
-        return configClients[clientStr].day || null;
+    const clientOverrides = configClients[clientStr];
+
+    if (clientOverrides) {
+        // Return the first override day found (not perfect but acceptable for simple current-day logic)
+        // Or if today matches execution day?
+        // This function is ambiguous in multi-day. Let's return the first key.
+        const days = Object.keys(clientOverrides);
+        if (days.length > 0) return days[0];
     }
 
     // 2. Buscar días naturales en LACLAE

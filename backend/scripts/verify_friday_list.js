@@ -5,21 +5,20 @@ async function verifyList() {
     try {
         await initDb();
         console.log('🔄 Reloading Cache...');
-        await loadLaclaeCache(); // Direct call ensures readiness
+        await loadLaclaeCache();
 
         console.log('📅 Fetching clients for Vendor 15 - Viernes...');
-        // Simulate "viernes"
-        const clients = await getClientsForDay('viernes', '15', 'comercial');
+        // Correct order: (vendedorCodes, day, role)
+        const clients = await getClientsForDay('15', 'viernes', 'comercial');
 
         console.log(`✅ Total Clients Returned: ${clients.length}`);
 
-        const target = clients.find(c => c.code.includes('9046'));
-        if (target) {
-            console.log('✅ FOUND Client 9046 in List:', target);
-        } else {
-            console.log('❌ Client 9046 NOT FOUND in List');
-            console.log('Sample of first 5:', clients.slice(0, 5));
-        }
+        // Log found status specifically for our targets
+        ['9046', '10334', '10203'].forEach(code => {
+            const found = clients.find(c => String(c).includes(code));
+            if (found) console.log(`✅ FOUND ${code} in List`);
+            else console.log(`❌ ${code} NOT FOUND in List`);
+        });
 
         process.exit(0);
     } catch (error) {
