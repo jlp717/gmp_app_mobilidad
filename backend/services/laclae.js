@@ -83,7 +83,7 @@ async function loadLaclaeCache() {
                     DIAVISITASABADOSN as VIS_S, 
                     DIAVISITADOMINGOSN as VIS_D
                 FROM DSEDAC.CDVI
-                WHERE (MARCAACTUALIZACION <> 'B' OR MARCAACTUALIZACION IS NULL)  -- Fix: Include NULLs preventing massive data loss
+                WHERE (MARCAACTUALIZACION <> 'B' OR MARCAACTUALIZACION IS NULL OR TRIM(MARCAACTUALIZACION) = '')  -- Fix: Handle spaces too
             `);
 
             const dayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
