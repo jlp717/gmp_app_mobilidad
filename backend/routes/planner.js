@@ -1060,6 +1060,35 @@ router.get('/diagnose/client/:code', async (req, res) => {
 });
 
 // =============================================================================
+// DIAGNOSTIC: Vendor Cache Dump
+// =============================================================================
+router.get('/diagnose/vendor/:code', (req, res) => {
+    try {
+        const vendorCode = req.params.code.trim();
+        const { getCachedVendorCodes, getWeekCountsFromCache, getTotalClientsFromCache } = require('../services/laclae');
+
+        const vendors = getCachedVendorCodes();
+        const hasVendor = vendors.includes(vendorCode);
+
+        // We can't access laclaeCache directly from here as it is not exported, 
+        // relying on helper methods.
+        const counts = getWeekCountsFromCache(vendorCode, 'comercial');
+        const total = getTotalClientsFromCache(vendorCode, 'comercial');
+
+        res.json({
+            vendorCode,
+            isInCache: hasVendor,
+            totalClientsInCache: total,
+            weekCounts: counts,
+            cachedVendorsSample: vendors.slice(0, 10),
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// =============================================================================
 // RUTERO CLIENT DETAIL - Year comparison data for client detail page
 // =============================================================================
 router.get('/rutero/client/:code/detail', async (req, res) => {
