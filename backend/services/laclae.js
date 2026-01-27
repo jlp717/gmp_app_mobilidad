@@ -113,6 +113,8 @@ async function loadLaclaeCache() {
             });
 
             logger.info(`   ✅ Loaded ${cdviRows.length} route configs from CDVI`);
+            const v15Count = cdviRows.filter(r => r.VENDEDOR === '15').length;
+            logger.info(`   🔎 DEBUG: Vendor 15 has ${v15Count} clients in CDVI cache`);
 
 
             // 2. Load Sales/History data from DSED.LACLAE (Legacy source + Delivery Info)
