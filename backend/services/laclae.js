@@ -84,7 +84,14 @@ async function loadLaclaeCache() {
                     DIAVISITAJUEVESSN as VIS_J, 
                     DIAVISITAVIERNESSN as VIS_V, 
                     DIAVISITASABADOSN as VIS_S, 
-                    DIAVISITADOMINGOSN as VIS_D
+                    DIAVISITADOMINGOSN as VIS_D,
+                    ORDENVISITALUNES as OR_L,
+                    ORDENVISITAMARTES as OR_M,
+                    ORDENVISITAMIERCOLES as OR_X,
+                    ORDENVISITAJUEVES as OR_J,
+                    ORDENVISITAVIERNES as OR_V,
+                    ORDENVISITASABADO as OR_S,
+                    ORDENVISITADOMINGO as OR_D
                 FROM DSEDAC.CDVI
                 WHERE (MARCAACTUALIZACION <> 'B' OR MARCAACTUALIZACION IS NULL OR TRIM(MARCAACTUALIZACION) = '')  -- Fix: Handle spaces too
             `);
@@ -99,7 +106,16 @@ async function loadLaclaeCache() {
                 if (!laclaeCache[row.VENDEDOR][row.CLIENTE]) {
                     laclaeCache[row.VENDEDOR][row.CLIENTE] = {
                         visitDays: new Set(),
-                        deliveryDays: new Set()
+                        deliveryDays: new Set(),
+                        naturalOrder: {
+                            lunes: Number(row.OR_L) || 0,
+                            martes: Number(row.OR_M) || 0,
+                            miercoles: Number(row.OR_X) || 0,
+                            jueves: Number(row.OR_J) || 0,
+                            viernes: Number(row.OR_V) || 0,
+                            sabado: Number(row.OR_S) || 0,
+                            domingo: Number(row.OR_D) || 0
+                        }
                     };
                 }
 
@@ -498,6 +514,24 @@ function getClientDays(vendorCode, clientCode) {
     return null;
 }
 
+/**
+ * Get natural order for a client on a specific day
+ */
+function getNaturalOrder(vendorCode, clientCode, day) {
+    if (!laclaeCacheReady || !vendorCode || !clientCode || !day) return 9999;
+
+    const vendorData = laclaeCache[vendorCode.trim()];
+    if (!vendorData) return 9999;
+
+    const clientData = vendorData[clientCode.trim()];
+    if (!clientData || !clientData.naturalOrder) return 9999;
+
+    const order = clientData.naturalOrder[day.toLowerCase()];
+    // If order is 0, return 9999 (so it falls back to Code/Name sort logic)
+    // Actually, planner will handle fallback logic. Let's return the raw value.
+    return order || 0;
+}
+
 module.exports = {
     loadLaclaeCache,
     getClientsForDay,
@@ -510,5 +544,8 @@ module.exports = {
     getCachedVendorCodes,
     reloadRuteroConfig,
     getClientCurrentDay,
-    getClientDays
+    reloadRuteroConfig,
+    getClientCurrentDay,
+    getClientDays,
+    getNaturalOrder
 };
