@@ -857,6 +857,20 @@ router.get('/rutero/day/:day', async (req, res) => {
             if (r.PHONE?.trim()) phones.push({ type: 'Teléfono', number: r.PHONE.trim() });
             if (r.PHONE2?.trim()) phones.push({ type: 'Móvil', number: r.PHONE2.trim() });
 
+            // Determine Order
+            let clientOrder = 9999;
+            if (shouldIgnoreOverrides) {
+                // "Original" Mode: Use Natural Order from CDVI
+                // If 0 (no natural order), remains 9999 (will be sorted by Code below)
+                const natOrder = getNaturalOrder(primaryVendor, code, day);
+                if (natOrder > 0) clientOrder = natOrder;
+            } else {
+                // "Custom" Mode: Use Config Order
+                if (orderMap.has(code)) {
+                    clientOrder = orderMap.get(code);
+                }
+            }
+
             return {
                 code,
                 name: r.NAME?.trim(),
@@ -877,45 +891,11 @@ router.get('/rutero/day/:day', async (req, res) => {
                 lon: gps.lon,
                 observation: note ? note.text : null,
                 observationBy: note ? note.modifiedBy : null,
-                // Determine Order
-                let clientOrder = 9999;
-                if(shouldIgnoreOverrides) {
-                    // "Original" Mode: Use Natural Order from CDVI
-                    // If 0 (no natural order), remains 9999 (will be sorted by Code below)
-                    const natOrder = getNaturalOrder(primaryVendor, code, day);
-                    if (natOrder > 0) clientOrder = natOrder;
-                } else {
-                    // "Custom" Mode: Use Config Order
-                    if(orderMap.has(code)) {
-                        clientOrder = orderMap.get(code);
-    }
-            }
-
-            return {
-    code,
-    name: r.NAME?.trim(),
-    address: r.ADDRESS?.trim(),
-    city: r.CITY?.trim(),
-    phone: r.PHONE?.trim(),
-    phone2: r.PHONE2?.trim(),
-    phones,
-    // Frontend expects 'status' object with raw numbers
-    status: {
-        ytdSales: salesCurrent,
-        ytdPrevYear: salesPrev, // Sales in equivalent period
-        prevYearTotal: prevYearTotalSales, // Total sales in entire previous year (for NEW detection)
-        yoyVariation: parseFloat(growth.toFixed(1)),
-        isPositive: growth >= 0
-    },
-    lat: gps.lat,
-    lon: gps.lon,
-    observation: note ? note.text : null,
-    observationBy: note ? note.modifiedBy : null,
-    order: clientOrder
-};
+                order: clientOrder
+            };
         });
 
-// SORTING STRATEGY
+        // SORTING STRATEGY
 clients.sort((a, b) => {
     // 1. Primary Sort: Order (Natural or Custom)
     if (a.order !== b.order) {
