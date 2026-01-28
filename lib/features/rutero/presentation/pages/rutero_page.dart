@@ -257,6 +257,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           'year': _selectedYear,
           'month': _selectedMonth,
           'week': _selectedWeek,
+          'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
         },
       );
 

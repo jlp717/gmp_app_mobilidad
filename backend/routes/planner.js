@@ -894,40 +894,40 @@ router.get('/rutero/day/:day', async (req, res) => {
         });
 
         // SORTING STRATEGY
-clients.sort((a, b) => {
-    // 1. Primary Sort: Order (Natural or Custom)
-    if (a.order !== b.order) {
-        return a.order - b.order;
-    }
+        clients.sort((a, b) => {
+            // 1. Primary Sort: Order (Natural or Custom)
+            if (a.order !== b.order) {
+                return a.order - b.order;
+            }
 
-    // 2. Secondary Sort (Tie-breaker for 9999s)
-    if (shouldIgnoreOverrides) {
-        // Original Route Fallback: Stable Sort by CODE
-        return (a.name || '').localeCompare(b.name || '');
-    } else {
-        // Custom Route Fallback: Optimization Sort by SALES (Desc)
-        // This keeps high-value clients visible if not manually ordered
-        return b.status.ytdSales - a.status.ytdSales;
-    }
-});
+            // 2. Secondary Sort (Tie-breaker for 9999s)
+            if (shouldIgnoreOverrides) {
+                // Original Route Fallback: Stable Sort by CODE
+                return (a.name || '').localeCompare(b.name || '');
+            } else {
+                // Custom Route Fallback: Optimization Sort by SALES (Desc)
+                // This keeps high-value clients visible if not manually ordered
+                return b.status.ytdSales - a.status.ytdSales;
+            }
+        });
 
-res.json({
-    clients,
-    count: clients.length,
-    day,
-    year: currentYear,
-    compareYear: previousYear,
-    period: {
-        weeks: completedWeeks, // Number of completed weeks being compared
-        current: completedWeeks > 0 ? `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}` : 'Sin semanas completadas',
-        previous: completedWeeks > 0 && endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Sin comparación'
-    }
-});
+        res.json({
+            clients,
+            count: clients.length,
+            day,
+            year: currentYear,
+            compareYear: previousYear,
+            period: {
+                weeks: completedWeeks, // Number of completed weeks being compared
+                current: completedWeeks > 0 ? `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}` : 'Sin semanas completadas',
+                previous: completedWeeks > 0 && endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Sin comparación'
+            }
+        });
 
     } catch (error) {
-    logger.error(`Rutero Day Error: ${error.message}`);
-    res.status(500).json({ error: 'Error obteniendo rutero diario', details: error.message });
-}
+        logger.error(`Rutero Day Error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo rutero diario', details: error.message });
+    }
 });
 
 // =============================================================================
