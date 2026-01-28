@@ -903,7 +903,7 @@ clients.sort((a, b) => {
     // 2. Secondary Sort (Tie-breaker for 9999s)
     if (shouldIgnoreOverrides) {
         // Original Route Fallback: Stable Sort by CODE
-        return a.code.localeCompare(b.code);
+        return (a.name || '').localeCompare(b.name || '');
     } else {
         // Custom Route Fallback: Optimization Sort by SALES (Desc)
         // This keeps high-value clients visible if not manually ordered
