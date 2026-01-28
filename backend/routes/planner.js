@@ -16,8 +16,6 @@ const {
     getTotalClientsFromCache,
     getClientsForDay,
     reloadRuteroConfig,
-    getClientsForDay,
-    reloadRuteroConfig,
     getClientCurrentDay,
     getNaturalOrder
 } = require('../services/laclae');
