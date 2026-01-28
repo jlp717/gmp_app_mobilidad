@@ -16,7 +16,10 @@ const {
     getTotalClientsFromCache,
     getClientsForDay,
     reloadRuteroConfig,
-    getClientCurrentDay
+    getClientsForDay,
+    reloadRuteroConfig,
+    getClientCurrentDay,
+    getNaturalOrder
 } = require('../services/laclae');
 const { sendAuditEmail, sendAuditEmailNow } = require('../services/emailService');
 
@@ -874,33 +877,79 @@ router.get('/rutero/day/:day', async (req, res) => {
                 lon: gps.lon,
                 observation: note ? note.text : null,
                 observationBy: note ? note.modifiedBy : null,
-                order: orderMap.has(code) ? orderMap.get(code) : 9999
-            };
-        });
-
-        // Sort by custom order, then sales
-        clients.sort((a, b) => {
-            if (a.order !== b.order) return a.order - b.order;
-            return b.sales - a.sales;
-        });
-
-        res.json({
-            clients,
-            count: clients.length,
-            day,
-            year: currentYear,
-            compareYear: previousYear,
-            period: {
-                weeks: completedWeeks, // Number of completed weeks being compared
-                current: completedWeeks > 0 ? `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}` : 'Sin semanas completadas',
-                previous: completedWeeks > 0 && endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Sin comparación'
+                // Determine Order
+                let clientOrder = 9999;
+                if(shouldIgnoreOverrides) {
+                    // "Original" Mode: Use Natural Order from CDVI
+                    // If 0 (no natural order), remains 9999 (will be sorted by Code below)
+                    const natOrder = getNaturalOrder(primaryVendor, code, day);
+                    if (natOrder > 0) clientOrder = natOrder;
+                } else {
+                    // "Custom" Mode: Use Config Order
+                    if(orderMap.has(code)) {
+                        clientOrder = orderMap.get(code);
+    }
             }
+
+            return {
+    code,
+    name: r.NAME?.trim(),
+    address: r.ADDRESS?.trim(),
+    city: r.CITY?.trim(),
+    phone: r.PHONE?.trim(),
+    phone2: r.PHONE2?.trim(),
+    phones,
+    // Frontend expects 'status' object with raw numbers
+    status: {
+        ytdSales: salesCurrent,
+        ytdPrevYear: salesPrev, // Sales in equivalent period
+        prevYearTotal: prevYearTotalSales, // Total sales in entire previous year (for NEW detection)
+        yoyVariation: parseFloat(growth.toFixed(1)),
+        isPositive: growth >= 0
+    },
+    lat: gps.lat,
+    lon: gps.lon,
+    observation: note ? note.text : null,
+    observationBy: note ? note.modifiedBy : null,
+    order: clientOrder
+};
         });
+
+// SORTING STRATEGY
+clients.sort((a, b) => {
+    // 1. Primary Sort: Order (Natural or Custom)
+    if (a.order !== b.order) {
+        return a.order - b.order;
+    }
+
+    // 2. Secondary Sort (Tie-breaker for 9999s)
+    if (shouldIgnoreOverrides) {
+        // Original Route Fallback: Stable Sort by CODE
+        return a.code.localeCompare(b.code);
+    } else {
+        // Custom Route Fallback: Optimization Sort by SALES (Desc)
+        // This keeps high-value clients visible if not manually ordered
+        return b.status.ytdSales - a.status.ytdSales;
+    }
+});
+
+res.json({
+    clients,
+    count: clients.length,
+    day,
+    year: currentYear,
+    compareYear: previousYear,
+    period: {
+        weeks: completedWeeks, // Number of completed weeks being compared
+        current: completedWeeks > 0 ? `1 Ene - ${endDayCurrent} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthCurrent - 1]}` : 'Sin semanas completadas',
+        previous: completedWeeks > 0 && endMonthPrevious > 0 ? `1 Ene - ${endDayPrevious} ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][endMonthPrevious - 1]}` : 'Sin comparación'
+    }
+});
 
     } catch (error) {
-        logger.error(`Rutero Day Error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo rutero diario', details: error.message });
-    }
+    logger.error(`Rutero Day Error: ${error.message}`);
+    res.status(500).json({ error: 'Error obteniendo rutero diario', details: error.message });
+}
 });
 
 // =============================================================================
