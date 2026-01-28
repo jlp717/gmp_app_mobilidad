@@ -234,6 +234,8 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
             if (!ignoreOverrides) {
                 // Check override FOR THIS DAY SPECIFICALLY
                 const clientOverrides = configClients[clientCode] || {};
+                const overrideForDay = clientOverrides[dayLower];
+
                 // Check NEGATIVE override (Block)
                 const isBlocked = clientOverrides['!' + dayLower] || clientOverrides['no_' + dayLower];
 
