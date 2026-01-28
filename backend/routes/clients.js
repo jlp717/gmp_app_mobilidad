@@ -22,9 +22,10 @@ const getClientsHandler = async (req, res) => {
     const { vendedorCodes, search, limit = 1000, offset = 0 } = req.query;
     const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
+    let safeSearch = '';
     let searchFilter = '';
     if (search) {
-      const safeSearch = search.replace(/'/g, "''").trim().toUpperCase();
+      safeSearch = search.replace(/'/g, "''").trim().toUpperCase();
       searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE '%${safeSearch}%'
                       OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeSearch}%'
                       OR C.CODIGOCLIENTE LIKE '%${safeSearch}%'
