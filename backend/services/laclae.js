@@ -234,15 +234,16 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
             if (!ignoreOverrides) {
                 // Check override FOR THIS DAY SPECIFICALLY
                 const clientOverrides = configClients[clientCode] || {};
-                const overrideForDay = clientOverrides[dayLower];
+                // Check NEGATIVE override (Block)
+                const isBlocked = clientOverrides['!' + dayLower] || clientOverrides['no_' + dayLower];
 
-                if (overrideForDay) {
+                if (isBlocked) {
+                    shouldInclude = false;
+                } else if (overrideForDay) {
                     // Clearly overridden for this day -> INCLUDE
                     shouldInclude = true;
                 } else {
                     // No override for this specific day.
-                    // CHECK: Does the user expect this day to be blocked if another day has an override?
-                    // Previous logic: YES. New logic: NO (Additive/Fallback behaviors).
                     // If we have Natural Visit Day AND no specific override blocking it -> INCLUDE
                     if (days.includes(dayLower)) shouldInclude = true;
                 }
@@ -263,7 +264,8 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
         if (!ignoreOverrides) {
             Object.entries(configClients).forEach(([clientCode, cfg]) => {
                 const clientOverrides = configClients[clientCode] || {};
-                if (clientOverrides[dayLower]) {
+                // Only add POSITIVE overrides
+                if (clientOverrides[dayLower] && !dayLower.startsWith('!') && !dayLower.startsWith('no_')) {
                     finalClients.add(clientCode);
                 }
             });
@@ -298,26 +300,27 @@ function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
             const clientOverrides = configClients[clientCode] || {};
             const overrideDays = Object.keys(clientOverrides);
 
-            // 1. Add overrides
+            // 1. Add overrides (POSITIVE only)
             overrideDays.forEach(day => {
+                if (day.startsWith('!') || day.startsWith('no_')) return; // Skip negative overrides
                 if (counts.hasOwnProperty(day)) {
                     clientsSet[day].add(clientCode);
                 }
             });
 
-            // 2. Add Natural Days (IF NOT OVERRIDDEN on that day? Or additive?)
-            // Fallback logic says: If no override for day, allow natural.
+            // 2. Add Natural Days (IF NOT BLOCKED)
             days.forEach(day => {
-                if (counts.hasOwnProperty(day) && !clientOverrides[day]) {
+                const isBlocked = clientOverrides['!' + day] || clientOverrides['no_' + day];
+                if (counts.hasOwnProperty(day) && !clientOverrides[day] && !isBlocked) {
                     clientsSet[day].add(clientCode);
                 }
             });
         });
 
-        // Also add clients that exist ONLY in RuteroConfig (orphan overrides)
         // Also add clients that exist ONLY in RuteroConfig (orphans)
         Object.entries(configClients).forEach(([clientCode, overrides]) => {
             Object.keys(overrides).forEach(day => {
+                if (day.startsWith('!') || day.startsWith('no_')) return;
                 if (counts.hasOwnProperty(day)) {
                     clientsSet[day].add(clientCode);
                 }
