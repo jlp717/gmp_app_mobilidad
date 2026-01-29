@@ -119,7 +119,7 @@ async function rollbackAllChanges() {
             if (change.type === 'move') {
                 // Undo the move by posting to config endpoint
                 // This removes the config entry
-                await httpPost('/rutero/config', {
+                await httpPost('/api/rutero/config', {
                     vendedor: change.vendedor,
                     cliente: change.cliente,
                     dia: change.originalDay,
@@ -145,7 +145,7 @@ async function testApiHealth() {
     log('─', '─'.repeat(50));
 
     try {
-        const response = await httpGet('/rutero/week', { vendedorCodes: TEST_VENDOR, role: 'comercial' });
+        const response = await httpGet('/api/rutero/week', { vendedorCodes: TEST_VENDOR, role: 'comercial' });
 
         logResult('API responde', response.status === 200, `Status: ${response.status}`);
         logResult('Datos válidos', response.data && response.data.week, 'Week data presente');
@@ -166,7 +166,7 @@ async function testCountMatchesRows() {
     log('─', '─'.repeat(50));
 
     // Get week summary
-    const weekResponse = await httpGet('/rutero/week', { vendedorCodes: TEST_VENDOR, role: 'comercial' });
+    const weekResponse = await httpGet('/api/rutero/week', { vendedorCodes: TEST_VENDOR, role: 'comercial' });
 
     if (weekResponse.status !== 200) {
         logResult('Week endpoint', false, 'Error obteniendo semana');
@@ -182,7 +182,7 @@ async function testCountMatchesRows() {
         const expectedCount = weekCounts[day] || 0;
 
         // Get day clients
-        const dayResponse = await httpGet(`/rutero/day/${day}`, { vendedorCodes: TEST_VENDOR, role: 'comercial' });
+        const dayResponse = await httpGet(`/api/rutero/day/${day}`, { vendedorCodes: TEST_VENDOR, role: 'comercial' });
 
         if (dayResponse.status !== 200) {
             logResult(`${day}: obtener clientes`, false, 'Error API');
@@ -211,14 +211,14 @@ async function testOriginalVsCustom() {
     const day = 'miercoles';
 
     // Get Custom mode (default)
-    const customResponse = await httpGet(`/rutero/day/${day}`, {
+    const customResponse = await httpGet(`/api/rutero/day/${day}`, {
         vendedorCodes: TEST_VENDOR,
         role: 'comercial',
         ignoreOverrides: 'false'
     });
 
     // Get Original mode
-    const originalResponse = await httpGet(`/rutero/day/${day}`, {
+    const originalResponse = await httpGet(`/api/rutero/day/${day}`, {
         vendedorCodes: TEST_VENDOR,
         role: 'comercial',
         ignoreOverrides: 'true'
@@ -245,8 +245,8 @@ async function testOriginalVsCustom() {
     );
 
     // Test sabado - should have more in Custom (moved clients)
-    const satCustom = await httpGet('/rutero/day/sabado', { vendedorCodes: TEST_VENDOR, role: 'comercial', ignoreOverrides: 'false' });
-    const satOriginal = await httpGet('/rutero/day/sabado', { vendedorCodes: TEST_VENDOR, role: 'comercial', ignoreOverrides: 'true' });
+    const satCustom = await httpGet('/api/rutero/day/sabado', { vendedorCodes: TEST_VENDOR, role: 'comercial', ignoreOverrides: 'false' });
+    const satOriginal = await httpGet('/api/rutero/day/sabado', { vendedorCodes: TEST_VENDOR, role: 'comercial', ignoreOverrides: 'true' });
 
     if (satCustom.status === 200 && satOriginal.status === 200) {
         const satCustomCount = satCustom.data.clients?.length || 0;
@@ -269,7 +269,7 @@ async function testClientOrderField() {
     log('─', '─'.repeat(50));
 
     // Get custom mode - clients should have order field
-    const response = await httpGet('/rutero/day/lunes', { vendedorCodes: TEST_VENDOR, role: 'comercial' });
+    const response = await httpGet('/api/rutero/day/lunes', { vendedorCodes: TEST_VENDOR, role: 'comercial' });
 
     if (response.status !== 200 || !response.data.clients?.length) {
         logResult('Clientes tienen order', false, 'No hay clientes');
@@ -301,13 +301,13 @@ async function testBlockedClient() {
     log('─', '─'.repeat(50));
 
     // Get miercoles in both modes
-    const customResponse = await httpGet('/rutero/day/miercoles', {
+    const customResponse = await httpGet('/api/rutero/day/miercoles', {
         vendedorCodes: TEST_VENDOR,
         role: 'comercial',
         ignoreOverrides: 'false'
     });
 
-    const originalResponse = await httpGet('/rutero/day/miercoles', {
+    const originalResponse = await httpGet('/api/rutero/day/miercoles', {
         vendedorCodes: TEST_VENDOR,
         role: 'comercial',
         ignoreOverrides: 'true'
