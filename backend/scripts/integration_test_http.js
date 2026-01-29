@@ -196,23 +196,47 @@ async function testApiHealth() {
 // TEST 2: COUNT MATCHES ROWS
 // ============================================================================
 
+// ============================================================================
+// TEST 2: COUNT MATCHES ROWS
+// ============================================================================
+
 async function testCountMatchesRows() {
     log('\n📊', 'TEST 2: Contadores coinciden con filas (via HTTP)');
     log('─', '─'.repeat(50));
 
-    // Get week summary
-    const weekResponse = await httpGet('/api/rutero/week', { vendedorCodes: TEST_VENDOR, role: 'comercial' });
+    // Get week summary - Retry logic for cache loading
+    let weekResponse;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (attempts < maxAttempts) {
+        weekResponse = await httpGet('/api/rutero/week', { vendedorCodes: TEST_VENDOR, role: 'comercial' });
+
+        if (weekResponse.status === 200 && weekResponse.data.cacheStatus !== 'loading') {
+            break;
+        }
+
+        log('⏳', `Esperando caché... (Intento ${attempts + 1}/${maxAttempts})`);
+        if (weekResponse.data.cacheStatus) log('ℹ️', `Estado caché: ${weekResponse.data.cacheStatus}`);
+
+        await new Promise(r => setTimeout(r, 2000));
+        attempts++;
+    }
 
     if (weekResponse.status !== 200) {
-        logResult('Week endpoint', false, 'Error obteniendo semana');
+        logResult('Week endpoint', false, 'Error obteniendo semana o timeout caché');
         return;
     }
+
+    // Log what we got
+    log('ℹ️', 'Week Data: ' + JSON.stringify(weekResponse.data.week));
 
     const weekCounts = weekResponse.data.week;
 
     // Test a few days
     const testDays = ['lunes', 'miercoles', 'sabado'];
 
+    let allPassed = true;
     for (const day of testDays) {
         const expectedCount = weekCounts[day] || 0;
 
@@ -221,17 +245,22 @@ async function testCountMatchesRows() {
 
         if (dayResponse.status !== 200) {
             logResult(`${day}: obtener clientes`, false, 'Error API');
+            allPassed = false;
             continue;
         }
 
         const actualCount = dayResponse.data.clients?.length || 0;
 
-        logResult(
-            `${day}: Badge = Filas`,
-            expectedCount === actualCount,
-            `Badge=${expectedCount}, Filas=${actualCount}`
-        );
+        // Only log failure (or success for debugging if count > 0)
+        if (expectedCount !== actualCount) {
+            logResult(`${day}: Badge = Filas`, false, `Badge=${expectedCount}, Filas=${actualCount}`);
+            allPassed = false;
+        } else if (actualCount > 0) {
+            logResult(`${day}: Badge = Filas`, true, `Badge=${expectedCount}, Filas=${actualCount}`);
+        }
     }
+
+    if (allPassed) logResult('Todos los contadores coinciden', true);
 }
 
 // ============================================================================
