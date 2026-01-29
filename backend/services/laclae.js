@@ -92,8 +92,10 @@ async function loadLaclaeCache() {
                     ORDENVISITAVIERNES as OR_V,
                     ORDENVISITASABADO as OR_S,
                     ORDENVISITADOMINGO as OR_D
-                FROM DSEDAC.CDVI
-                WHERE (MARCAACTUALIZACION <> 'B' OR MARCAACTUALIZACION IS NULL OR TRIM(MARCAACTUALIZACION) = '')  -- Fix: Handle spaces too
+                FROM DSEDAC.CDVI C
+                JOIN DSEDAC.CLI K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE  -- Join CLI to check ANOBAJA
+                WHERE (C.MARCAACTUALIZACION <> 'B' OR C.MARCAACTUALIZACION IS NULL OR TRIM(C.MARCAACTUALIZACION) = '')
+                  AND (K.ANOBAJA = 0 OR K.ANOBAJA IS NULL) -- EXCLUDE BAJAS
             `);
 
             const dayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
@@ -153,10 +155,12 @@ async function loadLaclaeCache() {
           R1_T8DIVJ as VIS_J, R1_T8DIVV as VIS_V, R1_T8DIVS as VIS_S, R1_T8DIVD as VIS_D,
           R1_T8DIRL as DEL_L, R1_T8DIRM as DEL_M, R1_T8DIRX as DEL_X,
           R1_T8DIRJ as DEL_J, R1_T8DIRV as DEL_V, R1_T8DIRS as DEL_S, R1_T8DIRD as DEL_D
-        FROM DSED.LACLAE
-        WHERE R1_T8CDVD IS NOT NULL 
-          AND LCCDCL IS NOT NULL
-          AND LCAADC >= ${startYear}
+        FROM DSED.LACLAE L
+        JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE -- Join CLI to check ANOBAJA
+        WHERE L.R1_T8CDVD IS NOT NULL 
+          AND L.LCCDCL IS NOT NULL
+          AND L.LCAADC >= ${startYear}
+          AND (C.ANOBAJA = 0 OR C.ANOBAJA IS NULL) -- EXCLUDE BAJAS
       `);
 
             const visitCols = ['VIS_D', 'VIS_L', 'VIS_M', 'VIS_X', 'VIS_J', 'VIS_V', 'VIS_S'];
