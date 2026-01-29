@@ -76,22 +76,22 @@ async function loadLaclaeCache() {
             logger.info('   Loading Master Route Config from DSEDAC.CDVI...');
             const cdviRows = await conn.query(`
                 SELECT 
-                    TRIM(CODIGOVENDEDOR) as VENDEDOR,
-                    TRIM(CODIGOCLIENTE) as CLIENTE,
-                    DIAVISITALUNESSN as VIS_L, 
-                    DIAVISITAMARTESSN as VIS_M, 
-                    DIAVISITAMIERCOLESSN as VIS_X,
-                    DIAVISITAJUEVESSN as VIS_J, 
-                    DIAVISITAVIERNESSN as VIS_V, 
-                    DIAVISITASABADOSN as VIS_S, 
-                    DIAVISITADOMINGOSN as VIS_D,
-                    ORDENVISITALUNES as OR_L,
-                    ORDENVISITAMARTES as OR_M,
-                    ORDENVISITAMIERCOLES as OR_X,
-                    ORDENVISITAJUEVES as OR_J,
-                    ORDENVISITAVIERNES as OR_V,
-                    ORDENVISITASABADO as OR_S,
-                    ORDENVISITADOMINGO as OR_D
+                    TRIM(C.CODIGOVENDEDOR) as VENDEDOR,
+                    TRIM(C.CODIGOCLIENTE) as CLIENTE,
+                    C.DIAVISITALUNESSN as VIS_L, 
+                    C.DIAVISITAMARTESSN as VIS_M, 
+                    C.DIAVISITAMIERCOLESSN as VIS_X,
+                    C.DIAVISITAJUEVESSN as VIS_J, 
+                    C.DIAVISITAVIERNESSN as VIS_V, 
+                    C.DIAVISITASABADOSN as VIS_S, 
+                    C.DIAVISITADOMINGOSN as VIS_D,
+                    C.ORDENVISITALUNES as OR_L,
+                    C.ORDENVISITAMARTES as OR_M,
+                    C.ORDENVISITAMIERCOLES as OR_X,
+                    C.ORDENVISITAJUEVES as OR_J,
+                    C.ORDENVISITAVIERNES as OR_V,
+                    C.ORDENVISITASABADO as OR_S,
+                    C.ORDENVISITADOMINGO as OR_D
                 FROM DSEDAC.CDVI C
                 JOIN DSEDAC.CLI K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE  -- Join CLI to check ANOBAJA
                 WHERE (C.MARCAACTUALIZACION <> 'B' OR C.MARCAACTUALIZACION IS NULL OR TRIM(C.MARCAACTUALIZACION) = '')
@@ -149,12 +149,12 @@ async function loadLaclaeCache() {
 
             const rows = await conn.query(`
         SELECT DISTINCT
-          R1_T8CDVD as VENDEDOR,
-          LCCDCL as CLIENTE,
-          R1_T8DIVL as VIS_L, R1_T8DIVM as VIS_M, R1_T8DIVX as VIS_X,
-          R1_T8DIVJ as VIS_J, R1_T8DIVV as VIS_V, R1_T8DIVS as VIS_S, R1_T8DIVD as VIS_D,
-          R1_T8DIRL as DEL_L, R1_T8DIRM as DEL_M, R1_T8DIRX as DEL_X,
-          R1_T8DIRJ as DEL_J, R1_T8DIRV as DEL_V, R1_T8DIRS as DEL_S, R1_T8DIRD as DEL_D
+          L.R1_T8CDVD as VENDEDOR,
+          L.LCCDCL as CLIENTE,
+          L.R1_T8DIVL as VIS_L, L.R1_T8DIVM as VIS_M, L.R1_T8DIVX as VIS_X,
+          L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S, L.R1_T8DIVD as VIS_D,
+          L.R1_T8DIRL as DEL_L, L.R1_T8DIRM as DEL_M, L.R1_T8DIRX as DEL_X,
+          L.R1_T8DIRJ as DEL_J, L.R1_T8DIRV as DEL_V, L.R1_T8DIRS as DEL_S, L.R1_T8DIRD as DEL_D
         FROM DSED.LACLAE L
         JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE -- Join CLI to check ANOBAJA
         WHERE L.R1_T8CDVD IS NOT NULL 
