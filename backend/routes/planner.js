@@ -694,8 +694,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 TELEFONO2 as PHONE2
             FROM DSEDAC.CLI
             WHERE CODIGOCLIENTE IN (${safeClientFilter})
-              AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
-              -- (Removed NOT EXISTS filter: Shared clients must be visible)
+              -- AND (ANOBAJA = 0 OR ANOBAJA IS NULL) -- Removed to match Badge/Route logic: If in Route, show it.
         `;
         const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG);
 
