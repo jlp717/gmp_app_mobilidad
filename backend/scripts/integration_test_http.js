@@ -18,10 +18,12 @@ const http = require('http');
 const API_HOST = 'localhost';
 const API_PORT = 3000;
 const TEST_VENDOR = '33';
+const TEST_PASS = '3318'; // Correct password for Vendor 33
 
 // Track changes for rollback
 let changesLog = [];
 let testResults = { passed: 0, failed: 0, tests: [] };
+let authToken = null;
 
 // ============================================================================
 // HTTP UTILITIES
@@ -32,12 +34,15 @@ function httpGet(path, queryParams = {}) {
         const query = new URLSearchParams(queryParams).toString();
         const fullPath = query ? `${path}?${query}` : path;
 
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
         const options = {
             hostname: API_HOST,
             port: API_PORT,
             path: fullPath,
             method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
+            headers: headers
         };
 
         const req = http.request(options, (res) => {
@@ -62,15 +67,18 @@ function httpPost(path, body) {
     return new Promise((resolve, reject) => {
         const bodyStr = JSON.stringify(body);
 
+        const headers = {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(bodyStr)
+        };
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
         const options = {
             hostname: API_HOST,
             port: API_PORT,
             path: path,
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(bodyStr)
-            }
+            headers: headers
         };
 
         const req = http.request(options, (res) => {
@@ -90,6 +98,33 @@ function httpPost(path, body) {
         req.write(bodyStr);
         req.end();
     });
+}
+
+// ============================================================================
+// AUTHENTICATION
+// ============================================================================
+
+async function login() {
+    log('\n🔑', 'Autenticando...');
+    try {
+        const response = await httpPost('/api/auth/login', {
+            username: TEST_VENDOR,
+            password: TEST_PASS
+        });
+
+        if (response.status === 200 && response.data.token) {
+            authToken = response.data.token;
+            log('✅', 'Login correcto. Token obtenido.');
+            return true;
+        } else {
+            log('❌', `Login fallido. Status: ${response.status}`);
+            console.log('Respuesta:', response.data);
+            return false;
+        }
+    } catch (e) {
+        log('❌', `Error de conexión en login: ${e.message}`);
+        return false;
+    }
 }
 
 // ============================================================================
@@ -346,6 +381,12 @@ async function runAllTests() {
     log('👤', `Test Vendor: ${TEST_VENDOR}`);
 
     try {
+        // Login first
+        const authOk = await login();
+        if (!authOk) {
+            process.exit(1);
+        }
+
         // Health check first
         const apiOk = await testApiHealth();
 
