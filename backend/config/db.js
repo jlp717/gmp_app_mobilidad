@@ -4,81 +4,142 @@ const logger = require('../middleware/logger');
 
 dotenv.config();
 
-// Build connection string from environment variables (fallback to defaults for development)
+// Build connection string from environment variables
 const DB_UID = process.env.ODBC_UID || 'JAVIER';
 const DB_PWD = process.env.ODBC_PWD || 'JAVIER';
 const DB_DSN = process.env.ODBC_DSN || 'GMP';
+// Add connection timeout and other stability parameters if supported by driver
 const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;`;
 
 let dbPool = null;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
 
 async function initDb() {
     try {
+        // Use simple string config which is more reliable with older odbc versions
         dbPool = await odbc.pool(DB_CONFIG);
-        logger.info('✅ Database connection pool initialized');
+        logger.info('✅ Database connection pool initialized (Simple Mode)');
         return dbPool;
     } catch (error) {
-        logger.error(`❌ Database connection failed: ${error.message}`);
-        process.exit(1);
-    }
-}
-
-async function query(sql, logQuery = true, logError = true) {
-    if (!dbPool) throw new Error('Database pool not initialized');
-
-    const start = Date.now();
-    const conn = await dbPool.connect();
-    try {
-        const result = await conn.query(sql);
-        const duration = Date.now() - start;
-        if (logQuery) {
-            const preview = sql.replace(/\s+/g, ' ').substring(0, 100);
-            logger.info(`📊 Query (${duration}ms): ${preview}... → ${result.length} rows`);
-        }
-        return result;
-    } catch (error) {
-        if (logError) {
-            logger.error(`❌ Query Error: ${error.message} \nSQL: ${sql ? sql.substring(0, 50) : 'N/A'}`);
-        }
-        throw error;
-    } finally {
-        await conn.close();
+        logger.error(`❌ Database connection failed during init: ${error.message}`);
+        // Do not exit process, allow retry later
+        // process.exit(1);
     }
 }
 
 /**
- * Execute a parameterized query to prevent SQL injection
- * Uses ODBC parameterized queries with ? placeholders
- * The node-odbc library supports parameterized queries via conn.query(sql, params)
- * @param {string} sql - SQL query with ? placeholders
- * @param {Array} params - Array of parameter values in order
- * @param {boolean} logQuery - Whether to log the query (false for sensitive queries)
- * @param {boolean} logError - Whether to log errors (default true)
- * @returns {Promise<Array>} Query results
+ * Execute a query with retry logic and connection management
+ */
+async function query(sql, logQuery = true, logError = true) {
+    if (!dbPool) {
+        // Try to re-init if pool is missing
+        await initDb();
+        if (!dbPool) throw new Error('Database pool not initialized and failed to re-init');
+    }
+
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        let conn = null;
+        try {
+            conn = await dbPool.connect();
+
+            const start = Date.now();
+            const result = await conn.query(sql);
+            const duration = Date.now() - start;
+
+            if (logQuery) {
+                const preview = sql.replace(/\s+/g, ' ').substring(0, 100);
+                logger.info(`📊 Query (${duration}ms): ${preview}... → ${result.length} rows`);
+            }
+
+            return result;
+
+        } catch (error) {
+            lastError = error;
+            const isConnectionError = error.message.includes('Communication link failure') ||
+                error.message.includes('so close') ||
+                error.message.includes('SYSDUMMY1');
+
+            if (logError && attempt === MAX_RETRIES) {
+                logger.error(`❌ Query Error (Final Attempt): ${error.message} \nSQL: ${sql ? sql.substring(0, 50) : 'N/A'}`);
+            } else if (logError) {
+                logger.warn(`⚠️ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
+            }
+
+            if (!isConnectionError && !error.message.includes('odbc')) {
+                // If it's a syntax error, don't retry
+                break;
+            }
+
+            // Wait before retry
+            await new Promise(res => setTimeout(res, RETRY_DELAY_MS));
+
+        } finally {
+            if (conn) {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    logger.warn(`⚠️ Error closing connection: ${closeError.message}`);
+                }
+            }
+        }
+    }
+
+    throw lastError;
+}
+
+/**
+ * Execute a parameterized query with retry logic
  */
 async function queryWithParams(sql, params = [], logQuery = true, logError = true) {
-    if (!dbPool) throw new Error('Database pool not initialized');
-
-    const start = Date.now();
-    const conn = await dbPool.connect();
-    try {
-        // node-odbc supports parameterized queries directly via query(sql, params)
-        const result = await conn.query(sql, params);
-
-        const duration = Date.now() - start;
-        if (logQuery) {
-            const preview = sql.replace(/\s+/g, ' ').substring(0, 80);
-            logger.info(`📊 Parameterized Query (${duration}ms): ${preview}... → ${result.length} rows`);
-        }
-        return result;
-    } catch (error) {
-        if (logError) {
-            logger.error(`❌ Parameterized Query Error: ${error.message}`);
-        }
-        throw error;
-    } finally {
-        await conn.close();
+    if (!dbPool) {
+        await initDb();
+        if (!dbPool) throw new Error('Database pool not initialized');
     }
+
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        let conn = null;
+        try {
+            conn = await dbPool.connect();
+
+            const start = Date.now();
+            const result = await conn.query(sql, params);
+            const duration = Date.now() - start;
+
+            if (logQuery) {
+                const preview = sql.replace(/\s+/g, ' ').substring(0, 80);
+                logger.info(`📊 Param Query (${duration}ms): ${preview}... → ${result.length} rows`);
+            }
+
+            return result;
+
+        } catch (error) {
+            lastError = error;
+
+            if (logError && attempt === MAX_RETRIES) {
+                logger.error(`❌ Param Query Error (Final): ${error.message}`);
+            } else {
+                logger.warn(`⚠️ Param Query Retry (${attempt}): ${error.message}`);
+            }
+
+            if (!error.message.includes('odbc')) break; // Don't retry logic errors
+
+            await new Promise(res => setTimeout(res, RETRY_DELAY_MS));
+
+        } finally {
+            if (conn) {
+                try {
+                    await conn.close();
+                } catch (e) { /* ignore close errors */ }
+            }
+        }
+    }
+
+    throw lastError;
 }
 
 function getPool() {
