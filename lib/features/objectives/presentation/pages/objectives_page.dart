@@ -238,12 +238,29 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
             final sales = (monthData['sales'] as num?)?.toDouble() ?? 0;
             final obj = (monthData['objective'] as num?)?.toDouble() ?? 0;
             
-            // Pacing Logic
-            final workingDays = (monthData['workingDays'] as num?)?.toInt() ?? 22; // Default 22 if missing
-            final daysPassed = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
+            // Pacing Logic - FIXED: Only count days for months ACTUALLY SELECTED
+            // If the current month is not selected, we should NOT include its daysPassed
+            final workingDays = (monthData['workingDays'] as num?)?.toInt() ?? 22;
+            final now = DateTime.now();
+            final isCurrentMonth = year == now.year && monthNum == now.month;
+            final isSelectedMonth = _selectedMonths.contains(monthNum);
+            
+            // daysPassed should be:
+            // - 0 if month is in the future
+            // - workingDays if month is fully in the past
+            // - actual daysPassed if it's the current month AND selected
+            int daysPassed = 0;
+            if (year < now.year || (year == now.year && monthNum < now.month)) {
+              // Past month - use full working days
+              daysPassed = workingDays;
+            } else if (isCurrentMonth && isSelectedMonth) {
+              // Current month and selected - use actual days passed
+              daysPassed = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
+            }
+            // Future months = 0 daysPassed
             
             double paceObj = 0;
-            if (workingDays > 0) {
+            if (workingDays > 0 && daysPassed > 0) {
                paceObj = (obj / workingDays) * daysPassed;
             }
             
@@ -1042,6 +1059,12 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     
     if (ytdObjective == 0) return const SizedBox.shrink();
     
+    // FIX: Only show YTD banner if multiple months are selected, OR if it's January only (beginning of year)
+    final now = DateTime.now();
+    final isJanuaryOnlyAtYearStart = _selectedMonths.length == 1 && _selectedMonths.first == 1 && now.month <= 2;
+    final shouldShowYTDBanner = _selectedMonths.length > 1 || isJanuaryOnlyAtYearStart;
+    if (!shouldShowYTDBanner) return const SizedBox.shrink();
+    
     final isOnTrack = ytdProgress >= 100;
     final color = isOnTrack ? AppTheme.success : (ytdProgress >= 90 ? Colors.orange : AppTheme.error);
     
@@ -1353,7 +1376,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
               const SizedBox(height: 4),
               */
               
-              // Period objective (based on selected months)
+              // FIX: Period objective label hidden as per user request
+              // Kept commented for potential future use
+              /*
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -1368,6 +1393,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                   ],
                 ),
               ),
+              */
               const SizedBox(height: 10),
               
               // Current sales - big display
