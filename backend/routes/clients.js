@@ -35,44 +35,23 @@ const getClientsHandler = async (req, res) => {
                       OR C.NIF LIKE '%${safeSearch}%')`;
     }
 
-    // Build route filter: include clients from vendor's routes (even without sales)
-    // If vendor has ANY sales in a route, show ALL clients from that route
-    let routeFilter = '';
-    if (vendedorCodes) {
-      const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
-      routeFilter = `
-        OR C.CODIGORUTA IN (
-          SELECT DISTINCT CLI_INNER.CODIGORUTA
-          FROM DSED.LACLAE LAC_INNER
-          JOIN DSEDAC.CLI CLI_INNER ON LAC_INNER.LCCDCL = CLI_INNER.CODIGOCLIENTE
-          WHERE LAC_INNER.LCCDVD IN (${vendorList})
-            AND LAC_INNER.TPDC = 'LAC'
-            AND LAC_INNER.LCAADC >= ${MIN_YEAR}
-            AND CLI_INNER.CODIGORUTA IS NOT NULL
-            AND CLI_INNER.CODIGORUTA <> ''
-            AND (CLI_INNER.ANOBAJA = 0 OR CLI_INNER.ANOBAJA IS NULL)
-        )
-        AND NOT EXISTS (
-            SELECT 1 FROM DSEDAC.CDVI OWNER
-            WHERE OWNER.CODIGOCLIENTE = C.CODIGOCLIENTE
-              AND OWNER.CODIGOVENDEDOR NOT IN (${vendorList})
-        )
-        AND (
-             -- Show if it has an entry in CDVI (Explicit Owner = Me, guaranteed by NOT EXISTS above)
-             (SELECT COUNT(*) FROM DSEDAC.CDVI O WHERE O.CODIGOCLIENTE = C.CODIGOCLIENTE) > 0
-             OR
-             -- Show if Orphan (No CDVI) AND Route Dominant Vendor is Me
-             RV.CODIGOVENDEDOR IN (${vendorList})
-        )
-      `;
+    // OPTIMIZATION v3: Pre-compute allowed client codes from in-memory cache
+    // This eliminates expensive NOT EXISTS and subquery route filters
+    let clientCodesFilter = '';
+    if (vendedorCodes && !search) {
+      const { getClientCodesFromCache } = require('../services/laclae');
+      const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
+
+      if (cachedClientCodes && cachedClientCodes.length > 0) {
+        // Use cached client codes directly - no subqueries needed!
+        const codesList = cachedClientCodes.slice(0, 2000).map(c => `'${c}'`).join(',');
+        clientCodesFilter = `AND C.CODIGOCLIENTE IN (${codesList})`;
+        logger.info(`[CLIENTS] Using cached client codes: ${cachedClientCodes.length} clients for vendor ${vendedorCodes}`);
+      }
     }
 
-    // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT
-    // Now includes clients from vendor's routes even if they have no sales yet
-    // For clients without sales, we get the predominant vendor of their route
-    // Also includes visit/delivery days from LACLAE
-    // Generate Cache Key (v4 = optimized query without days join)
-    const cacheKey = `clients:list:v4:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${limit}:${offset}`;
+    // Generate Cache Key (v5 = optimized with pre-filtered client codes)
+    const cacheKey = `clients:list:v5:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${limit}:${offset}`;
     // Use LONG TTL for browsing, MEDIUM for search results
     const cacheTTL = isSearchQuery ? TTL.MEDIUM : TTL.LONG;
 
@@ -80,84 +59,45 @@ const getClientsHandler = async (req, res) => {
     logger.info(`[CLIENTS] Starting query for vendor ${vendedorCodes || 'all'}, search: ${search || 'none'}`);
     const queryStart = Date.now();
 
+    // SIMPLIFIED QUERY v3: Single LACLAE scan with pre-filtered client codes
     const clients = await cachedQuery(query, `
       SELECT
         C.CODIGOCLIENTE as code,
-        MAX(COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE))) as name,
-        MAX(C.NIF) as nif,
-        MAX(C.DIRECCION) as address, MAX(C.POBLACION) as city, MAX(C.PROVINCIA) as province,
-        MAX(C.CODIGOPOSTAL) as postalCode, MAX(C.TELEFONO1) as phone, MAX(C.TELEFONO2) as phone2,
-        MAX(C.CODIGORUTA) as route, MAX(C.PERSONACONTACTO) as contactPerson,
-        COALESCE(MAX(S.TOTAL_PURCHASES), 0) as totalPurchases,
-        COALESCE(MAX(S.NUM_ORDERS), 0) as numOrders,
-        COALESCE(MAX(S.LAST_PURCHASE_DATE), 0) as lastDateInt,
-        COALESCE(MAX(S.TOTAL_MARGIN), 0) as totalMargin,
-        MAX(C.ANOBAJA) as yearInactive,
-        COALESCE(MAX(TRIM(V.NOMBREVENDEDOR)), MAX(TRIM(RV.NOMBREVENDEDOR))) as vendorName,
-        COALESCE(MAX(S.LAST_VENDOR), MAX(RV.CODIGOVENDEDOR)) as vendorCode
+        COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) as name,
+        C.NIF as nif,
+        C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
+        C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
+        C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
+        COALESCE(S.TOTAL_PURCHASES, 0) as totalPurchases,
+        COALESCE(S.NUM_ORDERS, 0) as numOrders,
+        COALESCE(S.LAST_PURCHASE_DATE, 0) as lastDateInt,
+        COALESCE(S.TOTAL_MARGIN, 0) as totalMargin,
+        C.ANOBAJA as yearInactive,
+        TRIM(V.NOMBREVENDEDOR) as vendorName,
+        S.LAST_VENDOR as vendorCode
       FROM DSEDAC.CLI C
-      LEFT JOIN(
-        SELECT
-            Stats.LCCDCL as CODIGOCLIENTEALBARAN,
-            LastV.LCCDVD as LAST_VENDOR,
-            Stats.TOTAL_PURCHASES,
-            Stats.TOTAL_MARGIN,
-            Stats.NUM_ORDERS,
-            Stats.LAST_PURCHASE_DATE
-        FROM (
-            SELECT LCCDCL,
-                SUM(LCIMVT) as TOTAL_PURCHASES,
-                SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
-                COUNT(DISTINCT LCAADC || '-' || LCMMDC || '-' || LCDDDC) as NUM_ORDERS,
-                MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
-            FROM DSED.LACLAE
-            WHERE LCAADC >= ${MIN_YEAR}
-              AND TPDC = 'LAC'
-              AND LCTPVT IN ('CC', 'VC')
-              AND LCCLLN IN ('AB', 'VT')
-              AND LCSRAB NOT IN ('N', 'Z')
-              ${vendedorFilter.replace(/L\./g, '')}
-            GROUP BY LCCDCL
-        ) Stats
-        LEFT JOIN (
-            SELECT LCCDCL, LCCDVD
-            FROM (
-                SELECT LCCDCL, LCCDVD,
-                    ROW_NUMBER() OVER(PARTITION BY LCCDCL ORDER BY (LCAADC * 10000 + LCMMDC * 100 + LCDDDC) DESC, LCCDVD ASC) as RN
-                FROM DSED.LACLAE
-                WHERE LCAADC >= ${MIN_YEAR}
-                  AND TPDC = 'LAC'
-                  AND LCTPVT IN ('CC', 'VC')
-                  AND LCCLLN IN ('AB', 'VT')
-                  AND LCSRAB NOT IN ('N', 'Z')
-                  ${vendedorFilter.replace(/L\./g, '')}
-            ) T WHERE RN = 1
-        ) LastV ON Stats.LCCDCL = LastV.LCCDCL
-      ) S ON C.CODIGOCLIENTE = S.CODIGOCLIENTEALBARAN
-      LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
       LEFT JOIN (
-        SELECT CODIGORUTA, CODIGOVENDEDOR, NOMBREVENDEDOR
-        FROM (
-          SELECT
-            CLI_R.CODIGORUTA,
-            LAC_R.R1_T8CDVD as CODIGOVENDEDOR,
-            VDD_R.NOMBREVENDEDOR,
-            ROW_NUMBER() OVER(PARTITION BY CLI_R.CODIGORUTA ORDER BY COUNT(*) DESC) as RN
-          FROM DSED.LACLAE LAC_R
-          JOIN DSEDAC.CLI CLI_R ON LAC_R.LCCDCL = CLI_R.CODIGOCLIENTE
-          JOIN DSEDAC.VDD VDD_R ON LAC_R.R1_T8CDVD = VDD_R.CODIGOVENDEDOR
-          WHERE LAC_R.LCAADC >= ${MIN_YEAR}
-            AND LAC_R.TPDC = 'LAC'
-            AND CLI_R.CODIGORUTA IS NOT NULL
-          GROUP BY CLI_R.CODIGORUTA, LAC_R.R1_T8CDVD, VDD_R.NOMBREVENDEDOR
-        ) WHERE RN = 1
-      ) RV ON C.CODIGORUTA = RV.CODIGORUTA AND S.LAST_VENDOR IS NULL
-      -- OPTIMIZATION: Removed days LEFT JOIN (D) - now fetched from in-memory laclaeCache
+        SELECT 
+          LCCDCL as CLIENT_CODE,
+          SUM(LCIMVT) as TOTAL_PURCHASES,
+          SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
+          COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
+          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE,
+          MAX(LCCDVD) as LAST_VENDOR
+        FROM DSED.LACLAE
+        WHERE LCAADC >= ${MIN_YEAR}
+          AND TPDC = 'LAC'
+          AND LCTPVT IN ('CC', 'VC')
+          AND LCCLLN IN ('AB', 'VT')
+          AND LCSRAB NOT IN ('N', 'Z')
+          ${vendedorFilter.replace(/L\./g, '')}
+        GROUP BY LCCDCL
+      ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
+      LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
-        AND (S.LAST_VENDOR IS NOT NULL ${routeFilter})
+        ${clientCodesFilter || `AND S.LAST_VENDOR IS NOT NULL`}
         ${searchFilter}
-      GROUP BY C.CODIGOCLIENTE
-      ORDER BY COALESCE(MAX(S.TOTAL_PURCHASES), 0) DESC
+      ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
       OFFSET ${parseInt(offset)} ROWS
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
     `, cacheKey, cacheTTL);
