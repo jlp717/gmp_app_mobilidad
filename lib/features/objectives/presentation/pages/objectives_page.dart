@@ -1737,8 +1737,11 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         // For current month, use proportional objective
         double displayObj = obj;
         final isCurrentMonth = year == now.year && m['month'] == now.month;
-        if (isCurrentMonth && workingDays > 0 && daysPassed > 0 && daysPassed < workingDays) {
+        // FIX: For current month, ALWAYS use proportional logic to match chart
+        if (isCurrentMonth && workingDays > 0) {
           displayObj = (obj / workingDays) * daysPassed;
+        } else if (isCurrentMonth && workingDays <= 0) {
+          displayObj = 0;
         }
         
         if (sales > maxY) maxY = sales;
@@ -1824,8 +1827,13 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         // For current month, show proportional objective based on days worked
         // For past months, show full objective (daysPassed == workingDays)
         double displayObj = weightedObj;
-        if (isCurrentMonth && workingDays > 0 && daysPassed > 0 && daysPassed < workingDays) {
-          displayObj = (weightedObj / workingDays) * daysPassed;
+        
+        // FIX: For current month, ALWAYS use proportional, even if daysPassed is 0
+        if (isCurrentMonth && workingDays > 0) {
+           displayObj = (weightedObj / workingDays) * daysPassed;
+        } else if (isCurrentMonth && workingDays <= 0) {
+           // Fallback if no working days defined for current month
+           displayObj = 0; 
         }
         
         return FlSpot((m - 1).toDouble(), displayObj);
