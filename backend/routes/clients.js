@@ -15,12 +15,14 @@ const { getClientDays } = require('../services/laclae');
 
 
 // =============================================================================
-// CLIENTS LIST
+// CLIENTS LIST (OPTIMIZED v2 - 2026-02-02)
 // =============================================================================
 const getClientsHandler = async (req, res) => {
+  const startTime = Date.now();
   try {
     const { vendedorCodes, search, limit = 1000, offset = 0 } = req.query;
     const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+    const isSearchQuery = !!search;
 
     let safeSearch = '';
     let searchFilter = '';
@@ -69,10 +71,15 @@ const getClientsHandler = async (req, res) => {
     // Now includes clients from vendor's routes even if they have no sales yet
     // For clients without sales, we get the predominant vendor of their route
     // Also includes visit/delivery days from LACLAE
-    // Generate Cache Key
-    const cacheKey = `clients:list:v3:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${limit}:${offset}`;
+    // Generate Cache Key (v4 = optimized query without days join)
+    const cacheKey = `clients:list:v4:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${limit}:${offset}`;
+    // Use LONG TTL for browsing, MEDIUM for search results
+    const cacheTTL = isSearchQuery ? TTL.MEDIUM : TTL.LONG;
 
-    // Execute with Cache (5 minutes TTL)
+    // Execute with Cache (LONG TTL for browsing, MEDIUM for search)
+    logger.info(`[CLIENTS] Starting query for vendor ${vendedorCodes || 'all'}, search: ${search || 'none'}`);
+    const queryStart = Date.now();
+
     const clients = await cachedQuery(query, `
       SELECT
         C.CODIGOCLIENTE as code,
@@ -87,11 +94,7 @@ const getClientsHandler = async (req, res) => {
         COALESCE(MAX(S.TOTAL_MARGIN), 0) as totalMargin,
         MAX(C.ANOBAJA) as yearInactive,
         COALESCE(MAX(TRIM(V.NOMBREVENDEDOR)), MAX(TRIM(RV.NOMBREVENDEDOR))) as vendorName,
-        COALESCE(MAX(S.LAST_VENDOR), MAX(RV.CODIGOVENDEDOR)) as vendorCode,
-        MAX(D.VIS_L) as visL, MAX(D.VIS_M) as visM, MAX(D.VIS_X) as visX,
-        MAX(D.VIS_J) as visJ, MAX(D.VIS_V) as visV, MAX(D.VIS_S) as visS,
-        MAX(D.DEL_L) as delL, MAX(D.DEL_M) as delM, MAX(D.DEL_X) as delX,
-        MAX(D.DEL_J) as delJ, MAX(D.DEL_V) as delV, MAX(D.DEL_S) as delS
+        COALESCE(MAX(S.LAST_VENDOR), MAX(RV.CODIGOVENDEDOR)) as vendorCode
       FROM DSEDAC.CLI C
       LEFT JOIN(
         SELECT
@@ -149,16 +152,7 @@ const getClientsHandler = async (req, res) => {
           GROUP BY CLI_R.CODIGORUTA, LAC_R.R1_T8CDVD, VDD_R.NOMBREVENDEDOR
         ) WHERE RN = 1
       ) RV ON C.CODIGORUTA = RV.CODIGORUTA AND S.LAST_VENDOR IS NULL
-      LEFT JOIN (
-        SELECT LCCDCL,
-          MAX(R1_T8DIVL) as VIS_L, MAX(R1_T8DIVM) as VIS_M, MAX(R1_T8DIVX) as VIS_X,
-          MAX(R1_T8DIVJ) as VIS_J, MAX(R1_T8DIVV) as VIS_V, MAX(R1_T8DIVS) as VIS_S,
-          MAX(R1_T8DIRL) as DEL_L, MAX(R1_T8DIRM) as DEL_M, MAX(R1_T8DIRX) as DEL_X,
-          MAX(R1_T8DIRJ) as DEL_J, MAX(R1_T8DIRV) as DEL_V, MAX(R1_T8DIRS) as DEL_S
-        FROM DSED.LACLAE
-        WHERE LCAADC >= ${MIN_YEAR} AND R1_T8CDVD IS NOT NULL
-        GROUP BY LCCDCL
-      ) D ON C.CODIGOCLIENTE = D.LCCDCL
+      -- OPTIMIZATION: Removed days LEFT JOIN (D) - now fetched from in-memory laclaeCache
       WHERE C.ANOBAJA = 0
         AND (S.LAST_VENDOR IS NOT NULL ${routeFilter})
         ${searchFilter}
@@ -166,7 +160,10 @@ const getClientsHandler = async (req, res) => {
       ORDER BY COALESCE(MAX(S.TOTAL_PURCHASES), 0) DESC
       OFFSET ${parseInt(offset)} ROWS
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `, cacheKey, TTL.MEDIUM);
+    `, cacheKey, cacheTTL);
+
+    const queryDuration = Date.now() - queryStart;
+    logger.info(`[CLIENTS] Query completed: ${clients.length} rows in ${queryDuration}ms`);
 
 
     const formatDateFromInt = (dateInt) => {
@@ -252,6 +249,9 @@ const getClientsHandler = async (req, res) => {
       }),
       hasMore: clients.length === parseInt(limit)
     });
+
+    const totalDuration = Date.now() - startTime;
+    logger.info(`[CLIENTS] Total response time: ${totalDuration}ms for ${clients.length} clients`);
 
   } catch (error) {
     logger.error(`Clients error: ${error.message} `);
