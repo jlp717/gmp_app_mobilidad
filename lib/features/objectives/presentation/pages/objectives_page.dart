@@ -240,31 +240,56 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
             
             // Pacing Logic - FIXED 2.0:
             // Ensure we count proper days for current month
-            final workingDays = (monthData['workingDays'] as num?)?.toInt() ?? 22;
+            // Pacing Logic - FIXED 2.0:
+            // Ensure we count proper days for current month
+            int workingDays = (monthData['workingDays'] as num?)?.toInt() ?? 22;
+            int daysPassed = 0;
+            
             final now = DateTime.now();
             final isCurrentMonth = year == now.year && monthNum == now.month;
             final isSelectedMonth = _selectedMonths.contains(monthNum);
             
-            // daysPassed should be:
-            // - 0 if month is in the future
-            // - workingDays if month is fully in the past
-            // - actual daysPassed if it's the current month AND selected
-            int daysPassed = 0;
-            if (year < now.year || (year == now.year && monthNum < now.month)) {
-              // Past month - use full working days
-              daysPassed = workingDays;
-            } else if (isCurrentMonth && isSelectedMonth) {
-              // Current month and selected
-              final backendDays = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
-              // Improve: If backend says 0 but we are in the month (e.g. day 2), force at least 1?
-              // Or trust backend? If backend logic is "completed days", day 2 might mean 1 completed day.
-              // Let's use backendDays unless correct logic implies more.
-              daysPassed = backendDays;
-              
-              // FORCE FIX: If it's current month, we want to see Ritmo even if daysPassed is 0 (start of month).
-              // But for calculation of "paceObj", 0 days means 0 objective, which is technically correct.
-              // Identifying visual issue vs calculation issue.
-              // Visual issue resolved in build logic (don't hide if daysPassed=0).
+            // SPECIAL FIX FOR 'All Agents' (Jefe de Ventas view)
+            // If viewing all agents (no specific filter), calculate standard Mon-Sat working days
+            // This avoids issues where aggregated data might have incorrect average days (e.g. 20 vs 24)
+            bool isAllAgentsView = widget.isJefeVentas && (_selectedVendedor == null || _selectedVendedor!.isEmpty);
+            
+            if (isAllAgentsView) {
+               // Calculate strict Mon-Sat days for this month
+               int totalDaysInMonth = DateTime(year, monthNum + 1, 0).day;
+               int monSatDays = 0;
+               for (int day = 1; day <= totalDaysInMonth; day++) {
+                 final d = DateTime(year, monthNum, day);
+                 if (d.weekday != DateTime.sunday) {
+                   monSatDays++;
+                 }
+               }
+               workingDays = monSatDays;
+               
+               // Calculate days passed based on Mon-Sat logic
+               if (year < now.year || (year == now.year && monthNum < now.month)) {
+                 daysPassed = workingDays;
+               } else if (isCurrentMonth && isSelectedMonth) {
+                  // Count Mon-Sat days up to today
+                  int passedCount = 0;
+                  for (int day = 1; day <= now.day; day++) {
+                    final d = DateTime(year, monthNum, day);
+                    if (d.weekday != DateTime.sunday) {
+                      passedCount++;
+                    }
+                  }
+                  daysPassed = passedCount;
+               }
+            } else {
+                // Standard logic for individual agents (trust backend data)
+                if (year < now.year || (year == now.year && monthNum < now.month)) {
+                  // Past month - use full working days
+                  daysPassed = workingDays;
+                } else if (isCurrentMonth && isSelectedMonth) {
+                  // Current month and selected
+                  final backendDays = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
+                  daysPassed = backendDays;
+                }
             }
             // Future months = 0 daysPassed
             
