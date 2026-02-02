@@ -238,8 +238,8 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
             final sales = (monthData['sales'] as num?)?.toDouble() ?? 0;
             final obj = (monthData['objective'] as num?)?.toDouble() ?? 0;
             
-            // Pacing Logic - FIXED: Only count days for months ACTUALLY SELECTED
-            // If the current month is not selected, we should NOT include its daysPassed
+            // Pacing Logic - FIXED 2.0:
+            // Ensure we count proper days for current month
             final workingDays = (monthData['workingDays'] as num?)?.toInt() ?? 22;
             final now = DateTime.now();
             final isCurrentMonth = year == now.year && monthNum == now.month;
@@ -254,18 +254,29 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
               // Past month - use full working days
               daysPassed = workingDays;
             } else if (isCurrentMonth && isSelectedMonth) {
-              // Current month and selected - use actual days passed
-              daysPassed = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
+              // Current month and selected
+              final backendDays = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
+              // Improve: If backend says 0 but we are in the month (e.g. day 2), force at least 1?
+              // Or trust backend? If backend logic is "completed days", day 2 might mean 1 completed day.
+              // Let's use backendDays unless correct logic implies more.
+              daysPassed = backendDays;
+              
+              // FORCE FIX: If it's current month, we want to see Ritmo even if daysPassed is 0 (start of month).
+              // But for calculation of "paceObj", 0 days means 0 objective, which is technically correct.
+              // Identifying visual issue vs calculation issue.
+              // Visual issue resolved in build logic (don't hide if daysPassed=0).
             }
             // Future months = 0 daysPassed
             
             double paceObj = 0;
-            if (workingDays > 0 && daysPassed > 0) {
+            // Allow daysPassed to be 0 for calculation (paceObj = 0)
+            if (workingDays > 0) {
                paceObj = (obj / workingDays) * daysPassed;
             }
             
             totalSales += sales;
             totalObjective += obj;
+            // Just sum paceObj directly
             totalPaceObjective += paceObj;
             totalWorkingDays += workingDays;
             totalDaysPassed += daysPassed;
@@ -303,12 +314,11 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     double monthlyObjective = totalAnnualObjective > 0 ? totalAnnualObjective / 12 : 0;
     double consistentTarget = (monthlyObjective * _selectedMonths.length);
     
-    // Use consistent target if totalObjective is zero or we prefer consistency
+    // Use consistent target ONLY if totalObjective is zero (missing granular data)
     if (totalObjective == 0 && consistentTarget > 0) {
         totalObjective = consistentTarget;
-    } else {
-        totalObjective = consistentTarget;
     }
+    // ELSE: Keep totalObjective as the sum of selected months (respects seasonality)
     
     // If pace calculation yielded 0 (e.g. historical data where daysPassed might be 0 or full), 
     // we should ensure it makes sense. 
@@ -1057,13 +1067,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     final ytdProgress = (ytd['progress'] as num?)?.toDouble() ?? 0;
     final year = (ytd['year'] as num?)?.toInt() ?? DateTime.now().year;
     
-    if (ytdObjective == 0) return const SizedBox.shrink();
-    
-    // FIX: Only show YTD banner if multiple months are selected, OR if it's January only (beginning of year)
-    final now = DateTime.now();
-    final isJanuaryOnlyAtYearStart = _selectedMonths.length == 1 && _selectedMonths.first == 1 && now.month <= 2;
-    final shouldShowYTDBanner = _selectedMonths.length > 1 || isJanuaryOnlyAtYearStart;
-    if (!shouldShowYTDBanner) return const SizedBox.shrink();
+    // FIX: Only show YTD banner if strictly more than 1 month is selected
+    // User expectation: Single month view should focus on that month's specific data, not "Acumulado"
+    if (_selectedMonths.length <= 1) return const SizedBox.shrink();
     
     final isOnTrack = ytdProgress >= 100;
     final color = isOnTrack ? AppTheme.success : (ytdProgress >= 90 ? Colors.orange : AppTheme.error);
@@ -1085,7 +1091,8 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Acumulado $year (hasta ${_monthNamesShort[DateTime.now().month - 1]})',
+                // Dynamic label based on selection
+                Text('Acumulado $year (${_selectedMonths.length} meses)',
                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
                 Text('${_formatCurrency(ytdSales)} de ${_formatCurrency(ytdObjective)}',
                     style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
@@ -1445,8 +1452,10 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                 // Green when on track, orange when behind - clear visual feedback
                 final paceColor = isOnTrack ? AppTheme.success : Colors.orangeAccent;
                 
-                // Only show if there's a meaningful pace calculation
-                if (workingDays <= 0 || daysPassed <= 0) return const SizedBox.shrink();
+                // Only show if there's a meaningful pace calculation context (working days exist)
+                // FIX: Do NOT hide if daysPassed is 0. Only hide if workingDays is 0 (invalid data).
+                // We want to see "Ritmo Diario" even on day 1 of the month.
+                if (workingDays <= 0) return const SizedBox.shrink();
                 
                 return Container(
                   margin: const EdgeInsets.only(top: 16),
