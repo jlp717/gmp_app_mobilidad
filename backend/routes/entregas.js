@@ -184,7 +184,10 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               CPC.IMPORTEBRUTO,
               TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
-              TRIM(CPC.CODIGORUTA) as RUTA
+              TRIM(CPC.CODIGORUTA) as RUTA,
+              DS.STATUS as DS_STATUS,
+              DS.OBSERVACIONES as DS_OBS,
+              DS.FIRMA_PATH as DS_FIRMA
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
               ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
@@ -194,6 +197,8 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
               AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+              ON DS.ID = CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10)) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || CAST(CPC.TERMINALALBARAN AS VARCHAR(10)) || '-' || CAST(CPC.NUMEROALBARAN AS VARCHAR(10))
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids})
               AND OPP.DIAREPARTO = ${dia}
               AND OPP.MESREPARTO = ${mes}
@@ -294,7 +299,9 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 colorEstado: paymentInfo.color,
                 fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
                 ruta: row.RUTA?.trim(),
-                estado: 'PENDIENTE'
+                estado: (row.DS_STATUS || 'PENDIENTE').trim(),
+                observaciones: row.DS_OBS,
+                firma: row.DS_FIRMA
             };
         });
 
@@ -500,11 +507,30 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 // ===================================
 router.post('/update', async (req, res) => {
     try {
-        const { itemId, status, repartidorId, observaciones } = req.body;
-        logger.info(`[ENTREGAS] Updating ${itemId} to ${status} by ${repartidorId}`);
-        // Here you would update a tracking table. For now just success.
-        res.json({ success: true, message: 'Status updated' });
+        const { itemId, status, repartidorId, observaciones, firma, fotos, latitud, longitud } = req.body;
+        logger.info(`[ENTREGAS] Updating ${itemId} to ${status} (Rep: ${repartidorId})`);
+
+        // Upsert into JAVIER.DELIVERY_STATUS
+        // 1. Delete existing
+        await query(`DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
+
+        // 2. Insert new
+        const obsSafe = observaciones ? observaciones.replace(/'/g, "''") : '';
+        const firmaSafe = firma ? firma.replace(/'/g, "''") : '';
+        const lat = latitud || 0;
+        const lon = longitud || 0;
+
+        const insertSql = `
+            INSERT INTO JAVIER.DELIVERY_STATUS 
+            (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT)
+            VALUES ('${itemId}', '${status}', '${obsSafe}', '${firmaSafe}', ${lat}, ${lon}, '${repartidorId}', CURRENT TIMESTAMP)
+        `;
+
+        await query(insertSql, false);
+
+        res.json({ success: true, message: 'Status updated and saved' });
     } catch (error) {
+        logger.error(`Error in /update: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });

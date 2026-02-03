@@ -1389,11 +1389,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
 
     // CTR validation
+    // CTR validation (Strict)
     if (_isUrgent && !_isPaid) {
-      if (_observacionesController.text.trim().isEmpty) {
-        _showError('Cobro pendiente: Indique motivo en observaciones');
-        return;
-      }
+      HapticFeedback.error();
+      _showError('⚠️ COBRO OBLIGATORIO: Debe marcar "Marcar como Cobrado" en la pestaña Cobro para continuar.');
+      // Optionally switch tab to payment
+      _tabController.animateTo(1);
+      return;
     }
 
     setState(() => _isSubmitting = true);

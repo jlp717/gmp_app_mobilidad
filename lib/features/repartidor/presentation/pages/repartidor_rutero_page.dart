@@ -729,26 +729,87 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   }
 
   void _handleQuickComplete(AlbaranEntrega albaran) {
+    // 1. Validation: If CTR (Must Pay), prevent quick swipe
+    if (albaran.esCTR) {
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.warning_amber_rounded, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(child: Text('Cobro obligatorio. Abra el detalle para registrar pago.')),
+            ],
+          ),
+          backgroundColor: AppTheme.obligatorio,
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'ABRIR',
+            textColor: Colors.white,
+            onPressed: () => _showDetailDialog(albaran),
+          ),
+        ),
+      );
+      // Re-open detail slightly delayed
+      Future.delayed(const Duration(milliseconds: 300), () => _showDetailDialog(albaran));
+      return;
+    }
+
+    // 2. Perform Quick Complete
+    final provider = Provider.of<EntregasProvider>(context, listen: false);
+    
+    // Optimistic UI update or wait? 
+    // Let's show loading snackbar then success
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text('Completado: ${albaran.nombreCliente}'),
+            SizedBox(
+              width: 20, 
+              height: 20, 
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)
             ),
+            const SizedBox(width: 12),
+            Expanded(child: Text('Completando ${albaran.nombreCliente}...')),
           ],
         ),
-        backgroundColor: AppTheme.success,
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'VER DETALLE',
-          textColor: Colors.white,
-          onPressed: () => _showDetailDialog(albaran),
-        ),
+        backgroundColor: AppTheme.darkCard,
+        duration: const Duration(seconds: 1),
       ),
     );
+
+    provider.marcarEntregado(
+      albaranId: albaran.id,
+      observaciones: 'Completado rápido (Swipe)',
+      // No signature/photos for quick swipe
+    ).then((success) {
+      if (success) {
+        HapticFeedback.success();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Completado: ${albaran.nombreCliente}')),
+              ],
+            ),
+            backgroundColor: AppTheme.success,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        provider.cargarAlbaranesPendientes(); // Refresh list
+      } else {
+        HapticFeedback.error();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al completar: ${provider.error ?? "Desconocido"}'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    });
   }
 
   void _showQuickNoteDialog(AlbaranEntrega albaran) {

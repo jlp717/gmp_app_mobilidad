@@ -145,6 +145,30 @@ app.use('/api/logs', userActionsRoutes);
 async function startServer() {
   await initDb();
 
+  // Ensure Delivery Status Table Exists (Safe Strategy)
+  try {
+    const checkSql = `SELECT COUNT(*) as CNT FROM SYSIBM.SYSTABLES WHERE TRIM(CREATOR) = 'JAVIER' AND TRIM(NAME) = 'DELIVERY_STATUS'`;
+    const result = await query(checkSql, false);
+    if (result[0].CNT === 0) {
+      logger.info('Creating JAVIER.DELIVERY_STATUS table...');
+      await query(`
+            CREATE TABLE JAVIER.DELIVERY_STATUS (
+                ID VARCHAR(64) NOT NULL PRIMARY KEY,
+                STATUS VARCHAR(20) DEFAULT 'PENDIENTE',
+                OBSERVACIONES VARCHAR(512),
+                FIRMA_PATH VARCHAR(255),
+                LATITUD DECIMAL(10, 8),
+                LONGITUD DECIMAL(11, 8),
+                UPDATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
+                REPARTIDOR_ID VARCHAR(20)
+            )
+        `, false);
+      logger.info('JAVIER.DELIVERY_STATUS created.');
+    }
+  } catch (e) {
+    logger.error(`Error ensuring delivery table: ${e.message}`);
+  }
+
   // Initialize Redis cache (non-blocking - works without Redis too)
   initCache()
     .then(() => logger.info('✅ Redis cache initialized'))
