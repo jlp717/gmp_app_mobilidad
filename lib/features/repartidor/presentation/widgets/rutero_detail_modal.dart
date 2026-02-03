@@ -1391,7 +1391,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     // CTR validation
     // CTR validation (Strict)
     if (_isUrgent && !_isPaid) {
-      HapticFeedback.error();
+      HapticFeedback.heavyImpact();
       _showError('⚠️ COBRO OBLIGATORIO: Debe marcar "Marcar como Cobrado" en la pestaña Cobro para continuar.');
       // Optionally switch tab to payment
       _tabController.animateTo(1);

@@ -18,7 +18,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.maripepa.gmp_mobilidad"
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    // ndkVersion = flutter.ndkVersion // Commented out to let Gradle decide
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -49,6 +49,14 @@ android {
         multiDexEnabled = true
     }
 
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += listOf("**/*.so")
+        }
+    }
+    
+    // Explicitly disabling strip for these architectures to avoid NDK errors
     packagingOptions {
         doNotStrip("*/armeabi-v7a/*.so")
         doNotStrip("*/arm64-v8a/*.so")
@@ -56,7 +64,6 @@ android {
         doNotStrip("*/x86_64/*.so")
     }
 
-    buildTypes {
         release {
             // Disabled due to NDK strip issue on Windows - AAB is still valid
             isMinifyEnabled = false
@@ -65,9 +72,6 @@ android {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug")
-            }
-            ndk {
-                debugSymbolLevel = "SYMBOL_TABLE"
             }
         }
     }

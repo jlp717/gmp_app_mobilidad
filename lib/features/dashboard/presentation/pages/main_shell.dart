@@ -32,12 +32,15 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   DashboardProvider? _dashboardProvider;
-  bool _isNavExpanded = true; // Estado del navbar colapsable
+  bool _isNavExpanded = true; 
   
   // State for Jefe Repartidor View
   String? _selectedRepartidor;
   List<Map<String, dynamic>> _repartidoresOptions = [];
   bool _isLoadingRepartidores = false;
+  
+  // Toggle state
+  bool _forceRepartidorMode = false;
 
   @override
   void initState() {
@@ -46,9 +49,23 @@ class _MainShellState extends State<MainShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnection();
       _checkForUpdates();
+      
+      // Init mode based on real user role
+      final auth = context.read<AuthProvider>();
+      if (auth.currentUser?.isRepartidor == true) {
+         _forceRepartidorMode = true;
+      }
     });
   }
-  
+
+  // Helper to determine effective mode
+  bool get _isRepartidorEffective {
+     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+     final user = authProvider.currentUser;
+     if (user?.isRepartidor == true) return true; // Always true for real drivers
+     return _forceRepartidorMode; // Toggleable for Jefe
+  }
+
   void _checkForUpdates() {
      final auth = context.read<AuthProvider>();
      if (auth.updateAvailable) {
@@ -64,8 +81,6 @@ class _MainShellState extends State<MainShell> {
                 actions: [
                     TextButton(
                         onPressed: () {
-                             // Dismiss (optional) or force?
-                             // User asked to notify, not necessarily block.
                              Navigator.pop(context);
                         },
                         child: const Text('Más tarde'),
@@ -73,7 +88,6 @@ class _MainShellState extends State<MainShell> {
                     ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonGreen),
                         onPressed: () {
-                             // Open Play Store
                             launchUrl(Uri.parse('https://play.google.com/store/apps/details?id=com.maripepa.gmp_app_mobilidad'), mode: LaunchMode.externalApplication);
                         },
                         child: const Text('ACTUALIZAR', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -152,63 +166,48 @@ class _MainShellState extends State<MainShell> {
   }
 
   // Get navigation destinations based on user role
-  // JEFE: Panel, Clientes, Ruta, Objetivos, Comisiones, Chat
-  // COMERCIAL: Clientes, Ruta, Objetivos, Comisiones, Chat
-  // REPARTIDOR: Rutero, Comisiones, Histórico, Chat IA (4 tabs exclusivos)
   List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
     final items = <_NavItem>[];
-    
-    // Obtener el rol del usuario
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
-    // Check ACTIVE role first
-    final isRepartidor = user?.isRepartidor ?? false;
+    
+    // Check EFFECTIVE role
+    final isRepartidor = _isRepartidorEffective;
     
     // ===============================================
-    // REPARTIDOR: 4 pestañas exclusivas
-    // 0=Rutero, 1=Comisiones, 2=Histórico, 3=Chat IA
+    // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
-      // Tab 1: Rutero (Ruta del día con cobros integrados)
       items.add(_NavItem(
         icon: Icons.route_outlined,
         selectedIcon: Icons.route,
         label: 'Rutero',
         color: AppTheme.neonBlue,
       ));
-      
-      // Tab 2: Comisiones (con umbral 30%)
       items.add(_NavItem(
         icon: Icons.euro_outlined,
         selectedIcon: Icons.euro,
         label: 'Comisiones',
         color: AppTheme.neonGreen,
       ));
-
-      // Tab 3: Histórico (albaranes, facturas, firmas)
       items.add(_NavItem(
         icon: Icons.history_outlined,
         selectedIcon: Icons.history,
         label: 'Histórico',
         color: AppTheme.neonPurple,
       ));
-      
-      // Tab 4: Chat IA
       items.add(_NavItem(
         icon: Icons.smart_toy_outlined,
         selectedIcon: Icons.smart_toy,
         label: 'Chat IA',
         color: AppTheme.neonPink,
       ));
-      
       return items;
     }
     
     // ===============================================
-    // JEFE y COMERCIAL
+    // SALES MODE (Jefe / Comercial)
     // ===============================================
-    
-    // Panel de Control - ONLY for Jefe de Ventas
     if (isJefeVentas) {
       items.add(_NavItem(
         icon: Icons.dashboard_outlined,
@@ -217,24 +216,18 @@ class _MainShellState extends State<MainShell> {
         color: AppTheme.neonBlue,
       ));
     }
-    
-    // Clientes - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.people_outline,
       selectedIcon: Icons.people,
       label: 'Clientes',
       color: AppTheme.neonGreen,
     ));
-    
-    // Ruta - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.route_outlined,
       selectedIcon: Icons.route,
       label: 'Ruta',
       color: AppTheme.neonPurple,
     ));
-    
-    // Objetivos - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.track_changes_outlined,
       selectedIcon: Icons.track_changes,
@@ -242,13 +235,7 @@ class _MainShellState extends State<MainShell> {
       color: Colors.orange,
     ));
     
-    // Comisiones - visible based on DB flag (user.showCommissions)
-    // Formerly hardcoded for 80, 13, 3, etc.
-    final showCommissions = user?.showCommissions ?? true; // Default true if legacy
-    
-    // Also hidden if hardcoded restrictedCodes matched? NO, replacing logic entirely as requested.
-    // "No hardcoding" -> Rely purely on DB flag.
-    
+    final showCommissions = user?.showCommissions ?? true; 
     if (showCommissions || isJefeVentas) {
       items.add(_NavItem(
         icon: Icons.euro_outlined,
@@ -258,10 +245,6 @@ class _MainShellState extends State<MainShell> {
       ));
     }
     
-    // COBROS REMOVIDO DE COMERCIAL - Ahora es exclusivo de Repartidor
-    // Los comerciales ya no ven la pestaña de Cobros
-    
-    // Chat IA - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.smart_toy_outlined,
       selectedIcon: Icons.smart_toy,
@@ -272,13 +255,7 @@ class _MainShellState extends State<MainShell> {
     return items;
   }
 
-  // Helper to get available repartidores (mocked or from auth)
-  // For now, if Jefe, we assume he can see all. We need a list of repartidores.
-  // We can filter `authProvider.vendedorCodes` or hardcode known drivers/fetch them.
-  // For simplicity, we'll use a hardcoded list + "TODOS" or filter known drivers.
   List<Map<String, String>> _getRepartidores(List<String> codes) {
-     // Return a list of {code, name}
-     // Ideally this comes from a provider. For now, we mock or use codes.
      return [
        {'code': 'ALL', 'name': 'Todos los Repartidores'},
        ...codes.map((c) => {'code': c, 'name': 'Repartidor $c'}),
@@ -297,11 +274,9 @@ class _MainShellState extends State<MainShell> {
       );
     }
 
-    final isJefeVentas = user.isJefeVentas; // The user capability
-    final isRepartidorMode = user.isRepartidor; // The active mode
-    
-    // Initialize selected if null
-    if (isJefeVentas && isRepartidorMode && _selectedRepartidor == null) {
+    final isJefeVentas = user.isJefeVentas; 
+    // Init default selection for Jefe in Repartidor Mode
+    if (_forceRepartidorMode && isJefeVentas && _selectedRepartidor == null) {
        _selectedRepartidor = 'ALL';
     }
 
@@ -312,31 +287,70 @@ class _MainShellState extends State<MainShell> {
       body: SafeArea(
         child: Row(
           children: [
-            // Custom Sidebar Navigation - Colapsable
+            // Custom Sidebar Navigation
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              width: _isNavExpanded ? 90 : 0, // REVERTED TO 90
+              width: _isNavExpanded ? 90 : 0, 
               child: _isNavExpanded ? Container(
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceColor,
                   border: Border(
-                    right: BorderSide(
-                      color: Colors.white.withOpacity(0.05),
-                      width: 1,
-                    ),
+                    right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
                   ),
                 ),
                 child: Column(
                   children: [
                     const SizedBox(height: 16),
-                    
-                    // User Avatar
                     _buildUserAvatar(user, isJefeVentas),
+                    const SizedBox(height: 16),
+
+                    // MODE SWITCHER FOR JEFE
+                    if (isJefeVentas)
+                         Padding(
+                           padding: const EdgeInsets.symmetric(horizontal: 12),
+                           child: InkWell(
+                             onTap: () {
+                               setState(() {
+                                 _forceRepartidorMode = !_forceRepartidorMode;
+                                 _currentIndex = 0; // Reset tab
+                               });
+                             },
+                             borderRadius: BorderRadius.circular(12),
+                             child: Container(
+                               padding: const EdgeInsets.symmetric(vertical: 8),
+                               decoration: BoxDecoration(
+                                 color: _forceRepartidorMode ? Colors.orange.withOpacity(0.2) : AppTheme.neonBlue.withOpacity(0.2),
+                                 borderRadius: BorderRadius.circular(12),
+                                 border: Border.all(
+                                   color: _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                                   width: 1
+                                 )
+                               ),
+                               child: Column(
+                                 children: [
+                                   Icon(
+                                     _forceRepartidorMode ? Icons.local_shipping : Icons.store,
+                                     color: _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                                     size: 20
+                                   ),
+                                   const SizedBox(height: 4),
+                                   Text(
+                                     _forceRepartidorMode ? 'Reparto' : 'Ventas',
+                                     style: TextStyle(
+                                       fontSize: 9,
+                                       fontWeight: FontWeight.bold,
+                                       color: _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                                     ),
+                                   )
+                                 ],
+                               ),
+                             ),
+                           ),
+                         ),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     
-                    // Navigation Items - Take available space
                     Expanded(
                       child: ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -354,13 +368,11 @@ class _MainShellState extends State<MainShell> {
                       ),
                     ),
                     
-                    // Bottom Section - Collapse button and Logout
                     const Divider(height: 1, color: Colors.white10),
                     Padding(
                       padding: const EdgeInsets.all(12),
                       child: Column(
                         children: [
-                          // Collapse button
                           _buildCollapseButton(),
                           const SizedBox(height: 8),
                           _buildLogoutButton(authProvider),
@@ -372,7 +384,7 @@ class _MainShellState extends State<MainShell> {
               ) : null,
             ),
             
-            // Expand button cuando está colapsado
+            // Expand button
             if (!_isNavExpanded)
               GestureDetector(
                 onTap: () => setState(() => _isNavExpanded = true),
@@ -380,9 +392,7 @@ class _MainShellState extends State<MainShell> {
                   width: 24,
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceColor,
-                    border: Border(
-                      right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
-                    ),
+                    border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1)),
                   ),
                   child: Center(
                     child: Container(
@@ -391,17 +401,13 @@ class _MainShellState extends State<MainShell> {
                         color: AppTheme.neonBlue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
-                        Icons.chevron_right_rounded,
-                        color: AppTheme.neonBlue,
-                        size: 16,
-                      ),
+                      child: Icon(Icons.chevron_right_rounded, color: AppTheme.neonBlue, size: 16),
                     ),
                   ),
                 ),
               ),
             
-            // Main Content Area
+            // Main Content
             Expanded(
               child: _buildCurrentPage(authProvider.vendedorCodes, isJefeVentas),
             ),
@@ -701,7 +707,7 @@ class _MainShellState extends State<MainShell> {
     // Obtener el rol del usuario
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
-    final isRepartidor = user?.isRepartidor ?? false;
+    final isRepartidor = _isRepartidorEffective; 
     
     // ===============================================
     // REPARTIDOR: 0=Rutero, 1=Comisiones, 2=Histórico, 3=Chat IA

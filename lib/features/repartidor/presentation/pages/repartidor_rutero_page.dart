@@ -785,7 +785,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       // No signature/photos for quick swipe
     ).then((success) {
       if (success) {
-        HapticFeedback.success();
+        HapticFeedback.lightImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -801,7 +801,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
         );
         provider.cargarAlbaranesPendientes(); // Refresh list
       } else {
-        HapticFeedback.error();
+        HapticFeedback.heavyImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al completar: ${provider.error ?? "Desconocido"}'),
