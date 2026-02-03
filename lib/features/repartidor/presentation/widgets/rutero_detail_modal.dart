@@ -122,10 +122,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         final signers = response['signers'] as List;
         setState(() {
           _suggestedDnis = signers.map((s) => s['DNI'].toString().trim()).toList();
-          // Store names map or just list? For now just names list for autocomplete if needed
           _suggestedNames = signers.map((s) => s['NOMBRE'].toString().trim()).toList();
           
-          // Pre-fill if only 1 recent signer? No, better let user choose.
+          // Pre-fill with most recent signer (User request)
+          if (signers.isNotEmpty) {
+             final last = signers.first;
+             _dniController.text = last['DNI'].toString().trim();
+             _nombreController.text = last['NOMBRE'].toString().trim();
+          }
         });
       }
     } catch (e) {

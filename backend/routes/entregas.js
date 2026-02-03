@@ -206,6 +206,36 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             ORDER BY CAC.NUMEROALBARAN
         `;
 
+        // Initialize JAVIER schema tables if not exist
+        try {
+            await query(`
+                CREATE TABLE IF NOT EXISTS JAVIER.DELIVERY_STATUS (
+                    ID VARCHAR(50) NOT NULL PRIMARY KEY,
+                    STATUS VARCHAR(20) DEFAULT 'PENDIENTE',
+                    OBSERVACIONES VARCHAR(1000),
+                    FIRMA_PATH VARCHAR(255),
+                    LATITUD DOUBLE,
+                    LONGITUD DOUBLE,
+                    REPARTIDOR_ID VARCHAR(20),
+                    UPDATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `, false);
+
+            await query(`
+                CREATE TABLE IF NOT EXISTS JAVIER.CLIENT_SIGNERS (
+                    CODIGOCLIENTE VARCHAR(20) NOT NULL,
+                    DNI VARCHAR(20) NOT NULL,
+                    NOMBRE VARCHAR(100),
+                    LAST_USED DATE,
+                    USAGE_COUNT INT DEFAULT 1,
+                    PRIMARY KEY (CODIGOCLIENTE, DNI)
+                )
+            `, false);
+        } catch (initErr) {
+            // Ignore if exists or schema not valid (DB2 might differ in IF NOT EXISTS syntax, proceed)
+            // logger.warn('Table init warning: ' + initErr.message);
+        }
+
         let rows = [];
         try {
             rows = await query(sql, false) || [];
@@ -214,8 +244,21 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             return res.json({ success: true, albaranes: [], total: 0 });
         }
 
+        // --- DEDUPLICATION ---
+        //Group by Albaran ID to prevent duplicates from multiple OPP rows
+        const uniqueMap = new Map();
+        rows.forEach(row => {
+            // FIX: Ensure ID matches the one used in JOIN (Trimmed Series)
+            const serie = (row.SERIEALBARAN || '').trim();
+            const id = `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
+            if (!uniqueMap.has(id)) {
+                uniqueMap.set(id, row);
+            }
+        });
+        const uniqueRows = Array.from(uniqueMap.values());
+
         // Process rows
-        const albaranes = rows.map(row => {
+        const albaranes = uniqueRows.map(row => {
             const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
 
             // Try robust matching
@@ -274,11 +317,13 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 
             const importeParsed = parseMoney(row.IMPORTEBRUTO);
 
+            const serie = (row.SERIEALBARAN || '').trim();
+
             return {
-                id: `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
+                id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
                 subempresa: row.SUBEMPRESAALBARAN,
                 ejercicio: row.EJERCICIOALBARAN,
-                serie: row.SERIEALBARAN?.trim() || '',
+                serie: serie,
                 terminal: row.TERMINALALBARAN,
                 numero: row.NUMEROALBARAN,
                 numeroFactura: numeroFactura,

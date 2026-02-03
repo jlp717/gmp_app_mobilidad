@@ -195,18 +195,18 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     return AnimatedBuilder(
       animation: Listenable.merge([_scannerAnimation, _progressController]),
       builder: (context, child) {
-        return Column(
+        return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 80,
-              height: 80,
+              width: 50,
+              height: 50,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
                   // Background ring
                   CustomPaint(
-                    size: const Size(80, 80),
+                    size: const Size(50, 50),
                     painter: _HoloRingPainter(
                       progress: progress * _progressController.value,
                       scannerAngle: _scannerAnimation.value,
@@ -222,15 +222,14 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                       const Icon(
                         Icons.local_shipping_outlined,
                         color: AppTheme.neonBlue,
-                        size: 20,
+                        size: 14,
                       ),
-                      const SizedBox(height: 2),
                       Text(
                         '${widget.entregasCompletadas}/${widget.totalEntregas}',
                         style: const TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontSize: 10,
                         ),
                       ),
                     ],
@@ -238,15 +237,29 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                 ],
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              'ENTREGAS',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-              ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'ENTREGAS',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+                 Text(
+                   '${(progress * 100).toInt()}%',
+                   style: const TextStyle(
+                     color: AppTheme.neonBlue,
+                     fontWeight: FontWeight.bold,
+                     fontSize: 18,
+                   ),
+                 ),
+              ],
             ),
           ],
         );
