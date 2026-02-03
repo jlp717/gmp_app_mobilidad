@@ -52,19 +52,12 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            keepDebugSymbols += listOf("**/*.so")
+            keepDebugSymbols += setOf("**/*.so")
         }
     }
-    
-    // Explicitly disabling strip for these architectures to avoid NDK errors
-    packagingOptions {
-        doNotStrip("*/armeabi-v7a/*.so")
-        doNotStrip("*/arm64-v8a/*.so")
-        doNotStrip("*/x86/*.so")
-        doNotStrip("*/x86_64/*.so")
-    }
 
-        release {
+    buildTypes {
+        getByName("release") {
             // Disabled due to NDK strip issue on Windows - AAB is still valid
             isMinifyEnabled = false
             isShrinkResources = false
@@ -73,13 +66,6 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
-        }
-    }
-
-    // Prevent stripping of native debug symbols (fixes NDK error)
-    packaging {
-        jniLibs {
-            keepDebugSymbols += listOf("**/*.so")
         }
     }
 }
