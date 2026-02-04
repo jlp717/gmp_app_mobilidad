@@ -527,7 +527,13 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 // ===================================
 router.post('/update', async (req, res) => {
     try {
-        const { itemId, status, repartidorId, observaciones, firma, fotos, latitud, longitud, forceUpdate } = req.body;
+        const { itemId: reqItemId, albaranId, status, repartidorId, observaciones, firma, fotos, latitud, longitud, forceUpdate } = req.body;
+        const itemId = reqItemId || albaranId; // Support both naming conventions
+
+        if (!itemId) {
+            return res.status(400).json({ success: false, error: 'Se requiere itemId o albaranId' });
+        }
+
         logger.info(`[ENTREGAS] Updating ${itemId} to ${status} (Rep: ${repartidorId}, Force: ${forceUpdate || false})`);
 
         // VALIDATION: Check if already delivered (prevents accidental duplicate confirmations)

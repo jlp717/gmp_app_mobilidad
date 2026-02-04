@@ -26,8 +26,7 @@ async function initRuteroDB() {
                 DNI VARCHAR(20) NOT NULL,
                 NOMBRE VARCHAR(100),
                 LAST_USED DATE,
-                USAGE_COUNT INT DEFAULT 1,
-                PRIMARY KEY (CODIGOCLIENTE, DNI)
+                USAGE_COUNT INTEGER
             )`
         }
     ];
@@ -38,14 +37,25 @@ async function initRuteroDB() {
             try {
                 // Try selecting 1 row to see if it exists
                 // Note: FETCH FIRST 1 ROWS ONLY is standard DB2 syntax
-                await query(`SELECT ID FROM ${table.name} FETCH FIRST 1 ROWS ONLY`, false, false);
+                await query(`SELECT 1 FROM ${table.name} FETCH FIRST 1 ROWS ONLY`, false, false);
                 console.log(`   ✅ ${table.name} exists and is accessible.`);
             } catch (checkErr) {
-                console.log(`   ℹ️ ${table.name} not accessible or missing (${checkErr.message}). Attempting creation...`);
+                console.log(`   ℹ️ ${table.name} not accessible or missing. Attempting creation...`);
 
                 try {
                     await query(table.sql, false, true);
                     console.log(`   ✅ Created ${table.name} successfully.`);
+
+                    // Create index separately for client signers
+                    if (table.name === 'JAVIER.CLIENT_SIGNERS') {
+                        try {
+                            await query(`CREATE UNIQUE INDEX JAVIER.IDX_CLIENT_SIGNERS ON JAVIER.CLIENT_SIGNERS (CODIGOCLIENTE, DNI)`, false, false);
+                            console.log(`   ✅ Created Index for ${table.name}`);
+                        } catch (idxErr) {
+                            console.log(`   ℹ️ Index creation skipped/failed: ${idxErr.message}`);
+                        }
+                    }
+
                 } catch (createErr) {
                     // Check common "already exists" errors just in case
                     if (createErr.message && (createErr.message.includes('already exists') || createErr.message.includes('42710'))) {
@@ -64,5 +74,4 @@ async function initRuteroDB() {
     }
 }
 
-// Ensure 5s wait for pool init inside query check if needed, but db.js handles it.
 initRuteroDB();
