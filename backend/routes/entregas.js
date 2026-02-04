@@ -208,35 +208,8 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             ORDER BY CAC.NUMEROALBARAN
         `;
 
-        // Initialize JAVIER schema tables if not exist
-        try {
-            await query(`
-                CREATE TABLE IF NOT EXISTS JAVIER.DELIVERY_STATUS (
-                    ID VARCHAR(50) NOT NULL PRIMARY KEY,
-                    STATUS VARCHAR(20) DEFAULT 'PENDIENTE',
-                    OBSERVACIONES VARCHAR(1000),
-                    FIRMA_PATH VARCHAR(255),
-                    LATITUD DOUBLE,
-                    LONGITUD DOUBLE,
-                    REPARTIDOR_ID VARCHAR(20),
-                    UPDATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            `, false);
-
-            await query(`
-                CREATE TABLE IF NOT EXISTS JAVIER.CLIENT_SIGNERS (
-                    CODIGOCLIENTE VARCHAR(20) NOT NULL,
-                    DNI VARCHAR(20) NOT NULL,
-                    NOMBRE VARCHAR(100),
-                    LAST_USED DATE,
-                    USAGE_COUNT INT DEFAULT 1,
-                    PRIMARY KEY (CODIGOCLIENTE, DNI)
-                )
-            `, false);
-        } catch (initErr) {
-            // Ignore if exists or schema not valid (DB2 might differ in IF NOT EXISTS syntax, proceed)
-            // logger.warn('Table init warning: ' + initErr.message);
-        }
+        // Table initialization removed to prevent AS400 errors.
+        // Tables JAVIER.DELIVERY_STATUS and JAVIER.CLIENT_SIGNERS are assumed to exist.
 
         let rows = [];
         try {
