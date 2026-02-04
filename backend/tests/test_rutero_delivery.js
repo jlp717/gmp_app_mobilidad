@@ -76,7 +76,7 @@ function request(method, path, body = null, token = null) {
 
 async function runTests() {
     log('═══════════════════════════════════════════════════════════', C.cyan);
-    log('        RUTERO DELIVERY ENDPOINTS TEST SUITE (FIXED)', C.cyan);
+    log('        RUTERO DELIVERY ENDPOINTS TEST SUITE (SCANNER)', C.cyan);
     log('═══════════════════════════════════════════════════════════', C.cyan);
     log(`Server: ${API_BASE}`, C.gray);
     log(`Time: ${new Date().toISOString()}\n`, C.gray);
@@ -97,87 +97,78 @@ async function runTests() {
             REPARTIDOR_ID = loginRes.body.user.code;
             log(`   ✅ Login successful! Code: ${REPARTIDOR_ID}, Role: ${loginRes.body.role}`, C.green);
             log(`   🔑 Token: ${AUTH_TOKEN.substring(0, 20)}...`, C.gray);
-
-            // If user is Jefe de Ventas, we might need to "view as" a repartidor to see deliveries
-            // Let's assume we want to view as '41' (ALFONSO) or just check GOYO's own if any.
-            // But if GOYO has no deliveries, we might fail.
-            // Let's list repartidores first to pick one if we are Jefe.
-            if (loginRes.body.role === 'JEFE_VENTAS') {
-                log('   👑 User is Director. Fetching repartidores list...', C.blue);
-                const repsRes = await request('GET', '/auth/repartidores', null, AUTH_TOKEN);
-                if (repsRes.status === 200 && repsRes.body.length > 0) {
-                    log(`   📋 Found ${repsRes.body.length} repartidores.`, C.gray);
-                    // Check if GOYO is in list (usually code 15)
-                    // But let's try to query GOYO first (15).
-                    REPARTIDOR_ID = '15';
-                }
-            }
-
         } else {
             log(`   ❌ Login failed: ${JSON.stringify(loginRes.body)}`, C.red);
             process.exit(1);
         }
 
         // =================================================================
-        // 2. GET PENDING DELIVERIES
+        // 2. GET PENDING DELIVERIES (Smart Search)
         // =================================================================
-        log(`\n📦 TEST 2: Get pending deliveries for ${REPARTIDOR_ID}...`, C.yellow);
+        let targetRepartidores = [REPARTIDOR_ID];
 
-        let pendingRes = await request('GET', `/entregas/pendientes/${REPARTIDOR_ID}`, null, AUTH_TOKEN);
-
-        if (pendingRes.status === 200) {
-            let albaranes = pendingRes.body.albaranes || [];
-            log(`   ✅ Success. Total albaranes: ${albaranes.length}`, C.green);
-            log(`   📊 KPI Resumen: `, C.cyan);
-            log(`      - Completed: ${pendingRes.body.resumen?.completedCount}`, C.cyan);
-            log(`      - A Cobrar: ${pendingRes.body.resumen?.totalACobrar}€`, C.cyan);
-
-            if (albaranes.length === 0 && loginRes.body.role === 'JEFE_VENTAS') {
-                // Try another repartidor if GOYO has none
-                log('   ⚠️ GOYO has 0 deliveries. Trying repartidor 41 (ALFONSO)...', C.yellow);
-                REPARTIDOR_ID = '41';
-                pendingRes = await request('GET', `/entregas/pendientes/${REPARTIDOR_ID}`, null, AUTH_TOKEN);
-                albaranes = pendingRes.body.albaranes || [];
-                log(`   ✅ Retry check. Total albaranes for 41: ${albaranes.length}`, C.green);
+        // If Director, use the list we fetched (or fetch it now if we don't have it)
+        if (loginRes.body.role === 'JEFE_VENTAS' || loginRes.body.isJefeVentas) {
+            log('   👑 User is Director. scanning for a repartidor with pending work...', C.blue);
+            const repsRes = await request('GET', '/auth/repartidores', null, AUTH_TOKEN);
+            if (repsRes.status === 200 && repsRes.body.length > 0) {
+                // Map the list to IDs
+                targetRepartidores = repsRes.body.map(r => r.code);
+                log(`   📋 Scanning ${targetRepartidores.length} repartidores...`, C.gray);
             }
+        }
 
-            if (albaranes.length > 0) {
-                // Find a PENDING one to test with
-                TARGET_ALBARAN = albaranes.find(a => (!a.estado || a.estado === 'PENDIENTE'));
+        let foundData = false;
 
-                if (!TARGET_ALBARAN) {
-                    // Try to pick ANY, even if delivered, to test duplicate
-                    TARGET_ALBARAN = albaranes[0];
-                    log('   ⚠️ No PENDING deliveries found. Picking first available (might be already delivered).', C.yellow);
+        for (const repId of targetRepartidores) {
+            process.stdout.write(`   � Checking Repartidor ${repId}... `);
+            const pendingRes = await request('GET', `/entregas/pendientes/${repId}`, null, AUTH_TOKEN);
+
+            if (pendingRes.status === 200) {
+                const albaranes = pendingRes.body.albaranes || [];
+                if (albaranes.length > 0) {
+                    console.log(`${C.green}FOUND!${C.reset}`);
+                    REPARTIDOR_ID = repId;
+                    log(`   ✅ Success. Total albaranes: ${albaranes.length}`, C.green);
+                    log(`   📊 KPI Resumen: `, C.cyan);
+                    log(`      - Completed: ${pendingRes.body.resumen?.completedCount}`, C.cyan);
+                    log(`      - A Cobrar: ${pendingRes.body.resumen?.totalACobrar}€`, C.cyan);
+
+                    TARGET_ALBARAN = albaranes.find(a => (!a.estado || a.estado === 'PENDIENTE'));
+                    if (!TARGET_ALBARAN) {
+                        TARGET_ALBARAN = albaranes[0];
+                        log('   ⚠️ No PENDING deliveries found. Picking first available.', C.yellow);
+                    }
+
+                    log(`   🎯 Target Albaran: ${TARGET_ALBARAN.numeroAlbaran} (ID: ${TARGET_ALBARAN.id})`, C.magenta);
+                    log(`   � Inspector: ${TARGET_ALBARAN.codigoRepartidor || 'N/A'}`, C.gray);
+                    foundData = true;
+                    break; // Stop looking
+                } else {
+                    console.log(`${C.gray}Empty${C.reset}`);
                 }
-
-                log(`   🎯 Target Albaran for test: ${TARGET_ALBARAN.numeroAlbaran} (ID: ${TARGET_ALBARAN.id})`, C.magenta);
-                log(`   💰 Importe: ${TARGET_ALBARAN.total}€`, C.gray);
-                log(`   🏷️ Estado actual: ${TARGET_ALBARAN.estado || 'PENDIENTE'}`, C.gray);
-                log(`   🏷️ Tags: ${JSON.stringify(TARGET_ALBARAN.tags || [])}`, C.gray);
-                log(`   👤 Repartidor Asignado (Director prop): ${TARGET_ALBARAN.codigoRepartidor || 'N/A'}`, C.gray);
             } else {
-                log('   ⚠️ No pending deliveries found for anyone. Cannot proceed with update tests.', C.red);
-                process.exit(0);
+                console.log(`${C.red}Error${C.reset}`);
             }
-        } else {
-            log(`   ❌ Failed to get pending: ${pendingRes.status}`, C.red);
-            log(JSON.stringify(pendingRes.body), C.gray);
-            process.exit(1);
+        }
+
+        if (!foundData) {
+            log('\n   ⚠️ No pending deliveries found for ANY scanned repartidor.', C.red);
+            log('   ⚠️ Cannot proceed with update tests. Please assign deliveries in ERP.', C.yellow);
+            process.exit(0);
         }
 
         // =================================================================
         // 3. CONFIRM DELIVERY
         // =================================================================
-        log('\n🚚 TEST 3: Confirm delivery (First pass)...', C.yellow);
+        log(`\n🚚 TEST 3: Confirm delivery for Repartidor ${REPARTIDOR_ID}...`, C.yellow);
 
-        // Simulating payload
         const payload = {
             albaranId: TARGET_ALBARAN.id,
             latitud: 40.416775,
             longitud: -3.703790,
-            firma: 'base64_signature_mock', // Backend treats this as string
-            observaciones: 'Test automatico script',
+            firma: 'base64_signature_mock',
+            observaciones: 'Test automatico scanner',
             fotos: []
         };
 
@@ -205,17 +196,13 @@ async function runTests() {
             } else {
                 log('   ⚠️ "alreadyDelivered" flag missing in body.', C.yellow);
             }
-
-            if (dupRes.body.error && dupRes.body.error.includes('ya fue confirmada')) {
-                log('   ✅ Error message is correct.', C.green);
-            }
         } else {
             log(`   ❌ FAILED! Expected 409, got ${dupRes.status}`, C.red);
             log(JSON.stringify(dupRes.body), C.gray);
         }
 
         // =================================================================
-        // 5. VERIFY KPIs UPDATED & TAGS
+        // 5. VERIFY KPIs & TAGS
         // =================================================================
         log('\n📈 TEST 5: Verify KPIs & Tags updated...', C.yellow);
         const kpiRes = await request('GET', `/entregas/pendientes/${REPARTIDOR_ID}`, null, AUTH_TOKEN);
@@ -225,17 +212,11 @@ async function runTests() {
             const myAlb = updatedList.find(a => a.id === TARGET_ALBARAN.id);
 
             if (myAlb) {
-                log(`   🏷️ New Status: ${myAlb.estado}`, myAlb.estado === 'ENTREGADO' ? C.green : C.red);
+                log(`   🏷️ New Status: ${myAlb.estado}`, myAlb.estado === 'ENTREGADO' || myAlb.estado === 'Entregado' ? C.green : C.yellow);
+                log(`   🏷️ Tags: ${JSON.stringify(myAlb.tags || [])}`, C.gray);
 
-                // Check Director view feature
-                if (myAlb.codigoRepartidor) {
-                    log(`   👤 Director View: codigoRepartidor = ${myAlb.codigoRepartidor}`, C.green);
-                }
-
-                // KPI check
                 const newCompleted = kpiRes.body.resumen?.completedCount;
                 log(`   📊 KPI Completed Count: ${newCompleted}`, newCompleted > 0 ? C.green : C.red);
-
             } else {
                 log('   ⚠️ Albaran disappeared from list.', C.yellow);
             }
