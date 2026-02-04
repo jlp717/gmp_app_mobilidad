@@ -318,8 +318,16 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
                         if (val != null) {
                           HapticFeedback.selectionClick();
                           filter.setVendor(val);
-                          setState(() => _lastLoadedId = null);
+                          
+                          // Manually trigger reload and pivot _lastLoadedId to prevent
+                          // duplicate/conflicting loads from didChangeDependencies
+                          if (mounted) {
+                            setState(() => _lastLoadedId = val);
+                          }
+                          
+                          // Force immediate reload
                           entregas.setRepartidor(val, forceReload: true);
+                          entregas.seleccionarFecha(_selectedDate);
                           _loadWeekData(val);
                         }
                       },
