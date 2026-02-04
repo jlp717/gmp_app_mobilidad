@@ -91,6 +91,12 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
     if (auth.isDirector && filter.selectedVendor != null) {
       targetId = filter.selectedVendor!;
     }
+    
+    // Safety check: specific endpoints do not support CSV IDs.
+    // If targetId is a list (e.g. from multi-vendor director context), take the first one.
+    if (targetId.contains(',')) {
+       targetId = targetId.split(',').first.trim();
+    }
 
     if (targetId.isNotEmpty) {
       if (_lastLoadedId != targetId) {
