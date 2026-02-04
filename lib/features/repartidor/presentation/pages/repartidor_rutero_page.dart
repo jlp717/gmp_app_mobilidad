@@ -220,15 +220,10 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
           // HOLOGRAPHIC KPI DASHBOARD
           HolographicKpiDashboard(
             totalEntregas: entregas.albaranes.length,
-            entregasCompletadas: entregas.albaranes
-                .where((a) => a.estado == EstadoEntrega.entregado)
-                .length,
+            entregasCompletadas: entregas.resumenCompletedCount,
             montoACobrar: entregas.resumenTotalACobrar,
             montoOpcional: entregas.resumenTotalOpcional,
-            totalMonto: entregas.albaranes.fold(
-              0.0,
-              (sum, item) => sum + item.importeTotal,
-            ),
+            totalMonto: entregas.resumenTotalBruto,
             isLoading: entregas.isLoading,
           ),
 

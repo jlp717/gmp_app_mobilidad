@@ -302,6 +302,7 @@ class EntregasProvider extends ChangeNotifier {
   double _resumenTotalBruto = 0;
   double _resumenTotalACobrar = 0;
   double _resumenTotalOpcional = 0;
+  int _resumenCompletedCount = 0;
 
   String get searchQuery => _searchQuery;
   String get sortBy => _sortBy;
@@ -311,6 +312,7 @@ class EntregasProvider extends ChangeNotifier {
   double get resumenTotalBruto => _resumenTotalBruto;
   double get resumenTotalACobrar => _resumenTotalACobrar;
   double get resumenTotalOpcional => _resumenTotalOpcional;
+  int get resumenCompletedCount => _resumenCompletedCount;
   
   void setSearchQuery(String query) {
     _searchQuery = query;
@@ -393,8 +395,9 @@ class EntregasProvider extends ChangeNotifier {
         _resumenTotalBruto = (resumen['totalBruto'] ?? 0).toDouble();
         _resumenTotalACobrar = (resumen['totalACobrar'] ?? 0).toDouble();
         _resumenTotalOpcional = (resumen['totalOpcional'] ?? 0).toDouble();
+        _resumenCompletedCount = (resumen['completedCount'] ?? 0) as int;
         
-        print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada');
+        print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada, completed=$_resumenCompletedCount');
       } else {
         _error = response['error'] ?? 'Error cargando entregas';
       }

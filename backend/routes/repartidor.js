@@ -790,8 +790,6 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
         const { date } = req.query; // Fecha de referencia (ej. hoy)
 
         const refDate = date ? new Date(date) : new Date();
-        const currentYear = refDate.getFullYear();
-        const currentMonth = refDate.getMonth() + 1;
         const currentDay = refDate.getDate();
 
         // Calculate start/end of week (Monday to Sunday)
@@ -821,43 +819,19 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Getting weekly stats ${startDateStr} to ${endDateStr} for ${cleanRepartidorId}`);
 
-        // Query to get daily aggregates
-        // Filter by specific payment types for Color Status
+        // Query to get daily aggregates with JAVIER status
         const sql = `
             SELECT 
                 OPP.DIAREPARTO as DIA,
                 OPP.MESREPARTO as MES,
                 OPP.ANOREPARTO as ANO,
-                COUNT(*) as TOTAL_CLIENTES,
-                SUM(CASE 
-                    WHEN UPPER(CPC.CODIGOFORMAPAGO) IN ('01', 'CNT', 'CONTADO', 'EFECTIVO') THEN 1
-                    WHEN UPPER(CPC.CODIGOFORMAPAGO) LIKE '%REP%' THEN 1
-                    WHEN UPPER(CPC.CODIGOFORMAPAGO) LIKE '%MEN%' THEN 1
-                    ELSE 0 
-                END) as TOTAL_COBRABLES,
-                SUM(CASE 
-                    WHEN UPPER(CPC.CODIGOFORMAPAGO) IN ('01', 'CNT', 'CONTADO', 'EFECTIVO') 
-                         OR UPPER(CPC.CODIGOFORMAPAGO) LIKE '%REP%' 
-                         OR UPPER(CPC.CODIGOFORMAPAGO) LIKE '%MEN%' 
-                    THEN CPC.IMPORTETOTAL 
-                    ELSE 0 
-                END) as IMPORTE_ESPERADO,
-                SUM(CASE 
-                    WHEN (UPPER(CPC.CODIGOFORMAPAGO) IN ('01', 'CNT', 'CONTADO', 'EFECTIVO') 
-                          OR UPPER(CPC.CODIGOFORMAPAGO) LIKE '%REP%' 
-                          OR UPPER(CPC.CODIGOFORMAPAGO) LIKE '%MEN%')
-                         AND COALESCE(CVC.IMPORTEPENDIENTE, 0) <= 0.05 -- Consider small margin as paid
-                    THEN CPC.IMPORTETOTAL 
-                    ELSE 0 
-                END) as IMPORTE_COBRADO
+                COUNT(DISTINCT CPC.NUMEROALBARAN) as TOTAL_ALBARANES,
+                SUM(CASE WHEN DS.STATUS = 'ENTREGADO' THEN 1 ELSE 0 END) as ENTREGADOS
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            LEFT JOIN DSEDAC.CVC CVC 
-                ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
-                AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
-                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
-                AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+                ON DS.ID = CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10)) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || CAST(CPC.TERMINALALBARAN AS VARCHAR(10)) || '-' || CAST(CPC.NUMEROALBARAN AS VARCHAR(10))
             WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) 
                 BETWEEN ${weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday} 
                     AND ${weekDays[6].syear * 10000 + weekDays[6].smonth * 100 + weekDays[6].sday}
@@ -871,19 +845,16 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
         const days = weekDays.map(wd => {
             const row = rows.find(r => r.ANO === wd.syear && r.MES === wd.smonth && r.DIA === wd.sday);
 
-            const totalClients = row ? parseInt(row.TOTAL_CLIENTES) : 0;
-            const totalCobrables = row ? parseInt(row.TOTAL_COBRABLES) : 0;
-            const expected = row ? parseFloat(row.IMPORTE_ESPERADO) : 0;
-            const collected = row ? parseFloat(row.IMPORTE_COBRADO) : 0;
+            const totalAlbaranes = row ? parseInt(row.TOTAL_ALBARANES) : 0;
+            const entregados = row ? parseInt(row.ENTREGADOS) : 0;
 
             // Status Logic:
-            // 0 cobrables -> 'none' (Gray)
-            // collected >= expected -> 'good' (Green)
-            // collected < expected -> 'bad' (Red)
+            // 0 albaranes -> 'none' (Gray)
+            // all completed -> 'good' (Green)
+            // some pending -> 'bad' (Red)
             let status = 'none';
-            if (totalCobrables > 0) {
-                // If we have collected everything (within small margin)
-                if (collected >= (expected - 0.10)) {
+            if (totalAlbaranes > 0) {
+                if (entregados >= totalAlbaranes) {
                     status = 'good';
                 } else {
                     status = 'bad';
@@ -894,7 +865,7 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
                 date: wd.formatted,
                 day: wd.sday,
                 dayName: ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'][new Date(wd.formatted).getDay()],
-                clients: totalClients,
+                clients: totalAlbaranes,
                 status: status
             };
         });

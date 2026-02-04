@@ -324,7 +324,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   Widget _buildDayStrip() {
     if (widget.weekDays.isEmpty) {
       return Container(
-        height: 70,
+        height: 55,
         alignment: Alignment.center,
         child: widget.isLoading
             ? const CircularProgressIndicator(
@@ -339,8 +339,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     }
 
     return Container(
-      height: 80,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      height: 55,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: Row(
         children: widget.weekDays.asMap().entries.map((entry) {
           final index = entry.key;
@@ -485,21 +485,21 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
 
   Widget _buildProgressBar(double progress) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Column(
         children: [
           Row(
             children: [
               Icon(
                 Icons.bolt,
-                size: 14,
+                size: 12,
                 color: AppTheme.neonBlue,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               Text(
                 'PROGRESO SEMANAL',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textSecondary,
                   letterSpacing: 1,
@@ -512,7 +512,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   return Text(
                     '${(progress * _progressAnimation.value * 100).toInt()}%',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: AppTheme.neonBlue,
                     ),
@@ -521,26 +521,24 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 3),
           AnimatedBuilder(
             animation: _progressAnimation,
             builder: (context, child) {
               return Container(
-                height: 4,
+                height: 3,
                 decoration: BoxDecoration(
                   color: AppTheme.darkCard,
                   borderRadius: BorderRadius.circular(2),
                 ),
                 child: Stack(
                   children: [
-                    // Background
                     Container(
                       decoration: BoxDecoration(
                         color: AppTheme.borderColor,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    // Progress
                     FractionallySizedBox(
                       widthFactor: progress * _progressAnimation.value,
                       child: Container(
@@ -549,12 +547,6 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                             colors: [AppTheme.neonBlue, AppTheme.neonCyan],
                           ),
                           borderRadius: BorderRadius.circular(2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.neonBlue.withOpacity(0.5),
-                              blurRadius: 6,
-                            ),
-                          ],
                         ),
                       ),
                     ),

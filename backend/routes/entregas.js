@@ -350,13 +350,15 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             };
         });
 
-        // --- FILTERING: Search by client name or code ---
+        // --- FILTERING: Search by client name, code, albarán or factura number ---
         const searchQuery = req.query.search?.toLowerCase().trim() || '';
         let filteredAlbaranes = albaranes;
         if (searchQuery) {
             filteredAlbaranes = albaranes.filter(a =>
                 a.nombreCliente?.toLowerCase().includes(searchQuery) ||
-                a.codigoCliente?.toLowerCase().includes(searchQuery)
+                a.codigoCliente?.toLowerCase().includes(searchQuery) ||
+                String(a.numeroAlbaran).includes(searchQuery) ||
+                String(a.numeroFactura).includes(searchQuery)
             );
         }
 
@@ -393,17 +395,13 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         }
         // 'default' keeps the original ORDER BY CAC.NUMEROALBARAN from SQL
 
-        // Calculate totals for summary
-        const totalBruto = filteredAlbaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
-        const totalACobrar = filteredAlbaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
-        const totalOpcional = filteredAlbaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        // Calculate totals for summary (always from unfiltered `albaranes` for accurate KPIs)
+        const totalBruto = albaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
+        const totalACobrar = albaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        const totalOpcional = albaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        const completedCount = albaranes.filter(a => a.estado === 'ENTREGADO').length;
 
-        logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} → albaranes=${filteredAlbaranes.length}, totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}`);
-
-        // Debug first row importe to see why it fails
-        if (rows.length > 0) {
-            logger.info(`[ENTREGAS_DEBUG] First Row Importe: Raw='${rows[0].IMPORTEBRUTO}', Parsed=${parseFloat(rows[0].IMPORTEBRUTO)}, esCTR=${albaranes[0].esCTR}`);
-        }
+        logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} → albaranes=${filteredAlbaranes.length}, totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}, completed=${completedCount}`);
 
         res.json({
             success: true,
@@ -413,7 +411,8 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             resumen: {
                 totalBruto: Math.round(totalBruto * 100) / 100,
                 totalACobrar: Math.round(totalACobrar * 100) / 100,
-                totalOpcional: Math.round(totalOpcional * 100) / 100
+                totalOpcional: Math.round(totalOpcional * 100) / 100,
+                completedCount
             }
         });
     } catch (error) {

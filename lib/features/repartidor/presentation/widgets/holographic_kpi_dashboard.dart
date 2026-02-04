@@ -97,8 +97,8 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 4, 12, 8), // Reduced vertical margin
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), // Compact padding
+      margin: const EdgeInsets.fromLTRB(12, 2, 12, 4), // Ultra compact margins
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Minimal padding
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -108,18 +108,11 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
             AppTheme.darkCard.withOpacity(0.8),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: AppTheme.neonBlue.withOpacity(0.2),
-          width: 1.5,
+          width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: widget.isLoading ? _buildLoadingState() : _buildContent(),
     );
@@ -127,7 +120,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
 
   Widget _buildLoadingState() {
     return const SizedBox(
-      height: 100,
+      height: 50,
       child: Center(
         child: CircularProgressIndicator(
           color: AppTheme.neonBlue,
@@ -138,51 +131,23 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
   }
 
   Widget _buildContent() {
-    return Column(
+    return Row(
       children: [
-        // Main KPI Row
-        Row(
-          children: [
-            // Circular progress for deliveries
-            Expanded(
-              flex: 3,
-              child: _buildDeliveryProgress(),
-            ),
-            
-            // Vertical divider
-            Container(
-              width: 1,
-              height: 80,
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    AppTheme.neonBlue.withOpacity(0.5),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-            
-            // Money metrics
-            Expanded(
-              flex: 5,
-              child: _buildMoneyMetrics(),
-            ),
-          ],
+        // Circular progress for deliveries
+        _buildDeliveryProgress(),
+        
+        // Vertical divider
+        Container(
+          width: 1,
+          height: 40,
+          margin: const EdgeInsets.symmetric(horizontal: 10),
+          color: AppTheme.borderColor,
         ),
         
-        const SizedBox(height: 12),
-        
-        if (widget.isLoading)
-          const LinearProgressIndicator(
-            backgroundColor: Colors.transparent,
-            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.neonBlue),
-            minHeight: 2,
-          ),
+        // Money metrics
+        Expanded(
+          child: _buildMoneyMetrics(),
+        ),
       ],
     );
   }
