@@ -167,6 +167,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         // CORRECTO: Usar OPP → CPC → CAC para repartidores
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con CAC
         // IMPORTANTE: Usar IMPORTEBRUTO (sin IVA) para cobros
+        // FIX: ID format must match exactly with frontend and update endpoint
         const sql = `
             SELECT 
               CAC.SUBEMPRESAALBARAN,
@@ -185,6 +186,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
               TRIM(CPC.CODIGORUTA) as RUTA,
+              TRIM(OPP.CODIGOREPARTIDOR) as CODIGO_REPARTIDOR,
               DS.STATUS as DS_STATUS,
               DS.OBSERVACIONES as DS_OBS,
               DS.FIRMA_PATH as DS_FIRMA
@@ -198,7 +200,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-              ON DS.ID = CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10)) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || CAST(CPC.TERMINALALBARAN AS VARCHAR(10)) || '-' || CAST(CPC.NUMEROALBARAN AS VARCHAR(10))
+              ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(COALESCE(CPC.SERIEALBARAN, '')) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids})
               AND OPP.DIAREPARTO = ${dia}
               AND OPP.MESREPARTO = ${mes}
@@ -344,6 +346,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 colorEstado: paymentInfo.color,
                 fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
                 ruta: row.RUTA?.trim(),
+                codigoRepartidor: row.CODIGO_REPARTIDOR?.trim() || '',
                 estado: (row.DS_STATUS || 'PENDIENTE').trim(),
                 observaciones: row.DS_OBS,
                 firma: row.DS_FIRMA
@@ -547,18 +550,44 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 });
 
 // ===================================
-// POST /update (Mock implementation for now)
+// POST /update - Update delivery status with duplicate prevention
 // ===================================
 router.post('/update', async (req, res) => {
     try {
-        const { itemId, status, repartidorId, observaciones, firma, fotos, latitud, longitud } = req.body;
-        logger.info(`[ENTREGAS] Updating ${itemId} to ${status} (Rep: ${repartidorId})`);
+        const { itemId, status, repartidorId, observaciones, firma, fotos, latitud, longitud, forceUpdate } = req.body;
+        logger.info(`[ENTREGAS] Updating ${itemId} to ${status} (Rep: ${repartidorId}, Force: ${forceUpdate || false})`);
+
+        // VALIDATION: Check if already delivered (prevents accidental duplicate confirmations)
+        if (status === 'ENTREGADO') {
+            try {
+                const checkSql = `SELECT STATUS, UPDATED_AT, REPARTIDOR_ID FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`;
+                const existing = await query(checkSql, false);
+
+                if (existing.length > 0 && existing[0].STATUS === 'ENTREGADO') {
+                    // Already delivered - only allow if forceUpdate is true
+                    if (!forceUpdate) {
+                        logger.warn(`[ENTREGAS] ⚠️ Duplicate confirmation attempt for ${itemId} (previously by ${existing[0].REPARTIDOR_ID} at ${existing[0].UPDATED_AT})`);
+                        return res.status(409).json({
+                            success: false,
+                            error: 'Esta entrega ya fue confirmada anteriormente',
+                            alreadyDelivered: true,
+                            previousRepartidor: existing[0].REPARTIDOR_ID,
+                            previousDate: existing[0].UPDATED_AT
+                        });
+                    }
+                    logger.info(`[ENTREGAS] Force update enabled for ${itemId}, overwriting previous delivery`);
+                }
+            } catch (checkErr) {
+                // Table might not exist yet, continue with insert
+                logger.warn(`[ENTREGAS] Check failed (table may not exist): ${checkErr.message}`);
+            }
+        }
 
         // Upsert into JAVIER.DELIVERY_STATUS
-        // 1. Delete existing
+        // 1. Delete existing (if any)
         await query(`DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
 
-        // 2. Insert new
+        // 2. Insert new record
         const obsSafe = observaciones ? observaciones.replace(/'/g, "''") : '';
         const firmaSafe = firma ? firma.replace(/'/g, "''") : '';
         const lat = latitud || 0;
@@ -571,10 +600,11 @@ router.post('/update', async (req, res) => {
         `;
 
         await query(insertSql, false);
+        logger.info(`[ENTREGAS] ✅ Delivery ${itemId} updated to ${status} by ${repartidorId}`);
 
-        res.json({ success: true, message: 'Status updated and saved' });
+        res.json({ success: true, message: 'Estado actualizado correctamente' });
     } catch (error) {
-        logger.error(`Error in /update: ${error.message}`);
+        logger.error(`[ENTREGAS] Error in /update: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });

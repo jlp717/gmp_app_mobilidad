@@ -168,6 +168,7 @@ class AlbaranEntrega {
   final String ruta;
   final String codigoVendedor;
   final String nombreVendedor;
+  final String codigoRepartidor; // Para Jefe de Ventas
   EstadoEntrega estado;
   List<EntregaItem> items;
   String? observaciones;
@@ -200,6 +201,7 @@ class AlbaranEntrega {
     this.ruta = '',
     this.codigoVendedor = '',
     this.nombreVendedor = '',
+    this.codigoRepartidor = '',
     this.estado = EstadoEntrega.pendiente,
     this.items = const [],
     this.observaciones,
@@ -235,6 +237,7 @@ class AlbaranEntrega {
       ruta: json['ruta']?.toString() ?? '',
       codigoVendedor: json['codigoVendedor']?.toString() ?? '',
       nombreVendedor: json['nombreVendedor']?.toString() ?? '',
+      codigoRepartidor: json['codigoRepartidor']?.toString() ?? '',
       estado: EstadoEntregaExtension.fromString(json['estado'] ?? 'PENDIENTE'),
       items: (json['items'] as List<dynamic>?)
               ?.map((e) => EntregaItem.fromJson(e))
@@ -540,6 +543,7 @@ class EntregasProvider extends ChangeNotifier {
     List<String>? fotos,
     double? latitud,
     double? longitud,
+    bool forceUpdate = false,
   }) async {
     try {
       // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
@@ -554,6 +558,7 @@ class EntregasProvider extends ChangeNotifier {
           'fotos': fotos,
           'latitud': latitud,
           'longitud': longitud,
+          'forceUpdate': forceUpdate,
         },
       );
 
@@ -569,6 +574,15 @@ class EntregasProvider extends ChangeNotifier {
         }
         notifyListeners();
         return true;
+      } else if (response['alreadyDelivered'] == true) {
+        // 409 Conflict - already delivered
+        _error = 'Esta entrega ya fue confirmada anteriormente';
+        notifyListeners();
+        return false;
+      } else {
+        _error = response['error'] ?? 'Error desconocido';
+        notifyListeners();
+        return false;
       }
     } catch (e) {
       _error = 'Error actualizando: $e';

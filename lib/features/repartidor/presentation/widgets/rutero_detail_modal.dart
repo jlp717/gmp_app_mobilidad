@@ -55,10 +55,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   List<String> _suggestedNames = [];
   List<String> _suggestedDnis = [];
 
-  // Payment state
   String _selectedPaymentMethod = 'EFECTIVO';
   bool _isPaid = false;
   bool _isSubmitting = false;
+  
+  // Inline validation errors (instead of snackbar)
+  String? _nombreError;
+  String? _dniError;
+  String? _firmaError;
+  String? _pagoError;
 
   @override
   void initState() {
@@ -1000,6 +1005,31 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
           ),
 
+          if (_pagoError != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.error.withOpacity(0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _pagoError!,
+                      style: const TextStyle(color: AppTheme.error, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           const SizedBox(height: 24),
 
           // Continue button
@@ -1133,6 +1163,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       controller: controller,
                       focusNode: focusNode,
                       onEditingComplete: onEditingComplete,
+                      onChanged: (_) {
+                        // Clear error when user starts typing
+                        if (_nombreError != null) {
+                          setState(() => _nombreError = null);
+                        }
+                      },
                       style: const TextStyle(color: AppTheme.textPrimary),
                       decoration: InputDecoration(
                         labelText: 'Nombre y Apellidos *',
@@ -1142,6 +1178,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
+                        errorText: _nombreError,
+                        errorStyle: const TextStyle(color: AppTheme.error),
                       ),
                     );
                   },
@@ -1193,6 +1231,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       controller: controller,
                       focusNode: focusNode,
                       onEditingComplete: onEditingComplete,
+                      onChanged: (_) {
+                        // Clear error when user starts typing
+                        if (_dniError != null) {
+                          setState(() => _dniError = null);
+                        }
+                      },
                       style: const TextStyle(color: AppTheme.textPrimary),
                       decoration: InputDecoration(
                         labelText: 'DNI / NIF *',
@@ -1202,6 +1246,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
+                        errorText: _dniError,
+                        errorStyle: const TextStyle(color: AppTheme.error),
                       ),
                     );
                   },
@@ -1294,7 +1340,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             decoration: BoxDecoration(
               color: AppTheme.darkCard,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.borderColor),
+              border: Border.all(
+                color: _firmaError != null ? AppTheme.error : AppTheme.borderColor,
+                width: _firmaError != null ? 2 : 1,
+              ),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
@@ -1304,6 +1353,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               ),
             ),
           ),
+          if (_firmaError != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _firmaError!,
+              style: const TextStyle(color: AppTheme.error, fontSize: 12),
+            ),
+          ],
 
           const SizedBox(height: 24),
 
@@ -1377,30 +1433,166 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return code;
   }
 
-  Future<void> _submitDelivery() async {
-    // Validation
+  /// Clear inline validation errors
+  void _clearValidationErrors() {
+    setState(() {
+      _nombreError = null;
+      _dniError = null;
+      _firmaError = null;
+      _pagoError = null;
+    });
+  }
+
+  /// Validate all fields, return true if valid
+  bool _validateFields() {
+    bool isValid = true;
+    
+    // Clear previous errors
+    _clearValidationErrors();
+    
+    // Validate nombre
     if (_nombreController.text.trim().isEmpty) {
-      _showError('El nombre del receptor es obligatorio');
-      return;
+      _nombreError = 'El nombre del receptor es obligatorio';
+      isValid = false;
     }
+    
+    // Validate DNI
     if (_dniController.text.trim().isEmpty) {
-      _showError('El DNI/NIF es obligatorio');
-      return;
+      _dniError = 'El DNI/NIF es obligatorio';
+      isValid = false;
     }
+    
+    // Validate signature
     if (_signatureController.isEmpty) {
-      _showError('La firma es obligatoria');
+      _firmaError = 'La firma es obligatoria';
+      isValid = false;
+    }
+    
+    // CTR payment validation
+    if (_isUrgent && !_isPaid) {
+      _pagoError = '⚠️ COBRO OBLIGATORIO';
+      _tabController.animateTo(1); // Switch to payment tab
+      isValid = false;
+    }
+    
+    setState(() {}); // Trigger rebuild to show errors
+    
+    if (!isValid) {
+      HapticFeedback.heavyImpact();
+    }
+    
+    return isValid;
+  }
+
+  /// Show confirmation dialog before submitting
+  Future<bool> _showConfirmationDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: AppTheme.neonBlue, size: 28),
+            const SizedBox(width: 12),
+            const Text(
+              'Confirmar Entrega',
+              style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '¿Está seguro de confirmar esta entrega?',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.darkBase,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.description, size: 16, color: AppTheme.textTertiary),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isFactura 
+                            ? 'Factura ${widget.albaran.numeroFactura}'
+                            : 'Albarán ${widget.albaran.numeroAlbaran}',
+                        style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.person, size: 16, color: AppTheme.textTertiary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${_nombreController.text} (${_dniController.text})',
+                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_isPaid) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.payment, size: 16, color: AppTheme.success),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Cobrado: $_selectedPaymentMethod',
+                          style: TextStyle(color: AppTheme.success, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCELAR', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.success,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('CONFIRMAR'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _submitDelivery() async {
+    // Inline validation
+    if (!_validateFields()) {
       return;
     }
 
-    // CTR validation
-    // CTR validation (Strict)
-    if (_isUrgent && !_isPaid) {
-      HapticFeedback.heavyImpact();
-      _showError('⚠️ COBRO OBLIGATORIO: Debe marcar "Marcar como Cobrado" en la pestaña Cobro para continuar.');
-      // Optionally switch tab to payment
-      _tabController.animateTo(1);
-      return;
-    }
+    // Show confirmation dialog
+    final confirmed = await _showConfirmationDialog();
+    if (!confirmed) return;
 
     setState(() => _isSubmitting = true);
 
@@ -1451,7 +1643,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
         );
       } else {
-        _showError(provider.error ?? 'Error al guardar entrega');
+        // Handle already delivered error specially
+        final errorMsg = provider.error ?? 'Error al guardar entrega';
+        if (errorMsg.contains('ya fue confirmada')) {
+          _showAlreadyDeliveredDialog();
+        } else {
+          _showError(errorMsg);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1459,6 +1657,44 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         _showError('Error: $e');
       }
     }
+  }
+
+  /// Show dialog when delivery was already confirmed
+  void _showAlreadyDeliveredDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 28),
+            const SizedBox(width: 12),
+            const Text(
+              'Entrega ya confirmada',
+              style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Esta entrega ya fue confirmada anteriormente. No se pueden registrar duplicados.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Close modal
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonBlue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('ENTENDIDO'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showError(String message) {
