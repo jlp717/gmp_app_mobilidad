@@ -15,7 +15,7 @@ const {
 const {
     getWeekCountsFromCache,
     getTotalClientsFromCache,
-    getClientsForDay,
+    getClientsForDay: getClientsForDayService,
     reloadRuteroConfig,
     getClientCurrentDay,
     getNaturalOrder
@@ -549,7 +549,7 @@ router.get('/rutero/positions/:day', async (req, res) => {
         const { day } = req.params;
         const { vendedorCodes, role } = req.query;
 
-        const dayClients = getClientsForDay(vendedorCodes, day, role || 'comercial');
+        const dayClients = getClientsForDayService(vendedorCodes, day, role || 'comercial');
 
         if (!dayClients) {
             return res.json({ positions: [], count: 0, cacheStatus: 'loading' });
@@ -660,7 +660,7 @@ router.get('/rutero/day/:day', async (req, res) => {
 
         // 1. Get client codes for the selected day from CACHE (Fast)
         // Pass ignoreOverrides flag
-        let dayClientCodes = getClientsForDay(vendedorCodes, day, role || 'comercial', shouldIgnoreOverrides);
+        let dayClientCodes = getClientsForDayService(vendedorCodes, day, role || 'comercial', shouldIgnoreOverrides);
 
         if (!dayClientCodes) {
             logger.warn(`[RUTERO DAY] Cache not ready`);
