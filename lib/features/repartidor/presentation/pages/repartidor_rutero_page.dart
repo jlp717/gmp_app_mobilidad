@@ -55,22 +55,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final filter = Provider.of<FilterProvider>(context, listen: true);
-
-    String targetId = widget.repartidorId ?? auth.currentUser?.code ?? '';
-    if (auth.isDirector && filter.selectedVendor != null) {
-      targetId = filter.selectedVendor!;
-    }
-
-    if (targetId.isNotEmpty && targetId != _lastLoadedId) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _lastLoadedId = targetId;
-          _loadData();
-        }
-      });
-    }
+    // Logic removed to prevent infinite loop. 
+    // Data loading is handled by initState and Dropdown changes.
   }
 
   @override

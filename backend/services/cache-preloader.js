@@ -57,9 +57,9 @@ async function preloadCache(port = 3000) {
 
         // 2. Background: Warm up Dashboard (Non-blocking)
         // Give the server a second to be ready
-        setTimeout(() => {
-            warmUpDashboard(port);
-        }, 2000);
+        // setTimeout(() => {
+        //     warmUpDashboard(port);
+        // }, 2000);
 
     } catch (e) {
         logger.error(`Fatal Preload Error: ${e.message}`);
