@@ -11,6 +11,7 @@ const {
     LACLAE_SALES_FILTER
 } = require('../utils/common');
 
+// Imports from laclae service
 const {
     getWeekCountsFromCache,
     getTotalClientsFromCache,
