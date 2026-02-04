@@ -96,18 +96,18 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   double _calculateWeekProgress() {
     if (widget.weekDays.isEmpty) return 0.0;
     
-    int completed = 0;
-    int total = 0;
+    int totalDeliveries = 0;
+    int completedDeliveries = 0;
     
     for (var day in widget.weekDays) {
       final clients = day['clients'] ?? 0;
-      if (clients > 0) {
-        total++;
-        if (day['status'] == 'good') completed++;
-      }
+      final done = day['completed'] ?? 0; // Use new backend field
+      
+      if (clients is int) totalDeliveries += clients;
+      if (done is int) completedDeliveries += done;
     }
     
-    return total > 0 ? completed / total : 0.0;
+    return totalDeliveries > 0 ? completedDeliveries / totalDeliveries : 0.0;
   }
 
   @override

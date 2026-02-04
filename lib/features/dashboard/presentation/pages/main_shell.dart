@@ -733,6 +733,7 @@ class _MainShellState extends State<MainShell> {
          switch (_currentIndex) {
           case 0:
             return ChangeNotifierProvider(
+              key: ValueKey('rutero_$effectiveRepartidorId'), // Force rebuild on ID change
               create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
               child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
             );
