@@ -74,9 +74,16 @@ function request(method, path, body = null, token = null) {
     });
 }
 
+function getVendorCode(obj) {
+    if (!obj) return null;
+    return obj.code || obj.CODE || obj.Code ||
+        obj.codigovendedor || obj.CODIGOVENDEDOR || obj.CodigoVendedor ||
+        obj.id || obj.ID || obj.vendedorCode;
+}
+
 async function runTests() {
     log('═══════════════════════════════════════════════════════════', C.cyan);
-    log('        RUTERO DELIVERY ENDPOINTS TEST SUITE (SCANNER)', C.cyan);
+    log('        RUTERO DELIVERY ENDPOINTS TEST SUITE (SCANNER FIXED v3)', C.cyan);
     log('═══════════════════════════════════════════════════════════', C.cyan);
     log(`Server: ${API_BASE}`, C.gray);
     log(`Time: ${new Date().toISOString()}\n`, C.gray);
@@ -112,8 +119,16 @@ async function runTests() {
             log('   👑 User is Director. scanning for a repartidor with pending work...', C.blue);
             const repsRes = await request('GET', '/auth/repartidores', null, AUTH_TOKEN);
             if (repsRes.status === 200 && repsRes.body.length > 0) {
-                // Map the list to IDs
-                targetRepartidores = repsRes.body.map(r => r.code);
+
+                // Debug first item to verify casing
+                log(`   🔎 DEBUG KEY SAMPLE: ${JSON.stringify(repsRes.body[0])}`, C.gray);
+
+                // Map the list to IDs, handling potential casing issues
+                targetRepartidores = repsRes.body.map(r => getVendorCode(r));
+
+                // Filter out valid IDs only
+                targetRepartidores = targetRepartidores.filter(id => id);
+
                 log(`   📋 Scanning ${targetRepartidores.length} repartidores...`, C.gray);
             }
         }
@@ -121,14 +136,17 @@ async function runTests() {
         let foundData = false;
 
         for (const repId of targetRepartidores) {
-            process.stdout.write(`   � Checking Repartidor ${repId}... `);
-            const pendingRes = await request('GET', `/entregas/pendientes/${repId}`, null, AUTH_TOKEN);
+            // Trim comma if present (just in case)
+            const cleanId = String(repId).split(',')[0].trim();
+
+            process.stdout.write(`   🔍 Checking Repartidor ${cleanId}... `);
+            const pendingRes = await request('GET', `/entregas/pendientes/${cleanId}`, null, AUTH_TOKEN);
 
             if (pendingRes.status === 200) {
                 const albaranes = pendingRes.body.albaranes || [];
                 if (albaranes.length > 0) {
                     console.log(`${C.green}FOUND!${C.reset}`);
-                    REPARTIDOR_ID = repId;
+                    REPARTIDOR_ID = cleanId;
                     log(`   ✅ Success. Total albaranes: ${albaranes.length}`, C.green);
                     log(`   📊 KPI Resumen: `, C.cyan);
                     log(`      - Completed: ${pendingRes.body.resumen?.completedCount}`, C.cyan);
@@ -141,14 +159,14 @@ async function runTests() {
                     }
 
                     log(`   🎯 Target Albaran: ${TARGET_ALBARAN.numeroAlbaran} (ID: ${TARGET_ALBARAN.id})`, C.magenta);
-                    log(`   � Inspector: ${TARGET_ALBARAN.codigoRepartidor || 'N/A'}`, C.gray);
+                    log(`   👤 Inspector: ${TARGET_ALBARAN.codigoRepartidor || 'N/A'}`, C.gray);
                     foundData = true;
                     break; // Stop looking
                 } else {
                     console.log(`${C.gray}Empty${C.reset}`);
                 }
             } else {
-                console.log(`${C.red}Error${C.reset}`);
+                console.log(`${C.red}Error ${pendingRes.status}${C.reset}`);
             }
         }
 
