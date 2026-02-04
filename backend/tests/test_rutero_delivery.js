@@ -183,6 +183,8 @@ async function runTests() {
 
         const payload = {
             albaranId: TARGET_ALBARAN.id,
+            repartidorId: REPARTIDOR_ID,
+            status: 'ENTREGADO',
             latitud: 40.416775,
             longitud: -3.703790,
             firma: 'base64_signature_mock',

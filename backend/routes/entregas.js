@@ -530,8 +530,8 @@ router.post('/update', async (req, res) => {
         const { itemId: reqItemId, albaranId, status, repartidorId, observaciones, firma, fotos, latitud, longitud, forceUpdate } = req.body;
         const itemId = reqItemId || albaranId; // Support both naming conventions
 
-        if (!itemId) {
-            return res.status(400).json({ success: false, error: 'Se requiere itemId o albaranId' });
+        if (!itemId || !status || !repartidorId) {
+            return res.status(400).json({ success: false, error: 'Faltan datos obligatorios: itemId, status, repartidorId' });
         }
 
         logger.info(`[ENTREGAS] Updating ${itemId} to ${status} (Rep: ${repartidorId}, Force: ${forceUpdate || false})`);
