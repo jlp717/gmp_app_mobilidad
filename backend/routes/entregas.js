@@ -572,14 +572,23 @@ router.post('/update', async (req, res) => {
         const lat = latitud || 0;
         const lon = longitud || 0;
 
+        // Identify who is performing the update (Inspector)
+        // usage: req.user.code (from token) is safest/best audit. Fallback to body.
+        let inspectorId = (req.user && req.user.code) ? req.user.code : repartidorId;
+
+        // Safety truncation
+        if (inspectorId && inspectorId.length > 20) {
+            inspectorId = inspectorId.substring(0, 20);
+        }
+
         const insertSql = `
             INSERT INTO JAVIER.DELIVERY_STATUS 
             (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT)
-            VALUES ('${itemId}', '${status}', '${obsSafe}', '${firmaSafe}', ${lat}, ${lon}, '${repartidorId}', CURRENT TIMESTAMP)
+            VALUES ('${itemId}', '${status}', '${obsSafe}', '${firmaSafe}', ${lat}, ${lon}, '${inspectorId}', CURRENT TIMESTAMP)
         `;
 
         await query(insertSql, false);
-        logger.info(`[ENTREGAS] ✅ Delivery ${itemId} updated to ${status} by ${repartidorId}`);
+        logger.info(`[ENTREGAS] ✅ Delivery ${itemId} updated to ${status} by ${inspectorId} (ReqRep: ${repartidorId})`);
 
         res.json({ success: true, message: 'Estado actualizado correctamente' });
     } catch (error) {
