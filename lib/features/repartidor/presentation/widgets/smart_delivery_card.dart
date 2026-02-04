@@ -59,16 +59,31 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
 
   Color get _borderColor {
     if (_isEntregado) return AppTheme.success;
-    if (_isUrgent) return AppTheme.obligatorio;
-    if (widget.albaran.colorEstado == 'orange') return AppTheme.opcional;
+    if (widget.albaran.colorEstado == 'purple' || _isFactura) return AppTheme.neonPurple;
+    if (widget.albaran.colorEstado == 'red' || _isUrgent) return AppTheme.obligatorio;
     return AppTheme.neonBlue;
   }
 
   BoxDecoration get _cardDecoration {
-    if (_isEntregado) return AppTheme.successCard();
-    if (_isFactura) return AppTheme.facturaCard();
-    if (_isUrgent) return AppTheme.urgentCard();
-    return AppTheme.holoCard(glowColor: _borderColor);
+    Color baseColor;
+    if (_isEntregado) {
+       baseColor = AppTheme.success;
+    } else if (widget.albaran.colorEstado == 'purple' || _isFactura) {
+       baseColor = AppTheme.neonPurple;
+    } else if (widget.albaran.colorEstado == 'red' || _isUrgent) {
+       baseColor = AppTheme.obligatorio;
+    } else {
+       return AppTheme.holoCard(glowColor: _borderColor);
+    }
+    
+    return BoxDecoration(
+      color: baseColor.withOpacity(0.08), // Light background tint
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: baseColor.withOpacity(0.6), width: 1.5),
+      boxShadow: [
+        BoxShadow(color: baseColor.withOpacity(0.1), blurRadius: 8, spreadRadius: 0),
+      ],
+    );
   }
 
   @override
@@ -76,13 +91,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1), // Compact vertical padding
       child: GestureDetector(
-        onHorizontalDragStart: _isEntregado ? null : (_) {
-          setState(() => _isDragging = true);
-        },
-        onHorizontalDragUpdate: _isEntregado ? null : (details) {
-          setState(() => _dragOffset += details.delta.dx);
-        },
-        onHorizontalDragEnd: _isEntregado ? null : _handleDragEnd,
+        // Swipe disabled as requested
         onTapDown: (_) => _animController.forward(),
         onTapUp: (_) => _animController.reverse(),
         onTapCancel: () => _animController.reverse(),
@@ -104,103 +113,23 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   }
 
   Widget _buildCardContent() {
-    return AnimatedContainer(
-      duration: AppTheme.animNormal,
-      transform: Matrix4.translationValues(_dragOffset, 0, 0),
-      child: Stack(
-        children: [
-          // Swipe indicators (behind card)
-          if (_isDragging) ...[
-            Positioned.fill(
-              child: Row(
-                children: [
-                  // Left reveal (complete)
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.success.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.only(left: 20),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.check_circle, color: AppTheme.success),
-                          SizedBox(width: 8),
-                          Text(
-                            'COMPLETAR',
-                            style: TextStyle(
-                              color: AppTheme.success,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Right reveal (note)
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: const [
-                          Text(
-                            'NOTA',
-                            style: TextStyle(
-                              color: AppTheme.neonBlue,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Icon(Icons.edit_note, color: AppTheme.neonBlue),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          
-          // Main card
-          Container(
-            decoration: _cardDecoration.copyWith(
-              border: Border.all(
-                color: _borderColor.withOpacity(0.8), // Increased opacity for visibility
-                width: _isUrgent ? 2.0 : 1.5,
-              )
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header row
-                    _buildHeader(),
-                    
-                    const SizedBox(height: 10),
-                    
-                    // Client info
-                    _buildClientInfo(),
-                    
-                    const SizedBox(height: 6), // Reduced spacing
-                    
-                    // Quick actions
-                    _buildQuickActions(),
-                  ],
-                ),
-              ),
-            ),
+    return Container(
+      decoration: _cardDecoration,
+      child: Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 10),
+              _buildClientInfo(),
+              const SizedBox(height: 6),
+              _buildQuickActions(),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -419,18 +348,6 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             onTap: widget.onTap,
           ),
         
-        const Spacer(),
-        
-        // Status text
-        if (!_isEntregado)
-          Text(
-            '◀ Desliza para completar ▶',
-            style: TextStyle(
-              color: AppTheme.textTertiary,
-              fontSize: 10,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
       ],
     );
   }

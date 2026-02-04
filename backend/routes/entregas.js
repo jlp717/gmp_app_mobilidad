@@ -265,6 +265,23 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             const serieFactura = (row.SERIEFACTURA || '').trim();
             const esFactura = numeroFactura > 0;
 
+            // --- COLOR LOGIC (User Request) ---
+            // Valid colors match AppTheme: 'red' (Obligatorio/Opcional), 'purple' (Factura), 'green' (Entregado/Normal)
+            let colorEstado = 'green';
+            const status = (row.DS_STATUS || 'PENDIENTE').trim();
+
+            if (status === 'ENTREGADO') {
+                colorEstado = 'green';
+            } else {
+                if (esFactura) {
+                    colorEstado = 'purple';
+                } else if (esCTR || puedeCobrarse) {
+                    colorEstado = 'red';
+                } else {
+                    colorEstado = 'green';
+                }
+            }
+
             // Robust Money Parser
             const parseMoney = (val) => {
                 if (val === null || val === undefined) return 0;
@@ -316,7 +333,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 diasPago: paymentInfo.diasPago,
                 esCTR: esCTR,
                 puedeCobrarse: puedeCobrarse,
-                colorEstado: paymentInfo.color,
+                colorEstado: colorEstado,
                 fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
                 ruta: row.RUTA?.trim(),
                 codigoRepartidor: row.CODIGO_REPARTIDOR?.trim() || '',
