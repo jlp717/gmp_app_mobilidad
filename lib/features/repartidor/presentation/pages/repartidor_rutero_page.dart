@@ -35,7 +35,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   List<Map<String, dynamic>> _weekDays = [];
   bool _isLoadingWeek = false;
   String? _lastLoadedId;
-  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchClientController = TextEditingController();
+  final TextEditingController _searchAlbaranController = TextEditingController();
   
   late AnimationController _listAnimController;
 
@@ -62,7 +63,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _searchClientController.dispose();
+    _searchAlbaranController.dispose();
     _listAnimController.dispose();
     super.dispose();
   }
@@ -291,17 +293,16 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
                         fontSize: 13,
                       ),
                       items: repartidores.map((r) {
-                        // Clean name - remove ID redundancy like "41 - 41 ALFONSO"
-                        final code = r['code'].toString();
-                        final name = r['name'].toString();
-                        final displayName = name.startsWith('$code ')
-                            ? name.replaceFirst('$code ', '')
-                            : name;
+                        final code = r['code'].toString().trim();
+                        final name = r['name'].toString().trim();
+                        // Format requested: R. 44: NOMBRE
+                        final displayName = 'R. $code: ${name.startsWith('$code ') ? name.replaceFirst('$code ', '') : name}';
 
                         return DropdownMenuItem(
                           value: code,
                           child: Text(
                             displayName,
+                            style: const TextStyle(fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -357,57 +358,91 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          // Search field
+          // Clients Filter
           Expanded(
-            flex: 3,
+            flex: 4,
             child: Container(
-              height: 38,
+              height: 36,
               decoration: BoxDecoration(
                 color: AppTheme.darkCard,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.borderColor),
               ),
               child: Row(
                 children: [
-                  const SizedBox(width: 10),
-                  const Icon(
-                    Icons.search,
-                    size: 18,
-                    color: AppTheme.textSecondary,
-                  ),
-                  const SizedBox(width: 8),
+                   const SizedBox(width: 8),
+                  const Icon(Icons.person_outline, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: TextField(
-                      controller: _searchController,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textPrimary,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Buscar cliente o nº albarán...',
-                        hintStyle: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
+                      controller: _searchClientController,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        hintText: 'Cliente...',
+                        hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      onChanged: (v) => entregas.setSearchQuery(v),
+                      onChanged: (v) => entregas.setSearchClient(v),
                     ),
                   ),
-                  if (_searchController.text.isNotEmpty)
+                  if (_searchClientController.text.isNotEmpty)
                     IconButton(
-                      icon: const Icon(Icons.clear, size: 16),
-                      color: AppTheme.textSecondary,
+                      icon: const Icon(Icons.clear, size: 14),
                       onPressed: () {
-                        _searchController.clear();
-                        entregas.setSearchQuery('');
+                        _searchClientController.clear();
+                        entregas.setSearchClient('');
                       },
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(width: 6),
+
+          // Albaranes Filter
+          Expanded(
+            flex: 3,
+            child: Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.darkCard,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Row(
+                children: [
                   const SizedBox(width: 8),
+                  const Icon(Icons.description_outlined, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchAlbaranController,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        hintText: 'Nº Alb/Fac...',
+                        hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (v) => entregas.setSearchAlbaran(v),
+                    ),
+                  ),
+                  if (_searchAlbaranController.text.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 14),
+                      onPressed: () {
+                        _searchAlbaranController.clear();
+                        entregas.setSearchAlbaran('');
+                      },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                 ],
               ),
             ),
@@ -497,45 +532,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
             ),
           ),
           
-          const SizedBox(width: 8),
 
-          // History Button
-          GestureDetector(
-            onTap: () {
-               HapticFeedback.lightImpact();
-               String currentId = entregas.repartidorId;
-               if (currentId.isEmpty) currentId = _lastLoadedId ?? '';
-               
-               if (currentId.isNotEmpty) {
-                 Navigator.push(
-                   context,
-                   MaterialPageRoute(
-                     builder: (_) => RepartidorHistoricoPage(
-                       repartidorId: currentId,
-                     ),
-                   ),
-                 );
-               } else {
-                 ScaffoldMessenger.of(context).showSnackBar(
-                   const SnackBar(content: Text('No hay repartidor seleccionado')),
-                 );
-               }
-            },
-            child: Container(
-              height: 38,
-              width: 38,
-              decoration: BoxDecoration(
-                color: AppTheme.darkCard,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: const Icon(
-                Icons.history,
-                color: AppTheme.neonPurple,
-                size: 20,
-              ),
-            ),
-          ),
         ],
       ),
     );

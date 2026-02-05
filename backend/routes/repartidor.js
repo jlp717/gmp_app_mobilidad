@@ -1075,12 +1075,13 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                  ORDER BY NAME FETCH FIRST 50 ROWS ONLY`;
 
         const rows = await query(sql, false);
+        logger.info(`[REPARTIDOR] Found ${rows.length} historical clients for repartidor ${repartidorId} since ${dateLimit}`);
 
         const clients = rows.map(r => ({
-            id: r.ID,
-            name: r.NAME,
-            address: r.ADDRESS,
-            totalDocuments: r.TOTAL_DOCS
+            id: (r.ID || '').trim(),
+            name: (r.NAME || '').trim() || `CLIENTE ${r.ID}`,
+            address: (r.ADDRESS || '').trim(),
+            totalDocuments: r.TOTAL_DOCS || 0
         }));
 
         res.json({ success: true, clients });

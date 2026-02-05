@@ -297,6 +297,8 @@ class EntregasProvider extends ChangeNotifier {
 
   // Search and sort state
   String _searchQuery = '';
+  String _searchClient = '';
+  String _searchAlbaran = '';
   String _sortBy = 'default'; // 'default', 'importe_desc', 'importe_asc'
   String _filterTipoPago = ''; // 'CONTADO', 'CREDITO', 'DOMICILIADO', etc.
   String _filterDebeCobrar = ''; // 'S' or 'N'
@@ -309,6 +311,8 @@ class EntregasProvider extends ChangeNotifier {
   int _resumenCompletedCount = 0;
 
   String get searchQuery => _searchQuery;
+  String get searchClient => _searchClient;
+  String get searchAlbaran => _searchAlbaran;
   String get sortBy => _sortBy;
   String get filterTipoPago => _filterTipoPago;
   String get filterDebeCobrar => _filterDebeCobrar;
@@ -320,6 +324,19 @@ class EntregasProvider extends ChangeNotifier {
   
   void setSearchQuery(String query) {
     _searchQuery = query;
+    // Clear specific filters if general is used? Or combine?
+    // User requested split, so maybe we clear general if they use specific?
+    // Keeping simple: use all provided.
+    cargarAlbaranesPendientes();
+  }
+
+  void setSearchClient(String query) {
+    _searchClient = query;
+    cargarAlbaranesPendientes();
+  }
+  
+  void setSearchAlbaran(String query) {
+    _searchAlbaran = query;
     cargarAlbaranesPendientes();
   }
 
@@ -370,11 +387,21 @@ class EntregasProvider extends ChangeNotifier {
     try {
       final formattedDate = '${_fechaSeleccionada.year}-${_fechaSeleccionada.month.toString().padLeft(2, '0')}-${_fechaSeleccionada.day.toString().padLeft(2, '0')}';
       
-      // Build URL with search, sort, and filter parameters
       String url = '/entregas/pendientes/$_repartidorId?date=$formattedDate';
+      
+      // Generic search (legacy support)
       if (_searchQuery.isNotEmpty) {
         url += '&search=${Uri.encodeComponent(_searchQuery)}';
       }
+      
+      // Separate filters
+      if (_searchClient.isNotEmpty) {
+        url += '&searchClient=${Uri.encodeComponent(_searchClient)}';
+      }
+      if (_searchAlbaran.isNotEmpty) {
+        url += '&searchAlbaran=${Uri.encodeComponent(_searchAlbaran)}';
+      }
+      
       if (_sortBy != 'default') {
         url += '&sortBy=$_sortBy';
       }

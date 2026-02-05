@@ -4,7 +4,7 @@
  */
 
 const nodemailer = require('nodemailer');
-const logger = require('../../config/logger');
+const logger = require('../../middleware/logger');
 
 // Configuración SMTP (misma infraestructura que granja_mari_pepa)
 const SMTP_CONFIG = {

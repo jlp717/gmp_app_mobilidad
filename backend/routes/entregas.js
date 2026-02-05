@@ -355,6 +355,23 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             );
         }
 
+        // --- SPECIFIC FILTERS (Split Search) ---
+        const searchClient = req.query.searchClient?.toLowerCase().trim() || '';
+        if (searchClient) {
+            filteredAlbaranes = filteredAlbaranes.filter(a =>
+                a.nombreCliente?.toLowerCase().includes(searchClient) ||
+                a.codigoCliente?.toLowerCase().includes(searchClient)
+            );
+        }
+
+        const searchAlbaran = req.query.searchAlbaran?.trim() || '';
+        if (searchAlbaran) {
+            filteredAlbaranes = filteredAlbaranes.filter(a =>
+                String(a.numeroAlbaran).includes(searchAlbaran) ||
+                String(a.numeroFactura).includes(searchAlbaran)
+            );
+        }
+
         // --- FILTER BY PAYMENT TYPE ---
         const filterTipo = req.query.tipoPago || ''; // e.g., 'CONTADO', 'CREDITO', 'DOMICILIADO'
         if (filterTipo) {
