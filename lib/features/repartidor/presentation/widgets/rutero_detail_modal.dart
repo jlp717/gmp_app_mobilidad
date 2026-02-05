@@ -3,8 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../entregas/providers/entregas_provider.dart';
@@ -1629,6 +1633,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
       if (success) {
         HapticFeedback.heavyImpact();
+        // Show share dialog before closing
+        await _showShareReceiptDialog();
+        if (!mounted) return;
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1711,4 +1718,236 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       ),
     );
   }
+
+  /// Show dialog to share delivery receipt via WhatsApp or Email
+  Future<void> _showShareReceiptDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.share, color: AppTheme.neonBlue),
+            const SizedBox(width: 12),
+            const Text('Compartir Nota', style: TextStyle(color: AppTheme.textPrimary)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '¿Desea enviar la nota de entrega al cliente?',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 20),
+            // WhatsApp button
+            _buildShareButton(
+              icon: Icons.chat,
+              label: 'Enviar por WhatsApp',
+              color: const Color(0xFF25D366),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _shareViaWhatsApp();
+              },
+            ),
+            const SizedBox(height: 12),
+            // Email button
+            _buildShareButton(
+              icon: Icons.email,
+              label: 'Enviar por Email',
+              color: AppTheme.neonBlue,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _shareViaEmail();
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Omitir', style: TextStyle(color: AppTheme.textTertiary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShareButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: color.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 12),
+              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Icon(Icons.chevron_right, color: color.withOpacity(0.6)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareViaWhatsApp() async {
+    try {
+      // Generate receipt PDF via API
+      final pdfData = await _generateReceiptPdf();
+      if (pdfData == null) return;
+
+      // Save PDF temporarily
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}.pdf');
+      await file.writeAsBytes(base64Decode(pdfData));
+
+      // Get phone number
+      final phone = widget.albaran.telefono.replaceAll(RegExp(r'[^\d]'), '');
+      final message = 'Nota de entrega - Albarán ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}';
+
+      // Share via WhatsApp
+      if (phone.isNotEmpty) {
+        final whatsappUrl = 'https://wa.me/34$phone?text=${Uri.encodeComponent(message)}';
+        if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
+          await launchUrl(Uri.parse(whatsappUrl), mode: LaunchMode.externalApplication);
+        }
+      }
+      
+      // Also share the file
+      await Share.shareXFiles([XFile(file.path)], text: message);
+    } catch (e) {
+      debugPrint('Error sharing via WhatsApp: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al compartir: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareViaEmail() async {
+    try {
+      final email = await _showEmailInputDialog();
+      if (email == null || email.isEmpty) return;
+
+      // Send via API
+      final api = ApiClient();
+      final response = await api.post(
+        '/entregas/receipt/${widget.albaran.id}/email',
+        body: {
+          'email': email,
+          'clientCode': widget.albaran.codigoCliente,
+          'clientName': widget.albaran.nombreCliente,
+          'albaranNum': widget.albaran.numeroAlbaran.toString(),
+          'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
+          'fecha': widget.albaran.fecha,
+          'subtotal': widget.albaran.importeTotal * 0.96, // Approx base
+          'iva': widget.albaran.importeTotal * 0.04,
+          'total': widget.albaran.importeTotal,
+          'formaPago': widget.albaran.formaPagoDesc,
+          'items': _loadedItems?.map((i) => {
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion,
+            'precio': i.precioUnitario,
+          }).toList() ?? [],
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response['success'] == true ? 'Email enviado a $email' : 'Error al enviar email'),
+            backgroundColor: response['success'] == true ? AppTheme.success : AppTheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error sending email: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al enviar email: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<String?> _showEmailInputDialog() async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: const Text('Enviar por Email', style: TextStyle(color: AppTheme.textPrimary)),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.emailAddress,
+          decoration: InputDecoration(
+            hintText: 'correo@ejemplo.com',
+            filled: true,
+            fillColor: AppTheme.bgPrimary,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          style: const TextStyle(color: AppTheme.textPrimary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancelar', style: TextStyle(color: AppTheme.textTertiary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _generateReceiptPdf() async {
+    try {
+      final api = ApiClient();
+      final response = await api.post(
+        '/entregas/receipt/${widget.albaran.id}',
+        body: {
+          'clientCode': widget.albaran.codigoCliente,
+          'clientName': widget.albaran.nombreCliente,
+          'albaranNum': widget.albaran.numeroAlbaran.toString(),
+          'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
+          'fecha': widget.albaran.fecha,
+          'subtotal': widget.albaran.importeTotal * 0.96,
+          'iva': widget.albaran.importeTotal * 0.04,
+          'total': widget.albaran.importeTotal,
+          'formaPago': widget.albaran.formaPagoDesc,
+          'items': _loadedItems?.map((i) => {
+            'cantidad': i.cantidad,
+            'descripcion': i.descripcion,
+            'precio': i.precioUnitario,
+          }).toList() ?? [],
+        },
+      );
+
+      if (response['success'] == true) {
+        return response['pdfBase64'] as String?;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error generating receipt: $e');
+      return null;
+    }
+  }
 }
+

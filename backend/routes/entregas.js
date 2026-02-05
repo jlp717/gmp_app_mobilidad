@@ -709,4 +709,113 @@ router.get('/signers/:clientCode', async (req, res) => {
     }
 });
 
+// ===================================
+// POST /receipt/:entregaId - Generate delivery receipt PDF
+// ===================================
+router.post('/receipt/:entregaId', async (req, res) => {
+    try {
+        const { entregaId } = req.params;
+        const { signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor } = req.body;
+
+        const { saveReceipt } = require('../app/services/deliveryReceiptService');
+
+        const deliveryData = {
+            albaranNum,
+            facturaNum,
+            clientCode,
+            clientName,
+            fecha,
+            items: items || [],
+            subtotal: subtotal || 0,
+            iva: iva || 0,
+            total: total || 0,
+            formaPago,
+            repartidor
+        };
+
+        // Resolve signature path if relative
+        let fullSignaturePath = null;
+        if (signaturePath) {
+            fullSignaturePath = path.join(photosDir, signaturePath);
+            if (!fs.existsSync(fullSignaturePath)) {
+                fullSignaturePath = null;
+                logger.warn(`[RECEIPT] Signature not found: ${signaturePath}`);
+            }
+        }
+
+        const result = await saveReceipt(deliveryData, fullSignaturePath);
+
+        // Convert PDF to base64 for mobile sharing
+        const pdfBase64 = result.buffer.toString('base64');
+
+        logger.info(`[RECEIPT] Generated receipt for ${entregaId}`);
+        res.json({
+            success: true,
+            pdfPath: result.relativePath,
+            pdfBase64: pdfBase64,
+            fileName: path.basename(result.filePath)
+        });
+    } catch (error) {
+        logger.error(`[RECEIPT] Error: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ===================================
+// POST /receipt/:entregaId/email - Send receipt via email
+// ===================================
+router.post('/receipt/:entregaId/email', async (req, res) => {
+    try {
+        const { entregaId } = req.params;
+        const { email, signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ success: false, error: 'Email is required' });
+        }
+
+        const { saveReceipt } = require('../app/services/deliveryReceiptService');
+        const { sendDeliveryReceipt } = require('../app/services/emailService');
+
+        const deliveryData = {
+            albaranNum,
+            facturaNum,
+            clientCode,
+            clientName,
+            fecha,
+            items: items || [],
+            subtotal: subtotal || 0,
+            iva: iva || 0,
+            total: total || 0,
+            formaPago,
+            repartidor
+        };
+
+        // Resolve signature path
+        let fullSignaturePath = null;
+        if (signaturePath) {
+            fullSignaturePath = path.join(photosDir, signaturePath);
+            if (!fs.existsSync(fullSignaturePath)) {
+                fullSignaturePath = null;
+            }
+        }
+
+        const receipt = await saveReceipt(deliveryData, fullSignaturePath);
+
+        // Send email
+        const emailResult = await sendDeliveryReceipt(email, receipt.buffer, {
+            albaranNum: facturaNum || albaranNum,
+            clientName,
+            total: total.toFixed(2),
+            fecha
+        });
+
+        logger.info(`[RECEIPT] Email sent to ${email} for ${entregaId}`);
+        res.json({ success: true, messageId: emailResult.messageId });
+    } catch (error) {
+        logger.error(`[RECEIPT] Email error: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 module.exports = router;
+
