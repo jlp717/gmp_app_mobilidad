@@ -292,6 +292,24 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            // Repartidor badge for directors (shown when viewing multiple repartidores)
+            if (widget.albaran.codigoRepartidor.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                ),
+                child: Text(
+                  'R${widget.albaran.codigoRepartidor}',
+                  style: TextStyle(
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
           ],
         ),
         
