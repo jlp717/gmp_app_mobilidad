@@ -89,9 +89,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       entregas.setRepartidor(targetId, autoReload: false);
       entregas.seleccionarFecha(_selectedDate);
       
-      // For week data, use first ID if multiple (week endpoint limitation)
-      final weekTargetId = targetId.contains(',') ? targetId.split(',').first.trim() : targetId;
-      _loadWeekData(weekTargetId);
+      // Backend supports multi-ID for week endpoint (uses IN clause)
+      _loadWeekData(targetId);
     }
   }
 
