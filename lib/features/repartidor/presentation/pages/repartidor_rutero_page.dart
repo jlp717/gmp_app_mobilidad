@@ -78,11 +78,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       targetId = filter.selectedVendor!;
     }
     
-    // Safety check: specific endpoints do not support CSV IDs.
-    // If targetId is a list (e.g. from multi-vendor director context), take the first one.
-    if (targetId.contains(',')) {
-       targetId = targetId.split(',').first.trim();
-    }
+    // NOTE: Multi-ID (comma-separated) IS supported by /pendientes endpoint
+    // The week endpoint needs single ID, handled in _loadWeekData
 
     if (targetId.isNotEmpty) {
       if (_lastLoadedId != targetId) {
@@ -91,7 +88,10 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
 
       entregas.setRepartidor(targetId, autoReload: false);
       entregas.seleccionarFecha(_selectedDate);
-      _loadWeekData(targetId);
+      
+      // For week data, use first ID if multiple (week endpoint limitation)
+      final weekTargetId = targetId.contains(',') ? targetId.split(',').first.trim() : targetId;
+      _loadWeekData(weekTargetId);
     }
   }
 

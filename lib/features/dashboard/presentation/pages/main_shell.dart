@@ -729,24 +729,27 @@ class _MainShellState extends State<MainShell> {
           }
       }
 
-      final content = Builder(builder: (_) {
-         switch (_currentIndex) {
-          case 0:
-            return ChangeNotifierProvider(
-              key: ValueKey('rutero_$effectiveRepartidorId'), // Force rebuild on ID change
-              create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-              child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
-            );
-          case 1:
-            return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
-          case 2:
-            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
-          case 3:
-            return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
-          default:
-            return const Center(child: Text('Página no encontrada'));
-        }
-      });
+      // Use KeyedSubtree to force complete widget tree rebuild when ID changes
+      final content = KeyedSubtree(
+        key: ValueKey('rutero_view_$effectiveRepartidorId'),
+        child: Builder(builder: (_) {
+          switch (_currentIndex) {
+            case 0:
+              return ChangeNotifierProvider(
+                create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
+                child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
+              );
+            case 1:
+              return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
+            case 2:
+              return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
+            case 3:
+              return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
+            default:
+              return const Center(child: Text('Página no encontrada'));
+          }
+        }),
+      );
 
       // Wrap in Column with Header only if Jefe
       if (isJefeVentas) {
