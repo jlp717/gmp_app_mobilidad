@@ -204,7 +204,6 @@ class ApiClient {
 
       return result;
     } on DioException catch (e) {
-      // On network error, try to return cached data if available
       if (cacheKey != null && _isNetworkError(e)) {
         final cached = CacheService.get<List<dynamic>>(cacheKey);
         if (cached != null) {
@@ -212,6 +211,23 @@ class ApiClient {
           return cached;
         }
       }
+      throw _handleError(e);
+    }
+  }
+
+  /// GET request returning bytes (Blob/PDF)
+  static Future<List<int>> getBytes(
+    String endpoint, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final response = await dio.get(
+        endpoint,
+        queryParameters: queryParameters,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return response.data as List<int>;
+    } on DioException catch (e) {
       throw _handleError(e);
     }
   }

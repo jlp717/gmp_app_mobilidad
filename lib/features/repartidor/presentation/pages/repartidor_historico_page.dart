@@ -4,6 +4,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/utils/currency_formatter.dart';
@@ -117,12 +120,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         clientId: clientId,
       );
       
-      _objectives = objectives.map((o) => MonthlyObjective(
-        month: o.month,
-        collectable: o.collectable,
-        collected: o.collected,
-        percentage: o.percentage,
-      )).toList();
+      _objectives = objectives;
     } catch (e) {
       _documents = [];
       _objectives = [];
@@ -1286,20 +1284,47 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
   }
 
-  void _shareDocument(DocumentHistory doc) {
+  Future<void> _shareDocument(DocumentHistory doc) async {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.share, color: Colors.white),
-            const SizedBox(width: 12),
-            Text('Compartiendo ${doc.type == DocumentType.factura ? 'Factura' : 'Albarán'} #${doc.number}...'),
-          ],
-        ),
-        backgroundColor: AppTheme.neonBlue,
-        behavior: SnackBarBehavior.floating,
+      const SnackBar(
+        content: Text('Descargando documento...'),
+        duration: Duration(seconds: 1),
+        backgroundColor: AppTheme.info,
       ),
     );
+
+    try {
+      // Parse ID (Format: YEAR-SERIE-NUMBER)
+      final parts = doc.id.split('-');
+      final year = parts.isNotEmpty ? int.tryParse(parts[0]) ?? doc.date.year : doc.date.year;
+      final serie = parts.length > 1 ? parts[1].trim() : 'A';
+      
+      final bytes = await RepartidorDataService.downloadDocument(
+        year: year,
+        serie: serie,
+        number: doc.number,
+        type: doc.type == DocumentType.factura ? 'factura' : 'albaran',
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final fileName = '${doc.type == DocumentType.factura ? "Factura" : "Albaran"}_${doc.number}.pdf';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)], 
+        text: 'Documento ${doc.number} - ${DateFormat('dd/MM/yyyy').format(doc.date)}'
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al compartir: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -1360,16 +1385,4 @@ class DocumentHistory {
   });
 }
 
-class MonthlyObjective {
-  final String month;
-  final double collectable;
-  final double collected;
-  final double percentage;
 
-  MonthlyObjective({
-    required this.month,
-    required this.collectable,
-    required this.collected,
-    required this.percentage,
-  });
-}

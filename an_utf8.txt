@@ -1,0 +1,287 @@
+﻿Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 67.0.0 (94.0.0 available)
+  analyzer 6.4.1 (10.0.2 available)
+  bloc 8.1.4 (9.2.0 available)
+  bloc_test 9.1.7 (10.0.0 available)
+  build 2.4.1 (4.0.4 available)
+  build_config 1.1.2 (1.2.0 available)
+  build_daemon 4.0.4 (4.1.1 available)
+  build_resolvers 2.4.2 (3.0.4 available)
+  build_runner 2.4.13 (2.11.0 available)
+  build_runner_core 7.3.2 (9.3.2 available)
+  built_value 8.12.0 (8.12.3 available)
+  characters 1.4.0 (1.4.1 available)
+  code_builder 4.11.0 (4.11.1 available)
+  connectivity_plus 5.0.2 (7.0.0 available)
+  connectivity_plus_platform_interface 1.2.4 (2.0.1 available)
+  cross_file 0.3.5+1 (0.3.5+2 available)
+  crypto 3.0.6 (3.0.7 available)
+  dart_style 2.3.6 (3.1.5 available)
+  dbus 0.7.11 (0.7.12 available)
+  dio 5.9.0 (5.9.1 available)
+  equatable 2.0.7 (2.0.8 available)
+  ffi 2.1.4 (2.1.5 available)
+  fl_chart 0.66.2 (1.1.1 available)
+  flutter_bloc 8.1.6 (9.1.1 available)
+  flutter_launcher_icons 0.13.1 (0.14.4 available)
+  flutter_map 6.2.1 (8.2.2 available)
+  geolocator 11.1.0 (14.0.2 available)
+  geolocator_android 4.6.2 (5.0.2 available)
+  geolocator_web 3.0.0 (4.1.3 available)
+  go_router 13.2.5 (17.1.0 available)
+  google_fonts 6.3.3 (8.0.1 available)
+  http 1.5.0 (1.6.0 available)
+  image 4.5.4 (4.7.2 available)
+  image_picker_android 0.8.13+10 (0.8.13+13 available)
+  image_picker_ios 0.8.13+3 (0.8.13+6 available)
+  intl 0.19.0 (0.20.2 available)
+  js 0.6.7 (0.7.2 available)
+  json_annotation 4.9.0 (4.10.0 available)
+  matcher 0.12.17 (0.12.18 available)
+  material_color_utilities 0.11.1 (0.13.0 available)
+  meta 1.16.0 (1.18.1 available)
+  mgrs_dart 2.0.0 (3.0.0 available)
+  mime 1.0.6 (2.0.0 available)
+  mockito 5.4.4 (5.6.3 available)
+  path_provider_android 2.2.20 (2.2.22 available)
+  path_provider_foundation 2.4.2 (2.6.0 available)
+  proj4dart 2.1.0 (3.0.0 available)
+  share_plus 7.2.2 (12.0.1 available)
+  share_plus_platform_interface 3.4.0 (6.1.0 available)
+  shared_preferences_android 2.4.18 (2.4.20 available)
+  shelf_web_socket 2.0.1 (3.0.0 available)
+  signature 5.5.0 (6.3.0 available)
+  source_gen 1.5.0 (4.2.0 available)
+  source_helper 1.3.5 (1.3.10 available)
+  syncfusion_flutter_calendar 24.2.9 (32.2.3 available)
+  syncfusion_flutter_charts 24.2.9 (32.2.3 available)
+  syncfusion_flutter_core 24.2.9 (32.2.3 available)
+  syncfusion_flutter_datepicker 24.2.9 (32.2.3 available)
+  test 1.26.2 (1.29.0 available)
+  test_api 0.7.6 (0.7.9 available)
+  test_core 0.6.11 (0.6.15 available)
+  timezone 0.9.2 (0.11.0 available)
+  unicode 0.3.1 (1.1.9 available)
+  url_launcher_web 2.4.1 (2.4.2 available)
+  uuid 4.5.1 (4.5.2 available)
+  vector_graphics_compiler 1.1.19 (1.1.20 available)
+  very_good_analysis 6.0.0 (10.1.0 available)
+  watcher 1.1.4 (1.2.1 available)
+Got dependencies!
+68 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Analyzing rutero_detail_modal.dart...                           
+
+   info - Sort directive sections alphabetically - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:5:1 - directives_ordering
+   info - Place 'dart:' imports before other imports - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:8:1 - directives_ordering
+   info - Place 'dart:' imports before other imports - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:9:1 - directives_ordering
+   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart' - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:9:8 - unnecessary_import
+   info - Place 'dart:' imports before other imports - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:10:1 - directives_ordering
+   info - Sort directive sections alphabetically - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:11:1 - directives_ordering
+   info - Use 'package:' imports for files in the 'lib' directory - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:12:8 - always_use_package_imports
+   info - Sort directive sections alphabetically - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:13:1 - directives_ordering
+   info - Use 'package:' imports for files in the 'lib' directory - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:13:8 - always_use_package_imports
+   info - Use 'package:' imports for files in the 'lib' directory - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:14:8 - always_use_package_imports
+   info - Missing documentation for a public member - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:24:24 - public_member_api_docs
+   info - Constructor declarations should be before non-constructor declarations - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:26:9 - sort_constructors_first
+   info - Missing documentation for a public member - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:26:9 - public_member_api_docs
+   info - Required named parameters should be before optional named parameters - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:26:53 - always_put_required_named_parameters_first
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:37:81 - lines_longer_than_80_chars
+   info - The value of the argument is redundant because it matches the default value - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:44:21 - avoid_redundant_argument_values
+   info - The variable 'item' should be final - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:106:20 - prefer_final_in_for_each
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:109:81 - lines_longer_than_80_chars
+warning - The operand can't be 'null', so the condition is always 'false' - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:127:25 - unnecessary_null_comparison
+   info - Method invocation or property access on a 'dynamic' target - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:133:47 - avoid_dynamic_calls
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:133:81 - lines_longer_than_80_chars
+   info - Method invocation or property access on a 'dynamic' target - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:134:48 - avoid_dynamic_calls
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:134:81 - lines_longer_than_80_chars
+   info - Method invocation or property access on a 'dynamic' target - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:139:36 - avoid_dynamic_calls
+   info - Method invocation or property access on a 'dynamic' target - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:140:39 - avoid_dynamic_calls
+   info - Don't invoke 'print' in production code - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:145:7 - avoid_print
+   info - Missing a required trailing comma - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:174:8 - require_trailing_commas
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:181:38 - deprecated_member_use
+   info - The value of the argument is redundant because it matches the default value - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:182:20 - avoid_redundant_argument_values
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:208:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:225:19 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:226:19 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:227:19 - prefer_const_literals_to_create_immutables
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:240:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:245:49 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:246:49 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:249:47 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:250:47 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:264:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:272:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:291:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:297:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:299:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:300:28 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:306:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:321:31 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:325:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:348:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:353:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:366:19 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:368:17 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:369:19 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:380:11 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:443:12 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:444:14 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:446:19 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:447:11 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:450:20 - prefer_const_constructors
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:475:39 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:478:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:488:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:510:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:538:53 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:542:11 - prefer_const_constructors
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:556:38 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:557:38 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:576:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:586:34 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:587:34 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:611:44 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:615:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:620:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:637:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:660:57 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:663:38 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:665:40 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:695:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:706:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:717:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:758:19 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:760:17 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:760:29 - prefer_const_constructors
+   info - The variable 'linea' should be final - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:769:28 - prefer_final_in_for_each
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:774:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:778:59 - deprecated_member_use
+   info - Use an 'if' element to conditionally add elements - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:819:19 - prefer_if_elements_to_conditional_expressions
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:820:46 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:827:44 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:828:41 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:834:49 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:841:17 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:843:26 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:854:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:861:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:864:26 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:873:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:881:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:896:11 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:898:20 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:911:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:917:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:919:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:939:44 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:940:44 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:961:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:977:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:986:34 - prefer_const_constructors
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:998:49 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1018:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1020:58 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1024:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1029:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1076:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1077:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1090:46 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1135:17 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1136:29 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1137:21 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1162:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1165:81 - lines_longer_than_80_chars
+   info - Unnecessary use of a 'double' literal - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1194:36 - prefer_int_literals
+   info - Unnecessary use of a 'double' literal - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1197:35 - prefer_int_literals
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1198:81 - lines_longer_than_80_chars
+   info - Unnecessary use of a 'double' literal - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1200:59 - prefer_int_literals
+   info - Unnecessary type annotation on a local variable - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1203:37 - omit_local_variable_types
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1206:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1230:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1233:81 - lines_longer_than_80_chars
+   info - Unnecessary use of a 'double' literal - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1262:36 - prefer_int_literals
+   info - Unnecessary use of a 'double' literal - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1265:35 - prefer_int_literals
+   info - Unnecessary use of a 'double' literal - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1268:59 - prefer_int_literals
+   info - Unnecessary type annotation on a local variable - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1271:37 - omit_local_variable_types
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1274:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1317:15 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1318:27 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1319:19 - prefer_const_constructors
+   info - Closure should be a tearoff - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1332:28 - unnecessary_lambdas
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1348:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1373:25 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1374:25 - prefer_const_literals_to_create_immutables
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1379:44 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1405:21 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1431:81 - lines_longer_than_80_chars
+   info - Unnecessary type annotation on a local variable - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1452:5 - omit_local_variable_types
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1499:16 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1500:21 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1501:13 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1501:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1505:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1513:13 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1515:22 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1530:23 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1530:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1536:32 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1536:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1543:23 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1543:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1548:34 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1548:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1558:25 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1562:34 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1562:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1575:81 - lines_longer_than_80_chars
+   info - Use an if-null operator to convert a 'null' to a 'bool' - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1588:12 - use_if_null_to_convert_nulls_to_bools
+   info - Don't use 'BuildContext's across async gaps - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1604:54 - use_build_context_synchronously
+   info - Unnecessary type annotation on a local variable - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1607:13 - omit_local_variable_types
+   info - Unnecessary type annotation on a local variable - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1609:13 - omit_local_variable_types
+   info - Unnecessary type annotation on a local variable - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1612:7 - omit_local_variable_types
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1614:81 - lines_longer_than_80_chars
+   info - Local variables should be final - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1621:7 - prefer_final_locals
+   info - Unnecessary type annotation on a local variable - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1621:7 - omit_local_variable_types
+   info - Missing an 'await' for the 'Future' computed by this expression - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1635:24 - unawaited_futures
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1641:11 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1642:22 - prefer_const_constructors
+warning - The type argument(s) of the function 'showDialog' can't be inferred - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1671:5 - inference_failure_on_function_invocation
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1676:16 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1677:21 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1678:13 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1678:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1682:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1687:81 - lines_longer_than_80_chars
+  error - The getter 'bgCard' isn't defined for the type 'AppTheme' - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1728:35 - undefined_getter
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1730:16 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1731:21 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1732:13 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1734:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1740:13 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1742:22 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1771:20 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1771:42 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1771:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1785:20 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1796:81 - lines_longer_than_80_chars
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1798:54 - deprecated_member_use
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1819:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1825:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1835:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1855:81 - lines_longer_than_80_chars
+   info - Missing a required trailing comma - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1865:12 - require_trailing_commas
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1872:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1873:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1881:81 - lines_longer_than_80_chars
+  error - The getter 'bgCard' isn't defined for the type 'AppTheme' - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1892:35 - undefined_getter
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1893:81 - lines_longer_than_80_chars
+  error - The getter 'bgPrimary' isn't defined for the type 'AppTheme' - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1900:33 - undefined_getter
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1908:20 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1908:44 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1908:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1928:81 - lines_longer_than_80_chars
+   info - Missing a required trailing comma - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1938:12 - require_trailing_commas
+   info - Missing a newline at the end of the file - lib\features\repartidor\presentation\widgets\rutero_detail_modal.dart:1951:2 - eol_at_end_of_file
+

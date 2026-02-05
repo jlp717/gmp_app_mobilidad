@@ -341,4 +341,24 @@ class RepartidorDataService {
       throw Exception('Error cargando objetivos: $e');
     }
   }
+
+  /// Descargar documento PDF
+  static Future<List<int>> downloadDocument({
+    required int year,
+    required String serie,
+    required int number,
+    required String type, // 'factura' o 'albaran'
+  }) async {
+    try {
+      // Por ahora siempre usamos endpoint de factura ya que albaran pdf no está implementado formalmente
+      // Si type == albaran, el backend podria generar una nota de entrega simple o adaptar la factura
+      final response = await ApiClient.getBytes(
+        '/repartidor/document/invoice/$year/$serie/$number/pdf',
+      );
+      
+      return response;
+    } catch (e) {
+      throw Exception('Error descargando documento: $e');
+    }
+  }
 }

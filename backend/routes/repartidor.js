@@ -10,6 +10,7 @@ const express = require('express');
 const router = express.Router();
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
+const { generateInvoicePDF } = require('../app/services/pdfService');
 
 // Commission configuration (30% threshold for repartidores)
 const REPARTIDOR_CONFIG = {
@@ -879,6 +880,339 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
     } catch (error) {
         logger.error(`[REPARTIDOR] Error in /rutero/week: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+// =============================================================================
+// GET /history/:repartidorId
+// Retrieve historical deliveries with filtering
+// =============================================================================
+router.get('/history/:repartidorId', async (req, res) => {
+    try {
+        const { repartidorId } = req.params;
+        const { startDate, endDate, search } = req.query;
+
+        if (!startDate || !endDate) {
+            return res.status(400).json({ success: false, error: 'Fechas requeridas' });
+        }
+
+        // Convert dates to integers YYYYMMDD
+        const startInt = parseInt(startDate.replace(/-/g, ''));
+        const endInt = parseInt(endDate.replace(/-/g, ''));
+        const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+
+        logger.info(`[REPARTIDOR] History for ${repartidorId} from ${startInt} to ${endInt}`);
+
+        let sql = `
+            SELECT 
+                CPC.ANODOCUMENTO || '-' || RIGHT('0' || CPC.MESDOCUMENTO, 2) || '-' || RIGHT('0' || CPC.DIADOCUMENTO, 2) as FECHA,
+                CPC.NUMEROALBARAN,
+                CPC.SERIEALBARAN,
+                CPC.EJERCICIOALBARAN,
+                CAC.NUMEROFACTURA,
+                CAC.SERIEFACTURA,
+                CAC.EJERCICIOFACTURA,
+                TRIM(CPC.CODIGOCLIENTEALBARAN) as CODIGO_CLIENTE,
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
+                CPC.IMPORTETOTAL as TOTAL,
+                DS.STATUS as ESTADO_ENTREGA,
+                DS.FIRMA_PATH
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+            INNER JOIN DSEDAC.CAC CAC 
+                ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
+                AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
+            LEFT JOIN DSEDAC.CLI CLI 
+                ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
+            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ${startInt} AND ${endInt}
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+        `;
+
+        if (search) {
+            const cleanSearch = search.toUpperCase().replace(/'/g, "''");
+            sql += ` AND (
+                UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR 
+                UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR
+                CAST(CPC.NUMEROALBARAN AS CHAR(20)) LIKE '%${cleanSearch}%' OR
+                CAST(CAC.NUMEROFACTURA AS CHAR(20)) LIKE '%${cleanSearch}%'
+            )`;
+        }
+
+        sql += ` ORDER BY FECHA DESC, CPC.NUMEROALBARAN DESC FETCH FIRST 200 ROWS ONLY`;
+
+        const rows = await query(sql, false) || [];
+
+        res.json({ success: true, count: rows.length, data: rows });
+    } catch (e) {
+        logger.error(`[REPARTIDOR] Error in /history: ${e.message}`);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// =============================================================================
+// GET /document/invoice/:year/:serie/:number/pdf
+// Generate formal Invoice PDF
+// =============================================================================
+router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
+    try {
+        const { year, serie, number } = req.params;
+
+        logger.info(`[PDF] Generating Invoice PDF: ${year}-${serie}-${number}`);
+
+        // 1. Fetch Header (From CAC - First matching Albaran)
+        // We use CAC because actual Invoice tables like FAC/FCL might be missing or inaccessible
+        const headerSql = `
+            SELECT 
+                CAC.EJERCICIOALBARAN, CAC.SERIEALBARAN, CAC.NUMEROALBARAN,
+                CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
+                CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA, -- Fallback to Alb date
+                TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
+                TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
+                TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
+                TRIM(COALESCE(CLI.PROVINCIA, '')) as PROVINCIACLIENTEFACTURA,
+                TRIM(COALESCE(CLI.CODIGOPOSTAL, '')) as CPCLIENTEFACTURA,
+                TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA
+            FROM DSEDAC.CAC CAC
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+            WHERE CAC.NUMEROFACTURA = ${number} 
+              AND CAC.SERIEFACTURA = '${serie}' 
+              AND CAC.EJERCICIOFACTURA = ${year}
+            FETCH FIRST 1 ROW ONLY
+        `;
+        const headers = await query(headerSql, false);
+
+        if (!headers || headers.length === 0) {
+            return res.status(404).json({ success: false, error: 'Factura no encontrada (CAC)' });
+        }
+        const header = headers[0];
+
+        // 2. Fetch Lines (From LAC - Aggregated from all Albaranes in this Invoice)
+        const linesSql = `
+            SELECT 
+                LAC.CODIGOARTICULO,
+                LAC.DESCRIPCION as DESCRIPCIONARTICULO,
+                '' as LOTEARTICULO, -- Column missing in LAC
+                LAC.CANTIDADUNIDADES as CANTIDADARTICULO,
+                0 as CAJASARTICULO, -- Column missing in LAC
+                LAC.IMPORTEVENTA as IMPORTENETOARTICULO,
+                0 as PORCENTAJEIVAARTICULO, -- Column missing in LAC
+                0 as PORCENTAJERECARGOARTICULO, -- Column missing in LAC
+                LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
+                LAC.PRECIOVENTA as PRECIOARTICULO
+            FROM DSEDAC.LAC LAC
+            INNER JOIN DSEDAC.CAC CAC 
+                 ON LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN 
+                 AND LAC.SERIEALBARAN = CAC.SERIEALBARAN 
+                 AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN 
+                 AND LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
+            WHERE CAC.NUMEROFACTURA = ${number} 
+              AND CAC.SERIEFACTURA = '${serie}' 
+              AND CAC.EJERCICIOFACTURA = ${year}
+            ORDER BY CAC.ANODOCUMENTO, CAC.MESDOCUMENTO, CAC.DIADOCUMENTO, CAC.NUMEROALBARAN, LAC.SECUENCIA
+        `;
+        const lines = await query(linesSql, false) || [];
+
+        // 3. Generate PDF
+        const buffer = await generateInvoicePDF({ header, lines });
+
+        // 4. Send Response
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename=Factura_${year}_${serie}_${number}.pdf`,
+            'Content-Length': buffer.length
+        });
+        res.send(buffer);
+
+    } catch (e) {
+        logger.error(`[PDF] Error generating invoice: ${e.message}`);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+
+// =============================================================================
+// GET /history/clients/:repartidorId
+// Get list of clients delivered by this repartidor (Last 6 months)
+// =============================================================================
+router.get('/history/clients/:repartidorId', async (req, res) => {
+    try {
+        const { repartidorId } = req.params;
+        const { search } = req.query;
+
+        const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+
+        // Last 6 months
+        const dateLimit = moment().subtract(6, 'months').format('YYYYMMDD');
+
+        let sql = `
+            SELECT DISTINCT
+                TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NAME,
+                TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
+                COUNT(CPC.NUMEROALBARAN) as TOTAL_DOCS
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+            LEFT JOIN DSEDAC.CLI CLI 
+                ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${dateLimit}
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+        `;
+
+        if (search) {
+            const cleanSearch = search.toUpperCase().replace(/'/g, "''");
+            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%')`;
+        }
+
+        sql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
+                 ORDER BY NAME FETCH FIRST 50 ROWS ONLY`;
+
+        const rows = await query(sql, false);
+
+        const clients = rows.map(r => ({
+            id: r.ID,
+            name: r.NAME,
+            address: r.ADDRESS,
+            totalDocuments: r.TOTAL_DOCS
+        }));
+
+        res.json({ success: true, clients });
+    } catch (e) {
+        logger.error(`[REPARTIDOR] Error getting history clients: ${e.message}`);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// =============================================================================
+// GET /history/documents/:clientId
+// Get documents for a specific client
+// =============================================================================
+router.get('/history/documents/:clientId', async (req, res) => {
+    try {
+        const { clientId } = req.params;
+        const { repartidorId } = req.query; // Optional: filter only docs delivered by this repartidor
+
+        let sql = `
+            SELECT 
+                CPC.ANODOCUMENTO || '-' || RIGHT('0' || CPC.MESDOCUMENTO, 2) || '-' || RIGHT('0' || CPC.DIADOCUMENTO, 2) as FECHA,
+                CPC.NUMEROALBARAN,
+                CPC.SERIEALBARAN,
+                CPC.EJERCICIOALBARAN,
+                CAC.NUMEROFACTURA,
+                CAC.SERIEFACTURA,
+                CAC.EJERCICIOFACTURA,
+                CPC.IMPORTETOTAL as AMOUNT,
+                COALESCE(CVC.IMPORTEPENDIENTE, 0) as PENDING,
+                DS.STATUS,
+                DS.FIRMA_PATH
+            FROM DSEDAC.CPC CPC
+            INNER JOIN DSEDAC.OPP OPP
+                ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+            INNER JOIN DSEDAC.CAC CAC 
+                ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
+                AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
+            LEFT JOIN DSEDAC.CVC CVC 
+                ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+                AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+                AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
+            WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId}'
+        `;
+
+        if (repartidorId) {
+            const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+            sql += ` AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
+        }
+
+        sql += ` ORDER BY FECHA DESC FETCH FIRST 100 ROWS ONLY`;
+
+        const rows = await query(sql, false);
+
+        const documents = rows.map(r => ({
+            id: `${r.EJERCICIOALBARAN}-${r.SERIEALBARAN}-${r.NUMEROALBARAN}`,
+            type: (r.NUMEROFACTURA && r.NUMEROFACTURA > 0) ? 'factura' : 'albaran',
+            number: (r.NUMEROFACTURA && r.NUMEROFACTURA > 0) ? r.NUMEROFACTURA : r.NUMEROALBARAN,
+            date: r.FECHA,
+            amount: parseFloat(r.AMOUNT) || 0,
+            pending: parseFloat(r.PENDING) || 0,
+            status: (r.STATUS === 'ENTREGADO') ? 'delivered' : 'notDelivered', // Mapping
+            hasSignature: !!r.FIRMA_PATH
+        }));
+
+        res.json({ success: true, documents });
+    } catch (e) {
+        logger.error(`[REPARTIDOR] Error getting client documents: ${e.message}`);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// =============================================================================
+// GET /history/objectives/:repartidorId
+// Get monthly commission progress
+// =============================================================================
+router.get('/history/objectives/:repartidorId', async (req, res) => {
+    try {
+        const { repartidorId } = req.params;
+        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const currentYear = new Date().getFullYear();
+
+        // Calculate for each month of current year
+        const sql = `
+            SELECT 
+                OPP.MESREPARTO as MONTH,
+                SUM(CPC.IMPORTETOTAL) as TOTAL_COBRABLE,
+                SUM(CASE 
+                    WHEN COALESCE(CVC.IMPORTEPENDIENTE, 0) = 0 THEN CPC.IMPORTETOTAL 
+                    ELSE CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)
+                END) as TOTAL_COBRADO
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+            LEFT JOIN DSEDAC.CVC CVC 
+                ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+                AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+                AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            WHERE OPP.ANOREPARTO = ${currentYear}
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
+            GROUP BY OPP.MESREPARTO
+            ORDER BY MONTH DESC
+        `;
+
+        const rows = await query(sql, false);
+        const monthNames = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+        const objectives = rows.map(r => {
+            const collectable = parseFloat(r.TOTAL_COBRABLE) || 0;
+            const collected = parseFloat(r.TOTAL_COBRADO) || 0;
+            const percentage = collectable > 0 ? (collected / collectable) * 100 : 0;
+
+            return {
+                month: monthNames[r.MONTH],
+                year: currentYear,
+                monthNum: r.MONTH,
+                collectable,
+                collected,
+                percentage,
+                thresholdMet: percentage >= REPARTIDOR_CONFIG.threshold
+            };
+        });
+
+        res.json({ success: true, objectives });
+    } catch (e) {
+        logger.error(`[REPARTIDOR] Error getting objectives: ${e.message}`);
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 

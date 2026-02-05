@@ -273,6 +273,7 @@ class EntregasProvider extends ChangeNotifier {
   AlbaranEntrega? get albaranSeleccionado => _albaranSeleccionado;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  String get repartidorId => _repartidorId;
   DateTime get fechaSeleccionada => _fechaSeleccionada;
   
   List<AlbaranEntrega> get albaranesPendientes =>

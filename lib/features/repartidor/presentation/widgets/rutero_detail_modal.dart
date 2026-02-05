@@ -1725,7 +1725,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
+        backgroundColor: AppTheme.darkCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
@@ -1844,10 +1844,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (email == null || email.isEmpty) return;
 
       // Send via API
-      final api = ApiClient();
-      final response = await api.post(
+      // Send via API
+      final response = await ApiClient.post(
         '/entregas/receipt/${widget.albaran.id}/email',
-        body: {
+        {
           'email': email,
           'clientCode': widget.albaran.codigoCliente,
           'clientName': widget.albaran.nombreCliente,
@@ -1858,11 +1858,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'iva': widget.albaran.importeTotal * 0.04,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
-          'items': _loadedItems?.map((i) => {
-            'cantidad': i.cantidad,
+          'items': _items.map((i) => {
+            'cantidad': i.cantidadPedida,
             'descripcion': i.descripcion,
             'precio': i.precioUnitario,
-          }).toList() ?? [],
+          }).toList(),
         },
       );
 
@@ -1889,7 +1889,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
+        backgroundColor: AppTheme.darkCard,
         title: const Text('Enviar por Email', style: TextStyle(color: AppTheme.textPrimary)),
         content: TextField(
           controller: controller,
@@ -1897,7 +1897,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           decoration: InputDecoration(
             hintText: 'correo@ejemplo.com',
             filled: true,
-            fillColor: AppTheme.bgPrimary,
+            fillColor: AppTheme.darkBase,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
           style: const TextStyle(color: AppTheme.textPrimary),
@@ -1919,10 +1919,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<String?> _generateReceiptPdf() async {
     try {
-      final api = ApiClient();
-      final response = await api.post(
+      final response = await ApiClient.post(
         '/entregas/receipt/${widget.albaran.id}',
-        body: {
+        {
           'clientCode': widget.albaran.codigoCliente,
           'clientName': widget.albaran.nombreCliente,
           'albaranNum': widget.albaran.numeroAlbaran.toString(),
@@ -1932,11 +1931,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'iva': widget.albaran.importeTotal * 0.04,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
-          'items': _loadedItems?.map((i) => {
-            'cantidad': i.cantidad,
+          'items': _items.map((i) => {
+            'cantidad': i.cantidadPedida,
             'descripcion': i.descripcion,
             'precio': i.precioUnitario,
-          }).toList() ?? [],
+          }).toList(),
         },
       );
 

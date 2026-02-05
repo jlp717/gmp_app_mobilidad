@@ -11,6 +11,7 @@ import '../widgets/futuristic_week_navigator.dart';
 import '../widgets/holographic_kpi_dashboard.dart';
 import '../widgets/smart_delivery_card.dart';
 import '../widgets/rutero_detail_modal.dart';
+import 'repartidor_historico_page.dart';
 
 /// Repartidor Rutero Page - Futuristic Redesign
 /// Features:
@@ -492,6 +493,46 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
                     entregas.setSortBy(val);
                   }
                 },
+              ),
+            ),
+          ),
+          
+          const SizedBox(width: 8),
+
+          // History Button
+          GestureDetector(
+            onTap: () {
+               HapticFeedback.lightImpact();
+               String currentId = entregas.repartidorId;
+               if (currentId.isEmpty) currentId = _lastLoadedId ?? '';
+               
+               if (currentId.isNotEmpty) {
+                 Navigator.push(
+                   context,
+                   MaterialPageRoute(
+                     builder: (_) => RepartidorHistoricoPage(
+                       repartidorId: currentId,
+                     ),
+                   ),
+                 );
+               } else {
+                 ScaffoldMessenger.of(context).showSnackBar(
+                   const SnackBar(content: Text('No hay repartidor seleccionado')),
+                 );
+               }
+            },
+            child: Container(
+              height: 38,
+              width: 38,
+              decoration: BoxDecoration(
+                color: AppTheme.darkCard,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: const Icon(
+                Icons.history,
+                color: AppTheme.neonPurple,
+                size: 20,
               ),
             ),
           ),
