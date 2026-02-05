@@ -630,12 +630,34 @@ router.post('/uploads/signature', async (req, res) => {
         const { entregaId, firma, clientCode, dni, nombre } = req.body; // firma is base64
         if (!firma) return res.status(400).json({ success: false, error: 'No signature' });
 
+        // Create organized directory structure: /uploads/photos/YYYY/MM/
+        const now = new Date();
+        const year = now.getFullYear().toString();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+
+        const organizedDir = path.join(photosDir, year, month);
+        if (!fs.existsSync(organizedDir)) {
+            fs.mkdirSync(organizedDir, { recursive: true });
+        }
+
+        // Clean entregaId for filename (replace special chars)
+        const safeEntregaId = (entregaId || 'unknown').toString().replace(/[^a-zA-Z0-9-]/g, '_');
+        const safeClientCode = (clientCode || 'CLI').toString().replace(/[^a-zA-Z0-9]/g, '');
+
+        // Filename format: FIRMA_YYYY-MM-DD_ClientCode_EntregaId_Timestamp.png
+        // Example: FIRMA_2026-02-05_12345_2026-A-1-999_1707123456789.png
+        const fileName = `FIRMA_${year}-${month}-${day}_${safeClientCode}_${safeEntregaId}_${Date.now()}.png`;
+        const filePath = path.join(organizedDir, fileName);
+
+        // Relative path for database storage (easier for migrations)
+        const relativePath = `${year}/${month}/${fileName}`;
+
         // Save base64 to file
         const base64Data = firma.replace(/^data:image\/png;base64,/, "");
-        const fileName = `sig-${entregaId}-${Date.now()}.png`;
-        const filePath = path.join(photosDir, fileName);
+        fs.writeFileSync(filePath, base64Data, 'base64');
 
-        require('fs').writeFileSync(filePath, base64Data, 'base64');
+        logger.info(`[SIGN] Saved signature: ${relativePath} for delivery ${entregaId}`);
 
         // Save Signer Info (Upsert)
         if (clientCode && dni) {
@@ -658,8 +680,10 @@ router.post('/uploads/signature', async (req, res) => {
             }
         }
 
-        res.json({ success: true, path: filePath });
+        // Return relative path (more portable) and full path
+        res.json({ success: true, path: relativePath, fullPath: filePath });
     } catch (error) {
+        logger.error(`[SIGN] Error saving signature: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });
