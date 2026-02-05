@@ -35,7 +35,7 @@ router.get('/yoy-comparison', async (req, res) => {
             SUM(L.LCIMVT - L.LCIMCT) as margin,
             COUNT(DISTINCT L.LCCDCL) as clients
           FROM DSED.LACLAE L 
-          WHERE L.LCAADC = ${yr} AND ${LACLAE_SALES_FILTER} ${monthFilter} ${vendedorFilter}
+          WHERE L.LCYEAB = ${yr} AND ${LACLAE_SALES_FILTER} ${monthFilter} ${vendedorFilter}
         `;
             const result = await cachedQuery(query, sql, `${cacheKeyBase}:${yr}`, TTL.LONG);
             return result[0] || {};
@@ -90,7 +90,7 @@ router.get('/top-clients', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         let dateFilter = '';
-        if (year) dateFilter += ` AND L.LCAADC = ${year}`;
+        if (year) dateFilter += ` AND L.LCYEAB = ${year}`;
         if (month) dateFilter += ` AND L.LCMMDC = ${month}`;
 
         const sql = `
@@ -153,11 +153,11 @@ router.get('/trends', async (req, res) => {
 
         // Get last 6 months from LACLAE
         const sql = `
-      SELECT L.LCAADC as year, L.LCMMDC as month, SUM(L.LCIMVT) as sales
+      SELECT L.LCYEAB as year, L.LCMMDC as month, SUM(L.LCIMVT) as sales
       FROM DSED.LACLAE L
-      WHERE L.LCAADC >= ${MIN_YEAR} AND ${LACLAE_SALES_FILTER} ${vendedorFilter}
-      GROUP BY L.LCAADC, L.LCMMDC
-      ORDER BY L.LCAADC DESC, L.LCMMDC DESC
+      WHERE L.LCYEAB >= ${MIN_YEAR} AND ${LACLAE_SALES_FILTER} ${vendedorFilter}
+      GROUP BY L.LCYEAB, L.LCMMDC
+      ORDER BY L.LCYEAB DESC, L.LCMMDC DESC
       FETCH FIRST 6 ROWS ONLY
     `;
         const history = await cachedQuery(query, sql, `analytics:trends:${vendedorCodes}`, TTL.LONG);
@@ -442,7 +442,7 @@ router.get('/sales-history/summary', async (req, res) => {
                     COUNT(DISTINCT TRIM(L.LCCDRF)) as product_count
                 FROM DSED.LACLAE L
                 WHERE ${LACLAE_FILTER}
-                  AND L.LCAADC = ${year}
+                  AND L.LCYEAB = ${year}
                   ${vendedorFilter}
                   ${clientFilter}
                   ${searchFilter}
@@ -456,18 +456,18 @@ router.get('/sales-history/summary', async (req, res) => {
         const getYearBreakdown = async (startYear, endYear) => {
             const queryStr = `
                 SELECT 
-                    L.LCAADC as year,
+                    L.LCYEAB as year,
                     SUM(L.LCIMVT) as sales,
                     SUM(L.LCIMVT - L.LCIMCT) as margin,
                     SUM(L.LCCTUD) as units
                 FROM DSED.LACLAE L
                 WHERE ${LACLAE_FILTER}
-                  AND L.LCAADC BETWEEN ${startYear} AND ${endYear}
+                  AND L.LCYEAB BETWEEN ${startYear} AND ${endYear}
                   ${vendedorFilter}
                   ${clientFilter}
                   ${searchFilter}
-                GROUP BY L.LCAADC
-                ORDER BY L.LCAADC DESC
+                GROUP BY L.LCYEAB
+                ORDER BY L.LCYEAB DESC
             `;
             return await cachedQuery(query, queryStr, `history:breakdown:laclae:${startYear}:${endYear}:${vendedorCodes}:${clientCode}:${productSearch}`, TTL.SHORT);
         };
@@ -477,16 +477,16 @@ router.get('/sales-history/summary', async (req, res) => {
             // Get Monthly data for BOTH years
             const queryStr = `
                 SELECT 
-                    L.LCAADC as year,
+                    L.LCYEAB as year,
                     L.LCMMDC as month,
                     SUM(L.LCIMVT) as sales
                 FROM DSED.LACLAE L
                 WHERE ${LACLAE_FILTER}
-                  AND L.LCAADC IN (${year}, ${prevYear})
+                  AND L.LCYEAB IN (${year}, ${prevYear})
                   ${vendedorFilter}
                   ${clientFilter}
                   ${searchFilter}
-                GROUP BY L.LCAADC, L.LCMMDC
+                GROUP BY L.LCYEAB, L.LCMMDC
                 ORDER BY L.LCMMDC
             `;
             const rows = await cachedQuery(query, queryStr, `history:monthly:${year}:${prevYear}:${vendedorCodes}:${clientCode}:${productSearch}`, TTL.SHORT);

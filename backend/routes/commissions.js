@@ -86,7 +86,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
         WHERE TRIM(L.LCCDVD) = '${vendorCode}'
-          AND L.LCAADC = ${currentYear}
+          AND L.LCYEAB = ${currentYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
 
@@ -96,7 +96,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDVD) = '${vendorCode}'
-              AND L.LCAADC = ${currentYear - 1}
+              AND L.LCYEAB = ${currentYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);
         return prevRows.map(r => r.CLIENT_CODE);
@@ -120,7 +120,7 @@ async function getClientsMonthlySales(clientCodes, year) {
             SUM(L.LCIMVT) as SALES
         FROM DSED.LACLAE L
         WHERE TRIM(L.LCCDCL) IN (${clientList})
-          AND L.LCAADC = ${year}
+          AND L.LCYEAB = ${year}
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
     `, false);
@@ -342,18 +342,18 @@ router.get('/summary', async (req, res) => {
 
         let salesQuery = `
             SELECT 
-                L.LCAADC as YEAR,
+                L.LCYEAB as YEAR,
                 LCMMDC as MONTH,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE L.LCAADC IN (${selectedYear}, ${prevYear})
+            WHERE L.LCYEAB IN (${selectedYear}, ${prevYear})
               AND ${LACLAE_SALES_FILTER}
         `;
 
         // Build vendor filter using helper function with TRIM
         const vendedorFilter = isAll ? '' : buildVendedorFilterLACLAE(vendedorCode, 'L');
 
-        salesQuery += ` ${vendedorFilter} GROUP BY L.LCAADC, LCMMDC`;
+        salesQuery += ` ${vendedorFilter} GROUP BY L.LCYEAB, LCMMDC`;
 
         const salesRows = await query(salesQuery);
 

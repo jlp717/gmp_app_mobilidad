@@ -67,7 +67,7 @@ router.get('/vendedores', async (req, res) => {
             WITH ActiveVendors AS (
                 SELECT DISTINCT TRIM(R1_T8CDVD) as CODE
                 FROM DSED.LACLAE
-                WHERE LCAADC IN (${currentYear}, ${prevYear})
+                WHERE LCYEAB IN (${currentYear}, ${prevYear})
                   AND R1_T8CDVD IS NOT NULL 
                   AND TRIM(R1_T8CDVD) <> ''
             )

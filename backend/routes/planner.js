@@ -158,7 +158,7 @@ router.get('/rutero/vendedores', async (req, res) => {
             WITH ActiveVendors AS (
                 SELECT DISTINCT TRIM(R1_T8CDVD) as CODE
                 FROM DSED.LACLAE
-                WHERE LCAADC IN (${currentYear}, ${prevYear}) 
+                WHERE LCYEAB IN (${currentYear}, ${prevYear}) 
                   AND R1_T8CDVD IS NOT NULL 
                   AND TRIM(R1_T8CDVD) <> ''
             )
@@ -707,7 +707,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SUM(L.LCIMCT) as COST
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
-              AND L.LCAADC = ${currentYear}
+              AND L.LCYEAB = ${currentYear}
               AND ${LACLAE_SALES_FILTER}
               AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
             GROUP BY L.LCCDCL
@@ -733,7 +733,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                     SUM(L.LCIMCT) as COST
                 FROM DSED.LACLAE L
                 WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
-                  AND L.LCAADC = ${previousYear}
+                  AND L.LCYEAB = ${previousYear}
                   AND ${LACLAE_SALES_FILTER}
                   AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
                 GROUP BY L.LCCDCL
@@ -758,7 +758,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
-              AND L.LCAADC = ${previousYear}
+              AND L.LCYEAB = ${previousYear}
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCCDCL
         `;
@@ -979,12 +979,12 @@ router.get('/diagnose/client/:code', async (req, res) => {
             const laclaeData = await query(`
                 SELECT DISTINCT
                     TRIM(L.R1_T8CDVD) as VENDOR_LACLAE,
-                    L.LCAADC as YEAR,
+                    L.LCYEAB as YEAR,
                     L.R1_T8DIVL as VIS_L, L.R1_T8DIVM as VIS_M, L.R1_T8DIVX as VIS_X,
                     L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S
                 FROM DSED.LACLAE L
                 WHERE TRIM(L.LCCDCL) = '${clientCode}'
-                ORDER BY L.LCAADC DESC
+                ORDER BY L.LCYEAB DESC
                 FETCH FIRST 10 ROWS ONLY
             `);
             results.laclaeHistory = laclaeData;
@@ -1135,17 +1135,17 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         // Get monthly sales for current and previous year
         const monthlySalesSql = `
             SELECT 
-                L.LCAADC as YEAR,
+                L.LCYEAB as YEAR,
                 L.LCMMDC as MONTH,
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST,
                 SUM(L.LCIMVT - L.LCIMCT) as MARGIN
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) = '${clientCode}'
-              AND L.LCAADC IN (${currentYear}, ${previousYear})
+              AND L.LCYEAB IN (${currentYear}, ${previousYear})
               AND ${LACLAE_SALES_FILTER}
-            GROUP BY L.LCAADC, L.LCMMDC
-            ORDER BY L.LCAADC DESC, L.LCMMDC ASC
+            GROUP BY L.LCYEAB, L.LCMMDC
+            ORDER BY L.LCYEAB DESC, L.LCMMDC ASC
         `;
         const monthlySales = await query(monthlySalesSql, false, false);
 
@@ -1197,14 +1197,14 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         // Get multi-year history
         const yearlyHistorySql = `
             SELECT 
-                L.LCAADC as YEAR,
+                L.LCYEAB as YEAR,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) = '${clientCode}'
-              AND L.LCAADC >= ${currentYear - 5}
+              AND L.LCYEAB >= ${currentYear - 5}
               AND ${LACLAE_SALES_FILTER}
-            GROUP BY L.LCAADC
-            ORDER BY L.LCAADC DESC
+            GROUP BY L.LCYEAB
+            ORDER BY L.LCYEAB DESC
         `;
         const yearlyHistory = await query(yearlyHistorySql, false, false);
         const yearlyTotals = yearlyHistory.map(row => ({
@@ -1221,7 +1221,7 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 MAX(L.LCAIDL * 10000 + L.LCMIDL * 100 + L.LCDIDL) as LAST_ORDER_DATE
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) = '${clientCode}'
-              AND L.LCAADC = ${currentYear}
+              AND L.LCYEAB = ${currentYear}
               AND ${LACLAE_SALES_FILTER}
         `;
         const frequencyResult = await query(frequencySql, false, false);

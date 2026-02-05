@@ -36,7 +36,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
         WHERE TRIM(L.LCCDVD) = '${vendorCode}'
-          AND L.LCAADC = ${currentYear}
+          AND L.LCYEAB = ${currentYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
 
@@ -46,7 +46,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDVD) = '${vendorCode}'
-              AND L.LCAADC = ${currentYear - 1}
+              AND L.LCYEAB = ${currentYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);
         return prevRows.map(r => r.CLIENT_CODE);
@@ -72,7 +72,7 @@ async function getClientsMonthlySales(clientCodes, year) {
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
         FROM DSED.LACLAE L
         WHERE TRIM(L.LCCDCL) IN (${clientList})
-          AND L.LCAADC = ${year}
+          AND L.LCYEAB = ${year}
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
     `, false);
@@ -387,17 +387,17 @@ router.get('/evolution', async (req, res) => {
         // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
         const rows = await query(`
           SELECT 
-            L.LCAADC as YEAR,
+            L.LCYEAB as YEAR,
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES,
             SUM(L.LCIMCT) as COST,
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
           FROM DSED.LACLAE L
-          WHERE L.LCAADC IN (${yearsFilter})
+          WHERE L.LCYEAB IN (${yearsFilter})
             AND ${LACLAE_SALES_FILTER}
             ${vendedorFilter}
-          GROUP BY L.LCAADC, L.LCMMDC
-          ORDER BY L.LCAADC, L.LCMMDC
+          GROUP BY L.LCYEAB, L.LCMMDC
+          ORDER BY L.LCYEAB, L.LCMMDC
         `);
 
 
@@ -755,7 +755,7 @@ router.get('/matrix', async (req, res) => {
         COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
         COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as SUBFAMILY_CODE,
         COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
-        L.LCAADC as YEAR,
+        L.LCYEAB as YEAR,
         L.LCMMDC as MONTH,
         SUM(L.LCIMVT) as SALES,
         SUM(L.LCIMCT) as COST,
@@ -779,12 +779,12 @@ router.get('/matrix', async (req, res) => {
       LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
       LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
       WHERE L.LCCDCL = '${clientCode}'
-        AND L.LCAADC IN(${yearsFilter})
+        AND L.LCYEAB IN(${yearsFilter})
         AND L.LCMMDC BETWEEN ${monthStart} AND ${monthEnd}
         -- FILTERS to match LACLAE logic
         AND ${LACLAE_SALES_FILTER}
         ${filterConditions}
-      GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
+      GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCYEAB, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
       ORDER BY SALES DESC
     `);
 
@@ -1737,7 +1737,7 @@ router.get('/by-client', async (req, res) => {
               LEFT JOIN (
                 SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
                 FROM DSED.LACLAE
-                WHERE LCAADC IN(${yearsFilter})
+                WHERE LCYEAB IN(${yearsFilter})
                   AND LCMMDC IN(${monthsFilter})
                   AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
                   AND LCCDCL IN (${clientCodesFilter})
@@ -1764,7 +1764,7 @@ router.get('/by-client', async (req, res) => {
                 SUM(L.LCIMCT) as COST
               FROM DSED.LACLAE L
               LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
-              WHERE L.LCAADC IN(${yearsFilter})
+              WHERE L.LCYEAB IN(${yearsFilter})
                 AND L.LCMMDC IN(${monthsFilter})
                 AND ${LACLAE_SALES_FILTER}
                 ${vendedorFilterSales}
@@ -1789,7 +1789,7 @@ router.get('/by-client', async (req, res) => {
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as PREV_SALES
               FROM DSED.LACLAE L
-              WHERE L.LCAADC = ${prevYear}
+              WHERE L.LCYEAB = ${prevYear}
                 AND L.LCMMDC IN(${monthsFilter})
                 AND ${LACLAE_SALES_FILTER}
                 AND L.LCCDCL IN (${retrievedCodes})
