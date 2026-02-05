@@ -1805,6 +1805,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<void> _shareViaWhatsApp() async {
     try {
+      // Prompt for phone number
+      final phone = await _showWhatsAppInputDialog();
+      if (phone == null || phone.isEmpty) return;
+
       // Generate receipt PDF via API
       final pdfData = await _generateReceiptPdf();
       if (pdfData == null) return;
@@ -1814,19 +1818,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final file = File('${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}.pdf');
       await file.writeAsBytes(base64Decode(pdfData));
 
-      // Get phone number
-      final phone = widget.albaran.telefono.replaceAll(RegExp(r'[^\d]'), '');
       final message = 'Nota de entrega - Albarán ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}';
 
+      // Join phone with 34 if it doesn't have it
+      String cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+      if (cleanPhone.length == 9) cleanPhone = '34$cleanPhone';
+
       // Share via WhatsApp
-      if (phone.isNotEmpty) {
-        final whatsappUrl = 'https://wa.me/34$phone?text=${Uri.encodeComponent(message)}';
-        if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
-          await launchUrl(Uri.parse(whatsappUrl), mode: LaunchMode.externalApplication);
-        }
+      final whatsappUrl = 'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}';
+      if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
+        await launchUrl(Uri.parse(whatsappUrl), mode: LaunchMode.externalApplication);
       }
       
-      // Also share the file
+      // Also share the file using native share (as backup)
       await Share.shareXFiles([XFile(file.path)], text: message);
     } catch (e) {
       debugPrint('Error sharing via WhatsApp: $e');
@@ -1885,32 +1889,116 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<String?> _showEmailInputDialog() async {
-    final controller = TextEditingController();
+    final controller = TextEditingController(text: widget.albaran.emailCliente);
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.darkCard,
-        title: const Text('Enviar por Email', style: TextStyle(color: AppTheme.textPrimary)),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.emailAddress,
-          decoration: InputDecoration(
-            hintText: 'correo@ejemplo.com',
-            filled: true,
-            fillColor: AppTheme.darkBase,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          style: const TextStyle(color: AppTheme.textPrimary),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.email, color: AppTheme.neonBlue, size: 24),
+            const SizedBox(width: 12),
+            const Text('Enviar por Email', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Confirmar dirección de correo:',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'correo@ejemplo.com',
+                hintStyle: TextStyle(color: AppTheme.textTertiary),
+                prefixIcon: const Icon(Icons.alternate_email, color: AppTheme.textTertiary),
+                filled: true,
+                fillColor: AppTheme.darkBase,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
+              ),
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancelar', style: TextStyle(color: AppTheme.textTertiary)),
+            child: Text('CANCELAR', style: TextStyle(color: AppTheme.textTertiary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
-            child: const Text('Enviar'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonBlue,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('ENVIAR'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showWhatsAppInputDialog() async {
+    final controller = TextEditingController(text: widget.albaran.telefono);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.chat, color: Color(0xFF25D366), size: 24),
+            const SizedBox(width: 12),
+            const Text('Enviar por WhatsApp', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Confirmar número de teléfono:',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.phone,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: '600000000',
+                hintStyle: TextStyle(color: AppTheme.textTertiary),
+                prefixIcon: const Icon(Icons.phone, color: AppTheme.textTertiary),
+                filled: true,
+                fillColor: AppTheme.darkBase,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF25D366))),
+              ),
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('CANCELAR', style: TextStyle(color: AppTheme.textTertiary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF25D366),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('COMPARTIR'),
           ),
         ],
       ),

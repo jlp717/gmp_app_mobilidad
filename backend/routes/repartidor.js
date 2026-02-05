@@ -1074,6 +1074,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
         sql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
                  ORDER BY NAME FETCH FIRST 50 ROWS ONLY`;
 
+        logger.info(`[REPARTIDOR] History SQL with repartidorId ${repartidorId}: ${sql.replace(/\s+/g, ' ')}`);
         const rows = await query(sql, false);
         logger.info(`[REPARTIDOR] Found ${rows.length} historical clients for repartidor ${repartidorId} since ${dateLimit}`);
 

@@ -57,10 +57,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     setState(() => _isLoading = true);
     
     try {
+      debugPrint('[History] Loading clients for Repartidor: ${widget.repartidorId}');
       final clients = await RepartidorDataService.getHistoryClients(
         repartidorId: widget.repartidorId,
         search: search,
       );
+      debugPrint('[History] Received ${clients.length} clients');
       
       _clients = clients.map((c) => ClientSummary(
         id: c.id,
@@ -69,7 +71,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         totalDocuments: c.totalDocuments,
       )).toList();
     } catch (e) {
+      debugPrint('[History] ❌ Error loading clients: $e');
       _clients = [];
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar clientes: $e'), backgroundColor: AppTheme.error),
+        );
+      }
     }
 
     if (mounted) {
