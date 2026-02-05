@@ -24,19 +24,19 @@ const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 //   LCMMDC = Mes Documento
 
 // Simple filter for LACLAE table (recommended for all sales queries)
-// This gives exactly 15,220,182.87€ for 2025
+// GOLDEN DATA ALIGNMENT: LCYEAB for year, LCSRAB excludes N, Z, G, D
 const LACLAE_SALES_FILTER = `
     L.TPDC = 'LAC'
     AND L.LCTPVT IN ('CC', 'VC') 
     AND L.LCCLLN IN ('AB', 'VT') 
-    AND L.LCSRAB NOT IN ('N', 'Z')
+    AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
 `.replace(/\s+/g, ' ').trim();
 
 // Legacy filter for DSEDAC.LAC table (uses short column names but with EXISTS)
 const LAC_SALES_FILTER = `
     L.LCTPVT IN ('CC', 'VC') 
     AND L.LCCLLN IN ('AB', 'VT') 
-    AND L.LCSRAB NOT IN ('N', 'Z')
+    AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
     AND EXISTS (
         SELECT 1 FROM DSEDAC.CAC CX
         WHERE L.LCSBAB = CX.CCSBAB 
@@ -49,7 +49,7 @@ const LAC_SALES_FILTER = `
 `.replace(/\s+/g, ' ').trim();
 
 const LAC_TIPOVENTA_FILTER = `L.LCTPVT IN ('CC', 'VC')`;
-const LAC_SERIEALBARAN_FILTER = `L.LCSRAB NOT IN ('N', 'Z')`;
+const LAC_SERIEALBARAN_FILTER = `L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')`;
 
 
 // =============================================================================

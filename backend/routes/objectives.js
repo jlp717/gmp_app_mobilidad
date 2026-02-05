@@ -90,6 +90,33 @@ async function getClientsMonthlySales(clientCodes, year) {
     return monthlyMap;
 }
 
+// =============================================================================
+// B-SALES LOOKUP (VENTAS EN B)
+// These are secondary channel sales stored in JAVIER.VENTAS_B
+// =============================================================================
+async function getBSales(vendorCode, year) {
+    if (!vendorCode || vendorCode === 'ALL') return {};
+
+    try {
+        const rows = await query(`
+            SELECT MES, IMPORTE
+            FROM JAVIER.VENTAS_B
+            WHERE CODIGOVENDEDOR = '${vendorCode.trim()}'
+              AND EJERCICIO = ${year}
+        `, false, false);
+
+        const monthlyMap = {};
+        rows.forEach(r => {
+            monthlyMap[r.MES] = parseFloat(r.IMPORTE) || 0;
+        });
+        return monthlyMap;
+    } catch (e) {
+        // Table may not exist - no B-sales
+        logger.debug(`B-sales lookup: ${e.message}`);
+        return {};
+    }
+}
+
 
 const SEASONAL_AGGRESSIVENESS = 0.5; // Tuning parameter for seasonality (0.0=flat, 1.0=high)
 
@@ -379,12 +406,37 @@ router.get('/evolution', async (req, res) => {
         const yearTotals = {};
 
         // =====================================================================
+        // B-SALES: Load B-sales for this vendor (from JAVIER.VENTAS_B)
+        // These get ADDED to both current year sales and previous year sales
+        // =====================================================================
+        const bSalesAllYears = {};
+        const isAll = !vendedorCodes || vendedorCodes === 'ALL';
+        if (!isAll) {
+            const firstCode = vendedorCodes.split(',')[0].trim();
+            for (const yr of uniqueYears) {
+                bSalesAllYears[yr] = await getBSales(firstCode, yr);
+            }
+            const totals = Object.entries(bSalesAllYears)
+                .filter(([_, data]) => Object.keys(data).length > 0)
+                .map(([yr, data]) => `${yr}: ${Object.values(data).reduce((s, v) => s + v, 0).toFixed(2)}€`);
+            if (totals.length > 0) {
+                console.log(`📊 [OBJECTIVES] B-Sales for ${firstCode}: ${totals.join(', ')}`);
+            }
+        }
+
+        // Helper to augment a row's SALES with B-sales
+        // We'll apply B-sales when processing rows
+        const addBSales = (year, month, baseSales) => {
+            const yearData = bSalesAllYears[year] || {};
+            return baseSales + (yearData[month] || 0);
+        };
+
+        // =====================================================================
         // INHERITED OBJECTIVES: Pre-load inherited sales for new vendors
         // =====================================================================
         // For vendors with incomplete history (some months with 0 sales in prevYear),
         // we calculate the target based on sales of their current clients by ANY vendor.
         let inheritedMonthlySales = {};
-        const isAll = !vendedorCodes || vendedorCodes === 'ALL';
 
         if (!isAll) {
             // Check if vendor has any months without data in previous year (for current year objectives)
@@ -456,7 +508,9 @@ router.get('/evolution', async (req, res) => {
                 const row = rows.find(r => r.YEAR == year && r.MONTH == m); // Loose equality
                 const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
 
+                // Base sales from LACLAE plus B-sales
                 let ownPrevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
+                ownPrevSales = addBSales(year - 1, m, ownPrevSales); // Add B-sales to previous year
 
                 // Use inherited sales when vendor has no own sales for this month
                 if (ownPrevSales === 0 && inheritedMonthlySales[m]) {
@@ -467,7 +521,10 @@ router.get('/evolution', async (req, res) => {
                     prevYearMonthlySales[m] = ownPrevSales;
                 }
 
-                if (row) currentYearTotalSoFar += parseFloat(row.SALES) || 0;
+                // Current year sales with B-sales
+                let currYearSales = row ? parseFloat(row.SALES) || 0 : 0;
+                currYearSales = addBSales(year, m, currYearSales);
+                if (currYearSales > 0) currentYearTotalSoFar += currYearSales;
             }
 
             // Combined: own sales + inherited sales from clients
@@ -521,7 +578,8 @@ router.get('/evolution', async (req, res) => {
                 const row = rows.find(r => r.YEAR == year && r.MONTH == m);
                 const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
 
-                const sales = row ? parseFloat(row.SALES) || 0 : 0;
+                // Apply B-sales to all output values
+                const sales = addBSales(year, m, row ? parseFloat(row.SALES) || 0 : 0);
                 const cost = row ? parseFloat(row.COST) || 0 : 0;
                 const clients = row ? parseInt(row.CLIENTS) || 0 : 0;
 

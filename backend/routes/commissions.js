@@ -134,6 +134,33 @@ async function getClientsMonthlySales(clientCodes, year) {
     return monthlyMap;
 }
 
+// =============================================================================
+// B-SALES LOOKUP (VENTAS EN B)
+// These are secondary channel sales stored in JAVIER.VENTAS_B
+// =============================================================================
+async function getBSales(vendorCode, year) {
+    if (!vendorCode || vendorCode === 'ALL') return {};
+
+    try {
+        const rows = await query(`
+            SELECT MES, IMPORTE
+            FROM JAVIER.VENTAS_B
+            WHERE CODIGOVENDEDOR = '${vendorCode.trim()}'
+              AND EJERCICIO = ${year}
+        `, false, false);
+
+        const monthlyMap = {};
+        rows.forEach(r => {
+            monthlyMap[r.MES] = parseFloat(r.IMPORTE) || 0;
+        });
+        return monthlyMap;
+    } catch (e) {
+        // Table may not exist - no B-sales
+        logger.debug(`B-sales lookup: ${e.message}`);
+        return {};
+    }
+}
+
 
 // =============================================================================
 // COMPUTATION LOGIC
@@ -396,12 +423,33 @@ router.get('/summary', async (req, res) => {
             }
         }
 
+        // =====================================================================
+        // B-SALES: Load B-sales for this vendor (from JAVIER.VENTAS_B)
+        // These get ADDED to both current year sales and previous year sales
+        // =====================================================================
+        let bSalesCurrYear = {};
+        let bSalesPrevYear = {};
+        if (!isAll) {
+            bSalesCurrYear = await getBSales(vendedorCode, selectedYear);
+            bSalesPrevYear = await getBSales(vendedorCode, prevYear);
+            const currTotal = Object.values(bSalesCurrYear).reduce((s, v) => s + v, 0);
+            const prevTotal = Object.values(bSalesPrevYear).reduce((s, v) => s + v, 0);
+            if (currTotal > 0 || prevTotal > 0) {
+                console.log(`📊 [COMMISSIONS] B-Sales for ${vendedorCode}: ${selectedYear}=${currTotal.toFixed(2)}€, ${prevYear}=${prevTotal.toFixed(2)}€`);
+            }
+        }
+
         for (let m = 1; m <= 12; m++) {
             const prevRow = salesRows.find(r => r.YEAR == prevYear && r.MONTH == m);
             const currRow = salesRows.find(r => r.YEAR == selectedYear && r.MONTH == m);
 
+            // Base sales from LACLAE
             let prevSales = prevRow ? parseFloat(prevRow.SALES) : 0;
-            const currentSales = currRow ? parseFloat(currRow.SALES) : 0;
+            let currentSales = currRow ? parseFloat(currRow.SALES) : 0;
+
+            // ADD B-SALES to both totals
+            prevSales += (bSalesPrevYear[m] || 0);
+            currentSales += (bSalesCurrYear[m] || 0);
 
             // INHERITED OBJECTIVES: Use inherited sales when vendor has no own sales for this month
             let targetSource = 'own';

@@ -156,6 +156,7 @@ class AlbaranEntrega {
   final String direccion;
   final String poblacion;
   final String telefono;
+  final String emailCliente;
   final String fecha;
   final double importeTotal;
   final String formaPago;
@@ -189,6 +190,7 @@ class AlbaranEntrega {
     this.direccion = '',
     this.poblacion = '',
     this.telefono = '',
+    this.emailCliente = '',
     required this.fecha,
     required this.importeTotal,
     this.formaPago = '',
@@ -225,6 +227,7 @@ class AlbaranEntrega {
       direccion: json['direccion']?.toString() ?? '',
       poblacion: json['poblacion']?.toString() ?? '',
       telefono: json['telefono']?.toString() ?? '',
+      emailCliente: json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
       fecha: json['fecha']?.toString() ?? '',
       importeTotal: (json['importe'] ?? json['importeTotal'] ?? 0).toDouble(),
       formaPago: json['formaPago']?.toString() ?? '',
