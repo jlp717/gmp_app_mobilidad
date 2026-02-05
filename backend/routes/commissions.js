@@ -141,17 +141,22 @@ async function getClientsMonthlySales(clientCodes, year) {
 async function getBSales(vendorCode, year) {
     if (!vendorCode || vendorCode === 'ALL') return {};
 
+    // Normalize code: try to match how it's stored. 
+    // Usually '2', but input might be '02'.
+    const rawCode = vendorCode.trim();
+    const unpaddedCode = rawCode.replace(/^0+/, '');
+
     try {
         const rows = await query(`
             SELECT MES, IMPORTE
             FROM JAVIER.VENTAS_B
-            WHERE CODIGOVENDEDOR = '${vendorCode.trim()}'
+            WHERE (CODIGOVENDEDOR = '${rawCode}' OR CODIGOVENDEDOR = '${unpaddedCode}')
               AND EJERCICIO = ${year}
         `, false, false);
 
         const monthlyMap = {};
         rows.forEach(r => {
-            monthlyMap[r.MES] = parseFloat(r.IMPORTE) || 0;
+            monthlyMap[r.MES] = (monthlyMap[r.MES] || 0) + (parseFloat(r.IMPORTE) || 0);
         });
         return monthlyMap;
     } catch (e) {

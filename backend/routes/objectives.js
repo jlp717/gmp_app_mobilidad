@@ -97,21 +97,25 @@ async function getClientsMonthlySales(clientCodes, year) {
 async function getBSales(vendorCode, year) {
     if (!vendorCode || vendorCode === 'ALL') return {};
 
+    // Normalize code: try to match how it's stored. 
+    // Usually '2', but input might be '02'.
+    const rawCode = vendorCode.trim();
+    const unpaddedCode = rawCode.replace(/^0+/, '');
+
     try {
         const rows = await query(`
             SELECT MES, IMPORTE
             FROM JAVIER.VENTAS_B
-            WHERE CODIGOVENDEDOR = '${vendorCode.trim()}'
+            WHERE (CODIGOVENDEDOR = '${rawCode}' OR CODIGOVENDEDOR = '${unpaddedCode}')
               AND EJERCICIO = ${year}
         `, false, false);
 
         const monthlyMap = {};
         rows.forEach(r => {
-            monthlyMap[r.MES] = parseFloat(r.IMPORTE) || 0;
+            monthlyMap[r.MES] = (monthlyMap[r.MES] || 0) + (parseFloat(r.IMPORTE) || 0);
         });
         return monthlyMap;
     } catch (e) {
-        // Table may not exist - no B-sales
         logger.debug(`B-sales lookup: ${e.message}`);
         return {};
     }
@@ -121,11 +125,12 @@ async function getBSales(vendorCode, year) {
 const SEASONAL_AGGRESSIVENESS = 0.5; // Tuning parameter for seasonality (0.0=flat, 1.0=high)
 
 /**
- * Get target percentage configuration for a vendor
- * Defaults to 3% IPC if not configured
+ * Get target percentage configuration for a vendor (OBJECTIVES GROWTH)
+ * Defaults to 10% if not configured
+ * NOTE: This is ADDITIONAL growth on top of 3% IPC which is handled separately
  */
 async function getVendorTargetConfig(vendorCode) {
-    if (!vendorCode || vendorCode === 'ALL') return 3.0;
+    if (!vendorCode || vendorCode === 'ALL') return 10.0;
     try {
         const code = vendorCode.split(',')[0].trim();
         const rows = await query(`
@@ -135,12 +140,12 @@ async function getVendorTargetConfig(vendorCode) {
         `, false);
 
         if (rows.length > 0) {
-            return parseFloat(rows[0].TARGET_PERCENTAGE) || 3.0;
+            return parseFloat(rows[0].TARGET_PERCENTAGE) || 10.0;
         }
-        return 3.0;
+        return 10.0;
     } catch (e) {
         logger.warn(`Could not fetch OBJ_CONFIG: ${e.message}`);
-        return 3.0;
+        return 10.0;
     }
 }
 
@@ -537,10 +542,13 @@ router.get('/evolution', async (req, res) => {
                 monthlyObjective = fixedMonthlyTarget;
                 annualObjective = fixedMonthlyTarget * 12;
             } else {
-                // Standard calculation: previous year * (1 + targetPct)
-                // Fallback to 10% if 0 (though normally handled by getVendorTargetConfig)
+                // FORMULA: Base * 1.03 (IPC) * (1 + targetPct/100)
+                // IPC = 3% industria standard
+                // targetPct = vendor-specific growth (default 10%)
+                const IPC = 1.03; // 3% IPC
                 const growthFactor = 1 + (targetPct / 100);
-                annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * growthFactor : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
+                const totalMultiplier = IPC * growthFactor; // e.g., 1.03 * 1.10 = 1.133
+                annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * totalMultiplier : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * totalMultiplier : 0);
                 monthlyObjective = annualObjective / 12;
             }
 
