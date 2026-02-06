@@ -275,10 +275,10 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'
-              AND CPC.ANODOCUMENTO >= ${new Date().getFullYear() - 1}
+              AND CPC.ANODOCUMENTO >= ${new Date().getFullYear() - 3}
               ${repartidorFilter}
             ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
-            FETCH FIRST 50 ROWS ONLY
+            FETCH FIRST 1000 ROWS ONLY
         `;
 
         const rows = await query(sql, false);
@@ -352,11 +352,11 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
-              AND OPP.ANOREPARTO >= ${new Date().getFullYear() - 1}
+              AND OPP.ANOREPARTO >= ${new Date().getFullYear() - 3}
               ${clientFilter}
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO
             ORDER BY OPP.ANOREPARTO DESC, OPP.MESREPARTO DESC
-            FETCH FIRST 12 ROWS ONLY
+            FETCH FIRST 120 ROWS ONLY
         `;
 
         const rows = await query(sql, false);
@@ -987,7 +987,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         // Last 6 months (using native JS instead of moment)
         const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 120); // 10 years (show "everything")
         const dateLimit = sixMonthsAgo.getFullYear().toString() +
             String(sixMonthsAgo.getMonth() + 1).padStart(2, '0') +
             String(sixMonthsAgo.getDate()).padStart(2, '0');
@@ -1014,7 +1014,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         sql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
                  ORDER BY MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) DESC 
-                 FETCH FIRST 200 ROWS ONLY`;
+                 FETCH FIRST 2000 ROWS ONLY`;
 
         logger.info(`[REPARTIDOR] History SQL with repartidorId ${repartidorId}: ${sql.replace(/\s+/g, ' ')}`);
         const rows = await query(sql, false);
