@@ -625,29 +625,6 @@ class _CommissionsPageState extends State<CommissionsPage> {
                  ],
                ),
              ),
-             // Warning for ALL mode - ONLY FOR JEFE DE VENTAS
-              if (widget.isJefeVentas && (context.watch<FilterProvider>().selectedVendor == '' || context.watch<FilterProvider>().selectedVendor == null))
-               Container(
-                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                 padding: const EdgeInsets.all(10),
-                 decoration: BoxDecoration(
-                   color: Colors.blue.withOpacity(0.1),
-                   borderRadius: BorderRadius.circular(8),
-                   border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                 ),
-                 child: Row(
-                   children: [
-                     const Icon(Icons.info_outline, color: Colors.blue, size: 18),
-                     const SizedBox(width: 8),
-                     Expanded(
-                       child: Text(
-                         'Vista general: Mostrando datos agregados de todos los comerciales. Seleccione uno del filtro para ver detalles individuales.',
-                         style: TextStyle(fontSize: 11, color: Colors.blue.shade200),
-                       ),
-                     ),
-                   ],
-                 ),
-               ),
            ],
            
            // Table
@@ -751,7 +728,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
     );
   }
 
-  /// Builds the ALL vendors table showing each vendor with their commission data
+  /// Builds the ALL vendors table showing each vendor with ALL their monthly data
   Widget _buildAllVendorsTable(List<dynamic> breakdown) {
     if (breakdown.isEmpty) {
       return const Center(
@@ -768,75 +745,187 @@ class _CommissionsPageState extends State<CommissionsPage> {
     sorted.sort((a, b) => ((b['grandTotalCommission'] as num?) ?? 0)
         .compareTo((a['grandTotalCommission'] as num?) ?? 0));
 
+    // Build rows: one header row per vendor + their month rows
+    final rows = <DataRow>[];
+
+    for (final v in sorted) {
+      final code = v['vendedorCode'] as String? ?? '?';
+      final name = v['vendorName'] as String? ?? 'Sin Nombre';
+      final grandTotal = (v['grandTotalCommission'] as num?)?.toDouble() ?? 0;
+      final isExcluded = (v['isExcluded'] as bool?) ?? false;
+      final months = (v['months'] as List?) ?? [];
+
+      // Calculate vendor totals
+      double totalTarget = 0, totalActual = 0;
+      for (var m in months) {
+        totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
+        totalActual += (m['actual'] as num?)?.toDouble() ?? 0;
+      }
+      final vendorPct = totalTarget > 0 ? (totalActual / totalTarget * 100) : 0.0;
+      final vendorPositive = totalActual >= totalTarget && totalTarget > 0;
+
+      // VENDOR HEADER ROW (highlighted)
+      rows.add(DataRow(
+        color: WidgetStateProperty.all(isExcluded ? Colors.black38 : AppTheme.neonBlue.withOpacity(0.15)),
+        cells: [
+          DataCell(Row(children: [
+            Text(code, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: 13)),
+            const SizedBox(width: 8),
+            Text(name, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white, fontSize: 12)),
+            if (isExcluded) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(color: Colors.orange.withOpacity(0.3), borderRadius: BorderRadius.circular(4)),
+                child: const Text('EXCLUIDO', style: TextStyle(fontSize: 8, color: Colors.orange)),
+              )
+            ]
+          ])),
+          DataCell(Text(CurrencyFormatter.format(totalTarget), style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white70))),
+          DataCell(Text(CurrencyFormatter.format(totalActual), style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : (vendorPositive ? AppTheme.success : AppTheme.error)))),
+          DataCell(Row(children: [
+            Icon(vendorPositive ? Icons.check_circle : Icons.cancel, color: isExcluded ? Colors.grey : (vendorPositive ? AppTheme.success : AppTheme.error), size: 16),
+            const SizedBox(width: 4),
+            Text('${vendorPct.toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : (vendorPositive ? AppTheme.success : AppTheme.error))),
+          ])),
+          const DataCell(SizedBox()),
+          DataCell(Text(CurrencyFormatter.format(grandTotal), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isExcluded ? Colors.grey : AppTheme.neonGreen))),
+          const DataCell(SizedBox()),
+          const DataCell(SizedBox()),
+          const DataCell(SizedBox()),
+          const DataCell(SizedBox()),
+          const DataCell(SizedBox()),
+        ],
+      ));
+
+      // MONTH ROWS for this vendor
+      final sortedMonths = List<dynamic>.from(months);
+      sortedMonths.sort((a, b) => (a['month'] as int).compareTo(b['month'] as int));
+
+      for (final m in sortedMonths) {
+        final monthNum = m['month'] as int;
+        final target = (m['target'] as num?)?.toDouble() ?? 0;
+        final actual = (m['actual'] as num?)?.toDouble() ?? 0;
+        final isFuture = (m['isFuture'] as bool?) ?? false;
+
+        final ctx = m['complianceCtx'] ?? {};
+        final pct = (ctx['pct'] as num?)?.toDouble() ?? 0;
+        final tier = (ctx['tier'] as num?)?.toInt() ?? 0;
+        final commission = (ctx['commission'] as num?)?.toDouble() ?? 0;
+
+        final workingDays = (m['workingDays'] as num?)?.toInt() ?? 0;
+        final daysPassed = (m['daysPassed'] as num?)?.toInt() ?? 0;
+        final proRatedTarget = (m['proRatedTarget'] as num?)?.toDouble() ?? 0;
+
+        final dailyCtx = m['dailyComplianceCtx'] ?? {};
+        final dailyGreen = (dailyCtx['isGreen'] as bool?) ?? false;
+        final provisionalCommission = (dailyCtx['provisionalCommission'] as num?)?.toDouble() ?? 0;
+        final dailyTier = (dailyCtx['tier'] as num?)?.toInt() ?? 0;
+        final dailyRate = (dailyCtx['rate'] as num?)?.toDouble() ?? 0;
+        final dailyPct = (dailyCtx['pct'] as num?)?.toDouble() ?? 0;
+
+        final isPositive = actual >= target && target > 0;
+        final color = isFuture ? Colors.grey : (isPositive ? AppTheme.success : AppTheme.error);
+        final dailyColor = isFuture ? Colors.grey : (dailyGreen ? AppTheme.success : Colors.orangeAccent);
+        final rowBgColor = isFuture ? Colors.black26 : AppTheme.surfaceColor;
+        final textOpacity = isFuture ? 0.4 : 1.0;
+
+        final pctDisplay = pct > 0 ? (pct - 100) : 0;
+        final pctText = isFuture ? '-' : (pct > 100 ? '+${pctDisplay.toStringAsFixed(1)}%' : '${pct.toStringAsFixed(1)}%');
+        final dailyPctDisplay = dailyPct > 0 ? (dailyPct - 100) : 0;
+        final dailyPctText = dailyPct > 100 ? '+${dailyPctDisplay.toStringAsFixed(1)}%' : '${dailyPct.toStringAsFixed(1)}%';
+
+        rows.add(DataRow(
+          color: WidgetStateProperty.all(rowBgColor),
+          cells: [
+            // MES
+            DataCell(Row(children: [
+              const SizedBox(width: 20), // Indent
+              Text(_getMonthName(monthNum), style: TextStyle(color: Colors.white.withOpacity(textOpacity))),
+              if (isFuture) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(4)),
+                  child: const Text('PEND', style: TextStyle(fontSize: 7, color: Colors.grey)),
+                )
+              ]
+            ])),
+            // OBJ. MES
+            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target), style: TextStyle(color: Colors.white.withOpacity(textOpacity), fontSize: 11))),
+            // VENTA
+            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11))),
+            // ESTADO
+            DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey)) : Row(children: [
+              Icon(isPositive ? Icons.check_circle : Icons.cancel, color: color, size: 14),
+              if (isPositive && tier > 0) ...[
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                  decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                  child: Text('F$tier', style: const TextStyle(fontSize: 8, color: AppTheme.neonBlue)),
+                )
+              ]
+            ])),
+            // %
+            DataCell(Text(pctText, style: TextStyle(color: isFuture ? Colors.grey : color, fontSize: 10))),
+            // COMISIÓN
+            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(commission), style: TextStyle(color: isFuture ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 11))),
+            // DÍAS
+            DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays', style: TextStyle(color: Colors.white.withOpacity(textOpacity * 0.7), fontSize: 10))),
+            // OBJ. ACUM.
+            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(proRatedTarget), style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(textOpacity)))),
+            // RITMO
+            DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey)) : Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(dailyGreen ? Icons.check_circle : Icons.warning_amber, color: dailyColor, size: 12),
+                  const SizedBox(width: 2),
+                  Text(dailyPctText, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: dailyColor)),
+                ]),
+                if (dailyTier > 0) Text('F$dailyTier (${dailyRate.toStringAsFixed(1)}%)', style: TextStyle(fontSize: 8, color: dailyColor))
+              ],
+            )),
+            // DIFF
+            DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey)) : Text(
+              (actual - proRatedTarget) >= 0 ? '+${CurrencyFormatter.format(actual - proRatedTarget)}' : CurrencyFormatter.format(actual - proRatedTarget),
+              style: TextStyle(color: (actual - proRatedTarget) >= 0 ? AppTheme.success : AppTheme.error, fontWeight: FontWeight.bold, fontSize: 10),
+            )),
+            // COM. PROV.
+            DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey)) : Text(
+              CurrencyFormatter.format(provisionalCommission),
+              style: TextStyle(color: provisionalCommission > 0 ? AppTheme.neonPurple : Colors.grey, fontWeight: FontWeight.bold, fontSize: 10),
+            )),
+          ],
+        ));
+      }
+    }
+
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          columnSpacing: 16,
+          columnSpacing: 12,
+          dataRowMinHeight: 32,
+          dataRowMaxHeight: 48,
           headingRowColor: WidgetStateProperty.all(AppTheme.surfaceColor.withOpacity(0.9)),
           columns: const [
-            DataColumn(label: Text('CÓD', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 12))),
-            DataColumn(label: Text('VENDEDOR', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 12))),
-            DataColumn(label: Text('OBJETIVO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 12))),
-            DataColumn(label: Text('VENTA', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 12))),
-            DataColumn(label: Text('CUMPL.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 12))),
-            DataColumn(label: Text('COMISIÓN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 12))),
+            DataColumn(label: Text('VENDEDOR / MES', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 11))),
+            DataColumn(label: Text('OBJ.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 11))),
+            DataColumn(label: Text('VENTA', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 11))),
+            DataColumn(label: Text('ESTADO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 11))),
+            DataColumn(label: Text('%', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 11))),
+            DataColumn(label: Text('COMISIÓN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 11))),
+            DataColumn(label: Text('DÍAS', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
+            DataColumn(label: Text('OBJ.AC.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
+            DataColumn(label: Text('RITMO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
+            DataColumn(label: Text('DIFF', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
+            DataColumn(label: Text('COM.PRV', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
           ],
-          rows: sorted.map<DataRow>((v) {
-            final code = v['vendedorCode'] as String? ?? '?';
-            final name = v['vendorName'] as String? ?? 'Sin Nombre';
-            final commission = (v['grandTotalCommission'] as num?)?.toDouble() ?? 0;
-            final isExcluded = (v['isExcluded'] as bool?) ?? false;
-
-            // Calculate totals from months
-            final months = (v['months'] as List?) ?? [];
-            double totalTarget = 0;
-            double totalActual = 0;
-            for (var m in months) {
-              totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
-              totalActual += (m['actual'] as num?)?.toDouble() ?? 0;
-            }
-
-            final pct = totalTarget > 0 ? (totalActual / totalTarget * 100) : 0.0;
-            final isPositive = totalActual >= totalTarget && totalTarget > 0;
-            final color = isExcluded ? Colors.grey : (isPositive ? AppTheme.success : AppTheme.error);
-
-            return DataRow(
-              color: WidgetStateProperty.all(isExcluded ? Colors.black26 : AppTheme.surfaceColor),
-              cells: [
-                DataCell(Text(code, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: 13))),
-                DataCell(SizedBox(
-                  width: 140,
-                  child: Text(name, style: TextStyle(color: isExcluded ? Colors.grey : Colors.white, fontSize: 12), overflow: TextOverflow.ellipsis),
-                )),
-                DataCell(Text(CurrencyFormatter.format(totalTarget), style: TextStyle(color: isExcluded ? Colors.grey : Colors.white54, fontSize: 12))),
-                DataCell(Text(CurrencyFormatter.format(totalActual), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12))),
-                DataCell(Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(isPositive ? Icons.check_circle : Icons.cancel, color: color, size: 14),
-                    const SizedBox(width: 4),
-                    Text('${pct.toStringAsFixed(1)}%', style: TextStyle(color: color, fontSize: 11)),
-                  ],
-                )),
-                DataCell(Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(CurrencyFormatter.format(commission), style: TextStyle(color: isExcluded ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 13)),
-                    if (isExcluded) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                        child: const Text('EXCL', style: TextStyle(fontSize: 8, color: Colors.orange)),
-                      )
-                    ]
-                  ],
-                )),
-              ],
-            );
-          }).toList(),
+          rows: rows,
         ),
       ),
     );
