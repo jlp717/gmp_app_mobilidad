@@ -636,9 +636,9 @@ router.get('/summary', async (req, res) => {
             if (vendedorCode === 'ALL') {
                 // ... Existing 'ALL' logic for single year ...
                 const vendorRows = await query(`
-                    SELECT DISTINCT TRIM(LCCDVD) as VENDOR_CODE
-                    FROM DSED.LACLAE
-                    WHERE LCAADC IN (${yr}, ${yr - 1})
+                    SELECT DISTINCT TRIM(L.LCCDVD) as VENDOR_CODE
+                    FROM DSED.LACLAE L
+                    WHERE L.LCAADC IN (${yr}, ${yr - 1})
                       AND ${LACLAE_SALES_FILTER}
                 `, false);
                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
