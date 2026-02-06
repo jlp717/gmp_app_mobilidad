@@ -33,6 +33,7 @@ async function getVendorNames() {
         const map = {};
         rows.forEach(r => {
             map[r.ID] = r.NAME;
+            map[r.ID.replace(/^0+/, '')] = r.NAME; // Support unpadded
         });
         return map;
     } catch (e) { return {}; }

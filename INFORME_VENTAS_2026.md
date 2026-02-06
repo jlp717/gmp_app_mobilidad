@@ -1,5 +1,5 @@
 # INFORME DE OBJETIVOS Y COMISIONES 2026
-Generado: 6/2/2026, 11:01:25
+Generado: 6/2/2026, 11:03:14
 Criterios:
 - Ventas 2025: Fecha Documento (LCAADC), Filtros (Excluye N,Z,G,D), Incluye Ventas B.
 - Objetivo Comisiones (Cobrar): Base 2025 * 1.03 (IPC 3%).
