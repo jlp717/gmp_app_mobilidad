@@ -116,6 +116,22 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
     return `AND (${conditions.join(' OR ')})`;
 }
 
+const { query } = require('../config/db');
+
+// ... (previous helper functions)
+
+async function getVendorName(vendorCode) {
+    if (!vendorCode || vendorCode === 'ALL') return 'Global';
+    try {
+        const rows = await query(`SELECT NOMBREVENDEDOR FROM DSEDAC.VDD WHERE TRIM(CODIGOVENDEDOR) = '${vendorCode.trim()}'`, false);
+        if (rows && rows.length > 0) return rows[0].NOMBREVENDEDOR;
+        return vendorCode;
+    } catch (e) {
+        console.error('Error getting vendor name:', e);
+        return vendorCode;
+    }
+}
+
 module.exports = {
     getCurrentDate,
     getCurrentYear,
@@ -125,7 +141,10 @@ module.exports = {
     LAC_TIPOVENTA_FILTER,
     LAC_SERIEALBARAN_FILTER,
     formatCurrency,
-
+    buildVendedorFilter,
+    buildVendedorFilterLACLAE,
+    buildDateFilter,
+    getVendorName, // Added Export
 
     // Helper to calculate working days (Mon-Fri + Sat/Sun if active)
     calculateWorkingDays: (year, month, activeWeekDays = []) => {
@@ -176,10 +195,7 @@ module.exports = {
 
 
         const start = new Date(year, month - 1, 1);
-        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Up to today (inclusive?) User said "a dia de hoy"
-        // Usually pacing "current day" starts at 0 sales, so maybe exclude today? 
-        // Or include if we expect real-time sales. User said "si lleva 8000 en dos dias". 
-        // Let's include today.
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
         let count = 0;
         const jsDayToCol = { 0: 'VIS_D', 1: 'VIS_L', 2: 'VIS_M', 3: 'VIS_X', 4: 'VIS_J', 5: 'VIS_V', 6: 'VIS_S' };
@@ -193,9 +209,5 @@ module.exports = {
             if (effectiveDays.includes(colName)) count++;
         }
         return count;
-    },
-
-    buildVendedorFilter,
-    buildVendedorFilterLACLAE,
-    buildDateFilter
+    }
 };
