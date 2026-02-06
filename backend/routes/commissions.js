@@ -347,7 +347,7 @@ router.get('/summary', async (req, res) => {
 
         let salesQuery = `
             SELECT 
-                L.LCYEAB as YEAR,
+                L.LCAADC as YEAR,
                 LCMMDC as MONTH,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L

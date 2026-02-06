@@ -81,11 +81,11 @@ const getClientsHandler = async (req, res) => {
           LCCDCL as CLIENT_CODE,
           SUM(LCIMVT) as TOTAL_PURCHASES,
           SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
-          COUNT(DISTINCT LCYEAB || LCMMDC || LCDDDC) as NUM_ORDERS,
-          MAX(LCYEAB * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE,
+          COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
+          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE,
           MAX(LCCDVD) as LAST_VENDOR
         FROM DSED.LACLAE
-        WHERE LCYEAB >= ${MIN_YEAR}
+        WHERE LCAADC >= ${MIN_YEAR}
           AND TPDC = 'LAC'
           AND LCTPVT IN ('CC', 'VC')
           AND LCCLLN IN ('AB', 'VT')

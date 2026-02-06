@@ -98,10 +98,6 @@ const SEASONAL_AGGRESSIVENESS = 0.5; // Tuning parameter for seasonality (0.0=fl
  * Defaults to 10% if not configured
  */
 async function getVendorTargetConfig(vendorCode) {
-    // DISABLED: Force 0% growth to match IPC-only baseline (User Request)
-    return 0.0;
-
-    /*
     if (!vendorCode || vendorCode === 'ALL') return 0.0;
     try {
         const code = vendorCode.split(',')[0].trim();
@@ -119,7 +115,6 @@ async function getVendorTargetConfig(vendorCode) {
         logger.warn(`Could not fetch OBJ_CONFIG: ${e.message}`);
         return 0.0;
     }
-    */
 }
 
 // =============================================================================

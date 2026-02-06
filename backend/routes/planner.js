@@ -158,7 +158,7 @@ router.get('/rutero/vendedores', async (req, res) => {
             WITH ActiveVendors AS (
                 SELECT DISTINCT TRIM(R1_T8CDVD) as CODE
                 FROM DSED.LACLAE
-                WHERE LCYEAB IN (${currentYear}, ${prevYear}) 
+                WHERE LCAADC IN (${currentYear}, ${prevYear}) 
                   AND R1_T8CDVD IS NOT NULL 
                   AND TRIM(R1_T8CDVD) <> ''
             )
@@ -707,7 +707,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SUM(L.LCIMCT) as COST
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
-              AND L.LCYEAB = ${currentYear}
+              AND L.LCAADC = ${currentYear}
               AND ${LACLAE_SALES_FILTER}
               AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
             GROUP BY L.LCCDCL
@@ -733,7 +733,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                     SUM(L.LCIMCT) as COST
                 FROM DSED.LACLAE L
                 WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
-                  AND L.LCYEAB = ${previousYear}
+                  AND L.LCAADC = ${previousYear}
                   AND ${LACLAE_SALES_FILTER}
                   AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
                 GROUP BY L.LCCDCL
@@ -758,7 +758,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
-              AND L.LCYEAB = ${previousYear}
+              AND L.LCAADC = ${previousYear}
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCCDCL
         `;

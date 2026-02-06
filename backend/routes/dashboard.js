@@ -70,7 +70,7 @@ router.get('/metrics', async (req, res) => {
             const todayDataSql = `
                 SELECT COALESCE(SUM(L.LCIMVT), 0) as sales, COUNT(DISTINCT L.LCNRAB) as orders
                 FROM DSED.LACLAE L
-                WHERE L.LCYEAB = ${currentYear} AND L.LCMMDC = ${currentMonth} AND L.LCDDDC = ${today} AND ${LACLAE_SALES_FILTER} ${vendedorFilter}
+                WHERE L.LCAADC = ${currentYear} AND L.LCMMDC = ${currentMonth} AND L.LCDDDC = ${today} AND ${LACLAE_SALES_FILTER} ${vendedorFilter}
             `;
             const todayData = await cachedQuery(query, todayDataSql, `${cacheKey}:today`, TTL.SHORT); // 5 min cache for today
             todaySales = parseFloat(todayData[0]?.SALES) || 0;
