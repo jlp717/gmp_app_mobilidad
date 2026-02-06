@@ -214,18 +214,11 @@ function calculateWorkingDays(year, month, activeWeekDays) {
  * 3. Calculate Commission = (Actual - Target) * TierRate
  */
 function calculateCommission(actual, target, config) {
-    if (target <= 0) return { commission: 0, tier: 0, percentOver: 0, increment: 0 };
+    if (target <= 0) return { commission: 0, tier: 0, percentOver: 0, increment: 0, compliancePct: 0 };
 
     // 1. Compliance
     const compliancePct = (actual / target) * 100;
-
-    // If below target, no commission
-    // Note: User said "100.01% to 103%"
-    if (compliancePct <= 100.009) { // minimal buffer for float precision
-        return { commission: 0, tier: 0, percentOver: 0, increment: 0 };
-    }
-
-    const increment = actual - target; // "Diferencia en euros"
+    const increment = actual - target;
 
     // 2. Determine Rate based on Total Compliance
     let rate = 0;
@@ -240,13 +233,22 @@ function calculateCommission(actual, target, config) {
     } else if (compliancePct > config.TIER1_MAX) { // 103.01 - 106%
         rate = config.TIER2_PCT; // 1.3%
         tier = 2;
-    } else { // 100.01 - 103%
+    } else if (compliancePct > 100.00) { // 100.01 - 103%
+        // Use slight buffer 100.001 to avoid float noise if needed, but user wants EXACT.
+        // If > 100, we assign Tier 1.
         rate = config.TIER1_PCT; // 1.0%
         tier = 1;
+    } else {
+        // <= 100%
+        rate = 0;
+        tier = 0;
     }
 
-    // 3. Calc Amount
-    const commissionAmount = increment * (rate / 100);
+    // 3. Calc Amount (Only if positive increment)
+    let commissionAmount = 0;
+    if (increment > 0 && rate > 0) {
+        commissionAmount = increment * (rate / 100);
+    }
 
     return {
         commission: commissionAmount,
