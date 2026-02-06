@@ -985,8 +985,12 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        // Last 6 months
-        const dateLimit = moment().subtract(6, 'months').format('YYYYMMDD');
+        // Last 6 months (using native JS instead of moment)
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const dateLimit = sixMonthsAgo.getFullYear().toString() +
+            String(sixMonthsAgo.getMonth() + 1).padStart(2, '0') +
+            String(sixMonthsAgo.getDate()).padStart(2, '0');
 
         let sql = `
             SELECT DISTINCT
