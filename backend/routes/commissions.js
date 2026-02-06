@@ -372,14 +372,14 @@ router.get('/summary', async (req, res) => {
         // I will reconstruct the string properly here.
         salesQuery = `
              SELECT 
-                INT(L.LCAADC / 10000) as YEAR,
+                L.LCAADC as YEAR,
                 LCMMDC as MONTH,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE INT(L.LCAADC / 10000) IN (${selectedYear}, ${prevYear})
+            WHERE L.LCAADC IN (${selectedYear}, ${prevYear})
               AND ${LACLAE_SALES_FILTER}
               ${vendedorFilter}
-            GROUP BY INT(L.LCAADC / 10000), LCMMDC
+            GROUP BY L.LCAADC, LCMMDC
             ORDER BY YEAR, MONTH
         `;
 

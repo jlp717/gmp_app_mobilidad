@@ -361,16 +361,16 @@ router.get('/evolution', async (req, res) => {
         // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
         const rows = await query(`
           SELECT 
-            INT(L.LCAADC / 10000) as YEAR,
+            L.LCAADC as YEAR,
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES,
             SUM(L.LCIMCT) as COST,
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
           FROM DSED.LACLAE L
-          WHERE INT(L.LCAADC / 10000) IN (${yearsFilter})
+          WHERE L.LCAADC IN (${yearsFilter})
             AND ${LACLAE_SALES_FILTER}
             ${vendedorFilter}
-          GROUP BY INT(L.LCAADC / 10000), L.LCMMDC
+          GROUP BY L.LCAADC, L.LCMMDC
           ORDER BY YEAR, MONTH
         `);
 
