@@ -98,7 +98,7 @@ const SEASONAL_AGGRESSIVENESS = 0.5; // Tuning parameter for seasonality (0.0=fl
  * Defaults to 10% if not configured
  */
 async function getVendorTargetConfig(vendorCode) {
-    if (!vendorCode || vendorCode === 'ALL') return 10.0;
+    if (!vendorCode || vendorCode === 'ALL') return 0.0; // Default 0% (IPC Only)
     try {
         const code = vendorCode.split(',')[0].trim();
         const rows = await query(`
@@ -108,12 +108,12 @@ async function getVendorTargetConfig(vendorCode) {
         `, false);
 
         if (rows.length > 0) {
-            return parseFloat(rows[0].TARGET_PERCENTAGE) || 10.0;
+            return parseFloat(rows[0].TARGET_PERCENTAGE) || 0.0;
         }
-        return 10.0;
+        return 0.0; // Default 0%
     } catch (e) {
         logger.warn(`Could not fetch OBJ_CONFIG: ${e.message}`);
-        return 10.0;
+        return 0.0;
     }
 }
 
