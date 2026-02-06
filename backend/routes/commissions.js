@@ -567,14 +567,89 @@ router.get('/summary', async (req, res) => {
             // Calculate Global Total Commission
             const globalTotalCommission = results.reduce((sum, r) => sum + r.grandTotalCommission, 0);
 
+            // --- AGGREGATE MONTHLY DATA (TEAM VIEW) ---
+            const aggregateMonths = [];
+            for (let m = 1; m <= 12; m++) {
+                let totalTarget = 0;
+                let totalActual = 0;
+                let totalCommission = 0;
+                let totalDaysPassed = 0; // Average or Max? Usually confusing for team. Let's sum.
+                // Actually, for "Ritmo", we need global sums.
+
+                results.forEach(res => {
+                    const monthData = res.months.find(rm => rm.month === m);
+                    if (monthData) {
+                        totalTarget += monthData.target;
+                        totalActual += monthData.actual;
+                        totalCommission += (monthData.complianceCtx?.commission || 0);
+                        // We don't sum workingDays as it is calendar based, but it might vary by vendor? 
+                        // Usually constant per month.
+                    }
+                });
+
+                // Recalc global metrics for this month
+                const pct = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+                // Re-evaluate tier based on global %? Or just sum of commissions?
+                // User wants "seeing commercial by commercial". The total commission should be the SUM of individual commissions.
+                // We should NOT re-calculate commission based on global target/sales because that would ignore individual tiers.
+
+                aggregateMonths.push({
+                    month: m,
+                    target: totalTarget,
+                    actual: totalActual,
+                    workingDays: 20, // Dummy, not used in aggregate view mostly
+                    daysPassed: 0,
+                    isFuture: (selectedYear > new Date().getFullYear()) || (selectedYear === new Date().getFullYear() && m > new Date().getMonth() + 1),
+                    complianceCtx: {
+                        pct: pct,
+                        commission: totalCommission, // Sum of individual commissions
+                        tier: 0, // Not applicable globally
+                        rate: 0
+                    },
+                    dailyComplianceCtx: {
+                        pct: 0,
+                        isGreen: totalActual >= totalTarget, // Simple check
+                        provisionalCommission: 0
+                    }
+                });
+            }
+
+            // --- AGGREGATE QUARTERLY DATA ---
+            const aggregateQuarters = [1, 2, 3].map(qIdx => {
+                // Sum up all vendors' quarter data
+                let qTarget = 0;
+                let qActual = 0;
+                let qCommission = 0;
+
+                results.forEach(res => {
+                    const qData = res.quarters[qIdx - 1]; // qIdx is 1-based, array 0-based
+                    if (qData) {
+                        qTarget += qData.target;
+                        qActual += qData.actual;
+                        qCommission += ((qData.commission || 0) + (qData.additionalPayment || 0));
+                    }
+                });
+
+                return {
+                    id: qIdx,
+                    name: qIdx === 1 ? 'Primer Cuatrimestre' : (qIdx === 2 ? 'Segundo Cuatrimestre' : 'Tercer Cuatrimestre'),
+                    target: qTarget,
+                    actual: qActual,
+                    commission: qCommission,
+                    additionalPayment: 0, // Included in commission sum
+                    complianceCtx: {
+                        pct: qTarget > 0 ? (qActual / qTarget) * 100 : 0
+                    }
+                };
+            });
+
             return res.json({
                 success: true,
                 config: config,
                 grandTotalCommission: globalTotalCommission,
-                breakdown: results, // Array of { vendedorCode, vendorName, months, quarters, grandTotalCommission, isExcluded }
-                // Provide empty arrays for top-level months/quarters for potential backward compatibility
-                months: [],
-                quarters: []
+                breakdown: results,
+                months: aggregateMonths,
+                quarters: aggregateQuarters
             });
 
         } else {

@@ -28,7 +28,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
   
   // Filters
   int _selectedYear = DateTime.now().year; // Default to current year
-  int? _selectedMonth; // Null = All Months
+  List<int> _selectedMonths = []; // Empty = All
 
   @override
   void initState() {
@@ -131,10 +131,89 @@ class _CommissionsPageState extends State<CommissionsPage> {
     );
   }
   
+  // --- MULTI-SELECT MONTH PICKER ---
+  void _showMonthPicker() async {
+    final selected = Set<int>.from(_selectedMonths);
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceColor,
+              title: const Text('Seleccionar Meses', style: TextStyle(color: Colors.white)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        title: const Text("Seleccionar Todo", style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
+                        onTap: () {
+                          setModalState(() {
+                            if (selected.length == 12) {
+                              selected.clear();
+                            } else {
+                              selected.addAll(List.generate(12, (i) => i + 1));
+                            }
+                          });
+                        },
+                        trailing: Icon(
+                          selected.length == 12 ? Icons.check_box : Icons.check_box_outline_blank,
+                          color: AppTheme.neonBlue
+                        ),
+                      ),
+                      const Divider(color: Colors.white24),
+                      ...List.generate(12, (index) {
+                        final m = index + 1;
+                        final isSelected = selected.contains(m);
+                        return CheckboxListTile(
+                          title: Text(_getMonthName(m), style: const TextStyle(color: Colors.white)),
+                          value: isSelected,
+                          activeColor: AppTheme.neonBlue,
+                          checkColor: Colors.black,
+                          onChanged: (val) {
+                            setModalState(() {
+                              if (val == true) {
+                                selected.add(m);
+                              } else {
+                                selected.remove(m);
+                              }
+                            });
+                          },
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: () {
+                     setState(() {
+                       _selectedMonths = selected.toList()..sort();
+                     });
+                     Navigator.pop(ctx);
+                  },
+                  child: const Text('Aplicar', style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          }
+        );
+      }
+    );
+  }
+
   // --- SUPER TABLE WIDGET ---
   Widget _buildSuperTable(List<dynamic> breakdown) {
     // Columns: Agente, Venta, Objetivo, %, Comisión
-    final hasMonthFilter = _selectedMonth != null;
+    final hasMonthFilter = _selectedMonths.isNotEmpty;
     
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
@@ -157,17 +236,16 @@ class _CommissionsPageState extends State<CommissionsPage> {
              double commission = 0;
              
              if (hasMonthFilter) {
-               // Extract specific month
+               // Aggregate selected months
                final months = agent['months'] as List? ?? [];
-               // dynamic search
-               final mDataList = months.where((m) => m['month'] == _selectedMonth).toList();
-               if (mDataList.isNotEmpty) {
-                 final mData = mDataList.first;
-                 sales = (mData['actual'] as num?)?.toDouble() ?? 0;
-                 target = (mData['target'] as num?)?.toDouble() ?? 0;
-                 // Commission: Month commission
-                 final ctx = mData['complianceCtx'] ?? {};
-                 commission = (ctx['commission'] as num?)?.toDouble() ?? 0;
+               // Filter by selected list
+               final filteredM = months.where((m) => _selectedMonths.contains(m['month'])).toList();
+               
+               for (var m in filteredM) {
+                 sales += (m['actual'] as num?)?.toDouble() ?? 0;
+                 target += (m['target'] as num?)?.toDouble() ?? 0;
+                 final ctx = m['complianceCtx'] ?? {};
+                 commission += (ctx['commission'] as num?)?.toDouble() ?? 0;
                }
              } else {
                // Full Year: Sum of all quarters actuals (or months)
@@ -221,11 +299,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final isAllMode = (context.watch<FilterProvider>().selectedVendor == 'ALL') || 
                       (widget.isJefeVentas && (context.watch<FilterProvider>().selectedVendor == '' || context.watch<FilterProvider>().selectedVendor == null));
                       
-    // If ALL mode and we have breakdown data, show Super Table
     final breakdown = (_data?['breakdown'] as List?) ?? [];
     final showSuperTable = isAllMode && breakdown.isNotEmpty;
 
-    // Normal Mode Variables
     final months = _data?['months'] as List? ?? [];
     final quarters = _data?['quarters'] as List? ?? [];
     final status = _data?['status'] as String? ?? 'active';
@@ -233,14 +309,36 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final grandTotal = (_data?['grandTotalCommission'] as num?)?.toDouble() ?? 
                        (_data?['totals']?['commission'] as num?)?.toDouble() ?? 0;
 
-    // Apply Filters to Normal View
+    // Apply Filters and Calulate Totals for Cards
     List<dynamic> filteredMonths = months;
-    if (_selectedMonth != null) {
-      filteredMonths = months.where((m) => m['month'] == _selectedMonth).toList();
+    if (_selectedMonths.isNotEmpty) {
+      filteredMonths = months.where((m) => _selectedMonths.contains(m['month'])).toList();
+    }
+    filteredMonths.sort((a, b) => (a['month'] as int).compareTo(b['month'] as int));
+
+    // Calculate Totals (Sensitive to filters)
+    double totalSales = 0;
+    double totalTarget = 0;
+    double totalCommission = 0;
+    
+    if (_selectedMonths.isNotEmpty) {
+       // Sum filtered
+       for(var m in filteredMonths) {
+           totalSales += (m['actual'] as num?)?.toDouble() ?? 0;
+           totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
+           final ctx = m['complianceCtx'] ?? {};
+           totalCommission += (ctx['commission'] as num?)?.toDouble() ?? 0;
+       }
+    } else {
+       // Full Year (use quarters for robust sum)
+       for(var q in quarters) {
+           totalSales += (q['actual'] as num?)?.toDouble() ?? 0;
+           totalTarget += (q['target'] as num?)?.toDouble() ?? 0;
+       }
+       totalCommission = grandTotal;
     }
     
-    // Sort months just in case
-    filteredMonths.sort((a, b) => (a['month'] as int).compareTo(b['month'] as int));
+    final totalPct = totalTarget > 0 ? (totalSales / totalTarget) * 100 : 0.0;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
@@ -255,109 +353,122 @@ class _CommissionsPageState extends State<CommissionsPage> {
              onSync: _loadDataWithYear,
            ),
            
-           // Header & Filters
+           // Header Content
            Container(
-             padding: const EdgeInsets.all(16),
+             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
              color: AppTheme.surfaceColor,
              child: Column(
                children: [
+                 // ROW 1: Commercial Selector (if Jefe) + Info Icon
+                 if (widget.isJefeVentas) 
+                   Padding(
+                     padding: const EdgeInsets.only(bottom: 8.0),
+                     child: Row(children: [
+                        Expanded(child: GlobalVendorSelector(isJefeVentas: true, onChanged: _loadDataWithYear)),
+                        const SizedBox(width: 8),
+                        IconButton(icon: const Icon(Icons.info_outline, color: AppTheme.neonBlue), onPressed: _showExplanationModal)
+                     ]),
+                   ),
+
+                 // ROW 2: FILTERS + SUMMARY TAGS
+                 // User wants compact filters and "tags" appearing.
                  Row(
+                   crossAxisAlignment: CrossAxisAlignment.start, // Align top
                    children: [
-                     const Icon(Icons.euro, color: AppTheme.neonGreen, size: 24),
-                     const SizedBox(width: 12),
+                     // LEFT: Filters (Compact)
                      Expanded(
+                       flex: 4, 
                        child: Column(
                          crossAxisAlignment: CrossAxisAlignment.start,
                          children: [
-                           // COMMERCIAL SELECTOR (JEFE)
-                           if (widget.isJefeVentas) ...[
-                              GlobalVendorSelector(
-                                isJefeVentas: true,
-                                onChanged: _loadDataWithYear,
-                              ),
-                              const SizedBox(height: 8),
-                           ],
-                           
+                           // Year / Month Row
                            Row(
-                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                              children: [
-                               Text(showSuperTable ? 'Vista Global ${_selectedYear}' : 'Comisiones ${_selectedYear}', 
-                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
-                               if (!isInformative && !showSuperTable)
-                                  Text('Total: ${CurrencyFormatter.format(grandTotal)}', 
-                                     style: const TextStyle(color: AppTheme.neonGreen, fontSize: 14, fontWeight: FontWeight.bold)),
+                               // Year (Small)
+                               Container(
+                                 height: 36,
+                                 padding: const EdgeInsets.symmetric(horizontal: 8),
+                                 decoration: BoxDecoration(
+                                   color: Colors.white.withOpacity(0.05),
+                                   borderRadius: BorderRadius.circular(8),
+                                   border: Border.all(color: Colors.white24),
+                                 ),
+                                 child: DropdownButton<int>(
+                                   value: _selectedYear,
+                                   dropdownColor: AppTheme.surfaceColor,
+                                   underline: const SizedBox(),
+                                   style: const TextStyle(color: Colors.white, fontSize: 13),
+                                   icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: 18),
+                                   items: [2024, 2025, 2026, 2027].map((y) => DropdownMenuItem(value: y, child: Text(y.toString()))).toList(),
+                                   onChanged: (val) {
+                                     if (val != null) {
+                                       setState(() => _selectedYear = val);
+                                       _loadDataWithYear();
+                                     }
+                                   },
+                                 ),
+                               ),
+                               const SizedBox(width: 8),
+                               // Month (Multi-Select Button)
+                               Expanded(
+                                 child: InkWell(
+                                   onTap: _showMonthPicker,
+                                   child: Container(
+                                     height: 36,
+                                     padding: const EdgeInsets.symmetric(horizontal: 8),
+                                     decoration: BoxDecoration(
+                                       color: Colors.white.withOpacity(0.05),
+                                       borderRadius: BorderRadius.circular(8),
+                                       border: Border.all(color: _selectedMonths.isNotEmpty ? AppTheme.neonBlue : Colors.white24),
+                                     ),
+                                     alignment: Alignment.centerLeft,
+                                     child: Row(
+                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                       children: [
+                                         Flexible(
+                                           child: Text(
+                                             _selectedMonths.isEmpty ? "Todo el Año" 
+                                             : (_selectedMonths.length == 1 ? _getMonthName(_selectedMonths.first) 
+                                                : "${_selectedMonths.length} Meses"),
+                                             style: const TextStyle(color: Colors.white, fontSize: 13),
+                                             overflow: TextOverflow.ellipsis,
+                                           ),
+                                         ),
+                                         const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: 18)
+                                       ],
+                                     ),
+                                   ),
+                                 ),
+                               ),
                              ],
                            ),
-                           
-                           if (isInformative)
-                             const Text('Modo Informativo (No Comisionable)', style: TextStyle(color: Colors.grey, fontSize: 11)),
                          ],
                        ),
                      ),
-                     IconButton(
-                       icon: const Icon(Icons.info_outline, color: AppTheme.neonBlue),
-                       onPressed: _showExplanationModal,
-                       tooltip: 'Explicación cálculo',
-                     ),
-                   ],
-                 ),
-                 
-                 const SizedBox(height: 12),
-                 
-                 // --- YEAR & MONTH FILTERS ---
-                 Row(
-                   children: [
-                     // Year Dropdown
-                     Container(
-                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                       decoration: BoxDecoration(
-                         color: Colors.white.withOpacity(0.05),
-                         borderRadius: BorderRadius.circular(8),
-                         border: Border.all(color: Colors.white24),
-                       ),
-                       child: DropdownButton<int>(
-                         value: _selectedYear,
-                         dropdownColor: AppTheme.surfaceColor,
-                         underline: const SizedBox(),
-                         style: const TextStyle(color: Colors.white, fontSize: 14),
-                         icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue),
-                         items: [2024, 2025, 2026, 2027].map((y) => DropdownMenuItem(value: y, child: Text(y.toString()))).toList(),
-                         onChanged: (val) {
-                           if (val != null) {
-                             setState(() => _selectedYear = val);
-                             _loadDataWithYear();
-                           }
-                         },
-                       ),
-                     ),
+                     
                      const SizedBox(width: 12),
-                     // Month Dropdown
+                     
+                     // RIGHT: 3 SUMMARY TAGS (Stacked or Grid)
+                     // "habit tres etiquetas encima de la tabla"
+                     // Let's put them here.
                      Expanded(
-                       child: Container(
-                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                         decoration: BoxDecoration(
-                           color: Colors.white.withOpacity(0.05),
-                           borderRadius: BorderRadius.circular(8),
-                           border: Border.all(color: Colors.white24),
-                         ),
-                         child: DropdownButton<int?>(
-                           value: _selectedMonth,
-                           dropdownColor: AppTheme.surfaceColor,
-                           underline: const SizedBox(),
-                           isExpanded: true,
-                           hint: const Text("Todo el Año", style: TextStyle(color: Colors.white54)),
-                           style: const TextStyle(color: Colors.white, fontSize: 14),
-                           icon: const Icon(Icons.calendar_month, color: AppTheme.neonBlue),
-                           items: [
-                             const DropdownMenuItem<int?>(value: null, child: Text("Todo el Año")),
-                             ...List.generate(12, (i) => DropdownMenuItem(value: i+1, child: Text(_getMonthName(i+1))))
-                           ],
-                           onChanged: (val) {
-                             setState(() => _selectedMonth = val);
-                           },
-                         ),
-                       ),
-                     ),
+                        flex: 6,
+                        child: Column(
+                          children: [
+                            Row(children: [
+                               Expanded(child: _buildSummaryCard('Objetivo', totalTarget, AppTheme.neonBlue)),
+                               const SizedBox(width: 6),
+                               Expanded(child: _buildSummaryCard('Venta', totalSales, AppTheme.neonPurple)),
+                            ]),
+                            const SizedBox(height: 6),
+                            Row(children: [
+                               Expanded(child: _buildSummaryCard('% Obj', null, totalPct >= 100 ? AppTheme.success : Colors.orange, overrideText: '${totalPct.toStringAsFixed(1)}%')),
+                               const SizedBox(width: 6),
+                               Expanded(child: _buildSummaryCard('Comisión', totalCommission, AppTheme.neonGreen)),
+                            ])
+                          ],
+                        )
+                     )
                    ],
                  ),
                ],
@@ -370,12 +481,33 @@ class _CommissionsPageState extends State<CommissionsPage> {
              : _error != null ? Center(child: Text('Error: $_error', style: const TextStyle(color: AppTheme.error)))
              : showSuperTable
                 ? _buildSuperTable(breakdown) // NEW SUPER TABLE VIEW
-                : _buildNormalView(filteredMonths, quarters, isInformative), // EXISTING VIEW (Refactored)
+                : _buildNormalView(filteredMonths, quarters, isInformative), 
            ),
         ],
       ),
     );
   }
+
+  Widget _buildSummaryCard(String label, double? value, Color color, {String? overrideText}) {
+      return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withOpacity(0.3))
+          ),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                  Text(label.toUpperCase(), style: TextStyle(fontSize: 9, color: color.withOpacity(0.8), fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 2),
+                  Text(overrideText ?? CurrencyFormatter.format(value ?? 0), 
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)
+                  )
+              ]
+          )
+      );
+  } 
   
   // Refactored existing Normal View
   Widget _buildNormalView(List<dynamic> months, List<dynamic> quarters, bool isInformative) {
@@ -399,12 +531,12 @@ class _CommissionsPageState extends State<CommissionsPage> {
     
     // Helper to add Quarter
     void addQuarterRow(Map<String, dynamic> q, int idx) {
-        if (_selectedMonth != null) return; // Hide quarters if filtering by month
+        if (_selectedMonths.isNotEmpty) return; // Hide quarters if filtering by month
         rows.add(_createQuarterRow(q, idx));
     }
 
     // Build Sequence
-    if (_selectedMonth != null) {
+    if (_selectedMonths.isNotEmpty) {
        months.forEach((m) => addMonthRow(m as Map<String, dynamic>));
     } else {
         // Standard Interleaved view
