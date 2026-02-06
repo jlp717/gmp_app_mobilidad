@@ -351,7 +351,7 @@ router.get('/summary', async (req, res) => {
                 LCMMDC as MONTH,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE L.LCYEAB IN (${selectedYear}, ${prevYear})
+            WHERE L.LCAADC IN (${selectedYear}, ${prevYear})
               AND ${LACLAE_SALES_FILTER}
         `;
 

@@ -29,14 +29,14 @@ const LACLAE_SALES_FILTER = `
     L.TPDC = 'LAC'
     AND L.LCTPVT IN ('CC', 'VC') 
     AND L.LCCLLN IN ('AB', 'VT') 
-    AND L.LCSRAB NOT IN ('N', 'Z')
+    AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
 `.replace(/\s+/g, ' ').trim();
 
 // Legacy filter for DSEDAC.LAC table (uses short column names but with EXISTS)
 const LAC_SALES_FILTER = `
     L.LCTPVT IN ('CC', 'VC') 
     AND L.LCCLLN IN ('AB', 'VT') 
-    AND L.LCSRAB NOT IN ('N', 'Z')
+    AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
     AND EXISTS (
         SELECT 1 FROM DSEDAC.CAC CX
         WHERE L.LCSBAB = CX.CCSBAB 
