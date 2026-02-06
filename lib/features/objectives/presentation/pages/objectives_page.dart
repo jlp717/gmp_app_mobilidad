@@ -1609,8 +1609,8 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                                       ? '¡Objetivo cumplido!' 
                                       : 'Objetivo no alcanzado')
                                   : (isOnTrack
-                                      ? 'Vas ${((dailyActual / dailyTarget - 1) * 100).toStringAsFixed(0)}% por ENCIMA del ritmo'
-                                      : 'Vas ${((1 - dailyActual / dailyTarget) * 100).toStringAsFixed(0)}% por DEBAJO del ritmo'),
+                                      ? 'Vas ${((dailyActual / dailyTarget - 1) * 100).toStringAsFixed(2)}% por ENCIMA del ritmo'
+                                      : 'Vas ${((1 - dailyActual / dailyTarget) * 100).toStringAsFixed(2)}% por DEBAJO del ritmo'),
                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: paceColor),
                             ),
                           ],
