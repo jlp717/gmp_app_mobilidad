@@ -28,7 +28,7 @@ async function getBSales(vendorCode, year) {
 
 // HELPER: TARGET CONFIG
 async function getVendorTargetConfig(vendorCode) {
-    if (!vendorCode) return 10.0;
+    if (!vendorCode) return 0.0;
     try {
         const code = vendorCode.split(',')[0].trim();
         const rows = await query(`
@@ -36,9 +36,9 @@ async function getVendorTargetConfig(vendorCode) {
             FROM JAVIER.OBJ_CONFIG 
             WHERE CODIGOVENDEDOR = '${code}'
         `, false, false);
-        if (rows.length > 0) return parseFloat(rows[0].TARGET_PERCENTAGE) || 10.0;
-        return 10.0;
-    } catch (e) { return 10.0; }
+        if (rows.length > 0) return parseFloat(rows[0].TARGET_PERCENTAGE) || 0.0;
+        return 0.0;
+    } catch (e) { return 0.0; }
 }
 
 async function main() {

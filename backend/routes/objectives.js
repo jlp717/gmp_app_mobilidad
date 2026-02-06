@@ -36,7 +36,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
         WHERE TRIM(L.LCCDVD) = '${vendorCode}'
-          AND L.LCYEAB = ${currentYear}
+          AND L.LCAADC = ${currentYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
 
@@ -46,7 +46,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDVD) = '${vendorCode}'
-              AND L.LCYEAB = ${currentYear - 1}
+              AND L.LCAADC = ${currentYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);
         return prevRows.map(r => r.CLIENT_CODE);
@@ -72,7 +72,7 @@ async function getClientsMonthlySales(clientCodes, year) {
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
         FROM DSED.LACLAE L
         WHERE TRIM(L.LCCDCL) IN (${clientList})
-          AND L.LCYEAB = ${year}
+          AND L.LCAADC = ${year}
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
     `, false);
@@ -90,47 +90,19 @@ async function getClientsMonthlySales(clientCodes, year) {
     return monthlyMap;
 }
 
-// =============================================================================
-// B-SALES LOOKUP (VENTAS EN B)
-// These are secondary channel sales stored in JAVIER.VENTAS_B
-// =============================================================================
-async function getBSales(vendorCode, year) {
-    if (!vendorCode || vendorCode === 'ALL') return {};
-
-    // Normalize code: try to match how it's stored. 
-    // Usually '2', but input might be '02'.
-    const rawCode = vendorCode.trim();
-    const unpaddedCode = rawCode.replace(/^0+/, '');
-
-    try {
-        const rows = await query(`
-            SELECT MES, IMPORTE
-            FROM JAVIER.VENTAS_B
-            WHERE (CODIGOVENDEDOR = '${rawCode}' OR CODIGOVENDEDOR = '${unpaddedCode}')
-              AND EJERCICIO = ${year}
-        `, false, false);
-
-        const monthlyMap = {};
-        rows.forEach(r => {
-            monthlyMap[r.MES] = (monthlyMap[r.MES] || 0) + (parseFloat(r.IMPORTE) || 0);
-        });
-        return monthlyMap;
-    } catch (e) {
-        logger.debug(`B-sales lookup: ${e.message}`);
-        return {};
-    }
-}
-
 
 const SEASONAL_AGGRESSIVENESS = 0.5; // Tuning parameter for seasonality (0.0=flat, 1.0=high)
 
 /**
- * Get target percentage configuration for a vendor (OBJECTIVES GROWTH)
+ * Get target percentage configuration for a vendor
  * Defaults to 10% if not configured
- * NOTE: This is ADDITIONAL growth on top of 3% IPC which is handled separately
  */
 async function getVendorTargetConfig(vendorCode) {
-    if (!vendorCode || vendorCode === 'ALL') return 10.0;
+    // DISABLED: Force 0% growth to match IPC-only baseline (User Request)
+    return 0.0;
+
+    /*
+    if (!vendorCode || vendorCode === 'ALL') return 0.0;
     try {
         const code = vendorCode.split(',')[0].trim();
         const rows = await query(`
@@ -140,13 +112,14 @@ async function getVendorTargetConfig(vendorCode) {
         `, false);
 
         if (rows.length > 0) {
-            return parseFloat(rows[0].TARGET_PERCENTAGE) || 10.0;
+            return parseFloat(rows[0].TARGET_PERCENTAGE) || 0.0;
         }
-        return 10.0;
+        return 0.0;
     } catch (e) {
         logger.warn(`Could not fetch OBJ_CONFIG: ${e.message}`);
-        return 10.0;
+        return 0.0;
     }
+    */
 }
 
 // =============================================================================
@@ -392,17 +365,17 @@ router.get('/evolution', async (req, res) => {
         // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
         const rows = await query(`
           SELECT 
-            L.LCYEAB as YEAR,
+            L.LCAADC as YEAR,
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES,
             SUM(L.LCIMCT) as COST,
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
           FROM DSED.LACLAE L
-          WHERE L.LCYEAB IN (${yearsFilter})
+          WHERE L.LCAADC IN (${yearsFilter})
             AND ${LACLAE_SALES_FILTER}
             ${vendedorFilter}
-          GROUP BY L.LCYEAB, L.LCMMDC
-          ORDER BY L.LCYEAB, L.LCMMDC
+          GROUP BY L.LCAADC, L.LCMMDC
+          ORDER BY L.LCAADC, L.LCMMDC
         `);
 
 
@@ -411,37 +384,12 @@ router.get('/evolution', async (req, res) => {
         const yearTotals = {};
 
         // =====================================================================
-        // B-SALES: Load B-sales for this vendor (from JAVIER.VENTAS_B)
-        // These get ADDED to both current year sales and previous year sales
-        // =====================================================================
-        const bSalesAllYears = {};
-        const isAll = !vendedorCodes || vendedorCodes === 'ALL';
-        if (!isAll) {
-            const firstCode = vendedorCodes.split(',')[0].trim();
-            for (const yr of uniqueYears) {
-                bSalesAllYears[yr] = await getBSales(firstCode, yr);
-            }
-            const totals = Object.entries(bSalesAllYears)
-                .filter(([_, data]) => Object.keys(data).length > 0)
-                .map(([yr, data]) => `${yr}: ${Object.values(data).reduce((s, v) => s + v, 0).toFixed(2)}€`);
-            if (totals.length > 0) {
-                console.log(`📊 [OBJECTIVES] B-Sales for ${firstCode}: ${totals.join(', ')}`);
-            }
-        }
-
-        // Helper to augment a row's SALES with B-sales
-        // We'll apply B-sales when processing rows
-        const addBSales = (year, month, baseSales) => {
-            const yearData = bSalesAllYears[year] || {};
-            return baseSales + (yearData[month] || 0);
-        };
-
-        // =====================================================================
         // INHERITED OBJECTIVES: Pre-load inherited sales for new vendors
         // =====================================================================
         // For vendors with incomplete history (some months with 0 sales in prevYear),
         // we calculate the target based on sales of their current clients by ANY vendor.
         let inheritedMonthlySales = {};
+        const isAll = !vendedorCodes || vendedorCodes === 'ALL';
 
         if (!isAll) {
             // Check if vendor has any months without data in previous year (for current year objectives)
@@ -513,9 +461,7 @@ router.get('/evolution', async (req, res) => {
                 const row = rows.find(r => r.YEAR == year && r.MONTH == m); // Loose equality
                 const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
 
-                // Base sales from LACLAE plus B-sales
                 let ownPrevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
-                ownPrevSales = addBSales(year - 1, m, ownPrevSales); // Add B-sales to previous year
 
                 // Use inherited sales when vendor has no own sales for this month
                 if (ownPrevSales === 0 && inheritedMonthlySales[m]) {
@@ -526,10 +472,7 @@ router.get('/evolution', async (req, res) => {
                     prevYearMonthlySales[m] = ownPrevSales;
                 }
 
-                // Current year sales with B-sales
-                let currYearSales = row ? parseFloat(row.SALES) || 0 : 0;
-                currYearSales = addBSales(year, m, currYearSales);
-                if (currYearSales > 0) currentYearTotalSoFar += currYearSales;
+                if (row) currentYearTotalSoFar += parseFloat(row.SALES) || 0;
             }
 
             // Combined: own sales + inherited sales from clients
@@ -542,13 +485,10 @@ router.get('/evolution', async (req, res) => {
                 monthlyObjective = fixedMonthlyTarget;
                 annualObjective = fixedMonthlyTarget * 12;
             } else {
-                // FORMULA: Base * 1.03 (IPC) * (1 + targetPct/100)
-                // IPC = 3% industria standard
-                // targetPct = vendor-specific growth (default 10%)
-                const IPC = 1.03; // 3% IPC
+                // Standard calculation: previous year * (1 + targetPct)
+                // Fallback to 10% if 0 (though normally handled by getVendorTargetConfig)
                 const growthFactor = 1 + (targetPct / 100);
-                const totalMultiplier = IPC * growthFactor; // e.g., 1.03 * 1.10 = 1.133
-                annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * totalMultiplier : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * totalMultiplier : 0);
+                annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * growthFactor : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
                 monthlyObjective = annualObjective / 12;
             }
 
@@ -586,8 +526,7 @@ router.get('/evolution', async (req, res) => {
                 const row = rows.find(r => r.YEAR == year && r.MONTH == m);
                 const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
 
-                // Apply B-sales to all output values
-                const sales = addBSales(year, m, row ? parseFloat(row.SALES) || 0 : 0);
+                const sales = row ? parseFloat(row.SALES) || 0 : 0;
                 const cost = row ? parseFloat(row.COST) || 0 : 0;
                 const clients = row ? parseInt(row.CLIENTS) || 0 : 0;
 
@@ -763,7 +702,7 @@ router.get('/matrix', async (req, res) => {
         COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
         COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as SUBFAMILY_CODE,
         COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
-        L.LCYEAB as YEAR,
+        L.LCAADC as YEAR,
         L.LCMMDC as MONTH,
         SUM(L.LCIMVT) as SALES,
         SUM(L.LCIMCT) as COST,
@@ -787,12 +726,12 @@ router.get('/matrix', async (req, res) => {
       LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
       LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
       WHERE L.LCCDCL = '${clientCode}'
-        AND L.LCYEAB IN(${yearsFilter})
+        AND L.LCAADC IN(${yearsFilter})
         AND L.LCMMDC BETWEEN ${monthStart} AND ${monthEnd}
         -- FILTERS to match LACLAE logic
         AND ${LACLAE_SALES_FILTER}
         ${filterConditions}
-      GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCYEAB, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
+      GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
       ORDER BY SALES DESC
     `);
 
@@ -1745,7 +1684,7 @@ router.get('/by-client', async (req, res) => {
               LEFT JOIN (
                 SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
                 FROM DSED.LACLAE
-                WHERE LCYEAB IN(${yearsFilter})
+                WHERE LCAADC IN(${yearsFilter})
                   AND LCMMDC IN(${monthsFilter})
                   AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
                   AND LCCDCL IN (${clientCodesFilter})
@@ -1772,7 +1711,7 @@ router.get('/by-client', async (req, res) => {
                 SUM(L.LCIMCT) as COST
               FROM DSED.LACLAE L
               LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
-              WHERE L.LCYEAB IN(${yearsFilter})
+              WHERE L.LCAADC IN(${yearsFilter})
                 AND L.LCMMDC IN(${monthsFilter})
                 AND ${LACLAE_SALES_FILTER}
                 ${vendedorFilterSales}
@@ -1797,7 +1736,7 @@ router.get('/by-client', async (req, res) => {
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as PREV_SALES
               FROM DSED.LACLAE L
-              WHERE L.LCYEAB = ${prevYear}
+              WHERE L.LCAADC = ${prevYear}
                 AND L.LCMMDC IN(${monthsFilter})
                 AND ${LACLAE_SALES_FILTER}
                 AND L.LCCDCL IN (${retrievedCodes})
