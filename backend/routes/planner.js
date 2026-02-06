@@ -613,27 +613,36 @@ router.get('/rutero/day/:day', async (req, res) => {
             // Calculate the reference point: end of the week BEFORE the selected week
             // First, find the first day of the selected month
             const firstDayOfMonth = new Date(currentYear, m - 1, 1);
-            const firstWeekdayOfMonth = firstDayOfMonth.getDay(); // 0=Sunday, 1=Monday
+            const firstWeekdayOfMonth = firstDayOfMonth.getDay(); // 0=Sunday, 1=Monday, ...
 
-            // Calculate the Monday of week 1 of this month
-            // Week 1 starts on day 1, but we need to find when it ends (Sunday)
-            // First Sunday of/after month start
-            let daysUntilSunday = (7 - firstWeekdayOfMonth) % 7;
-            if (daysUntilSunday === 0) daysUntilSunday = 7; // If 1st is Sunday, first week ends on that day
+            // Find the first Sunday of the month (end of week 1)
+            // If day 1 is Sunday (0), then the first Sunday IS day 1
+            // If day 1 is Monday (1), the first Sunday is day 7
+            // If day 1 is Saturday (6), the first Sunday is day 2
+            let daysUntilFirstSunday = (7 - firstWeekdayOfMonth) % 7;
+            // NOTE: If firstWeekdayOfMonth === 0 (Sunday), daysUntilFirstSunday = 0, meaning day 1 IS a Sunday
 
-            // Sunday that ends week W of the month
-            const sundayOfWeekW = new Date(currentYear, m - 1, 1 + daysUntilSunday + (w - 1) * 7);
+            // The Sunday that ends week 1 of the month
+            const firstSundayOfMonth = new Date(currentYear, m - 1, 1 + daysUntilFirstSunday);
 
-            // The reference date is the Sunday BEFORE the selected week (completed weeks only)
-            // For week 1: the Sunday before the month started
-            // For week N: the Sunday that ends week N-1
+            // The Sunday that ends week W of the month
+            const sundayOfWeekW = new Date(firstSundayOfMonth);
+            sundayOfWeekW.setDate(firstSundayOfMonth.getDate() + (w - 1) * 7);
+
+            // For COMPLETED weeks comparison:
+            // If we are in week W, we compare data up to the Sunday that ends week (W-1)
+            // For week 1: there is no completed week in this month yet, use the Sunday BEFORE month start
+            // For week 2: use the Sunday that ends week 1 (firstSundayOfMonth)
+            // For week N: use the Sunday that ends week (N-1)
+
             if (w <= 1) {
-                // Week 1: use the Sunday before the first day of the month
+                // Week 1: no completed weeks in this month yet
+                // Use the Sunday before the first day of the month
                 referenceDate = getLastSunday(firstDayOfMonth);
             } else {
-                // Week N: use the Sunday that ends week N-1 (which is 7 days before week N's Sunday)
-                referenceDate = new Date(sundayOfWeekW);
-                referenceDate.setDate(sundayOfWeekW.getDate() - 7);
+                // Week N (N >= 2): use the Sunday that ends week (N-1)
+                referenceDate = new Date(firstSundayOfMonth);
+                referenceDate.setDate(firstSundayOfMonth.getDate() + (w - 2) * 7);
             }
 
             // Ensure referenceDate doesn't go before Jan 1 of current year

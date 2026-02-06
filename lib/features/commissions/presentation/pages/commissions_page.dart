@@ -26,414 +26,200 @@ class _CommissionsPageState extends State<CommissionsPage> {
   Map<String, dynamic>? _data;
   DateTime? _lastFetchTime;
   
-  // Filters
-  List<int> _selectedYears = [DateTime.now().year]; // Default current
-  List<int> _selectedMonths = []; // Empty = All
+  // Jefe View
+
 
   @override
   void initState() {
     super.initState();
-    _loadDataWithYear();
+
+    _loadData();
   }
 
-  Future<void> _loadDataWithYear() async {
-      setState(() { _isLoading = true; _error = null; });
-      try {
-        final defaultCode = widget.employeeCode.split(',').first;
-        String? filterCode;
-        if (mounted) {
-          filterCode = context.read<FilterProvider>().selectedVendor;
-        }
-        final code = filterCode ?? defaultCode;
 
-        // Verify we have years
-        if (_selectedYears.isEmpty) _selectedYears = [DateTime.now().year];
 
-        // Pass years as comma separated string or relies on service handling list?
-        // Service expects 'year' as dynamic or int. 
-        // We will modify the Service call to pass string "2024,2025" or similar logic.
-        // Assuming CommissionsService.getSummary accepts dynamic year.
-        final yearParam = _selectedYears.join(',');
-        
-        final res = await CommissionsService.getSummary(vendedorCode: code, year: yearParam);
-        
-        setState(() {
-          _data = res;
-          _isLoading = false;
-          _lastFetchTime = DateTime.now();
-        });
-      } catch (e) {
-        if (mounted) setState(() { _error = e.toString(); _isLoading = false; });
+  Future<void> _loadData() async {
+    setState(() { _isLoading = true; _error = null; });
+    try {
+      final defaultCode = widget.employeeCode.split(',').first;
+
+      // Use Provider if mounted, otherwise local fallback (init)
+      String? filterCode;
+      if (mounted) {
+        filterCode = context.read<FilterProvider>().selectedVendor;
       }
-  }
-  
-  // ... (Keep existing _showExplanationModal)
 
-  void _showMonthPicker() async {
-     // ... (Keep existing)
-    final selected = Set<int>.from(_selectedMonths);
-    await showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AlertDialog(
-              backgroundColor: AppTheme.surfaceColor,
-              title: const Text('Seleccionar Meses', style: TextStyle(color: Colors.white)),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        title: const Text("Seleccionar Todo", style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
-                        onTap: () {
-                          setModalState(() {
-                             selected.clear();
-                             // Logic: If user clicks 'Select All' usually means 'All' (empty list in logic) or actually all 12.
-                             // But my logic says Empty = All. So clearing is "All".
-                             // But UI should show all checked if all selected? 
-                             // Let's stick to: Empty = All. But here we select specific months.
-                             // If "All" text, clear set.
-                          });
-                        },
-                        trailing: Icon(selected.isEmpty ? Icons.check_box : Icons.check_box_outline_blank, color: AppTheme.neonBlue),
-                      ),
-                      const Divider(color: Colors.white24),
-                      ...List.generate(12, (index) {
-                        final m = index + 1;
-                        final isSelected = selected.contains(m);
-                        return CheckboxListTile( // ...
-                           title: Text(_getMonthName(m), style: const TextStyle(color: Colors.white)),
-                           value: isSelected,
-                           activeColor: AppTheme.neonBlue,
-                           checkColor: Colors.black,
-                           onChanged: (val) {
-                             setModalState(() {
-                               if (val == true) selected.add(m); else selected.remove(m);
-                             });
-                           }
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text("Cancelar", style: TextStyle(color:Colors.grey))),
-                TextButton(
-                  onPressed: () {
-                     setState(() {
-                       _selectedMonths = selected.toList()..sort();
-                     });
-                     Navigator.pop(ctx);
-                     _loadDataWithYear(); // Refresh data with new filters (local filtering mostly but good to sync)
-                  },
-                  child: const Text('Aplicar', style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
-                ),
-              ]
-            );
+      // For jefe de ventas: if no specific filter or 'ALL', request ALL vendors
+      String code;
+      if (widget.isJefeVentas && (filterCode == null || filterCode == '' || filterCode == 'ALL')) {
+        code = 'ALL';
+      } else {
+        code = filterCode ?? defaultCode;
+      }
+
+      final res = await CommissionsService.getSummary(vendedorCode: code);
+      setState(() {
+        _data = res;
+        _isLoading = false;
+        _lastFetchTime = DateTime.now();
+      });
+    } catch (e) {
+      if (mounted) {
+          setState(() {
+            _error = e.toString();
+            _isLoading = false;
           });
       }
+    }
+  }
+
+  void _showExplanationModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 24),
+            SizedBox(width: 8),
+            Text('Cómo funcionan las comisiones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 16)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: const Text('⚠️ Todas las cifras son SIN IVA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.lightBlue)),
+              ),
+              const SizedBox(height: 16),
+              _buildStep('📊 Objetivo Anual', 
+                  'Tu objetivo se calcula en base a las ventas del año anterior más un pequeño porcentaje de incremento.'),
+              const SizedBox(height: 12),
+              _buildStep('✅ Estado Mensual', 
+                  '• VERDE ✓ = Superas el objetivo del mes\n• ROJO ✗ = Por debajo del objetivo\n• Solo comisionas si superas el 100%'),
+              const SizedBox(height: 12),
+              _buildStep('💰 Franjas de Comisión', 
+                  'El % se aplica SOLO al exceso sobre el objetivo:\n\n'
+                  '• Franja 1 (100-103%): 1.0%\n'
+                  '• Franja 2 (103-106%): 1.3%\n'
+                  '• Franja 3 (106-110%): 1.6%\n'
+                  '• Franja 4 (>110%):    2.0%'),
+              const SizedBox(height: 12),
+              _buildStep('📅 Ritmo Diario', 
+                  'Compara tus ventas actuales vs. lo esperado al día de hoy:\\n'
+                  '• ✓ Verde (Adelantado/En ritmo) = Vas por buen camino\\n'
+                  '• ⚠ Naranja (Rezagado) = Necesitas acelerar'),
+              const SizedBox(height: 12),
+              _buildStep('🔒 Meses Pendientes', 
+                  'Los meses futuros aparecen sombreados.\nSe "desbloquean" cuando llegue su fecha.'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Entendido', style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 
-  void _showYearPicker() async {
-    final selected = Set<int>.from(_selectedYears);
-    final availableYears = [2024, 2025, 2026, 2027];
-    
-    await showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AlertDialog(
-              backgroundColor: AppTheme.surfaceColor,
-              title: const Text('Seleccionar Años', style: TextStyle(color: Colors.white)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: availableYears.map((y) {
-                    final isSelected = selected.contains(y);
-                    return CheckboxListTile(
-                      title: Text(y.toString(), style: const TextStyle(color: Colors.white)),
-                      value: isSelected,
-                      activeColor: AppTheme.neonBlue,
-                      checkColor: Colors.black,
-                      onChanged: (val) {
-                        setModalState(() {
-                           if (val == true) selected.add(y); else selected.remove(y);
-                        });
-                      },
-                    );
-                }).toList(),
-              ),
-              actions: [
-                 TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text("Cancelar", style: TextStyle(color:Colors.grey))),
-                 TextButton(
-                   onPressed: () {
-                      if (selected.isEmpty) selected.add(DateTime.now().year); // Enforce at least one
-                      setState(() {
-                        _selectedYears = selected.toList()..sort();
-                      });
-                      Navigator.pop(ctx);
-                      _loadDataWithYear();
-                   },
-                   child: const Text("Aplicar", style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold))
-                 )
-              ],
-            );
-          }
-        );
-      }
+
+  Widget _buildStep(String title, String desc) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+        const SizedBox(height: 4),
+        Text(desc, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // ... (Keep restriction check)
+    // Restriction for specific commercials
+    // Only block if NOT a manager and effectively is one of the restricted codes
     final restrictedCodes = ['80', '13'];
     final isRestricted = !widget.isJefeVentas && 
                          restrictedCodes.any((c) => widget.employeeCode == c || widget.employeeCode.split(',').contains(c));
-    if (isRestricted) return const Center(child: Text("Sección no disponible", style: TextStyle(color: Colors.white70)));
+    
+    if (isRestricted) {
+      return const Center(child: Text("Sección no disponible para este usuario", style: TextStyle(color: Colors.white70)));
+    }
 
-    final isAllMode = (context.watch<FilterProvider>().selectedVendor == 'ALL') || 
-                      (widget.isJefeVentas && (context.watch<FilterProvider>().selectedVendor == '' || context.watch<FilterProvider>().selectedVendor == null));
-                      
+    // Check if we're in ALL mode (breakdown available)
     final breakdown = (_data?['breakdown'] as List?) ?? [];
-    final showSuperTable = isAllMode && breakdown.isNotEmpty;
+    final isAllMode = breakdown.isNotEmpty;
 
+    // ... vars ...
     final months = _data?['months'] as List? ?? [];
     final quarters = _data?['quarters'] as List? ?? [];
     final status = _data?['status'] as String? ?? 'active';
     final isInformative = status == 'informative';
-    // Grand totals depend on backend sum now
-    final grandTotal = (_data?['grandTotalCommission'] as num?)?.toDouble() ?? 
+    final grandTotal = (_data?['grandTotalCommission'] as num?)?.toDouble() ??
                        (_data?['totals']?['commission'] as num?)?.toDouble() ?? 0;
 
-    // Filter Logic in Frontend for Display (Backend already aggregated years, here we agg months)
-    List<dynamic> filteredMonths = months;
-    if (_selectedMonths.isNotEmpty) {
-      filteredMonths = months.where((m) => _selectedMonths.contains(m['month'])).toList();
-    }
-    filteredMonths.sort((a, b) => (a['month'] as int).compareTo(b['month'] as int));
-
-    // Calculate Summary Metrics
-    double totalSales = 0;
+    // Calculate summary stats
+    double totalProvisionalCommission = 0;
+    double totalActualSales = 0;
     double totalTarget = 0;
-    double totalCommission = 0;
+    double totalProRatedTarget = 0; // Expected sales by today
+    Map<String, dynamic>? currentMonthData;
     
-    // NOTE: If Multi-Year, 'months' array from backend contains summed data for Month 1, Month 2... across years.
-    // So summing them up here gives Global Total.
-    if (_selectedMonths.isNotEmpty) {
-       for(var m in filteredMonths) {
-           totalSales += (m['actual'] as num?)?.toDouble() ?? 0;
-           totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
-           final ctx = m['complianceCtx'] ?? {};
-           totalCommission += (ctx['commission'] as num?)?.toDouble() ?? 0;
-       }
-    } else {
-       // Full Period
-       if (quarters.isNotEmpty) {
-           for(var q in quarters) {
-               totalSales += (q['actual'] as num?)?.toDouble() ?? 0;
-               totalTarget += (q['target'] as num?)?.toDouble() ?? 0;
-           }
-           totalCommission = grandTotal;
-       } else {
-           // Fallback to months sum if quarters empty
-           for(var m in months) {
-               totalSales += (m['actual'] as num?)?.toDouble() ?? 0;
-               totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
-           }
-           totalCommission = grandTotal;
-       }
+    for (var m in months) {
+      final monthNum = (m['month'] as num?)?.toInt() ?? 0;
+      final isFuture = (m['isFuture'] as bool?) ?? false;
+      final actual = (m['actual'] as num?)?.toDouble() ?? 0;
+      final target = (m['target'] as num?)?.toDouble() ?? 0;
+      final dailyCtx = m['dailyComplianceCtx'] ?? {};
+      final provisionalComm = (dailyCtx['provisionalCommission'] as num?)?.toDouble() ?? 0;
+      final proRatedTarget = (m['proRatedTarget'] as num?)?.toDouble() ?? 0;
+      
+      if (!isFuture) {
+        totalProvisionalCommission += provisionalComm;
+        totalActualSales += actual;
+        totalTarget += target;
+        // For current month, use proRatedTarget (expected by today)
+        // For past months, use full target (should have been completed)
+        if (monthNum == DateTime.now().month) {
+          totalProRatedTarget += proRatedTarget; // Expected by today
+        } else {
+          totalProRatedTarget += target; // Full month target for past months
+        }
+      }
+      
+      // Current month (January = 1)
+      if (monthNum == DateTime.now().month) {
+        currentMonthData = m;
+      }
     }
     
-    final totalPct = totalTarget > 0 ? (totalSales / totalTarget) * 100 : 0.0;
-    final isPositive = totalSales >= totalTarget;
-
-    return Scaffold(
-      backgroundColor: AppTheme.darkBase,
-      body: Column(
-        children: [
-           SmartSyncHeader(
-             title: 'Comisiones',
-             subtitle: 'Seguimiento y Objetivos',
-             lastSync: _lastFetchTime,
-             isLoading: _isLoading,
-             onSync: _loadDataWithYear,
-           ),
-           
-           Container(
-             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-             color: AppTheme.surfaceColor,
-             child: Column(
-               children: [
-                 if (widget.isJefeVentas) 
-                   Padding(
-                     padding: const EdgeInsets.only(bottom: 12.0),
-                     child: GlobalVendorSelector(isJefeVentas: true, onChanged: _loadDataWithYear),
-                   ),
-
-                 Row(
-                   crossAxisAlignment: CrossAxisAlignment.center, 
-                   children: [
-                     // LEFT: Compact Selectors
-                     Column(
-                         crossAxisAlignment: CrossAxisAlignment.start,
-                         children: [
-                             // Years
-                             InkWell(
-                                 onTap: _showYearPicker,
-                                 child: Container(
-                                     width: 100, height: 32,
-                                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                                     margin: const EdgeInsets.only(bottom: 6),
-                                     decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), border: Border.all(color: Colors.white24), borderRadius: BorderRadius.circular(6)),
-                                     child: Row(
-                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                         children: [
-                                             Flexible(child: Text(_selectedYears.length > 1 ? "${_selectedYears.length} Años" : _selectedYears.first.toString(), style: const TextStyle(fontSize: 12, color: Colors.white), overflow: TextOverflow.ellipsis)),
-                                             const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: 16)
-                                         ]
-                                     )
-                                 )
-                             ),
-                             // Months
-                             InkWell(
-                                 onTap: _showMonthPicker,
-                                 child: Container(
-                                     width: 100, height: 32,
-                                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                                     decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), border: Border.all(color: Colors.white24), borderRadius: BorderRadius.circular(6)),
-                                     child: Row(
-                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                         children: [
-                                             Flexible(child: Text(_selectedMonths.isEmpty ? "Todo el Año" : (_selectedMonths.length==1 ? _getMonthName(_selectedMonths.first) : "${_selectedMonths.length} Meses"), style: const TextStyle(fontSize: 12, color: Colors.white), overflow: TextOverflow.ellipsis)),
-                                             const Icon(Icons.calendar_month, color: AppTheme.neonBlue, size: 16)
-                                         ]
-                                     )
-                                 )
-                             ),
-                         ]
-                     ),
-                     
-                     const SizedBox(width: 16),
-                     
-                     // RIGHT: Classic "Tags" (Middle)
-                     Expanded(
-                        child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly, // "Middle" look
-                            children: [
-                                _buildMiddleTag("OBJETIVO", CurrencyFormatter.format(totalTarget), Colors.white54),
-                                _buildMiddleTag("VENTA", CurrencyFormatter.format(totalSales), isPositive ? AppTheme.success : Colors.white),
-                                _buildMiddleTag("COMISIÓN", CurrencyFormatter.format(totalCommission), AppTheme.neonGreen, isBold: true),
-                            ]
-                        )
-                     )
-                   ],
-                 ),
-               ],
-             ),
-           ),
-           
-           Expanded(
-             child: _isLoading ? const Center(child: ModernLoading(message: 'Calculando...')) 
-             : _error != null ? Center(child: Text('Error: $_error', style: const TextStyle(color: AppTheme.error)))
-             : showSuperTable
-                ? _buildSuperTable(breakdown) 
-                : _buildNormalView(filteredMonths, quarters, isInformative), 
-           ),
-        ],
-      )
-    );
-  }
-
-  // Restored Design Tag
-  Widget _buildMiddleTag(String label, String value, Color color, {bool isBold = false}) {
-     return Column(
-         mainAxisSize: MainAxisSize.min,
-         children: [
-             Text(label, style: const TextStyle(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.w600)),
-             const SizedBox(height: 2),
-             Text(value, style: TextStyle(fontSize: 15, color: color, fontWeight: isBold ? FontWeight.w900 : FontWeight.bold))
-         ]
-     );
-  } 
-  
-  // Refactored existing Normal View
-  Widget _buildNormalView(List<dynamic> months, List<dynamic> quarters, bool isInformative) {
-    if (months.isEmpty && quarters.isEmpty) {
-         return const Center(
-             child: Column(mainAxisSize: MainAxisSize.min, children: [
-                 Icon(Icons.search_off, size: 48, color: Colors.white24),
-                 SizedBox(height: 16),
-                 Text("No hay datos para la selección", style: TextStyle(color: Colors.white54))
-             ])
-         );
-    }
+    // Overall compliance: actual vs WHAT WE SHOULD HAVE BY NOW (not total target)
+    final overallCompliance = totalTarget > 0 ? (totalActualSales / totalTarget) * 100 : 0;
     
-    // Prepare table rows
+    // Rhythm compliance: are we on track for the current day?
+    // If totalProRatedTarget > 0, compare actual vs expected by today
+    final rhythmCompliance = totalProRatedTarget > 0 ? (totalActualSales / totalProRatedTarget) * 100 : 100;
+    final isOnRhythm = rhythmCompliance >= 100;
+    final rhythmStatus = rhythmCompliance >= 105 ? 'Adelantado' : (rhythmCompliance >= 95 ? 'En ritmo' : 'Rezagado');
+
+
+    // Prepare table rows (interleaving quarters)
     final rows = <DataRow>[];
     
+    // Sort months just in case
+    months.sort((a, b) => (a['month'] as int).compareTo(b['month'] as int));
+
+
     // Helper to add month row
     void addMonthRow(Map<String, dynamic> m) {
-       rows.add(_createMonthRow(m, isInformative));
-    }
-    
-    // Helper to add Quarter
-    void addQuarterRow(Map<String, dynamic> q, int idx) {
-        if (_selectedMonths.isNotEmpty) return; // Hide quarters if filtering by month
-        rows.add(_createQuarterRow(q, idx));
-    }
-
-    // Build Sequence
-    if (_selectedMonths.isNotEmpty) {
-       months.forEach((m) => addMonthRow(m as Map<String, dynamic>));
-    } else {
-        // Standard Interleaved view
-        final q1Months = months.where((m) => (m['month'] as int) <= 4).toList();
-        for (var m in q1Months) addMonthRow(m as Map<String, dynamic>);
-        if (q1Months.isNotEmpty && quarters.isNotEmpty) addQuarterRow(quarters[0], 0);
-
-        final q2Months = months.where((m) => (m['month'] as int) > 4 && (m['month'] as int) <= 8).toList();
-        for (var m in q2Months) addMonthRow(m as Map<String, dynamic>);
-        if (q2Months.isNotEmpty && quarters.length > 1) addQuarterRow(quarters[1], 1);
-
-        final q3Months = months.where((m) => (m['month'] as int) > 8).toList();
-        for (var m in q3Months) addMonthRow(m as Map<String, dynamic>);
-        if (q3Months.isNotEmpty && quarters.length > 2) addQuarterRow(quarters[2], 2);
-    }
-    
-    return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 20,
-          headingRowColor: MaterialStateProperty.all(AppTheme.surfaceColor.withOpacity(0.8)),
-          columns: const [
-            DataColumn(label: Text('MES', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('OBJ. MES', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('VENTA', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('ESTADO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('%', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('COMISIÓN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen))),
-            DataColumn(label: Text('DÍAS', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
-            DataColumn(label: Text('OBJ. ACUM.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
-            DataColumn(label: Text('RITMO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
-            DataColumn(label: Text('DIFF', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
-            DataColumn(label: Text('COM. PROV.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
-          ],
-          rows: rows,
-        ),
-      ),
-    );
-  }
-
-  // --- ROW CREATORS ---
-  DataRow _createMonthRow(Map<String, dynamic> m, bool isInformative) {
       final monthNum = m['month'] as int;
       final monthName = _getMonthName(monthNum);
       final target = (m['target'] as num?)?.toDouble() ?? 0;
@@ -446,31 +232,41 @@ class _CommissionsPageState extends State<CommissionsPage> {
       final commission = (ctx['commission'] as num?)?.toDouble() ?? 0;
       
       final workingDays = (m['workingDays'] as num?)?.toInt() ?? 0;
-      final proRatedTarget = (m['proRatedTarget'] as num?)?.toDouble() ?? 0;
-      final daysPassed = (m['daysPassed'] as num?)?.toInt() ?? 0;
-      
+      final dailyTarget = (m['dailyTarget'] as num?)?.toDouble() ?? 0;
+      final dailyActual = (m['dailyActual'] as num?)?.toDouble() ?? 0;
       final dailyCtx = m['dailyComplianceCtx'] ?? {};
       final dailyGreen = (dailyCtx['isGreen'] as bool?) ?? false;
-      final provisionalCommission = (dailyCtx['provisionalCommission'] as num?)?.toDouble() ?? 0;
-      final dailyTier = (dailyCtx['tier'] as num?)?.toInt() ?? 0;
-      final dailyRate = (dailyCtx['rate'] as num?)?.toDouble() ?? 0;
-      final dailyPct = (dailyCtx['pct'] as num?)?.toDouble() ?? 0;
 
+      // Color logic: future months get special styling
       final isPositive = actual >= target && target > 0;
       final color = isFuture ? Colors.grey : (isPositive ? AppTheme.success : AppTheme.error);
       final dailyColor = isFuture ? Colors.grey : (dailyGreen ? AppTheme.success : Colors.orangeAccent);
       final rowBgColor = isFuture ? Colors.black38 : AppTheme.surfaceColor;
       final textOpacity = isFuture ? 0.4 : 1.0;
 
+      // Monthly Pct Logic
       final pctDisplay = pct > 0 ? (pct - 100) : 0;
-      final pctText = isFuture ? '-' : (pct > 100 ? '+${pctDisplay.toStringAsFixed(1)}%' : '${pct.toStringAsFixed(1)}%');
-      
-      final dailyPctDisplay = dailyPct > 0 ? (dailyPct - 100) : 0;
-      final dailyPctText = dailyPct > 100 ? '+${dailyPctDisplay.toStringAsFixed(1)}%' : '${dailyPct.toStringAsFixed(1)}%';
+      final pctText = isFuture ? '-'
+          : (pct > 100 ? '+${pctDisplay.toStringAsFixed(1)}%' : '${pct.toStringAsFixed(1)}%');
 
-      return DataRow(
-        color: MaterialStateProperty.all(rowBgColor),
+      // Daily accumulated data (new from backend)
+      final daysPassed = (m['daysPassed'] as num?)?.toInt() ?? 0;
+      final proRatedTarget = (m['proRatedTarget'] as num?)?.toDouble() ?? 0;
+      final provisionalCommission = (dailyCtx['provisionalCommission'] as num?)?.toDouble() ?? 0;
+      final dailyTier = (dailyCtx['tier'] as num?)?.toInt() ?? 0;
+      final dailyRate = (dailyCtx['rate'] as num?)?.toDouble() ?? 0;
+      final dailyPct = (dailyCtx['pct'] as num?)?.toDouble() ?? 0;
+      
+      // Daily percentage text
+      final dailyPctDisplay = dailyPct > 0 ? (dailyPct - 100) : 0;
+      final dailyPctText = dailyPct > 100 
+          ? '+${dailyPctDisplay.toStringAsFixed(1)}%' 
+          : '${dailyPct.toStringAsFixed(1)}%';
+
+      rows.add(DataRow(
+        color: WidgetStateProperty.all(rowBgColor),
         cells: [
+          // MES
           DataCell(Row(
             children: [
               Text(monthName, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white.withOpacity(textOpacity))),
@@ -484,8 +280,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
               ]
             ],
           )),
+          // OBJ. MES
           DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target), style: TextStyle(color: Colors.white.withOpacity(textOpacity)))),
+          // VENTA REAL (acumulada del mes)
           DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual), style: TextStyle(color: color, fontWeight: FontWeight.bold))),
+          // ESTADO MES
           DataCell(isFuture 
             ? const Text('-', style: TextStyle(color: Colors.grey))
             : Row(
@@ -501,14 +300,20 @@ class _CommissionsPageState extends State<CommissionsPage> {
                  ]
                ],
           )),
+          // % SOBRE (mes)
           DataCell(Text(pctText, style: TextStyle(color: isFuture ? Colors.grey : color, fontSize: 11))),
+          // COMISIÓN MES
           DataCell(Text(
             isFuture ? '-' : (isInformative ? '-' : CurrencyFormatter.format(commission)), 
             style: TextStyle(color: isFuture ? Colors.grey : (isInformative ? Colors.grey : AppTheme.neonGreen), fontWeight: FontWeight.bold)
           )),
           
+          // === SECCIÓN RITMO DIARIO ===
+          // DÍAS (transcurridos / totales)
           DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays', style: TextStyle(color: Colors.white.withOpacity(textOpacity * 0.7), fontSize: 11))),
+          // OBJ. ACUM. (pro-rated target)
           DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(proRatedTarget), style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(textOpacity)))),
+          // ESTADO RITMO + % SOBRE
           DataCell(isFuture 
             ? const Text('-', style: TextStyle(color: Colors.grey))
             : Column(
@@ -522,8 +327,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
                  ]),
                  if (dailyTier > 0) 
                    Text('Franja $dailyTier (${dailyRate.toStringAsFixed(1)}%)', style: TextStyle(fontSize: 9, color: dailyColor))
-               ],
+                 else if (!dailyGreen && actual > 0)
+                   Text('Por debajo', style: TextStyle(fontSize: 9, color: dailyColor))
+                ],
           )),
+          // DIFERENCIA (Venta Real - Obj. Acumulado)
           DataCell(isFuture 
             ? const Text('-', style: TextStyle(color: Colors.grey))
             : Text(
@@ -537,20 +345,29 @@ class _CommissionsPageState extends State<CommissionsPage> {
                 )
               )
           ),
+          // COMISIÓN PROVISIONAL
           DataCell(isFuture || isInformative
             ? const Text('-', style: TextStyle(color: Colors.grey))
             : Text(
                 CurrencyFormatter.format(provisionalCommission),
-                style: TextStyle(color: provisionalCommission > 0 ? AppTheme.neonPurple : Colors.grey, fontWeight: FontWeight.bold, fontSize: 11)
+                style: TextStyle(
+                  color: provisionalCommission > 0 ? AppTheme.neonPurple : Colors.grey,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11
+                )
               )
           ),
         ],
-      );
-  }
+      ));
+    }
 
-  DataRow _createQuarterRow(Map<String, dynamic> q, int qIndex) {
+
+    // Helper to add Quarter summary (Paid vs Real)
+    void addQuarterRow(Map<String, dynamic> q, int qIndex) {
+       if (q.isEmpty) return;
+
        final monthNow = DateTime.now().month;
-       final currentQ = (monthNow - 1) ~/ 4; 
+       final currentQ = (monthNow - 1) ~/ 4; // 0 for Jan-Apr, 1 for May-Aug, 2 for Sep-Dec
        final isPast = qIndex < currentQ;
        final isCurrent = qIndex == currentQ;
        final isFuture = qIndex > currentQ;
@@ -564,14 +381,14 @@ class _CommissionsPageState extends State<CommissionsPage> {
        final bgColor = isPast ? Colors.black26 : (isCurrent ? AppTheme.neonPurple.withOpacity(0.15) : Colors.transparent);
        final textColor = isPast ? Colors.grey : (isCurrent ? AppTheme.neonPurple : Colors.white24);
        
-       return DataRow(
+       rows.add(DataRow(
          color: WidgetStateProperty.all(bgColor),
          cells: [
             DataCell(Text(name.toUpperCase(), style: TextStyle(color: textColor, fontWeight: FontWeight.bold))),
-            const DataCell(SizedBox()), 
-            const DataCell(SizedBox()), 
-            const DataCell(SizedBox()), 
-            const DataCell(SizedBox()), 
+            const DataCell(SizedBox()), // OBJ. MES
+            const DataCell(SizedBox()), // VENTA
+            const DataCell(SizedBox()), // ESTADO
+            const DataCell(SizedBox()), // %
             DataCell( isFuture ? const Text('-') : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -580,27 +397,366 @@ class _CommissionsPageState extends State<CommissionsPage> {
                   Text('Pagado: ${CurrencyFormatter.format(paid)}', style: TextStyle(fontSize: 12, color: isPast ? Colors.white60 : AppTheme.neonGreen, fontWeight: FontWeight.bold)),
                 ]
             )),
-            const DataCell(SizedBox()), 
-            const DataCell(SizedBox()), 
-            const DataCell(SizedBox()), 
-            const DataCell(SizedBox()), 
-            const DataCell(SizedBox()), 
+            const DataCell(SizedBox()), // DÍAS
+            const DataCell(SizedBox()), // OBJ. ACUM.
+            const DataCell(SizedBox()), // RITMO
+            const DataCell(SizedBox()), // DIFF
+            const DataCell(SizedBox()), // COM. PROV.
          ]
-       );
-  }
+       ));
+    }
 
+
+    // Build Sequence
+    // Build Sequence
+    final q1Months = months.where((m) => (m['month'] as int) <= 4).toList();
+    for (var m in q1Months) addMonthRow(m);
+    if (q1Months.isNotEmpty && quarters.isNotEmpty) addQuarterRow(quarters[0], 0);
+
+    final q2Months = months.where((m) => (m['month'] as int) > 4 && (m['month'] as int) <= 8).toList();
+    for (var m in q2Months) addMonthRow(m);
+    if (q2Months.isNotEmpty && quarters.length > 1) addQuarterRow(quarters[1], 1);
+
+    final q3Months = months.where((m) => (m['month'] as int) > 8).toList();
+    for (var m in q3Months) addMonthRow(m);
+    if (q3Months.isNotEmpty && quarters.length > 2) addQuarterRow(quarters[2], 2);
+    
+    return Scaffold(
+      backgroundColor: AppTheme.darkBase,
+      body: Column(
+        children: [
+           // Smart Sync Header (like other pages)
+           SmartSyncHeader(
+             title: 'Comisiones',
+             subtitle: 'Seguimiento y Objetivos',
+             lastSync: _lastFetchTime,
+             isLoading: _isLoading,
+             onSync: _loadData,
+           ),
+           // Header
+           Container(
+             padding: const EdgeInsets.all(16),
+             color: AppTheme.surfaceColor,
+             child: Row(
+               children: [
+                 const Icon(Icons.euro, color: AppTheme.neonGreen, size: 24),
+                 const SizedBox(width: 12),
+                 Expanded(
+                   child: Column(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       if (widget.isJefeVentas) ...[
+                          GlobalVendorSelector(
+                            isJefeVentas: true,
+                            onChanged: _loadData,
+                          ),
+                       ]
+                       else
+                         const Text('Comisiones 2026', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                         
+                       if (isInformative)
+                         const Text('Modo Informativo (No Comisionable)', style: TextStyle(color: Colors.grey, fontSize: 11))
+                       else
+                         Text('Total Acumulado: ${CurrencyFormatter.format(grandTotal)}', 
+                             style: const TextStyle(color: AppTheme.neonGreen, fontSize: 14)),
+                     ],
+                   ),
+                 ),
+                 IconButton(
+                   icon: const Icon(Icons.info_outline, color: AppTheme.neonBlue),
+                   onPressed: _showExplanationModal,
+                   tooltip: 'Explicación cálculo',
+                 ),
+               ],
+             ),
+           ),
+           
+           // === SUMMARY CARDS ===
+           if (!_isLoading && _error == null && !isInformative) ...[
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+               child: Row(
+                 children: [
+                   // Current Month Card
+                   Expanded(
+                     child: Container(
+                       padding: const EdgeInsets.all(12),
+                       decoration: BoxDecoration(
+                         gradient: LinearGradient(
+                           colors: [AppTheme.neonBlue.withOpacity(0.2), AppTheme.neonPurple.withOpacity(0.1)],
+                         ),
+                         borderRadius: BorderRadius.circular(12),
+                         border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                       ),
+                       child: Column(
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: [
+                           Row(
+                             children: [
+                               const Icon(Icons.calendar_today, color: AppTheme.neonBlue, size: 16),
+                               const SizedBox(width: 6),
+                               Text(_getMonthName(DateTime.now().month).toUpperCase(), 
+                                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+                             ],
+                           ),
+                           const SizedBox(height: 6),
+                           if (currentMonthData != null) ...[
+                             Text(CurrencyFormatter.format((currentMonthData!['actual'] as num?)?.toDouble() ?? 0),
+                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                             Text('de ${CurrencyFormatter.format((currentMonthData!['target'] as num?)?.toDouble() ?? 0)}',
+                                 style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.6))),
+                             const SizedBox(height: 6),
+                             // Mini progress bar
+                             ClipRRect(
+                               borderRadius: BorderRadius.circular(4),
+                               child: LinearProgressIndicator(
+                                 value: ((currentMonthData!['actual'] as num?)?.toDouble() ?? 0) / 
+                                        ((currentMonthData!['target'] as num?)?.toDouble() ?? 1).clamp(0.01, double.infinity),
+                                 backgroundColor: Colors.white.withOpacity(0.1),
+                                 valueColor: AlwaysStoppedAnimation<Color>(
+                                   ((currentMonthData!['actual'] as num?)?.toDouble() ?? 0) >= 
+                                   ((currentMonthData!['target'] as num?)?.toDouble() ?? 0)
+                                   ? AppTheme.success : AppTheme.neonBlue
+                                 ),
+                                 minHeight: 6,
+                               ),
+                             ),
+                           ] else
+                             const Text('Sin datos', style: TextStyle(color: Colors.grey)),
+                         ],
+                       ),
+                     ),
+                   ),
+                   const SizedBox(width: 8),
+                   // Provisional Commission Card
+                   Expanded(
+                     child: Container(
+                       padding: const EdgeInsets.all(12),
+                       decoration: BoxDecoration(
+                         gradient: LinearGradient(
+                           colors: [AppTheme.neonGreen.withOpacity(0.2), AppTheme.success.withOpacity(0.1)],
+                         ),
+                         borderRadius: BorderRadius.circular(12),
+                         border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+                       ),
+                       child: Column(
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: [
+                           const Row(
+                             children: [
+                               Icon(Icons.trending_up, color: AppTheme.neonGreen, size: 16),
+                               SizedBox(width: 6),
+                               Text('COMISIÓN PROV.', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                             ],
+                           ),
+                           const SizedBox(height: 8),
+                           Text(CurrencyFormatter.format(totalProvisionalCommission),
+                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                           const SizedBox(height: 2),
+                           Text('Confirmado: ${CurrencyFormatter.format(grandTotal)}',
+                               style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.7))),
+                         ],
+                       ),
+                     ),
+                   ),
+                   const SizedBox(width: 8),
+                   // Compliance Card - now uses RHYTHM-based comparison
+                   Expanded(
+                     child: Container(
+                       padding: const EdgeInsets.all(12),
+                       decoration: BoxDecoration(
+                         color: isOnRhythm 
+                           ? AppTheme.success.withOpacity(0.15) 
+                           : Colors.orange.withOpacity(0.15),
+                         borderRadius: BorderRadius.circular(12),
+                         border: Border.all(color: isOnRhythm 
+                           ? AppTheme.success.withOpacity(0.3) 
+                           : Colors.orange.withOpacity(0.3)),
+                       ),
+                       child: Column(
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: [
+                           Row(
+                             children: [
+                               Icon(isOnRhythm ? Icons.trending_up : Icons.speed, 
+                                   color: isOnRhythm ? AppTheme.success : Colors.orange, size: 16),
+                               const SizedBox(width: 6),
+                               Text('RITMO ACTUAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, 
+                                   color: isOnRhythm ? AppTheme.success : Colors.orange)),
+                             ],
+                           ),
+                           Text('(a día ${DateTime.now().day})',
+                               style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.5))),
+                           const SizedBox(height: 6),
+                           
+                           // Metrics Row
+                           Column(
+                             crossAxisAlignment: CrossAxisAlignment.start,
+                             children: [
+                               // Rhythm (Month/Period pace)
+                               Row(
+                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                 children: [
+                                   Text('Vs Ritmo:', style: TextStyle(fontSize: 10, color: Colors.white70)),
+                                   Text('${rhythmCompliance.toStringAsFixed(1)}%', 
+                                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isOnRhythm ? AppTheme.success : Colors.orange)),
+                                 ],
+                               ),
+                               const SizedBox(height: 2),
+                               // Annual/Total
+                               Row(
+                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                 children: [
+                                   Text('Vs Obj. Total:', style: TextStyle(fontSize: 10, color: Colors.white70)),
+                                   Text('${overallCompliance.toStringAsFixed(1)}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                 ],
+                               ),
+                             ],
+                           ),
+                           
+                           const SizedBox(height: 4),
+                           Text(rhythmStatus,
+                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, 
+                                   color: isOnRhythm ? AppTheme.success : Colors.orange)),
+                         ],
+                       ),
+                     ),
+                   ),
+                 ],
+               ),
+             ),
+             // Warning for ALL mode - ONLY FOR JEFE DE VENTAS
+              if (widget.isJefeVentas && (context.watch<FilterProvider>().selectedVendor == '' || context.watch<FilterProvider>().selectedVendor == null))
+               Container(
+                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                 padding: const EdgeInsets.all(10),
+                 decoration: BoxDecoration(
+                   color: Colors.blue.withOpacity(0.1),
+                   borderRadius: BorderRadius.circular(8),
+                   border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                 ),
+                 child: Row(
+                   children: [
+                     const Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                     const SizedBox(width: 8),
+                     Expanded(
+                       child: Text(
+                         'Vista general: Mostrando datos agregados de todos los comerciales. Seleccione uno del filtro para ver detalles individuales.',
+                         style: TextStyle(fontSize: 11, color: Colors.blue.shade200),
+                       ),
+                     ),
+                   ],
+                 ),
+               ),
+           ],
+           
+           // Table
+
+
+           Expanded(
+             child: _isLoading ? const Center(child: ModernLoading(message: 'Calculando...'))
+             : _error != null ? Center(child: Text('Error: $_error', style: const TextStyle(color: AppTheme.error)))
+             : isAllMode
+               ? _buildAllVendorsTable(breakdown)  // Show ALL vendors table
+             : totalTarget <= 0 && !isInformative // ZERO TARGET WARNING
+               ? Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    margin: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppTheme.darkSurface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.info_outline, color: Colors.orange, size: 48),
+                        const SizedBox(height: 16),
+                        const Text('Sin Objetivo de Comisiones',
+                            style: TextStyle(color: Colors.orange, fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'No se han encontrado ventas comisionables (Tipos AB/VT) en el año anterior para calcular el objetivo 2026.\nLas ventas de tipo "CM" u otros no generan objetivo ni comisiones.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+               )
+             : SingleChildScrollView(
+                 scrollDirection: Axis.vertical,
+                 child: SingleChildScrollView(
+                   scrollDirection: Axis.horizontal,
+                   child: DataTable(
+                     columnSpacing: 20,
+                     headingRowColor: WidgetStateProperty.all(AppTheme.surfaceColor.withOpacity(0.8)),
+                      columns: const [
+                        // === DATOS DEL MES ===
+                        DataColumn(label: Text('MES', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
+                        DataColumn(label: Text('OBJ. MES', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
+                        DataColumn(label: Text('VENTA', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
+                        DataColumn(label: Text('ESTADO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
+                        DataColumn(label: Text('%', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
+                        DataColumn(label: Text('COMISIÓN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen))),
+                        // === RITMO DIARIO (acumulado) ===
+                        DataColumn(label: Text('DÍAS', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
+                        DataColumn(label: Text('OBJ. ACUM.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
+                        DataColumn(label: Text('RITMO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
+                        DataColumn(label: Text('DIFF', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
+                        DataColumn(label: Text('COM. PROV.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
+                      ],
+
+                     rows: rows,
+                   ),
+                 ),
+               ),
+           ),
+        ],
+      ),
+    );
+  }
+  
   String _getMonthName(int m) {
     const names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     if (m < 1 || m > 12) return 'Mes $m';
     return names[m - 1];
   }
+  
+  Widget _buildTierChip(String tier, String range, String rate) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.neonBlue.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.neonBlue.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(tier, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+          ),
+          const SizedBox(width: 4),
+          Text('$range → $rate', style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.7))),
+        ],
+      ),
+    );
+  }
 
-  /// Super Table: Shows breakdown of all vendors when in 'ALL' mode
-  Widget _buildSuperTable(List<dynamic> breakdown) {
+  /// Builds the ALL vendors table showing each vendor with their commission data
+  Widget _buildAllVendorsTable(List<dynamic> breakdown) {
     if (breakdown.isEmpty) {
       return const Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.search_off, size: 48, color: Colors.white24),
+          Icon(Icons.group_off, size: 48, color: Colors.white24),
           SizedBox(height: 16),
           Text("No hay datos de vendedores", style: TextStyle(color: Colors.white54))
         ])
@@ -609,70 +765,78 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
     // Sort by grandTotalCommission descending
     final sorted = List<dynamic>.from(breakdown);
-    sorted.sort((a, b) => ((b['grandTotalCommission'] as num?) ?? 0).compareTo((a['grandTotalCommission'] as num?) ?? 0));
-
-    // Calculate totals for each vendor
-    final rows = sorted.map<DataRow>((v) {
-      final code = v['vendedorCode'] as String? ?? '?';
-      final name = v['vendorName'] as String? ?? 'Sin Nombre';
-      final commission = (v['grandTotalCommission'] as num?)?.toDouble() ?? 0;
-      final isExcluded = (v['isExcluded'] as bool?) ?? false;
-
-      // Sum up months for totals
-      final months = (v['months'] as List?) ?? [];
-      double totalTarget = 0;
-      double totalActual = 0;
-      for (var m in months) {
-        totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
-        totalActual += (m['actual'] as num?)?.toDouble() ?? 0;
-      }
-
-      final pct = totalTarget > 0 ? (totalActual / totalTarget * 100) : 0.0;
-      final isPositive = totalActual >= totalTarget && totalTarget > 0;
-      final color = isPositive ? AppTheme.success : AppTheme.error;
-
-      return DataRow(
-        color: WidgetStateProperty.all(isExcluded ? Colors.black26 : AppTheme.surfaceColor),
-        cells: [
-          DataCell(Text(code, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white))),
-          DataCell(Text(name, style: TextStyle(color: isExcluded ? Colors.grey : Colors.white70))),
-          DataCell(Text(CurrencyFormatter.format(totalTarget), style: TextStyle(color: isExcluded ? Colors.grey : Colors.white54))),
-          DataCell(Text(CurrencyFormatter.format(totalActual), style: TextStyle(color: isExcluded ? Colors.grey : color, fontWeight: FontWeight.bold))),
-          DataCell(Text('${pct.toStringAsFixed(1)}%', style: TextStyle(color: isExcluded ? Colors.grey : color, fontSize: 12))),
-          DataCell(Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(CurrencyFormatter.format(commission), style: TextStyle(color: isExcluded ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold)),
-              if (isExcluded) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                  child: const Text('EXCLUIDO', style: TextStyle(fontSize: 8, color: Colors.orange)),
-                )
-              ]
-            ],
-          )),
-        ],
-      );
-    }).toList();
+    sorted.sort((a, b) => ((b['grandTotalCommission'] as num?) ?? 0)
+        .compareTo((a['grandTotalCommission'] as num?) ?? 0));
 
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          columnSpacing: 24,
-          headingRowColor: WidgetStateProperty.all(AppTheme.surfaceColor.withOpacity(0.8)),
+          columnSpacing: 16,
+          headingRowColor: WidgetStateProperty.all(AppTheme.surfaceColor.withOpacity(0.9)),
           columns: const [
-            DataColumn(label: Text('CÓD', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('VENDEDOR', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('OBJETIVO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('VENTA', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('%', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
-            DataColumn(label: Text('COMISIÓN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen))),
+            DataColumn(label: Text('CÓD', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 12))),
+            DataColumn(label: Text('VENDEDOR', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 12))),
+            DataColumn(label: Text('OBJETIVO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 12))),
+            DataColumn(label: Text('VENTA', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 12))),
+            DataColumn(label: Text('CUMPL.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 12))),
+            DataColumn(label: Text('COMISIÓN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 12))),
           ],
-          rows: rows,
+          rows: sorted.map<DataRow>((v) {
+            final code = v['vendedorCode'] as String? ?? '?';
+            final name = v['vendorName'] as String? ?? 'Sin Nombre';
+            final commission = (v['grandTotalCommission'] as num?)?.toDouble() ?? 0;
+            final isExcluded = (v['isExcluded'] as bool?) ?? false;
+
+            // Calculate totals from months
+            final months = (v['months'] as List?) ?? [];
+            double totalTarget = 0;
+            double totalActual = 0;
+            for (var m in months) {
+              totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
+              totalActual += (m['actual'] as num?)?.toDouble() ?? 0;
+            }
+
+            final pct = totalTarget > 0 ? (totalActual / totalTarget * 100) : 0.0;
+            final isPositive = totalActual >= totalTarget && totalTarget > 0;
+            final color = isExcluded ? Colors.grey : (isPositive ? AppTheme.success : AppTheme.error);
+
+            return DataRow(
+              color: WidgetStateProperty.all(isExcluded ? Colors.black26 : AppTheme.surfaceColor),
+              cells: [
+                DataCell(Text(code, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: 13))),
+                DataCell(SizedBox(
+                  width: 140,
+                  child: Text(name, style: TextStyle(color: isExcluded ? Colors.grey : Colors.white, fontSize: 12), overflow: TextOverflow.ellipsis),
+                )),
+                DataCell(Text(CurrencyFormatter.format(totalTarget), style: TextStyle(color: isExcluded ? Colors.grey : Colors.white54, fontSize: 12))),
+                DataCell(Text(CurrencyFormatter.format(totalActual), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12))),
+                DataCell(Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(isPositive ? Icons.check_circle : Icons.cancel, color: color, size: 14),
+                    const SizedBox(width: 4),
+                    Text('${pct.toStringAsFixed(1)}%', style: TextStyle(color: color, fontSize: 11)),
+                  ],
+                )),
+                DataCell(Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(CurrencyFormatter.format(commission), style: TextStyle(color: isExcluded ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 13)),
+                    if (isExcluded) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                        child: const Text('EXCL', style: TextStyle(fontSize: 8, color: Colors.orange)),
+                      )
+                    ]
+                  ],
+                )),
+              ],
+            );
+          }).toList(),
         ),
       ),
     );
