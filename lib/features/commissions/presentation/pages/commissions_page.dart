@@ -405,19 +405,19 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
     // Build Sequence
     if (_selectedMonth != null) {
-       months.forEach(addMonthRow);
+       months.forEach((m) => addMonthRow(m as Map<String, dynamic>));
     } else {
         // Standard Interleaved view
         final q1Months = months.where((m) => (m['month'] as int) <= 4).toList();
-        for (var m in q1Months) addMonthRow(m);
+        for (var m in q1Months) addMonthRow(m as Map<String, dynamic>);
         if (q1Months.isNotEmpty && quarters.isNotEmpty) addQuarterRow(quarters[0], 0);
 
         final q2Months = months.where((m) => (m['month'] as int) > 4 && (m['month'] as int) <= 8).toList();
-        for (var m in q2Months) addMonthRow(m);
+        for (var m in q2Months) addMonthRow(m as Map<String, dynamic>);
         if (q2Months.isNotEmpty && quarters.length > 1) addQuarterRow(quarters[1], 1);
 
         final q3Months = months.where((m) => (m['month'] as int) > 8).toList();
-        for (var m in q3Months) addMonthRow(m);
+        for (var m in q3Months) addMonthRow(m as Map<String, dynamic>);
         if (q3Months.isNotEmpty && quarters.length > 2) addQuarterRow(quarters[2], 2);
     }
     
