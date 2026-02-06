@@ -234,70 +234,7 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
     }
 });
 
-// =============================================================================
-// GET /history/clients/:repartidorId
-// Lista de clientes atendidos por el repartidor
-// =============================================================================
-router.get('/history/clients/:repartidorId', async (req, res) => {
-    try {
-        const { repartidorId } = req.params;
-        const { search } = req.query;
 
-        logger.info(`[REPARTIDOR] Getting client list for ${repartidorId}`);
-
-        const cleanRepartidorId = repartidorId.toString().trim();
-        let whereSearch = '';
-        if (search && search.length >= 2) {
-            const s = search.toUpperCase().replace(/'/g, "''"); // Escapar comillas simples
-            whereSearch = `AND (TRIM(CLI.CODIGOCLIENTE) LIKE '%${s}%' OR UPPER(COALESCE(CLI.NOMBRECLIENTE, '')) LIKE '%${s}%')`;
-        }
-
-        // CORRECTO: Usar OPP → CPC para repartidores
-        const sql = `
-            SELECT DISTINCT
-                TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as NOMBRE,
-                TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCION,
-                TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
-                COUNT(*) as TOTAL_DOCUMENTOS
-            FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC 
-                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
-              AND OPP.ANOREPARTO >= ${new Date().getFullYear() - 1}
-              ${whereSearch}
-            GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), TRIM(COALESCE(CLI.DIRECCION, '')), TRIM(COALESCE(CLI.POBLACION, ''))
-            ORDER BY TOTAL_DOCUMENTOS DESC
-            FETCH FIRST 50 ROWS ONLY
-        `;
-
-        let rows = [];
-        try {
-            rows = await query(sql, false) || [];
-        } catch (queryError) {
-            logger.warn(`[REPARTIDOR] Query error in history/clients: ${queryError.message}`);
-            return res.json({ success: true, clients: [] });
-        }
-
-        const clients = rows.map(row => ({
-            id: row.CLIENTE || '',
-            name: row.NOMBRE || row.CLIENTE || 'Cliente',
-            address: `${row.DIRECCION || ''}, ${row.POBLACION || ''}`.trim().replace(/^,\s*|,\s*$/g, '') || '',
-            totalDocuments: row.TOTAL_DOCUMENTOS || 0
-        }));
-
-        res.json({
-            success: true,
-            clients
-        });
-
-    } catch (error) {
-        logger.error(`[REPARTIDOR] Error in history/clients: ${error.message}`);
-        // Devolver respuesta vacía en lugar de error 500
-        res.json({ success: true, clients: [], warning: error.message });
-    }
-});
 
 // =============================================================================
 // GET /history/documents/:clientId
