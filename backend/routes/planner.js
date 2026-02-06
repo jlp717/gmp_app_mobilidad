@@ -590,50 +590,78 @@ router.get('/rutero/day/:day', async (req, res) => {
 
         // Determine the reference date (The "End Date" for calculation)
         // IMPORTANT: We want to compare COMPLETED weeks only.
-        // If user is viewing week 3, we compare weeks 1-2 (completed weeks).
-        // So referenceDate should be the Sunday of week (selected - 1), NOT week selected.
+        // referenceDate is ALWAYS the last completed Sunday (before today or selected week)
+        // completedWeeks is ALWAYS the total number of weeks from Jan 1 to referenceDate
         let referenceDate;
-        let completedWeeks = 0; // Track how many weeks are completed for the period label
+        let completedWeeks = 0;
+
+        // Helper: Find the last Sunday before or on a given date
+        const getLastSunday = (date) => {
+            const d = new Date(date);
+            const dayOfWeek = d.getDay(); // 0=Sunday, 1=Monday, ...
+            // If today is Sunday (0), go back 7 days to previous Sunday (we don't count current week)
+            // Otherwise, go back to last Sunday
+            const daysBack = dayOfWeek === 0 ? 7 : dayOfWeek;
+            d.setDate(d.getDate() - daysBack);
+            return d;
+        };
 
         if (month && week) {
             const m = parseInt(month);
             const w = parseInt(week);
 
-            // Calculate the Sunday that ends the PREVIOUS week (completed weeks)
-            // If viewing week 1, there are no completed weeks yet -> use Jan 1
-            // If viewing week 2, use end of week 1
-            // If viewing week 3, use end of week 2, etc.
-
+            // Calculate the reference point: end of the week BEFORE the selected week
+            // First, find the first day of the selected month
             const firstDayOfMonth = new Date(currentYear, m - 1, 1);
-            // Find first Sunday of month (or end of first week)
-            let daysUntilSunday = (7 - firstDayOfMonth.getDay()) % 7;
-            if (daysUntilSunday === 0) daysUntilSunday = 7; // If Jan 1 is Sunday, first week ends that day
-            let firstSunday = new Date(currentYear, m - 1, 1 + daysUntilSunday);
+            const firstWeekdayOfMonth = firstDayOfMonth.getDay(); // 0=Sunday, 1=Monday
 
+            // Calculate the Monday of week 1 of this month
+            // Week 1 starts on day 1, but we need to find when it ends (Sunday)
+            // First Sunday of/after month start
+            let daysUntilSunday = (7 - firstWeekdayOfMonth) % 7;
+            if (daysUntilSunday === 0) daysUntilSunday = 7; // If 1st is Sunday, first week ends on that day
+
+            // Sunday that ends week W of the month
+            const sundayOfWeekW = new Date(currentYear, m - 1, 1 + daysUntilSunday + (w - 1) * 7);
+
+            // The reference date is the Sunday BEFORE the selected week (completed weeks only)
+            // For week 1: the Sunday before the month started
+            // For week N: the Sunday that ends week N-1
             if (w <= 1) {
-                // Week 1: No completed weeks yet, use start of year for minimal comparison
-                referenceDate = new Date(currentYear, 0, 1);
+                // Week 1: use the Sunday before the first day of the month
+                referenceDate = getLastSunday(firstDayOfMonth);
+            } else {
+                // Week N: use the Sunday that ends week N-1 (which is 7 days before week N's Sunday)
+                referenceDate = new Date(sundayOfWeekW);
+                referenceDate.setDate(sundayOfWeekW.getDate() - 7);
+            }
+
+            // Ensure referenceDate doesn't go before Jan 1 of current year
+            const startOfYear = new Date(currentYear, 0, 1);
+            if (referenceDate < startOfYear) {
+                referenceDate = new Date(startOfYear);
                 completedWeeks = 0;
             } else {
-                // For week N, completed weeks are 1 to (N-1)
-                // End of week (N-1) is the Sunday before the current week
-                completedWeeks = w - 1;
-                referenceDate = new Date(firstSunday);
-                referenceDate.setDate(firstSunday.getDate() + (w - 2) * 7); // -2 because we want previous week's Sunday
+                // Calculate completed weeks from Jan 1 to referenceDate
+                const msPerDay = 86400000;
+                const daysSinceStart = Math.floor((referenceDate - startOfYear) / msPerDay);
+                completedWeeks = Math.floor(daysSinceStart / 7) + 1;
             }
         } else {
-            // Default to Today logic - use last completed Sunday
+            // Default: use last completed Sunday before today
             const today = new Date(now);
-            const dayOfWeek = today.getDay();
-            // If today is Sunday (0), go back 7 days to previous Sunday
-            // Otherwise, go back to last Sunday
-            const d = dayOfWeek === 0 ? 7 : dayOfWeek;
-            referenceDate = new Date(today);
-            referenceDate.setDate(today.getDate() - d);
+            referenceDate = getLastSunday(today);
 
             // Calculate completed weeks from start of year
             const startOfYear = new Date(currentYear, 0, 1);
-            completedWeeks = Math.floor((referenceDate - startOfYear) / (7 * 86400000)) + 1;
+            if (referenceDate < startOfYear) {
+                referenceDate = new Date(startOfYear);
+                completedWeeks = 0;
+            } else {
+                const msPerDay = 86400000;
+                const daysSinceStart = Math.floor((referenceDate - startOfYear) / msPerDay);
+                completedWeeks = Math.floor(daysSinceStart / 7) + 1;
+            }
         }
 
         let endMonthCurrent = referenceDate.getMonth() + 1;

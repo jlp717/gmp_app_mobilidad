@@ -3,7 +3,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 
 class CommissionsService {
   /// Get Commissions Summary
-  static Future<Map<String, dynamic>> getSummary({required String vendedorCode, int year = 2026}) async {
+  static Future<Map<String, dynamic>> getSummary({required String vendedorCode, dynamic year = 2026}) async {
     try {
       final response = await ApiClient.get(
         '/commissions/summary', 

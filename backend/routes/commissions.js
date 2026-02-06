@@ -501,7 +501,14 @@ router.get('/summary', async (req, res) => {
         const { vendedorCode, year } = req.query;
         if (!vendedorCode) return res.status(400).json({ success: false, error: 'Falta codigo vendedor' });
 
-        const selectedYear = parseInt(year) || new Date().getFullYear();
+        // Parse Years (Multi-Select)
+        const yearParam = year ? year.toString() : getCurrentYear().toString();
+        const years = yearParam.split(',').map(y => parseInt(y.trim())).filter(n => !isNaN(n));
+
+        // If no valid year, use current
+        if (years.length === 0) years.push(getCurrentYear());
+
+        const selectedYear = years[0]; // Primary year for reference (Config loading)
 
         // A. Load Config
         let config = DEFAULT_CONFIG_2026;
@@ -541,132 +548,163 @@ router.get('/summary', async (req, res) => {
             };
         }
 
-        if (vendedorCode === 'ALL') {
-            // Fetch all distinct active vendors from LACLAE for the current and previous year
-            const vendorRows = await query(`
-                SELECT DISTINCT TRIM(LCCDVD) as VENDOR_CODE
-                FROM DSED.LACLAE
-                WHERE LCAADC IN (${selectedYear}, ${selectedYear - 1})
-                  AND ${LACLAE_SALES_FILTER}
-            `, false);
-            const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
 
-            logger.info(`[COMMISSIONS] Generating breakdown for ${vendorCodes.length} vendors...`);
+        logger.info(`[COMMISSIONS] Requested Summary for ${vendedorCode} in years: ${years.join(',')}`);
 
-            // Parallel execution of calculateVendorData for each vendor
-            const promises = vendorCodes.map(code => calculateVendorData(code, selectedYear, config));
-            const results = await Promise.all(promises);
-
-            // Sort by total actual sales (descending)
-            results.sort((a, b) => {
-                const salesA = a.quarters.reduce((s, q) => s + q.actual, 0);
-                const salesB = b.quarters.reduce((s, q) => s + q.actual, 0);
-                return salesB - salesA;
-            });
-
-            // Calculate Global Total Commission
-            const globalTotalCommission = results.reduce((sum, r) => sum + r.grandTotalCommission, 0);
-
-            // --- AGGREGATE MONTHLY DATA (TEAM VIEW) ---
-            const aggregateMonths = [];
-            for (let m = 1; m <= 12; m++) {
-                let totalTarget = 0;
-                let totalActual = 0;
-                let totalCommission = 0;
-                let totalDaysPassed = 0; // Average or Max? Usually confusing for team. Let's sum.
-                // Actually, for "Ritmo", we need global sums.
-
-                results.forEach(res => {
-                    const monthData = res.months.find(rm => rm.month === m);
-                    if (monthData) {
-                        totalTarget += monthData.target;
-                        totalActual += monthData.actual;
-                        totalCommission += (monthData.complianceCtx?.commission || 0);
-                        // We don't sum workingDays as it is calendar based, but it might vary by vendor? 
-                        // Usually constant per month.
-                    }
-                });
-
-                // Recalc global metrics for this month
-                const pct = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
-                // Re-evaluate tier based on global %? Or just sum of commissions?
-                // User wants "seeing commercial by commercial". The total commission should be the SUM of individual commissions.
-                // We should NOT re-calculate commission based on global target/sales because that would ignore individual tiers.
-
-                aggregateMonths.push({
-                    month: m,
-                    target: totalTarget,
-                    actual: totalActual,
-                    workingDays: 20, // Dummy, not used in aggregate view mostly
-                    daysPassed: 0,
-                    isFuture: (selectedYear > new Date().getFullYear()) || (selectedYear === new Date().getFullYear() && m > new Date().getMonth() + 1),
-                    complianceCtx: {
-                        pct: pct,
-                        commission: totalCommission, // Sum of individual commissions
-                        tier: 0, // Not applicable globally
-                        rate: 0
-                    },
-                    dailyComplianceCtx: {
-                        pct: 0,
-                        isGreen: totalActual >= totalTarget, // Simple check
-                        provisionalCommission: 0
-                    }
-                });
-            }
-
-            // --- AGGREGATE QUARTERLY DATA ---
-            const aggregateQuarters = [1, 2, 3].map(qIdx => {
-                // Sum up all vendors' quarter data
-                let qTarget = 0;
-                let qActual = 0;
-                let qCommission = 0;
-
-                results.forEach(res => {
-                    const qData = res.quarters[qIdx - 1]; // qIdx is 1-based, array 0-based
-                    if (qData) {
-                        qTarget += qData.target;
-                        qActual += qData.actual;
-                        qCommission += ((qData.commission || 0) + (qData.additionalPayment || 0));
-                    }
-                });
-
-                return {
-                    id: qIdx,
-                    name: qIdx === 1 ? 'Primer Cuatrimestre' : (qIdx === 2 ? 'Segundo Cuatrimestre' : 'Tercer Cuatrimestre'),
-                    target: qTarget,
-                    actual: qActual,
-                    commission: qCommission,
-                    additionalPayment: 0, // Included in commission sum
-                    complianceCtx: {
-                        pct: qTarget > 0 ? (qActual / qTarget) * 100 : 0
-                    }
-                };
-            });
-
-            return res.json({
+        // Helper to sum results
+        const sumResults = (resA, resB) => {
+            // Merges two 'breakdown' or 'data' objects
+            // This is complex for deep structures. 
+            // Simplified: We return a structure that mimics a single year response but with summed values.
+            return {
                 success: true,
-                config: config,
-                grandTotalCommission: globalTotalCommission,
-                breakdown: results,
-                months: aggregateMonths,
-                quarters: aggregateQuarters
-            });
-
-        } else {
-            // Single Vendor
-            const data = await calculateVendorData(vendedorCode, selectedYear, config);
-            return res.json({
-                success: true,
-                config: config,
-                status: data.isExcluded ? 'informative' : 'active',
-                vendor: data.vendedorCode,
-                months: data.months,
-                quarters: data.quarters,
+                config: resA.config, // Use first
+                grandTotalCommission: (resA.grandTotalCommission || 0) + (resB.grandTotalCommission || 0),
+                breakdown: mergeBreakdowns(resA.breakdown, resB.breakdown),
+                months: mergeTimeUnits(resA.months, resB.months),
+                quarters: mergeTimeUnits(resA.quarters, resB.quarters),
                 totals: {
-                    commission: data.grandTotalCommission
+                    commission: (resA.totals?.commission || 0) + (resB.totals?.commission || 0)
+                }
+            };
+        };
+
+        const mergeBreakdowns = (listA, listB) => {
+            // Merge by vendorCode
+            if (!listA) return listB;
+            if (!listB) return listA;
+
+            const map = new Map();
+            [...listA, ...listB].forEach(item => {
+                if (!map.has(item.vendedorCode)) {
+                    map.set(item.vendedorCode, { ...item }); // Clone
+                } else {
+                    const existing = map.get(item.vendedorCode);
+                    existing.grandTotalCommission += item.grandTotalCommission;
+                    existing.months = mergeTimeUnits(existing.months, item.months);
+                    existing.quarters = mergeTimeUnits(existing.quarters, item.quarters);
+                    // Don't sum targets usually? Yes, if multi-year, Target 2024 + Target 2025 = Total Target.
+                    // But 'item' structure matches 'calculateVendorData' output.
                 }
             });
+            return Array.from(map.values());
+        };
+
+        const mergeTimeUnits = (listA, listB) => {
+            // Merge by month index or quarter id
+            if (!listA) return listB || [];
+            if (!listB) return listA || [];
+
+            const merged = [];
+            // Assuming lists are 1-12 or 1-4.
+            // We just map by ID.
+            const maxId = Math.max(
+                ...listA.map(i => i.month || i.id || 0),
+                ...listB.map(i => i.month || i.id || 0)
+            );
+
+            for (let i = 1; i <= maxId; i++) {
+                const dA = listA.find(x => (x.month || x.id) === i);
+                const dB = listB.find(x => (x.month || x.id) === i);
+
+                if (!dA && !dB) continue;
+
+                const base = dA ? { ...dA } : { ...dB };
+                if (dA && dB) {
+                    base.target = (dA.target || 0) + (dB.target || 0);
+                    base.actual = (dA.actual || 0) + (dB.actual || 0);
+                    // Commission
+                    const commA = (dA.complianceCtx?.commission || 0) + (dA.commission || 0);
+                    const commB = (dB.complianceCtx?.commission || 0) + (dB.commission || 0);
+
+                    // Helper to set comm
+                    if (base.complianceCtx) base.complianceCtx.commission = commA + commB;
+                    else base.commission = commA + commB;
+                }
+                merged.push(base);
+            }
+            return merged;
+        };
+
+        // Execution
+        let aggregatedResult = null;
+
+        for (const yr of years) {
+            // Process Year
+            let yearResult;
+
+            if (vendedorCode === 'ALL') {
+                // ... Existing 'ALL' logic for single year ...
+                const vendorRows = await query(`
+                    SELECT DISTINCT TRIM(LCCDVD) as VENDOR_CODE
+                    FROM DSED.LACLAE
+                    WHERE LCAADC IN (${yr}, ${yr - 1})
+                      AND ${LACLAE_SALES_FILTER}
+                `, false);
+                const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
+                const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
+                const results = await Promise.all(promises);
+
+                results.sort((a, b) => b.grandTotalCommission - a.grandTotalCommission); // Sort by comm or sales?
+                const globalTotal = results.reduce((s, r) => s + r.grandTotalCommission, 0);
+
+                // Aggregate Months/Quarters for this year (Team View)
+                const aggMonths = [];
+                for (let m = 1; m <= 12; m++) {
+                    let tT = 0, tA = 0, tC = 0;
+                    results.forEach(r => {
+                        const md = r.months.find(x => x.month === m);
+                        if (md) { tT += md.target; tA += md.actual; tC += (md.complianceCtx?.commission || 0); }
+                    });
+                    aggMonths.push({
+                        month: m, target: tT, actual: tA,
+                        complianceCtx: { commission: tC }
+                    });
+                }
+
+                // Aggregate Quarters
+                const aggQuarters = [1, 2, 3].map(q => {
+                    let tT = 0, tA = 0, tC = 0;
+                    results.forEach(r => {
+                        const qd = r.quarters.find(x => x.id === q);
+                        if (qd) { tT += qd.target; tA += qd.actual; tC += ((qd.commission || 0) + (qd.additionalPayment || 0)); }
+                    });
+                    return { id: q, target: tT, actual: tA, commission: tC };
+                });
+
+                yearResult = {
+                    config: config,
+                    grandTotalCommission: globalTotal,
+                    breakdown: results,
+                    months: aggMonths,
+                    quarters: aggQuarters
+                };
+
+            } else {
+                // Single Vendor
+                const data = await calculateVendorData(vendedorCode, yr, config);
+                yearResult = {
+                    config: config,
+                    grandTotalCommission: data.grandTotalCommission,
+                    totals: { commission: data.grandTotalCommission },
+                    months: data.months,
+                    quarters: data.quarters,
+                    vendor: data.vendedorCode,
+                    breakdown: [] // No breakdown for single
+                };
+            }
+
+            if (!aggregatedResult) {
+                aggregatedResult = yearResult;
+            } else {
+                aggregatedResult = sumResults(aggregatedResult, yearResult);
+            }
         }
+
+        return res.json({
+            success: true,
+            ...aggregatedResult
+        });
 
     } catch (error) {
         logger.error(`Commissions error: ${error.message}`);
