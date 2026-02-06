@@ -5,6 +5,32 @@ const path = require('path');
 // CONFIG
 const IPC = 1.03;
 
+// Fallback names in case DB lookup fails
+const FALLBACK_NAMES = {
+    '01': 'GOYO', '1': 'GOYO',
+    '02': 'BARTOLO', '2': 'BARTOLO',
+    '03': 'MARTIN MANCHON', '3': 'MARTIN MANCHON',
+    '05': 'RODRIGUEZ', '5': 'RODRIGUEZ',
+    '10': 'EDGAR',
+    '13': 'BAYONAS',
+    '15': 'ALFONSO SALAS',
+    '16': 'FRANCISCO ASENSIO',
+    '20': 'JOAQUIN',
+    '33': 'VICENTE',
+    '35': 'ANTONIO',
+    '72': 'JOSE ANTONIO',
+    '73': 'PEDRO',
+    '80': 'JESUS',
+    '81': 'MIGUEL ANGEL',
+    '82': 'SERGIO',
+    '83': 'DAVID',
+    '92': 'VANESA',
+    '93': 'MARI CARMEN (TLV)',
+    '94': 'JUAN JOSE GARCIA',
+    '97': 'VENTA CENTRAL',
+    'V1': 'JUAN SOLER'
+};
+
 async function getBSales(year) {
     try {
         const rows = await query(`SELECT CODIGOVENDEDOR, SUM(IMPORTE) as TOTAL FROM JAVIER.VENTAS_B WHERE EJERCICIO=${year} GROUP BY CODIGOVENDEDOR`, false, false);
@@ -29,14 +55,19 @@ async function getGrowthConfig() {
 
 async function getVendorNames() {
     try {
-        const rows = await query(`SELECT TRIM(VCCDVD) as ID, TRIM(VCNMVV) as NAME FROM DSEDAC.VDC`, false, false);
+        // Try to fetch from DB, but use fallback if fails
+        const rows = await query(`SELECT TRIM(CODIGOVENDEDOR) as ID, TRIM(NOMBREVENDEDOR) as NAME FROM DSEDAC.VDD`, false, false);
         const map = {};
         rows.forEach(r => {
-            map[r.ID] = r.NAME;
-            map[r.ID.replace(/^0+/, '')] = r.NAME; // Support unpadded
+            if (r.ID && r.NAME) {
+                map[r.ID] = r.NAME;
+                map[r.ID.replace(/^0+/, '')] = r.NAME;
+            }
         });
         return map;
-    } catch (e) { return {}; }
+    } catch (e) {
+        return {};
+    }
 }
 
 async function main() {
@@ -81,13 +112,13 @@ async function main() {
 
     for (const row of salesRows) {
         const id = row.VENDOR.trim();
-        // Skip specialized/internal codes if needed? Keeping all for now.
-        const name = vendorNames[id] || 'DESCONOCIDO';
+        const cleanId = id.replace(/^0+/, '');
+
+        // Lookup Order: DB Map -> Fallback Map -> ID
+        const name = vendorNames[id] || vendorNames[cleanId] || FALLBACK_NAMES[id] || FALLBACK_NAMES[cleanId] || 'DESCONOCIDO';
 
         const baseApp = parseFloat(row.TOTAL) || 0;
-        // Normalize ID for B-sales (remove leading zeros)
-        const idNorm = id.replace(/^0+/, '');
-        const b = (bSales2025[id] || 0) + (bSales2025[idNorm] || 0); // Check both keys
+        const b = (bSales2025[id] || 0) + (bSales2025[cleanId] || 0);
 
         const totalBase = baseApp + b;
         const growth = growthMap[id] !== undefined ? growthMap[id] : 10.0; // Default 10%

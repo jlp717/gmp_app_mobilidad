@@ -347,12 +347,14 @@ router.get('/summary', async (req, res) => {
 
         let salesQuery = `
             SELECT 
-                L.LCAADC as YEAR,
+                INT(L.LCAADC / 10000) as YEAR,
                 LCMMDC as MONTH,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE L.LCAADC IN (${selectedYear}, ${prevYear})
+            WHERE INT(L.LCAADC / 10000) IN (${selectedYear}, ${prevYear})
               AND ${LACLAE_SALES_FILTER}
+            GROUP BY INT(L.LCAADC / 10000), LCMMDC
+            ORDER BY YEAR, MONTH
         `;
 
         // Build vendor filter using helper function with TRIM
@@ -387,12 +389,12 @@ router.get('/summary', async (req, res) => {
 
             if (missingMonths.length > 0) {
                 // Vendor is "new" or has incomplete history - load inherited sales
-                console.log(`📊 Vendor ${vendedorCode} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
+                console.log(`📊 Vendor ${vendedorCode} has ${missingMonths.length} months without data: [${missingMonths.join(',')}].Loading inherited targets...`);
 
                 const currentClients = await getVendorCurrentClients(vendedorCode, selectedYear);
                 if (currentClients.length > 0) {
                     inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
-                    console.log(`📊 Found ${currentClients.length} clients. Inherited sales map: ${JSON.stringify(inheritedMonthlySales)}`);
+                    console.log(`📊 Found ${currentClients.length} clients.Inherited sales map: ${JSON.stringify(inheritedMonthlySales)}`);
                 }
             }
         }
@@ -410,21 +412,21 @@ router.get('/summary', async (req, res) => {
                     FROM JAVIER.COMMERCIAL_TARGETS
                     WHERE CODIGOVENDEDOR = '${vendedorCode}'
                       AND ANIO = ${selectedYear}
-                      AND (MES = ${currentMonth} OR MES IS NULL)
+                      AND(MES = ${currentMonth} OR MES IS NULL)
                       AND ACTIVO = 1
                     ORDER BY MES DESC
                     FETCH FIRST 1 ROWS ONLY
-                `, false);
+    `, false);
 
                 if (fixedRows && fixedRows.length > 0) {
                     fixedCommissionBase = parseFloat(fixedRows[0].IMPORTE_BASE_COMISION) || null;
                     if (fixedCommissionBase) {
-                        console.log(`📊 [COMMISSIONS] Vendor ${vendedorCode} has FIXED commission base: ${fixedCommissionBase}€`);
+                        console.log(`📊[COMMISSIONS] Vendor ${vendedorCode} has FIXED commission base: ${fixedCommissionBase}€`);
                     }
                 }
             } catch (err) {
                 // Table might not exist - continue with percentage-based
-                console.log(`📊 [COMMISSIONS] COMMERCIAL_TARGETS: ${err.message}`);
+                console.log(`📊[COMMISSIONS] COMMERCIAL_TARGETS: ${err.message}`);
             }
         }
 
@@ -440,7 +442,7 @@ router.get('/summary', async (req, res) => {
             const currTotal = Object.values(bSalesCurrYear).reduce((s, v) => s + v, 0);
             const prevTotal = Object.values(bSalesPrevYear).reduce((s, v) => s + v, 0);
             if (currTotal > 0 || prevTotal > 0) {
-                console.log(`📊 [COMMISSIONS] B-Sales for ${vendedorCode}: ${selectedYear}=${currTotal.toFixed(2)}€, ${prevYear}=${prevTotal.toFixed(2)}€`);
+                console.log(`📊[COMMISSIONS] B - Sales for ${vendedorCode}: ${selectedYear}=${currTotal.toFixed(2)}€, ${prevYear}=${prevTotal.toFixed(2)}€`);
             }
         }
 
@@ -595,7 +597,7 @@ router.get('/summary', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Commissions error: ${error.message}`);
+        logger.error(`Commissions error: ${error.message} `);
         res.status(500).json({ error: 'Error calculando comisiones', details: error.message });
     }
 });
