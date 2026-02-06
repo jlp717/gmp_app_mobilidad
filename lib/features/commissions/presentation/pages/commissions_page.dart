@@ -728,7 +728,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
     );
   }
 
-  /// Builds the ALL vendors table showing each vendor with ALL their monthly data
+  /// Builds the ALL vendors expandable list showing each vendor with their monthly data
   Widget _buildAllVendorsTable(List<dynamic> breakdown) {
     if (breakdown.isEmpty) {
       return const Center(
@@ -740,194 +740,295 @@ class _CommissionsPageState extends State<CommissionsPage> {
       );
     }
 
-    // Sort by grandTotalCommission descending
+    // Sort by vendor code ascending
     final sorted = List<dynamic>.from(breakdown);
-    sorted.sort((a, b) => ((b['grandTotalCommission'] as num?) ?? 0)
-        .compareTo((a['grandTotalCommission'] as num?) ?? 0));
+    sorted.sort((a, b) => (a['vendedorCode'] as String? ?? '').compareTo(b['vendedorCode'] as String? ?? ''));
 
-    // Build rows: one header row per vendor + their month rows
-    final rows = <DataRow>[];
+    return ListView.builder(
+      itemCount: sorted.length,
+      itemBuilder: (context, index) => _VendorExpandableCard(
+        vendor: sorted[index],
+        getMonthName: _getMonthName,
+      ),
+    );
+  }
+}
 
-    for (final v in sorted) {
-      final code = v['vendedorCode'] as String? ?? '?';
-      final name = v['vendorName'] as String? ?? 'Sin Nombre';
-      final grandTotal = (v['grandTotalCommission'] as num?)?.toDouble() ?? 0;
-      final isExcluded = (v['isExcluded'] as bool?) ?? false;
-      final months = (v['months'] as List?) ?? [];
+/// Expandable card for each vendor in ALL mode
+class _VendorExpandableCard extends StatefulWidget {
+  final dynamic vendor;
+  final String Function(int) getMonthName;
 
-      // Calculate vendor totals
-      double totalTarget = 0, totalActual = 0;
-      for (var m in months) {
-        totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
-        totalActual += (m['actual'] as num?)?.toDouble() ?? 0;
-      }
-      final vendorPct = totalTarget > 0 ? (totalActual / totalTarget * 100) : 0.0;
-      final vendorPositive = totalActual >= totalTarget && totalTarget > 0;
+  const _VendorExpandableCard({required this.vendor, required this.getMonthName});
 
-      // VENDOR HEADER ROW (highlighted)
-      rows.add(DataRow(
-        color: WidgetStateProperty.all(isExcluded ? Colors.black38 : AppTheme.neonBlue.withOpacity(0.15)),
-        cells: [
-          DataCell(Row(children: [
-            Text(code, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: 13)),
-            const SizedBox(width: 8),
-            Text(name, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white, fontSize: 12)),
-            if (isExcluded) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(color: Colors.orange.withOpacity(0.3), borderRadius: BorderRadius.circular(4)),
-                child: const Text('EXCLUIDO', style: TextStyle(fontSize: 8, color: Colors.orange)),
-              )
-            ]
-          ])),
-          DataCell(Text(CurrencyFormatter.format(totalTarget), style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white70))),
-          DataCell(Text(CurrencyFormatter.format(totalActual), style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : (vendorPositive ? AppTheme.success : AppTheme.error)))),
-          DataCell(Row(children: [
-            Icon(vendorPositive ? Icons.check_circle : Icons.cancel, color: isExcluded ? Colors.grey : (vendorPositive ? AppTheme.success : AppTheme.error), size: 16),
-            const SizedBox(width: 4),
-            Text('${vendorPct.toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : (vendorPositive ? AppTheme.success : AppTheme.error))),
-          ])),
-          const DataCell(SizedBox()),
-          DataCell(Text(CurrencyFormatter.format(grandTotal), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isExcluded ? Colors.grey : AppTheme.neonGreen))),
-          const DataCell(SizedBox()),
-          const DataCell(SizedBox()),
-          const DataCell(SizedBox()),
-          const DataCell(SizedBox()),
-          const DataCell(SizedBox()),
-        ],
-      ));
+  @override
+  State<_VendorExpandableCard> createState() => _VendorExpandableCardState();
+}
 
-      // MONTH ROWS for this vendor
-      final sortedMonths = List<dynamic>.from(months);
-      sortedMonths.sort((a, b) => (a['month'] as int).compareTo(b['month'] as int));
+class _VendorExpandableCardState extends State<_VendorExpandableCard> {
+  bool _isExpanded = false;
 
-      for (final m in sortedMonths) {
-        final monthNum = m['month'] as int;
-        final target = (m['target'] as num?)?.toDouble() ?? 0;
-        final actual = (m['actual'] as num?)?.toDouble() ?? 0;
-        final isFuture = (m['isFuture'] as bool?) ?? false;
+  @override
+  Widget build(BuildContext context) {
+    final v = widget.vendor;
+    final code = v['vendedorCode'] as String? ?? '?';
+    final name = v['vendorName'] as String? ?? 'Sin Nombre';
+    final grandTotal = (v['grandTotalCommission'] as num?)?.toDouble() ?? 0;
+    final isExcluded = (v['isExcluded'] as bool?) ?? false;
+    final months = (v['months'] as List?) ?? [];
+    final quarters = (v['quarters'] as List?) ?? [];
 
-        final ctx = m['complianceCtx'] ?? {};
-        final pct = (ctx['pct'] as num?)?.toDouble() ?? 0;
-        final tier = (ctx['tier'] as num?)?.toInt() ?? 0;
-        final commission = (ctx['commission'] as num?)?.toDouble() ?? 0;
+    // Calculate vendor totals
+    double totalTarget = 0, totalActual = 0;
+    for (var m in months) {
+      totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
+      totalActual += (m['actual'] as num?)?.toDouble() ?? 0;
+    }
+    final vendorPct = totalTarget > 0 ? (totalActual / totalTarget * 100) : 0.0;
+    final vendorPositive = totalActual >= totalTarget && totalTarget > 0;
+    final statusColor = isExcluded ? Colors.grey : (vendorPositive ? AppTheme.success : AppTheme.error);
 
-        final workingDays = (m['workingDays'] as num?)?.toInt() ?? 0;
-        final daysPassed = (m['daysPassed'] as num?)?.toInt() ?? 0;
-        final proRatedTarget = (m['proRatedTarget'] as num?)?.toDouble() ?? 0;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isExcluded ? Colors.black26 : AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _isExpanded ? AppTheme.neonBlue.withOpacity(0.5) : Colors.white12),
+      ),
+      child: Column(
+        children: [
+          // HEADER (always visible) - tap to expand/collapse
+          InkWell(
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: _isExpanded ? AppTheme.neonBlue.withOpacity(0.1) : Colors.transparent,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              ),
+              child: Row(
+                children: [
+                  // Expand/Collapse arrow
+                  Icon(
+                    _isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                    color: AppTheme.neonBlue,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  // Code
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonBlue.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(code, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: 12)),
+                  ),
+                  const SizedBox(width: 10),
+                  // Name
+                  Expanded(
+                    child: Text(name, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis),
+                  ),
+                  if (isExcluded) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                      child: const Text('EXCL', style: TextStyle(fontSize: 9, color: Colors.orange)),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  // Status icon
+                  Icon(vendorPositive ? Icons.check_circle : Icons.cancel, color: statusColor, size: 18),
+                  const SizedBox(width: 4),
+                  Text('${vendorPct.toStringAsFixed(0)}%', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(width: 12),
+                  // Commission total
+                  Text(CurrencyFormatter.format(grandTotal), style: TextStyle(color: isExcluded ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 14)),
+                ],
+              ),
+            ),
+          ),
 
-        final dailyCtx = m['dailyComplianceCtx'] ?? {};
-        final dailyGreen = (dailyCtx['isGreen'] as bool?) ?? false;
-        final provisionalCommission = (dailyCtx['provisionalCommission'] as num?)?.toDouble() ?? 0;
-        final dailyTier = (dailyCtx['tier'] as num?)?.toInt() ?? 0;
-        final dailyRate = (dailyCtx['rate'] as num?)?.toDouble() ?? 0;
-        final dailyPct = (dailyCtx['pct'] as num?)?.toDouble() ?? 0;
-
-        final isPositive = actual >= target && target > 0;
-        final color = isFuture ? Colors.grey : (isPositive ? AppTheme.success : AppTheme.error);
-        final dailyColor = isFuture ? Colors.grey : (dailyGreen ? AppTheme.success : Colors.orangeAccent);
-        final rowBgColor = isFuture ? Colors.black26 : AppTheme.surfaceColor;
-        final textOpacity = isFuture ? 0.4 : 1.0;
-
-        final pctDisplay = pct > 0 ? (pct - 100) : 0;
-        final pctText = isFuture ? '-' : (pct > 100 ? '+${pctDisplay.toStringAsFixed(1)}%' : '${pct.toStringAsFixed(1)}%');
-        final dailyPctDisplay = dailyPct > 0 ? (dailyPct - 100) : 0;
-        final dailyPctText = dailyPct > 100 ? '+${dailyPctDisplay.toStringAsFixed(1)}%' : '${dailyPct.toStringAsFixed(1)}%';
-
-        rows.add(DataRow(
-          color: WidgetStateProperty.all(rowBgColor),
-          cells: [
-            // MES
-            DataCell(Row(children: [
-              const SizedBox(width: 20), // Indent
-              Text(_getMonthName(monthNum), style: TextStyle(color: Colors.white.withOpacity(textOpacity))),
-              if (isFuture) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(4)),
-                  child: const Text('PEND', style: TextStyle(fontSize: 7, color: Colors.grey)),
-                )
-              ]
-            ])),
-            // OBJ. MES
-            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target), style: TextStyle(color: Colors.white.withOpacity(textOpacity), fontSize: 11))),
-            // VENTA
-            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11))),
-            // ESTADO
-            DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey)) : Row(children: [
-              Icon(isPositive ? Icons.check_circle : Icons.cancel, color: color, size: 14),
-              if (isPositive && tier > 0) ...[
-                const SizedBox(width: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                  decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                  child: Text('F$tier', style: const TextStyle(fontSize: 8, color: AppTheme.neonBlue)),
-                )
-              ]
-            ])),
-            // %
-            DataCell(Text(pctText, style: TextStyle(color: isFuture ? Colors.grey : color, fontSize: 10))),
-            // COMISIÓN
-            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(commission), style: TextStyle(color: isFuture ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 11))),
-            // DÍAS
-            DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays', style: TextStyle(color: Colors.white.withOpacity(textOpacity * 0.7), fontSize: 10))),
-            // OBJ. ACUM.
-            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(proRatedTarget), style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(textOpacity)))),
-            // RITMO
-            DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey)) : Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Icon(dailyGreen ? Icons.check_circle : Icons.warning_amber, color: dailyColor, size: 12),
-                  const SizedBox(width: 2),
-                  Text(dailyPctText, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: dailyColor)),
-                ]),
-                if (dailyTier > 0) Text('F$dailyTier (${dailyRate.toStringAsFixed(1)}%)', style: TextStyle(fontSize: 8, color: dailyColor))
-              ],
-            )),
-            // DIFF
-            DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey)) : Text(
-              (actual - proRatedTarget) >= 0 ? '+${CurrencyFormatter.format(actual - proRatedTarget)}' : CurrencyFormatter.format(actual - proRatedTarget),
-              style: TextStyle(color: (actual - proRatedTarget) >= 0 ? AppTheme.success : AppTheme.error, fontWeight: FontWeight.bold, fontSize: 10),
-            )),
-            // COM. PROV.
-            DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey)) : Text(
-              CurrencyFormatter.format(provisionalCommission),
-              style: TextStyle(color: provisionalCommission > 0 ? AppTheme.neonPurple : Colors.grey, fontWeight: FontWeight.bold, fontSize: 10),
-            )),
+          // EXPANDED CONTENT
+          if (_isExpanded) ...[
+            const Divider(height: 1, color: Colors.white12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildVendorDataTable(months, quarters, isExcluded),
+            ),
           ],
-        ));
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVendorDataTable(List<dynamic> months, List<dynamic> quarters, bool isExcluded) {
+    final rows = <DataRow>[];
+    final sortedMonths = List<dynamic>.from(months);
+    sortedMonths.sort((a, b) => (a['month'] as int).compareTo(b['month'] as int));
+
+    // Quarter definitions: Q1 = Ene-Abr, Q2 = May-Ago, Q3 = Sep-Dic
+    const quarterRanges = [
+      {'name': 'CUATRIMESTRE 1', 'label': 'Ene - Abr', 'start': 1, 'end': 4},
+      {'name': 'CUATRIMESTRE 2', 'label': 'May - Ago', 'start': 5, 'end': 8},
+      {'name': 'CUATRIMESTRE 3', 'label': 'Sep - Dic', 'start': 9, 'end': 12},
+    ];
+
+    int quarterIndex = 0;
+
+    for (final m in sortedMonths) {
+      final monthNum = m['month'] as int;
+
+      // Check if we need to insert a quarter header BEFORE this month
+      while (quarterIndex < quarterRanges.length && monthNum > (quarterRanges[quarterIndex]['end'] as int)) {
+        // Add quarter summary row
+        final qr = quarterRanges[quarterIndex];
+        final qData = quarters.length > quarterIndex ? quarters[quarterIndex] : null;
+        rows.add(_buildQuarterRow(qr, qData, isExcluded));
+        quarterIndex++;
       }
+
+      // Add month row
+      rows.add(_buildMonthRow(m, isExcluded));
     }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 12,
-          dataRowMinHeight: 32,
-          dataRowMaxHeight: 48,
-          headingRowColor: WidgetStateProperty.all(AppTheme.surfaceColor.withOpacity(0.9)),
-          columns: const [
-            DataColumn(label: Text('VENDEDOR / MES', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 11))),
-            DataColumn(label: Text('OBJ.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 11))),
-            DataColumn(label: Text('VENTA', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 11))),
-            DataColumn(label: Text('ESTADO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 11))),
-            DataColumn(label: Text('%', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 11))),
-            DataColumn(label: Text('COMISIÓN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 11))),
-            DataColumn(label: Text('DÍAS', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
-            DataColumn(label: Text('OBJ.AC.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
-            DataColumn(label: Text('RITMO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
-            DataColumn(label: Text('DIFF', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
-            DataColumn(label: Text('COM.PRV', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 11))),
+    // Add remaining quarters
+    while (quarterIndex < quarterRanges.length) {
+      final qr = quarterRanges[quarterIndex];
+      final qData = quarters.length > quarterIndex ? quarters[quarterIndex] : null;
+      rows.add(_buildQuarterRow(qr, qData, isExcluded));
+      quarterIndex++;
+    }
+
+    return DataTable(
+      columnSpacing: 10,
+      dataRowMinHeight: 28,
+      dataRowMaxHeight: 44,
+      headingRowHeight: 36,
+      headingRowColor: WidgetStateProperty.all(AppTheme.darkBase),
+      columns: const [
+        DataColumn(label: Text('MES', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 10))),
+        DataColumn(label: Text('OBJETIVO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 10))),
+        DataColumn(label: Text('VENTA', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 10))),
+        DataColumn(label: Text('EST.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 10))),
+        DataColumn(label: Text('%', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textSecondary, fontSize: 10))),
+        DataColumn(label: Text('COMISIÓN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 10))),
+        DataColumn(label: Text('DÍAS', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10))),
+        DataColumn(label: Text('OBJ.AC', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10))),
+        DataColumn(label: Text('RITMO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10))),
+        DataColumn(label: Text('DIFF', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10))),
+        DataColumn(label: Text('COM.PRV', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10))),
+      ],
+      rows: rows,
+    );
+  }
+
+  DataRow _buildMonthRow(dynamic m, bool isExcluded) {
+    final monthNum = m['month'] as int;
+    final target = (m['target'] as num?)?.toDouble() ?? 0;
+    final actual = (m['actual'] as num?)?.toDouble() ?? 0;
+    final isFuture = (m['isFuture'] as bool?) ?? false;
+
+    final ctx = m['complianceCtx'] ?? {};
+    final pct = (ctx['pct'] as num?)?.toDouble() ?? 0;
+    final tier = (ctx['tier'] as num?)?.toInt() ?? 0;
+    final commission = (ctx['commission'] as num?)?.toDouble() ?? 0;
+
+    final workingDays = (m['workingDays'] as num?)?.toInt() ?? 0;
+    final daysPassed = (m['daysPassed'] as num?)?.toInt() ?? 0;
+    final proRatedTarget = (m['proRatedTarget'] as num?)?.toDouble() ?? 0;
+
+    final dailyCtx = m['dailyComplianceCtx'] ?? {};
+    final dailyGreen = (dailyCtx['isGreen'] as bool?) ?? false;
+    final provisionalCommission = (dailyCtx['provisionalCommission'] as num?)?.toDouble() ?? 0;
+    final dailyPct = (dailyCtx['pct'] as num?)?.toDouble() ?? 0;
+
+    final isPositive = actual >= target && target > 0;
+    final color = isFuture || isExcluded ? Colors.grey : (isPositive ? AppTheme.success : AppTheme.error);
+    final dailyColor = isFuture || isExcluded ? Colors.grey : (dailyGreen ? AppTheme.success : Colors.orangeAccent);
+    final textOpacity = (isFuture || isExcluded) ? 0.5 : 1.0;
+
+    final pctDisplay = pct > 0 ? (pct - 100) : 0;
+    final pctText = isFuture ? '-' : (pct > 100 ? '+${pctDisplay.toStringAsFixed(1)}%' : '${pct.toStringAsFixed(1)}%');
+    final dailyPctDisplay = dailyPct > 0 ? (dailyPct - 100) : 0;
+    final dailyPctText = dailyPct > 100 ? '+${dailyPctDisplay.toStringAsFixed(1)}%' : '${dailyPct.toStringAsFixed(1)}%';
+
+    return DataRow(
+      color: WidgetStateProperty.all(isFuture ? Colors.black26 : Colors.transparent),
+      cells: [
+        DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(widget.getMonthName(monthNum), style: TextStyle(color: Colors.white.withOpacity(textOpacity), fontSize: 11)),
+          if (isFuture) ...[
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+              decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(3)),
+              child: const Text('PEND', style: TextStyle(fontSize: 7, color: Colors.grey)),
+            )
+          ]
+        ])),
+        DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target), style: TextStyle(color: Colors.white.withOpacity(textOpacity), fontSize: 10))),
+        DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 10))),
+        DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10)) : Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(isPositive ? Icons.check_circle : Icons.cancel, color: color, size: 12),
+          if (isPositive && tier > 0) Text(' F$tier', style: const TextStyle(fontSize: 8, color: AppTheme.neonBlue)),
+        ])),
+        DataCell(Text(pctText, style: TextStyle(color: color, fontSize: 9))),
+        DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(commission), style: TextStyle(color: isFuture ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 10))),
+        DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays', style: TextStyle(color: Colors.white.withOpacity(textOpacity * 0.7), fontSize: 9))),
+        DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(proRatedTarget), style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(textOpacity)))),
+        DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9)) : Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(dailyGreen ? Icons.check_circle : Icons.warning_amber, color: dailyColor, size: 10),
+          Text(' $dailyPctText', style: TextStyle(fontSize: 8, color: dailyColor)),
+        ])),
+        DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9)) : Text(
+          (actual - proRatedTarget) >= 0 ? '+${CurrencyFormatter.format(actual - proRatedTarget)}' : CurrencyFormatter.format(actual - proRatedTarget),
+          style: TextStyle(color: (actual - proRatedTarget) >= 0 ? AppTheme.success : AppTheme.error, fontWeight: FontWeight.bold, fontSize: 9),
+        )),
+        DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9)) : Text(
+          CurrencyFormatter.format(provisionalCommission),
+          style: TextStyle(color: provisionalCommission > 0 ? AppTheme.neonPurple : Colors.grey, fontWeight: FontWeight.bold, fontSize: 9),
+        )),
+      ],
+    );
+  }
+
+  DataRow _buildQuarterRow(Map<String, dynamic> qr, dynamic qData, bool isExcluded) {
+    final name = qr['name'] as String;
+    final label = qr['label'] as String;
+    final commission = (qData?['commission'] as num?)?.toDouble() ?? 0;
+    final additional = (qData?['additionalPayment'] as num?)?.toDouble() ?? 0;
+    final total = commission + additional;
+
+    return DataRow(
+      color: WidgetStateProperty.all(AppTheme.neonPurple.withOpacity(0.1)),
+      cells: [
+        DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.calendar_view_month, color: AppTheme.neonPurple, size: 14),
+          const SizedBox(width: 4),
+          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10)),
+          const SizedBox(width: 4),
+          Text('($label)', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 9)),
+        ])),
+        const DataCell(SizedBox()),
+        const DataCell(SizedBox()),
+        const DataCell(SizedBox()),
+        const DataCell(SizedBox()),
+        DataCell(Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Gen: ${CurrencyFormatter.format(total)}', style: TextStyle(fontSize: 9, color: isExcluded ? Colors.grey : Colors.white70)),
+            Text('Pag: ${CurrencyFormatter.format(commission)}', style: TextStyle(fontSize: 10, color: isExcluded ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold)),
           ],
-          rows: rows,
-        ),
-      ),
+        )),
+        const DataCell(SizedBox()),
+        const DataCell(SizedBox()),
+        const DataCell(SizedBox()),
+        const DataCell(SizedBox()),
+        const DataCell(SizedBox()),
+      ],
     );
   }
 }
