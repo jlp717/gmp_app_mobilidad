@@ -520,7 +520,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               dividerHeight: 0,
               tabs: const [
                 Tab(text: 'Documentos'),
-                Tab(text: 'Objetivos 30%'),
+                Tab(text: 'Objetivos'),
               ],
             ),
           ),
@@ -1182,7 +1182,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Progreso Objetivo 30%',
+            'Progreso Objetivo',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
           ),
           const SizedBox(height: 8),

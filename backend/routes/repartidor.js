@@ -1013,7 +1013,8 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
         }
 
         sql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
-                 ORDER BY NAME FETCH FIRST 50 ROWS ONLY`;
+                 ORDER BY MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) DESC 
+                 FETCH FIRST 200 ROWS ONLY`;
 
         logger.info(`[REPARTIDOR] History SQL with repartidorId ${repartidorId}: ${sql.replace(/\s+/g, ' ')}`);
         const rows = await query(sql, false);
@@ -1034,9 +1035,10 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 });
 
 // =============================================================================
-// GET /history/documents/:clientId
-// Get documents for a specific client
+// GET /history/documents/:clientId (See above for implementation)
 // =============================================================================
+// Duplicate route removed
+/*
 router.get('/history/documents/:clientId', async (req, res) => {
     try {
         const { clientId } = req.params;
@@ -1073,37 +1075,39 @@ router.get('/history/documents/:clientId', async (req, res) => {
             WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId}'
         `;
 
-        if (repartidorId) {
-            const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
-            sql += ` AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
-        }
-
-        sql += ` ORDER BY FECHA DESC FETCH FIRST 100 ROWS ONLY`;
-
-        const rows = await query(sql, false);
-
-        const documents = rows.map(r => ({
-            id: `${r.EJERCICIOALBARAN}-${r.SERIEALBARAN}-${r.NUMEROALBARAN}`,
-            type: (r.NUMEROFACTURA && r.NUMEROFACTURA > 0) ? 'factura' : 'albaran',
-            number: (r.NUMEROFACTURA && r.NUMEROFACTURA > 0) ? r.NUMEROFACTURA : r.NUMEROALBARAN,
-            date: r.FECHA,
-            amount: parseFloat(r.AMOUNT) || 0,
-            pending: parseFloat(r.PENDING) || 0,
-            status: (r.STATUS === 'ENTREGADO') ? 'delivered' : 'notDelivered', // Mapping
-            hasSignature: !!r.FIRMA_PATH
-        }));
-
-        res.json({ success: true, documents });
-    } catch (e) {
-        logger.error(`[REPARTIDOR] Error getting client documents: ${e.message}`);
-        res.status(500).json({ success: false, error: e.message });
+    if (repartidorId) {
+        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        sql += ` AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
     }
+
+    sql += ` ORDER BY FECHA DESC FETCH FIRST 100 ROWS ONLY`;
+
+    const rows = await query(sql, false);
+
+    const documents = rows.map(r => ({
+        id: `${r.EJERCICIOALBARAN}-${r.SERIEALBARAN}-${r.NUMEROALBARAN}`,
+        type: (r.NUMEROFACTURA && r.NUMEROFACTURA > 0) ? 'factura' : 'albaran',
+        number: (r.NUMEROFACTURA && r.NUMEROFACTURA > 0) ? r.NUMEROFACTURA : r.NUMEROALBARAN,
+        date: r.FECHA,
+        amount: parseFloat(r.AMOUNT) || 0,
+        pending: parseFloat(r.PENDING) || 0,
+        status: (r.STATUS === 'ENTREGADO') ? 'delivered' : 'notDelivered', // Mapping
+        hasSignature: !!r.FIRMA_PATH
+    }));
+
+    res.json({ success: true, documents });
+} catch (e) {
+    logger.error(`[REPARTIDOR] Error getting client documents: ${e.message}`);
+    res.status(500).json({ success: false, error: e.message });
+}
 });
+*/
 
 // =============================================================================
-// GET /history/objectives/:repartidorId
-// Get monthly commission progress
+// GET /history/objectives/:repartidorId (See above for implementation)
 // =============================================================================
+// Duplicate route removed
+/*
 router.get('/history/objectives/:repartidorId', async (req, res) => {
     try {
         const { repartidorId } = req.params;
@@ -1133,31 +1137,31 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
             ORDER BY MONTH DESC
         `;
 
-        const rows = await query(sql, false);
-        const monthNames = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const rows = await query(sql, false);
+    const monthNames = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-        const objectives = rows.map(r => {
-            const collectable = parseFloat(r.TOTAL_COBRABLE) || 0;
-            const collected = parseFloat(r.TOTAL_COBRADO) || 0;
-            const percentage = collectable > 0 ? (collected / collectable) * 100 : 0;
+    const objectives = rows.map(r => {
+        const collectable = parseFloat(r.TOTAL_COBRABLE) || 0;
+        const collected = parseFloat(r.TOTAL_COBRADO) || 0;
+        const percentage = collectable > 0 ? (collected / collectable) * 100 : 0;
 
-            return {
-                month: monthNames[r.MONTH],
-                year: currentYear,
-                monthNum: r.MONTH,
-                collectable,
-                collected,
-                percentage,
-                thresholdMet: percentage >= REPARTIDOR_CONFIG.threshold
-            };
-        });
+        return {
+            month: monthNames[r.MONTH],
+            year: currentYear,
+            monthNum: r.MONTH,
+            collectable,
+            collected,
+            percentage,
+            thresholdMet: percentage >= REPARTIDOR_CONFIG.threshold
+        };
+    });
 
-        res.json({ success: true, objectives });
-    } catch (e) {
-        logger.error(`[REPARTIDOR] Error getting objectives: ${e.message}`);
-        res.status(500).json({ success: false, error: e.message });
-    }
+    res.json({ success: true, objectives });
+} catch (e) {
+    logger.error(`[REPARTIDOR] Error getting objectives: ${e.message}`);
+    res.status(500).json({ success: false, error: e.message });
+}
 });
+*/
 
 module.exports = router;
-
