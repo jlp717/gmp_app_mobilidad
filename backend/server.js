@@ -36,6 +36,7 @@ const filtersRoutes = require('./routes/filters');
 const entregasRoutes = require('./routes/entregas');
 const repartidorRoutes = require('./routes/repartidor');
 const userActionsRoutes = require('./routes/user-actions');
+const facturasRoutes = require('./routes/facturas');
 
 const app = express();
 app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
@@ -140,6 +141,7 @@ app.use('/api/filters', filtersRoutes);
 app.use('/api/entregas', entregasRoutes);
 app.use('/api/repartidor', repartidorRoutes);
 app.use('/api/logs', userActionsRoutes);
+app.use('/api/facturas', facturasRoutes);
 
 // Start server
 async function startServer() {

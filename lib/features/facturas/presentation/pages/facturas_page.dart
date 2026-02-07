@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../core/providers/auth_provider.dart';
-import '../data/facturas_service.dart';
+import '../../../../core/providers/auth_provider.dart';
+import '../../data/facturas_service.dart';
 
 class FacturasPage extends StatefulWidget {
   const FacturasPage({super.key});

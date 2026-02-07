@@ -24,6 +24,8 @@ class AuthProvider with ChangeNotifier {
   bool get updateAvailable => _updateAvailable;
   String get updateMessage => _updateMessage;
   bool get isDirector => _currentUser?.isDirector ?? false;
+  List<String> get vendorCodes => _vendedorCodes;
+  // Alias for compatibility
   List<String> get vendedorCodes => _vendedorCodes;
 
   AuthProvider() {
