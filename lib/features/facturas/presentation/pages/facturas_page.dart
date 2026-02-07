@@ -261,14 +261,32 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
         factura.ejercicio,
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'Factura ${factura.numeroFormateado} - ${factura.clienteNombre}',
-          subject: 'Factura ${factura.numeroFormateado}',
-        );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      
+      final text = '''
+Estimado cliente,
+
+Adjunto le remitimos la factura ${factura.numeroFormateado} correspondiente a su pedido.
+
+Importe total: ${factura.total.toStringAsFixed(2)} €
+
+Gracias por su confianza.
+Equipo Granja Mari Pepa''';
+
+      final result = await Share.shareXFiles(
+        [XFile(file.path)],
+        text: text,
+        subject: 'Factura ${factura.numeroFormateado} - Granja Mari Pepa',
+      );
+      
+      // On Android, result status is not always reliable for "success", 
+      // but if we get here without error, we can show a confirmation.
+      if (result.status == ShareResultStatus.success) {
+         if (!mounted) return;
+         _showSuccessDialog();
       }
+      
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -277,6 +295,29 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
         );
       }
     }
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Enviado'),
+          ],
+        ),
+        content: const Text('La factura se ha compartido correctamente.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ACEPTAR'),
+          ),
+        ],
+      ),
+    );
   }
   
   @override

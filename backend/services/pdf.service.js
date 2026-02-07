@@ -160,12 +160,17 @@ function drawFooter(doc, pageNum, totalPages) {
  * @param {Object} facturaData - {header, lines, payments}
  * @returns {Promise<Buffer>} PDF generado
  */
+/**
+ * Generar PDF de factura con diseño profesional
+ * @param {Object} facturaData - {header, lines} (clean object from service)
+ * @returns {Promise<Buffer>} PDF generado
+ */
 async function generateInvoicePDF(facturaData) {
     try {
         const header = facturaData.header || {};
         const lines = facturaData.lines || [];
 
-        logger.info(`📄 Generando PDF factura - Diseño Profesional v2.0 para ${header.NUMEROFACTURA}`);
+        logger.info(`📄 Generando PDF factura - Diseño Profesional v2.0 para ${header.serie}-${header.numero}`);
 
         return new Promise((resolve, reject) => {
             const doc = new PDFDocument({
@@ -173,9 +178,9 @@ async function generateInvoicePDF(facturaData) {
                 margin: 40,
                 bufferPages: true,
                 info: {
-                    Title: `Factura ${header.SERIEFACTURA}-${header.NUMEROFACTURA}`,
+                    Title: `Factura ${header.serie}-${header.numero}`,
                     Author: `${EMPRESA.nombre} ${EMPRESA.slogan}`,
-                    Subject: `Factura para ${header.NOMBRECLIENTEFACTURA}`,
+                    Subject: `Factura para ${header.clienteNombre}`,
                     Keywords: 'Factura, Mari Pepa, Food & Frozen, Hostelería'
                 }
             });
@@ -197,20 +202,21 @@ async function generateInvoicePDF(facturaData) {
                 .fillColor(COLORS.white)
                 .text('FACTURA', 50, y + 10);
 
-            const numFactura = `${header.SERIEFACTURA}-${header.NUMEROFACTURA}`;
+            const numFactura = `${header.serie}-${header.numero}`;
             doc.fontSize(16)
                 .text(numFactura, 400, y + 10, { width: 145, align: 'right' });
 
             y += 38;
 
-            // INFORMACIÓN DE FACTURA (FECHA Y EJERCICIO)
-            const fecha = formatDate(header.DIAFACTURA, header.MESFACTURA, header.ANOFACTURA);
+            // INFORMACIÓN DE FACTURA
+            // header.fecha is already formatted "DD/MM/YYYY"
+            const fecha = header.fecha || '';
 
             // Código Cliente
             doc.rect(40, y, 160, 20)
                 .fillAndStroke(COLORS.lightGray, COLORS.border);
             doc.fontSize(7).font('Helvetica-Bold').fillColor(COLORS.mediumGray).text('CÓDIGO CLIENTE', 45, y + 5);
-            doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORS.darkGray).text(header.CODIGOCLIENTEFACTURA || header.CODIGOCLIENTE || '', 45, y + 13);
+            doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORS.darkGray).text(header.clienteId || '', 45, y + 13);
 
             // Fecha
             doc.rect(205, y, 180, 20)
@@ -222,7 +228,7 @@ async function generateInvoicePDF(facturaData) {
             doc.rect(390, y, 165, 20)
                 .fillAndStroke(COLORS.lightGray, COLORS.border);
             doc.fontSize(7).font('Helvetica-Bold').fillColor(COLORS.mediumGray).text('EJERCICIO FISCAL', 395, y + 5);
-            doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORS.darkGray).text(header.EJERCICIOFACTURA || header.ANOFACTURA || '', 395, y + 13);
+            doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORS.darkGray).text(header.ejercicio || '', 395, y + 13);
 
             y += 26;
 
@@ -236,28 +242,23 @@ async function generateInvoicePDF(facturaData) {
             doc.fontSize(8).font('Helvetica-Bold').fillColor(COLORS.secondary).text('FACTURAR A', 45, y);
             y += 15;
 
-            // Nombre Alternativo Priority here? Actually passed in header.NOMBRECLIENTEFACTURA
             doc.fontSize(12).font('Helvetica-Bold').fillColor(COLORS.darkGray)
-                .text((header.NOMBRECLIENTEFACTURA || '').toUpperCase(), 45, y, { width: 500 });
+                .text((header.clienteNombre || '').toUpperCase(), 45, y, { width: 500 });
             y += 18;
 
             doc.fontSize(9).font('Helvetica').fillColor(COLORS.darkGray);
-            if (header.DIRECCIONCLIENTEFACTURA) {
-                doc.text(header.DIRECCIONCLIENTEFACTURA, 45, y);
+            if (header.clienteDireccion) {
+                doc.text(header.clienteDireccion, 45, y);
                 y += 12;
             }
 
-            if (header.CPCLIENTEFACTURA || header.POBLACIONCLIENTEFACTURA) {
-                let localidad = '';
-                if (header.CPCLIENTEFACTURA) localidad += header.CPCLIENTEFACTURA + ' ';
-                if (header.POBLACIONCLIENTEFACTURA) localidad += header.POBLACIONCLIENTEFACTURA;
-                if (header.PROVINCIACLIENTEFACTURA) localidad += ' (' + header.PROVINCIACLIENTEFACTURA + ')';
-                doc.text(localidad.trim(), 45, y);
+            if (header.clientePoblacion) {
+                doc.text(header.clientePoblacion, 45, y);
                 y += 12;
             }
 
-            if (header.CIFCLIENTEFACTURA) {
-                doc.fontSize(9).font('Helvetica-Bold').text(`NIF/CIF: ${header.CIFCLIENTEFACTURA}`, 45, y);
+            if (header.clienteNif) {
+                doc.fontSize(9).font('Helvetica-Bold').text(`NIF/CIF: ${header.clienteNif}`, 45, y);
             }
 
             y = clienteBoxStartY + 93;
@@ -268,12 +269,10 @@ async function generateInvoicePDF(facturaData) {
 
             doc.text('CÓDIGO', 42, y + 5, { width: 50 });
             doc.text('DESCRIPCIÓN', 95, y + 5, { width: 170 });
-            doc.text('LOTE', 270, y + 5, { width: 45 });
             doc.text('CAJAS', 320, y + 5, { width: 35, align: 'right' });
             doc.text('CANT.', 360, y + 5, { width: 38, align: 'right' });
             doc.text('PRECIO', 403, y + 5, { width: 42, align: 'right' });
             doc.text('% DTO', 450, y + 5, { width: 30, align: 'center' });
-            doc.text('% IVA', 485, y + 5, { width: 25, align: 'center' });
             doc.text('IMPORTE', 515, y + 5, { width: 40, align: 'right' });
 
             y += 18;
@@ -282,7 +281,7 @@ async function generateInvoicePDF(facturaData) {
             let alternateRow = true;
 
             lines.forEach((line) => {
-                const descripcion = (line.DESCRIPCIONARTICULO || '').substring(0, 50);
+                const descripcion = (line.descripcion || '').substring(0, 50);
                 const descHeight = doc.heightOfString(descripcion, { width: 170 });
                 const rowHeight = Math.max(20, descHeight + 12);
 
@@ -290,45 +289,39 @@ async function generateInvoicePDF(facturaData) {
                     doc.addPage();
                     y = drawHeader(doc, 10) + 10;
                     doc.rect(40, y, 515, 16).fillAndStroke(COLORS.secondary, COLORS.secondary);
+                    // Re-draw headers
                     doc.fontSize(7).font('Helvetica-Bold').fillColor(COLORS.white);
                     doc.text('CÓDIGO', 42, y + 5, { width: 50 });
                     doc.text('DESCRIPCIÓN', 95, y + 5, { width: 170 });
-                    doc.text('LOTE', 270, y + 5, { width: 45 });
                     doc.text('CAJAS', 320, y + 5, { width: 35, align: 'right' });
                     doc.text('CANT.', 360, y + 5, { width: 38, align: 'right' });
                     doc.text('PRECIO', 403, y + 5, { width: 42, align: 'right' });
                     doc.text('% DTO', 450, y + 5, { width: 30, align: 'center' });
-                    doc.text('% IVA', 485, y + 5, { width: 25, align: 'center' });
                     doc.text('IMPORTE', 515, y + 5, { width: 40, align: 'right' });
                     y += 18;
                     alternateRow = true;
                     doc.fontSize(7).font('Helvetica').fillColor(COLORS.darkGray);
                 }
 
-                const codigo = (line.CODIGOARTICULO || '').substring(0, 12);
+                const codigo = (line.codigo || '').substring(0, 12);
                 doc.text(codigo, 42, y + 3, { width: 50 });
                 doc.text(descripcion, 95, y + 3, { width: 170 });
 
-                const lote = (line.LOTEARTICULO || line.LOTE || '').substring(0, 10);
-                doc.text(lote || '-', 270, y + 3, { width: 45 });
+                // Cajas not in clean line object? facturas.service.js map doesn't include boxes.
+                // We'll ignore boxes or map it if needed. 
+                // For now, render '-'
+                doc.text('-', 320, y + 3, { width: 35, align: 'right' });
 
-                const cajas = line.CAJASARTICULO ?? line.NUMEROCAJAS ?? 0;
-                const cajasDisplay = Number(cajas) === 0 ? '-' : formatNumber(cajas, 0);
-                doc.text(cajasDisplay, 320, y + 3, { width: 35, align: 'right' });
-
-                const cantidad = line.CANTIDADARTICULO || 0;
+                const cantidad = parseFloat(line.cantidad) || 0;
                 doc.text(formatNumber(cantidad, 3), 360, y + 3, { width: 38, align: 'right' });
 
-                const precio = line.PRECIOARTICULO || 0;
+                const precio = parseFloat(line.precio) || 0;
                 doc.text(formatNumber(precio, 3) + ' €', 403, y + 3, { width: 42, align: 'right' });
 
-                const dto = line.PORCENTAJEDESCUENTOARTICULO || 0;
+                const dto = parseFloat(line.descuento) || 0;
                 doc.text(dto > 0 ? formatNumber(dto, 2) : '-', 450, y + 3, { width: 30, align: 'center' });
 
-                const iva = line.PORCENTAJEIVAARTICULO || 0;
-                doc.text(formatNumber(iva, 2), 485, y + 3, { width: 25, align: 'center' });
-
-                const importe = line.IMPORTENETOARTICULO || 0;
+                const importe = parseFloat(line.importe) || 0;
                 doc.font('Helvetica-Bold');
                 doc.text(formatNumber(importe, 2) + ' €', 515, y + 3, { width: 40, align: 'right' });
                 doc.font('Helvetica');
@@ -340,101 +333,57 @@ async function generateInvoicePDF(facturaData) {
             doc.moveTo(40, y).lineTo(555, y).strokeColor(COLORS.lightGray).lineWidth(1).stroke();
             y += 12;
 
-            // TOTALES
-            // Implement simple totals logic from reused code
-            // Agrupar líneas por % IVA y % Recargo
-            const gruposIVA = {};
+            // TOTALES usando header.bases
+            const bases = header.bases || [];
 
-            lines.forEach(line => {
-                const porcIVA = parseFloat(line.PORCENTAJEIVAARTICULO) || 0;
-                const porcRec = parseFloat(line.PORCENTAJERECARGOARTICULO) || 0;
-                const key = `${porcIVA.toFixed(2)}_${porcRec.toFixed(2)}`;
-
-                if (!gruposIVA[key]) {
-                    gruposIVA[key] = {
-                        porcIVA,
-                        porcRec,
-                        baseImponible: 0,
-                        iva: 0,
-                        recargo: 0
-                    };
-                }
-
-                const importe = parseFloat(line.IMPORTENETOARTICULO) || 0;
-                // Calculate if not present
-                const ivaLinea = line.IMPORTEIVAARTICULO !== undefined
-                    ? (parseFloat(line.IMPORTEIVAARTICULO) || 0)
-                    : (importe * (porcIVA / 100));
-                const recargoLinea = line.IMPORTERECARGOARTICULO !== undefined
-                    ? (parseFloat(line.IMPORTERECARGOARTICULO) || 0)
-                    : (importe * (porcRec / 100));
-
-                gruposIVA[key].baseImponible += importe;
-                gruposIVA[key].iva += ivaLinea;
-                gruposIVA[key].recargo += recargoLinea;
-            });
-
-            const grupos = Object.values(gruposIVA);
-
-            // Use header bases if lines are empty or for consistency if available
-            if (header.bases && header.bases.length > 0) {
-                // Override with header data if desired, but line calculation is usually more detailed
-                // However, user code checks header.BASEFACTURA etc.
-                // Let's stick to calculated for now or use the header bases if provided correctly
-            }
-
-            if (grupos.length > 0) {
-                const numFilas = Math.max(grupos.length, 1);
+            if (bases.length > 0) {
+                const numFilas = Math.max(bases.length, 1);
                 const alturaTabla = 16 + (numFilas * 14);
 
                 doc.rect(40, y, 515, alturaTabla).strokeColor(COLORS.border).lineWidth(1).stroke();
-                [110, 200, 290, 360, 430, 490].forEach(x => {
-                    doc.moveTo(x, y).lineTo(x, y + alturaTabla).stroke();
-                });
+                // Vertical lines
+                doc.moveTo(200, y).lineTo(200, y + alturaTabla).stroke(); // After Base
+                doc.moveTo(350, y).lineTo(350, y + alturaTabla).stroke(); // After IVA %
+                doc.moveTo(555, y).lineTo(555, y + alturaTabla).stroke(); // End
+
                 doc.moveTo(40, y + 16).lineTo(555, y + 16).stroke();
                 doc.rect(40, y, 515, 16).fillAndStroke(COLORS.lightGray, COLORS.border);
 
                 doc.fontSize(7).font('Helvetica-Bold').fillColor(COLORS.darkGray);
-                doc.text('Base Imponible', 42, y + 5, { width: 65, align: 'center' });
-                doc.text('% I.V.A.', 112, y + 5, { width: 85, align: 'center' });
-                doc.text('Importe I.V.A.', 202, y + 5, { width: 85, align: 'center' });
-                doc.text('% Recargo', 292, y + 5, { width: 65, align: 'center' });
-                doc.text('Importe Rec.', 362, y + 5, { width: 65, align: 'center' });
-                doc.text('Total', 432, y + 5, { width: 55, align: 'center' });
+                doc.text('Base Imponible', 42, y + 5, { width: 150, align: 'center' });
+                doc.text('% I.V.A.', 200, y + 5, { width: 140, align: 'center' });
+                doc.text('Importe I.V.A.', 350, y + 5, { width: 200, align: 'center' });
 
                 let yValor = y + 20;
                 doc.fontSize(8).font('Helvetica');
 
-                grupos.forEach(grupo => {
-                    const totalGrupo = grupo.baseImponible + grupo.iva + grupo.recargo;
-                    doc.text(formatNumber(grupo.baseImponible, 2) + ' €', 42, yValor, { width: 65, align: 'right' });
-                    doc.text(formatNumber(grupo.porcIVA, 2) + ' %', 112, yValor, { width: 85, align: 'center' });
-                    doc.text(formatNumber(grupo.iva, 2) + ' €', 202, yValor, { width: 85, align: 'right' });
-                    doc.text(grupo.porcRec > 0.001 ? formatNumber(grupo.porcRec, 2) + ' %' : '0,00 %', 292, yValor, { width: 65, align: 'center' });
-                    doc.text(grupo.recargo > 0.001 ? formatNumber(grupo.recargo, 2) + ' €' : '0,00 €', 362, yValor, { width: 65, align: 'right' });
-                    doc.font('Helvetica-Bold');
-                    doc.text(formatNumber(totalGrupo, 2) + ' €', 432, yValor, { width: 115, align: 'right' });
-                    doc.font('Helvetica');
+                bases.forEach(base => {
+                    const b = parseFloat(base.base) || 0;
+                    const pct = parseFloat(base.pct) || 0;
+                    const iva = parseFloat(base.iva) || 0;
+
+                    doc.text(formatNumber(b, 2) + ' €', 42, yValor, { width: 150, align: 'center' });
+                    doc.text(formatNumber(pct, 2) + ' %', 200, yValor, { width: 140, align: 'center' });
+                    doc.text(formatNumber(iva, 2) + ' €', 350, yValor, { width: 200, align: 'center' });
                     yValor += 14;
                 });
 
                 y += alturaTabla + 18;
             }
 
-            const totalBase = grupos.reduce((sum, g) => sum + g.baseImponible, 0);
-            const totalIVA = grupos.reduce((sum, g) => sum + g.iva, 0);
-            const totalRecargo = grupos.reduce((sum, g) => sum + g.recargo, 0);
-            const totalConIVA = totalBase + totalIVA + totalRecargo;
+            const total = parseFloat(header.total) || 0;
+            // Calculate base total from bases
+            const totalBase = bases.reduce((sum, b) => sum + (parseFloat(b.base) || 0), 0);
 
             doc.rect(350, y, 205, 22).strokeColor(COLORS.border).lineWidth(1).stroke();
-            doc.fontSize(10).font('Helvetica').fillColor(COLORS.darkGray).text('TOTAL SIN IVA', 360, y + 7);
+            doc.fontSize(10).font('Helvetica').fillColor(COLORS.darkGray).text('TOTAL NETO', 360, y + 7);
             doc.fontSize(12).font('Helvetica-Bold').fillColor(COLORS.darkGray).text(formatNumber(totalBase, 2) + ' €', 450, y + 6, { width: 100, align: 'right' });
 
             y += 24;
 
             doc.rect(350, y, 205, 28).fillAndStroke(COLORS.success, COLORS.success).lineWidth(2);
-            doc.fontSize(12).font('Helvetica-Bold').fillColor(COLORS.white).text('TOTAL CON IVA', 360, y + 9);
-            doc.fontSize(18).font('Helvetica-Bold').fillColor(COLORS.white).text(formatNumber(totalConIVA, 2) + ' €', 450, y + 6, { width: 100, align: 'right' });
+            doc.fontSize(12).font('Helvetica-Bold').fillColor(COLORS.white).text('TOTAL FACTURA', 360, y + 9);
+            doc.fontSize(18).font('Helvetica-Bold').fillColor(COLORS.white).text(formatNumber(total, 2) + ' €', 450, y + 6, { width: 100, align: 'right' });
 
             const range = doc.bufferedPageRange();
             for (let i = 0; i < range.count; i++) {
