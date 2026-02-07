@@ -275,10 +275,8 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'
-              AND CPC.ANODOCUMENTO >= ${new Date().getFullYear() - 3}
               ${repartidorFilter}
             ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
-            FETCH FIRST 1000 ROWS ONLY
         `;
 
         const rows = await query(sql, false);
@@ -326,13 +324,14 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Getting objectives for ${repartidorId}${clientId ? ` client ${clientId}` : ''}`);
 
-        const cleanRepartidorId = repartidorId.toString().trim();
+        // Handle comma-separated repartidor IDs
+        const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
         let clientFilter = '';
         if (clientId) {
             clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'`;
         }
 
-        // CORRECTO: Usar OPP → CPC para repartidores
+        // SENIOR: No date restriction, no row limit - fetch all historical data
         const sql = `
             SELECT 
                 OPP.ANOREPARTO as ANO,
@@ -351,12 +350,10 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
-              AND OPP.ANOREPARTO >= ${new Date().getFullYear() - 3}
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
               ${clientFilter}
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO
             ORDER BY OPP.ANOREPARTO DESC, OPP.MESREPARTO DESC
-            FETCH FIRST 120 ROWS ONLY
         `;
 
         const rows = await query(sql, false);
@@ -985,40 +982,33 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        // Last 6 months (using native JS instead of moment)
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 120); // 10 years (show "everything")
-        const dateLimit = sixMonthsAgo.getFullYear().toString() +
-            String(sixMonthsAgo.getMonth() + 1).padStart(2, '0') +
-            String(sixMonthsAgo.getDate()).padStart(2, '0');
-
+        // SENIOR: No date restriction - fetch ALL clients ever delivered
         let sql = `
-            SELECT DISTINCT
+            SELECT
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
-                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NAME,
+                TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
-                COUNT(CPC.NUMEROALBARAN) as TOTAL_DOCS
+                COUNT(CPC.NUMEROALBARAN) as TOTAL_DOCS,
+                MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             LEFT JOIN DSEDAC.CLI CLI 
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${dateLimit}
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
         `;
 
         if (search) {
             const cleanSearch = search.toUpperCase().replace(/'/g, "''");
-            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%')`;
+            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CPC.CODIGOCLIENTEALBARAN) LIKE '%${cleanSearch}%')`;
         }
 
-        sql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
-                 ORDER BY MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) DESC 
-                 FETCH FIRST 2000 ROWS ONLY`;
+        sql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
+                 ORDER BY LAST_VISIT DESC`;
 
         logger.info(`[REPARTIDOR] History SQL with repartidorId ${repartidorId}: ${sql.replace(/\s+/g, ' ')}`);
         const rows = await query(sql, false);
-        logger.info(`[REPARTIDOR] Found ${rows.length} historical clients for repartidor ${repartidorId} since ${dateLimit}`);
+        logger.info(`[REPARTIDOR] Found ${rows.length} historical clients for repartidor ${repartidorId}`);
 
         const clients = rows.map(r => ({
             id: (r.ID || '').trim(),

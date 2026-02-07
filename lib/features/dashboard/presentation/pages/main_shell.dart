@@ -18,6 +18,7 @@ import '../../../entregas/providers/entregas_provider.dart';
 import '../../../repartidor/presentation/pages/repartidor_rutero_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_comisiones_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
+import '../../../facturas/presentation/pages/facturas_page.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -244,6 +245,13 @@ class _MainShellState extends State<MainShell> {
         color: AppTheme.neonGreen,
       ));
     }
+    
+    items.add(_NavItem(
+      icon: Icons.receipt_long_outlined,
+      selectedIcon: Icons.receipt_long,
+      label: 'Facturas',
+      color: Colors.teal,
+    ));
     
     items.add(_NavItem(
       icon: Icons.smart_toy_outlined,
@@ -787,6 +795,8 @@ class _MainShellState extends State<MainShell> {
         case 4:
           return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
         case 5:
+          return const FacturasPage();
+        case 6:
           return ChatbotPage(vendedorCodes: vendedorCodes);
         default:
           return const Center(child: Text('Página no encontrada'));
@@ -807,6 +817,8 @@ class _MainShellState extends State<MainShell> {
       case 3:
         return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
       case 4:
+        return const FacturasPage();
+      case 5:
         return ChatbotPage(vendedorCodes: vendedorCodes);
       default:
         return const Center(child: Text('Página no encontrada'));
