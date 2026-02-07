@@ -225,21 +225,17 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       lastDate: DateTime(2030),
       locale: const Locale('es', 'ES'),
       builder: (context, child) {
-        // Force Dark Theme for DatePicker to match App Theme
+        // Force Light Theme for maximum readability per user request
         return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: AppTheme.neonBlue, // Header background
-              onPrimary: AppTheme.darkBase, // Header text
-              surface: AppTheme.surfaceColor, // Dialog background
-              onSurface: Colors.white, // Body text
+          data: ThemeData.light().copyWith(
+            primaryColor: const Color(0xFF1565C0), // Professional Blue
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF1565C0), // Header background
+              onPrimary: Colors.white, // Header text
+              surface: Colors.white, // Dialog background
+              onSurface: Colors.black, // Body text
             ),
-            dialogBackgroundColor: AppTheme.surfaceColor,
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.neonBlue, // Button text color
-              ),
-            ),
+            dialogBackgroundColor: Colors.white,
           ),
           child: child!,
         );
@@ -520,14 +516,15 @@ Equipo Granja Mari Pepa''';
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isDark ? Colors.white60 : Colors.grey,
-                fontSize: 12,
+              Text(
+                label,
+                style: TextStyle(
+                  color: isDark ? Colors.white.withOpacity(0.9) : Colors.grey.shade700,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
           ],
         ),
       ),
