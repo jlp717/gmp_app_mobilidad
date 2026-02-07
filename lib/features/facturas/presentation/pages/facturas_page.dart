@@ -367,72 +367,122 @@ Equipo Granja Mari Pepa''';
     final isDark = theme.brightness == Brightness.dark;
     final auth = context.watch<AuthProvider>();
     
+    // Modern Gradient Background for Header
+    final headerGradient = LinearGradient(
+      colors: isDark 
+          ? [const Color(0xFF1A1F3A), const Color(0xFF252B48)] 
+          : [const Color(0xFF1565C0), const Color(0xFF1976D2)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+
     return Column(
       children: [
-        // Header (AppBar replacement)
+        // 1. Vibrant Header Section
         Container(
-           padding: const EdgeInsets.all(16),
-           decoration: BoxDecoration(
-             color: AppTheme.surfaceColor,
-             border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
-           ),
-           child: Column(
-             children: [
-               Row(
-                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                 children: [
-                   Row(children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: Colors.teal.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.receipt_long_outlined, color: Colors.teal),
-                      ),
-                      const SizedBox(width: 12),
-                      Text('Mis Facturas', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-                   ]),
-                 ],
-               ),
-               if (auth.isDirector) ...[
-                 const SizedBox(height: 12),
-                 GlobalVendorSelector(
-                   isJefeVentas: true,
-                   onChanged: _loadInitialData,
-                 ),
-               ]
-             ],
-           ),
-        ),
-
-        // Content
-        Expanded(
+          padding: const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 24),
+          decoration: BoxDecoration(
+            gradient: headerGradient,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              )
+            ],
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(24),
+              bottomRight: Radius.circular(24),
+            ),
+          ),
           child: Column(
             children: [
-              // Summary Cards
-              _buildSummaryCards(),
-              
-              // Inputs & Filters
-              _buildFilters(context),
-
-              Expanded(
-                child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
-                      ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-                      : _facturas.isEmpty
-                          ? _buildEmptyState()
-                          : RefreshIndicator(
-                              onRefresh: _refreshData,
-                              child: ListView.builder(
-                                padding: const EdgeInsets.only(bottom: 80),
-                                itemCount: _facturas.length,
-                                itemBuilder: (context, index) {
-                                  final factura = _facturas[index];
-                                  return _buildFacturaCard(factura);
-                                },
-                              ),
-                            ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.receipt_long, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      const Text(
+                        'Mis Facturas',
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
+              if (auth.isDirector) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: GlobalVendorSelector(
+                    isJefeVentas: true,
+                    onChanged: _loadInitialData,
+                  ),
+                ),
+              ]
             ],
+          ),
+        ),
+
+        // 2. Content Body
+        Expanded(
+          child: Container(
+            color: isDark ? const Color(0xFF0A0E27) : const Color(0xFFF5F7FA), // Clean Background
+            child: Column(
+              children: [
+                // Summary Cards (Overlapping effect could be cool, but let's keep it simple first)
+                Transform.translate(
+                  offset: const Offset(0, -20), // Slight overlap with header
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildSummaryCards(),
+                  ),
+                ),
+                
+                // Filters
+                _buildFilters(context),
+
+                // List
+                Expanded(
+                  child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error != null
+                        ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
+                        : _facturas.isEmpty
+                            ? _buildEmptyState()
+                            : RefreshIndicator(
+                                onRefresh: _refreshData,
+                                child: ListView.separated(
+                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                                  itemCount: _facturas.length,
+                                  separatorBuilder: (ctx, i) => const SizedBox(height: 12),
+                                  itemBuilder: (context, index) {
+                                    final factura = _facturas[index];
+                                    return _buildFacturaCard(factura);
+                                  },
+                                ),
+                              ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -442,89 +492,69 @@ Equipo Granja Mari Pepa''';
   Widget _buildSummaryCards() {
     if (_summary == null) return const SizedBox.shrink();
     
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          _buildSummaryItem(
-            icon: Icons.receipt_long,
-            label: 'Facturas',
-            value: '${_summary!.totalFacturas}',
-            color: Colors.blue,
-          ),
-          const SizedBox(width: 8),
-          _buildSummaryItem(
-            icon: Icons.euro,
-            label: 'Total',
-            value: '${_summary!.totalImporte.toStringAsFixed(2)}€',
-            color: Colors.green,
-          ),
-          const SizedBox(width: 8),
-          _buildSummaryItem(
-            icon: Icons.percent,
-            label: 'Impuestos',
-            value: '${_summary!.totalIva.toStringAsFixed(2)}€',
-            color: Colors.orange,
-          ),
-        ],
-      ),
+    return Row(
+      children: [
+        _buildSummaryCard(
+          title: 'Total',
+          value: '${_summary!.totalImporte.toStringAsFixed(2)}€',
+          icon: Icons.euro,
+          gradient: const LinearGradient(colors: [Color(0xFF43A047), Color(0xFF66BB6A)]), // Green
+        ),
+        const SizedBox(width: 12),
+        _buildSummaryCard(
+          title: 'Facturas',
+          value: '${_summary!.totalFacturas}',
+          icon: Icons.receipt,
+          gradient: const LinearGradient(colors: [Color(0xFF1976D2), Color(0xFF42A5F5)]), // Blue
+        ),
+      ],
     );
   }
 
-  Widget _buildSummaryItem({
-    required IconData icon,
-    required String label,
+  Widget _buildSummaryCard({
+    required String title,
     required String value,
-    required Color color,
+    required IconData icon,
+    required Gradient gradient,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E2746) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 8,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(
-            color: isDark ? Colors.white10 : Colors.grey.shade100,
-          ),
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, color: Colors.white.withOpacity(0.9), size: 24),
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               value,
               style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
               ),
-              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isDark ? Colors.white.withOpacity(0.9) : Colors.grey.shade700,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
-              ),
           ],
         ),
       ),
@@ -532,155 +562,174 @@ Equipo Granja Mari Pepa''';
   }
 
   Widget _buildFilters(BuildContext context) {
-    // Replaced with improved date picker theme logic in _selectDate
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
-          // Search Row
           Row(
             children: [
               Expanded(
                 child: _buildSearchField(
                   controller: _clientSearchController,
                   hint: 'Buscar cliente...',
-                  icon: Icons.person_search,
+                  icon: Icons.person_search_outlined,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildSearchField(
                   controller: _facturaSearchController,
-                  hint: 'Nº Factura...',
-                  icon: Icons.receipt,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          
-          // Month & Year Row
-          Row(
-            children: [
-              Expanded(
-                child: _buildDropdown<int>(
-                  value: _selectedMonth,
-                  items: [
-                    const DropdownMenuItem<int>(
-                      value: null,
-                      child: Text('Todos los meses'),
-                    ),
-                    ...List.generate(12, (index) {
-                      final monthName = DateFormat('MMMM', 'es_ES').format(DateTime(2024, index + 1));
-                      final capitalized = monthName[0].toUpperCase() + monthName.substring(1);
-                      return DropdownMenuItem<int>(
-                        value: index + 1,
-                        child: Text(capitalized),
-                      );
-                    }),
-                  ],
-                  onChanged: _onMonthChanged,
-                  hint: 'Mes',
-                  icon: Icons.calendar_month,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDropdown<int>(
-                  value: _selectedYear,
-                  items: _years.map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
-                  onChanged: _onYearChanged,
-                  hint: 'Año',
-                  icon: Icons.calendar_today,
+                  hint: 'Nº Factura',
+                  icon: Icons.numbers,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           
-          // Date Range Row
+          // Date Controls
           Row(
             children: [
-              Expanded(
-                child: _buildDateButton(
-                  label: _dateFrom == null ? 'Desde' : DateFormat('dd/MM/yyyy').format(_dateFrom!),
-                  onTap: () => _selectDate(context, true),
-                  isActive: _dateFrom != null,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDateButton(
-                  label: _dateTo == null ? 'Hasta' : DateFormat('dd/MM/yyyy').format(_dateTo!),
-                  onTap: () => _selectDate(context, false),
-                  isActive: _dateTo != null,
-                ),
-              ),
-              if (_dateFrom != null || _dateTo != null)
-                IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.red),
-                  onPressed: () {
-                    setState(() {
-                      _dateFrom = null;
-                      _dateTo = null;
-                    });
-                    _refreshData();
-                  },
-                ),
+               // Month Dropdown (Mini)
+               Expanded(
+                 flex: 2,
+                 child: Container(
+                    height: 45,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E2746) : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: _selectedMonth,
+                        isExpanded: true,
+                        hint: Text('Mes', style: TextStyle(color: isDark ? Colors.white70 : Colors.grey[600])),
+                        icon: const Icon(Icons.calendar_view_month, size: 20),
+                        items: [
+                          const DropdownMenuItem<int>(value: null, child: Text('Todos')),
+                           ...List.generate(12, (index) {
+                            final monthName = DateFormat('MMM', 'es_ES').format(DateTime(2024, index + 1));
+                            return DropdownMenuItem<int>(
+                              value: index + 1,
+                              child: Text(monthName.toUpperCase()),
+                            );
+                          }),
+                        ],
+                        onChanged: _onMonthChanged,
+                      ),
+                    ),
+                 ),
+               ),
+               const SizedBox(width: 8),
+               // Year
+               Expanded(
+                 flex: 2,
+                 child: Container(
+                    height: 45,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E2746) : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                         value: _selectedYear,
+                         isExpanded: true,
+                         hint: const Text('Año'),
+                         icon: const Icon(Icons.calendar_today, size: 20),
+                         items: _years.map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
+                         onChanged: _onYearChanged,
+                      ),
+                    ),
+                 ),
+               ),
+               const SizedBox(width: 8),
+               // Date Range Button (Combined)
+               Expanded(
+                 flex: 3,
+                 child: InkWell(
+                   onTap: () => _showDateRangePicker(context), // New method
+                   borderRadius: BorderRadius.circular(12),
+                   child: Container(
+                     height: 45,
+                     decoration: BoxDecoration(
+                        color: (_dateFrom != null || _dateTo != null) 
+                            ? AppTheme.neonBlue.withOpacity(0.1) 
+                            : (isDark ? const Color(0xFF1E2746) : Colors.white),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: (_dateFrom != null || _dateTo != null) 
+                             ? AppTheme.neonBlue 
+                             : Colors.grey.withOpacity(0.3)
+                        ),
+                     ),
+                     child: Center(
+                       child: Row(
+                         mainAxisAlignment: MainAxisAlignment.center,
+                         children: [
+                           Icon(Icons.date_range, 
+                             size: 18, 
+                             color: (_dateFrom != null || _dateTo != null) ? AppTheme.neonBlue : Colors.grey
+                           ),
+                           const SizedBox(width: 4),
+                           Text(
+                             (_dateFrom != null) ? 'Filtrado' : 'Fechas',
+                             style: TextStyle(
+                               fontWeight: FontWeight.w600,
+                               color: (_dateFrom != null || _dateTo != null) ? AppTheme.neonBlue : Colors.grey[700]
+                             ),
+                           ),
+                         ],
+                       ),
+                     ),
+                   ),
+                 ),
+               ),
             ],
           ),
-          
-          const SizedBox(height: 16),
         ],
       ),
     );
   }
-
-  Widget _buildDateButton({
-    required String label,
-    required VoidCallback onTap,
-    required bool isActive,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        decoration: BoxDecoration(
-          color: isActive 
-              ? const Color(0xFF2D5A87).withOpacity(0.1)
-              : (isDark ? const Color(0xFF1E2746) : Colors.grey.shade100),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isActive 
-                ? const Color(0xFF2D5A87) 
-                : (isDark ? Colors.white10 : Colors.transparent),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.date_range, 
-              size: 18, 
-              color: isActive ? const Color(0xFF2D5A87) : Colors.grey,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? const Color(0xFF2D5A87) : (isDark ? Colors.white : Colors.black87),
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+  
+  // Replaces separate date buttons
+  Future<void> _showDateRangePicker(BuildContext context) async {
+      final picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2030),
+        initialDateRange: (_dateFrom != null && _dateTo != null) ? DateTimeRange(start: _dateFrom!, end: _dateTo!) : null,
+        locale: const Locale('es', 'ES'),
+        builder: (context, child) {
+          return Theme(
+            data: ThemeData.light().copyWith(
+              primaryColor: const Color(0xFF1565C0),
+              colorScheme: const ColorScheme.light(
+                primary: Color(0xFF1565C0),
+                onPrimary: Colors.white,
+                surface: Colors.white,
+                onSurface: Colors.black,
               ),
+              dialogBackgroundColor: Colors.white,
             ),
-          ],
-        ),
-      ),
-    );
+            child: child!,
+          );
+        },
+      );
+      
+      if (picked != null) {
+        setState(() {
+          _dateFrom = picked.start;
+          _dateTo = picked.end;
+          _selectedMonth = null;
+        });
+        _refreshData();
+      }
   }
 
   Widget _buildSearchField({
@@ -689,62 +738,34 @@ Equipo Granja Mari Pepa''';
     required IconData icon,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    
     return Container(
-      height: 48,
+      height: 45,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,
+        color: isDark ? const Color(0xFF1E2746) : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.transparent),
+        border: Border.all(color: Colors.grey.withOpacity(0.3)), // Subtle border
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+        ],
       ),
       child: TextField(
         controller: controller,
         onChanged: (_) => _onSearchChanged(),
+        textAlignVertical: TextAlignVertical.center,
         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
         decoration: InputDecoration(
+          isDense: true,
           hintText: hint,
-          hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey),
-          prefixIcon: Icon(icon, color: Colors.grey, size: 20),
+          hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
+          prefixIcon: Icon(icon, color: Colors.grey[600], size: 20),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildDropdown<T>({
-    required T? value,
-    required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T?> onChanged,
-    required String hint,
-    required IconData icon,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.transparent),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: value,
-          items: items,
-          onChanged: onChanged,
-          hint: Row(
-            children: [
-              Icon(icon, size: 18, color: Colors.grey),
-              const SizedBox(width: 8),
-              Text(hint, style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)),
-            ],
-          ),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
-          dropdownColor: isDark ? const Color(0xFF1E2746) : Colors.white,
-          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-          isExpanded: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
         ),
       ),
     );
@@ -752,78 +773,155 @@ Equipo Granja Mari Pepa''';
 
   Widget _buildFacturaCard(Factura factura) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Status Logic for Color accent
+    // Assuming if total > 200, it's 'High Value' or pending check (since we don't have explicit status yet)
+    // For now, let's use a nice accent color based on index or hash, or static blue
+    final accentColor = const Color(0xFF1976D2); // Professional Blue
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E2746) : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+            spreadRadius: 1,
           ),
         ],
-        border: Border.all(
-          color: isDark ? Colors.white10 : Colors.transparent,
-        ),
       ),
       child: Column(
         children: [
-          ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2D5A87).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Center(
-                child: Icon(Icons.receipt_long, color: Color(0xFF2D5A87)),
-              ),
+          // Card Header with Color Strip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: accentColor.withOpacity(0.05),
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+              border: Border(bottom: BorderSide(color: accentColor.withOpacity(0.1))),
             ),
-            title: Text(
-              factura.clienteNombre,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.insert_drive_file_outlined, size: 18, color: accentColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      factura.numeroFormateado,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: accentColor,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
                 Text(
-                  '${factura.numeroFormateado} • ${factura.fecha}',
-                  style: TextStyle(color: isDark ? Colors.white60 : Colors.grey[600]),
+                  DateFormat('dd MMM yyyy', 'es_ES').format(DateTime.parse(factura.fecha)),
+                  style: TextStyle(
+                    color: isDark ? Colors.white60 : Colors.grey[700],
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
-            trailing: Text(
-              '${factura.total.toStringAsFixed(2)} €',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Color(0xFF1B4332), // Dark green
-              ),
+          ),
+          
+          // Card Body
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                 // Client Info
+                 Expanded(
+                   child: Column(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       Text(
+                         factura.clienteNombre,
+                         style: TextStyle(
+                           fontWeight: FontWeight.bold,
+                           fontSize: 16,
+                           color: isDark ? Colors.white : const Color(0xFF2C3E50),
+                         ),
+                         maxLines: 2,
+                         overflow: TextOverflow.ellipsis,
+                       ),
+                       const SizedBox(height: 4),
+                       Row(
+                         children: [
+                           Icon(Icons.store, size: 14, color: Colors.grey[500]),
+                           const SizedBox(width: 4),
+                           Text(
+                             'Cliente: ${factura.clienteId}',
+                             style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                           ),
+                         ],
+                       ),
+                     ],
+                   ),
+                 ),
+                 
+                 // Amount
+                 Column(
+                   crossAxisAlignment: CrossAxisAlignment.end,
+                   children: [
+                     Text(
+                       '${factura.total.toStringAsFixed(2)} €',
+                       style: TextStyle(
+                         fontWeight: FontWeight.w900,
+                         fontSize: 20,
+                         color: isDark ? Colors.white : const Color(0xFF263238),
+                       ),
+                     ),
+                     Text(
+                       'Importe Total',
+                       style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                     ),
+                   ],
+                 ),
+              ],
             ),
           ),
-          const Divider(height: 1),
+          
+          // Actions Footer
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                TextButton.icon(
-                  onPressed: () => _downloadFactura(factura),
-                  icon: const Icon(Icons.download, size: 20, color: Color(0xFF2D5A87)),
-                  label: const Text('PDF', style: TextStyle(color: Color(0xFF2D5A87))),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _downloadFactura(factura),
+                    icon: const Icon(Icons.download_rounded, size: 18),
+                    label: const Text('Descargar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? Colors.white70 : Colors.grey[800],
+                      side: BorderSide(color: Colors.grey.withOpacity(0.3)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
                 ),
-                TextButton.icon(
-                  onPressed: () => _shareFacturaPdf(factura),
-                  icon: const Icon(Icons.share, size: 20, color: Color(0xFF2D5A87)),
-                  label: const Text('Compartir', style: TextStyle(color: Color(0xFF2D5A87))),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _shareFacturaPdf(factura),
+                    icon: const Icon(Icons.share, size: 18),
+                    label: const Text('Compartir'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentColor,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
                 ),
               ],
             ),
