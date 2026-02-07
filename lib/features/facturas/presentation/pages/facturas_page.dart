@@ -217,9 +217,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
 
   Future<void> _selectDate(BuildContext context, bool isFrom) async {
     final initialDate = isFrom ? (_dateFrom ?? DateTime.now()) : (_dateTo ?? DateTime.now());
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    
+
     final picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
@@ -227,23 +225,22 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       lastDate: DateTime(2030),
       locale: const Locale('es', 'ES'),
       builder: (context, child) {
+        // Force Dark Theme for DatePicker to match App Theme
         return Theme(
-          data: isDark
-            ? ThemeData.dark().copyWith(
-                colorScheme: const ColorScheme.dark(
-                  primary: AppTheme.neonBlue,
-                  surface: AppTheme.surfaceColor,
-                  onSurface: Colors.white,
-                ),
-                dialogBackgroundColor: AppTheme.surfaceColor,
-              )
-            : ThemeData.light().copyWith(
-                colorScheme: const ColorScheme.light(
-                  primary: AppTheme.neonBlue,
-                  surface: Colors.white,
-                  onSurface: Colors.black,
-                ),
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppTheme.neonBlue, // Header background
+              onPrimary: AppTheme.darkBase, // Header text
+              surface: AppTheme.surfaceColor, // Dialog background
+              onSurface: Colors.white, // Body text
             ),
+            dialogBackgroundColor: AppTheme.surfaceColor,
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.neonBlue, // Button text color
+              ),
+            ),
+          ),
           child: child!,
         );
       },
@@ -395,7 +392,7 @@ Equipo Granja Mari Pepa''';
                         child: const Icon(Icons.receipt_long_outlined, color: Colors.teal),
                       ),
                       const SizedBox(width: 12),
-                      Text('Mis Facturas v2', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                      Text('Mis Facturas', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                    ]),
                  ],
                ),
