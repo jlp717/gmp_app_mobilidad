@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/providers/filter_provider.dart'; // Import FilterProvider
 import '../../data/facturas_service.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -88,9 +89,18 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       if (user == null) throw Exception('No user logged in');
 
       // Handle "View As" logic
-      String codes = user.codigosVendedor;
-      if (user.role == 'director' && auth.viewAsVendorCode != null) {
-        codes = auth.viewAsVendorCode!;
+      final filter = Provider.of<FilterProvider>(context, listen: false);
+      
+      // Get codes from AuthProvider (List<String>) and join them
+      String codes = auth.vendedorCodes.join(',');
+      
+      // Fallback if empty (shouldn't happen for valid commercial)
+      if (codes.isEmpty && user.vendedorCode != null) {
+        codes = user.vendedorCode!;
+      }
+
+      if (user.role == 'director' && filter.selectedVendor != null) {
+        codes = filter.selectedVendor!;
       }
       
       setState(() {

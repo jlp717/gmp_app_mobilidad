@@ -248,11 +248,26 @@ class FacturasService {
     required String vendedorCodes,
     int? year,
     int? month,
+    String? search,
+    String? clientId,
+    String? clientSearch,
+    String? docSearch,
+    String? dateFrom,
+    String? dateTo,
   }) async {
     try {
       String url = '/facturas/summary?vendedorCodes=$vendedorCodes';
-      if (year != null) url += '&year=$year';
-      if (month != null) url += '&month=$month';
+      if (dateFrom != null && dateTo != null) {
+        url += '&dateFrom=$dateFrom&dateTo=$dateTo';
+      } else {
+        if (year != null) url += '&year=$year';
+        if (month != null) url += '&month=$month';
+      }
+      
+      if (search != null && search.isNotEmpty) url += '&search=${Uri.encodeComponent(search)}';
+      if (clientId != null) url += '&clientId=$clientId';
+      if (clientSearch != null && clientSearch.isNotEmpty) url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
+      if (docSearch != null && docSearch.isNotEmpty) url += '&docSearch=${Uri.encodeComponent(docSearch)}';
 
       final response = await ApiClient.get(url);
       
