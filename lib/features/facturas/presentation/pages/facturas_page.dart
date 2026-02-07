@@ -6,94 +6,100 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:intl/intl.dart';
+
 import '../../../../core/providers/auth_provider.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../data/facturas_service.dart';
+import '../../../../core/widgets/global_vendor_selector.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class FacturasPage extends StatefulWidget {
-  const FacturasPage({super.key});
+  const FacturasPage({Key? key}) : super(key: key);
 
   @override
   State<FacturasPage> createState() => _FacturasPageState();
 }
 
-class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMixin {
-  List<Factura> _facturas = [];
-  List<int> _years = [];
-  FacturaSummary? _summary;
-  bool _isLoading = true;
-  String _error = '';
-  
-  // Date Filters
-  int _selectedYear = DateTime.now().year;
+class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderStateMixin {
+  // Filters
+  int? _selectedYear;
   int? _selectedMonth;
   DateTime? _dateFrom;
   DateTime? _dateTo;
+  String _vendedorCodes = '';
   
-  // Search controllers
+  // Data
+  List<int> _years = [];
+  List<Factura> _facturas = [];
+  FacturaSummary? _summary;
+  bool _isLoading = true;
+  String? _error;
+
+  // Search Controllers (Debounce)
   final TextEditingController _clientSearchController = TextEditingController();
   final TextEditingController _facturaSearchController = TextEditingController();
-  Timer? _debounce;
-  
+  Timer? _debounceTimer;
+
+  // Animation
   late AnimationController _fadeController;
-  
+
   @override
   void initState() {
     super.initState();
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 300),
       vsync: this,
+      duration: const Duration(milliseconds: 600),
     );
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
     });
   }
-  
+
   @override
   void dispose() {
     _clientSearchController.dispose();
     _facturaSearchController.dispose();
-    _debounce?.cancel();
+    _debounceTimer?.cancel();
     _fadeController.dispose();
     super.dispose();
   }
-  
-  String get _vendedorCodes {
-    final auth = context.read<AuthProvider>();
-    final filter = context.read<FilterProvider>();
-    if (auth.isDirector && filter.selectedVendor != null) {
-      return filter.selectedVendor!;
-    }
-    return auth.vendorCodes.join(',');
-  }
-  
-  // Helper to format date
+
   String? _formatDateParam(DateTime? date) {
     if (date == null) return null;
-    return "${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}";
+    return DateFormat('yyyy-MM-dd').format(date);
   }
-  
-  Future<void> _loadInitialData() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _error = '';
+
+  void _onSearchChanged() {
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 600), () {
+      _refreshData();
     });
-    
+  }
+
+  Future<void> _loadInitialData() async {
     try {
-      final codes = _vendedorCodes;
-      if (codes.isEmpty) {
-        setState(() {
-          _error = 'No hay códigos de vendedor configurados';
-          _isLoading = false;
-        });
-        return;
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final user = auth.currentUser;
+      
+      if (user == null) throw Exception('No user logged in');
+
+      // Handle "View As" logic
+      String codes = user.codigosVendedor;
+      if (user.role == 'director' && auth.viewAsVendorCode != null) {
+        codes = auth.viewAsVendorCode!;
       }
       
+      setState(() {
+        _vendedorCodes = codes;
+        if (_selectedYear == null) {
+             _selectedYear = DateTime.now().year;
+        }
+      });
+
       final results = await Future.wait([
         FacturasService.getAvailableYears(codes),
         FacturasService.getFacturas(
@@ -109,6 +115,10 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
           vendedorCodes: codes,
           year: _selectedYear,
           month: _selectedMonth,
+          clientSearch: _clientSearchController.text,
+          docSearch: _facturaSearchController.text,
+          dateFrom: _formatDateParam(_dateFrom),
+          dateTo: _formatDateParam(_dateTo),
         ),
       ]);
       
@@ -150,6 +160,10 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
           vendedorCodes: codes,
           year: _selectedYear,
           month: _selectedMonth,
+          clientSearch: _clientSearchController.text,
+          docSearch: _facturaSearchController.text,
+          dateFrom: _formatDateParam(_dateFrom),
+          dateTo: _formatDateParam(_dateTo),
         ),
       ]);
       
@@ -193,52 +207,78 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
 
   Future<void> _selectDate(BuildContext context, bool isFrom) async {
     final initialDate = isFrom ? (_dateFrom ?? DateTime.now()) : (_dateTo ?? DateTime.now());
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
     final picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
       locale: const Locale('es', 'ES'),
+      builder: (context, child) {
+        return Theme(
+          data: isDark
+            ? ThemeData.dark().copyWith(
+                colorScheme: const ColorScheme.dark(
+                  primary: AppTheme.neonBlue,
+                  surface: AppTheme.surfaceColor,
+                  onSurface: Colors.white,
+                ),
+                dialogBackgroundColor: AppTheme.surfaceColor,
+              )
+            : ThemeData.light().copyWith(
+                colorScheme: const ColorScheme.light(
+                  primary: AppTheme.neonBlue,
+                  surface: Colors.white,
+                  onSurface: Colors.black,
+                ),
+            ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {
       setState(() {
         if (isFrom) {
           _dateFrom = picked;
-          // If To is null or before From, set To = From
           if (_dateTo == null || _dateTo!.isBefore(picked)) {
-            _dateTo = picked; // auto-set logic or just leave it?
+            _dateTo = picked;
           }
         } else {
           _dateTo = picked;
         }
-        // If we select dates, we might want to clear Month filter visually? 
-        // Logic will handle it, but for UI clarity:
         _selectedMonth = null; 
       });
       _refreshData();
     }
   }
-  
-  void _onSearchChanged() {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      _refreshData();
-    });
+
+  Future<void> _downloadFactura(Factura factura) async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Descargando factura...'), duration: Duration(seconds: 1)),
+      );
+      
+      final file = await FacturasService.downloadFacturaPdf(
+        factura.serie,
+        factura.numero,
+        factura.ejercicio,
+      );
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      
+      await Share.shareXFiles([XFile(file.path)], text: 'Factura ${factura.numeroFormateado}');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error descargando PDF: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
-  
-  void _showFacturaDetail(Factura factura) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _FacturaDetailSheet(
-        factura: factura,
-        onShare: _shareFacturaPdf,
-      ),
-    );
-  }
-  
+
   Future<void> _shareFacturaPdf(Factura factura) async {
     try {
       if (!mounted) return;
@@ -280,8 +320,6 @@ Equipo Granja Mari Pepa''';
         subject: 'Factura ${factura.numeroFormateado} - Granja Mari Pepa',
       );
       
-      // On Android, result status is not always reliable for "success", 
-      // but if we get here without error, we can show a confirmation.
       if (result.status == ShareResultStatus.success) {
          if (!mounted) return;
          _showSuccessDialog();
@@ -326,258 +364,259 @@ Equipo Granja Mari Pepa''';
     final isDark = theme.brightness == Brightness.dark;
     final auth = context.watch<AuthProvider>();
     
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFF8FAFC),
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (auth.isDirector)
-              GlobalVendorSelector(
-                isJefeVentas: true,
-                onChanged: _loadInitialData,
-              ),
+    return Column(
+      children: [
+        // Header (AppBar replacement)
+        Container(
+           padding: const EdgeInsets.all(16),
+           decoration: BoxDecoration(
+             color: AppTheme.surfaceColor,
+             border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+           ),
+           child: Column(
+             children: [
+               Row(
+                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                 children: [
+                   Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: Colors.teal.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.receipt_long_outlined, color: Colors.teal),
+                      ),
+                      const SizedBox(width: 12),
+                      Text('Mis Facturas v2', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                   ]),
+                 ],
+               ),
+               if (auth.isDirector) ...[
+                 const SizedBox(height: 12),
+                 GlobalVendorSelector(
+                   isJefeVentas: true,
+                   onChanged: _loadInitialData,
+                 ),
+               ]
+             ],
+           ),
+        ),
 
-            _buildHeader(theme, isDark),
-            _buildFiltersSection(theme, isDark),
-            _buildSearchFilters(theme, isDark),
-            
-            if (_summary != null) _buildSummary(theme, isDark),
-            
-            Expanded(
-              child: _isLoading
+        // Content
+        Expanded(
+          child: Column(
+            children: [
+              // Summary Cards
+              _buildSummaryCards(),
+              
+              // Inputs & Filters
+              _buildFilters(context),
+
+              Expanded(
+                child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : _error.isNotEmpty
-                      ? Center(child: Text(_error, style: TextStyle(color: Colors.red)))
+                  : _error != null
+                      ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
                       : _facturas.isEmpty
-                          ? const Center(child: Text('No hay facturas'))
+                          ? _buildEmptyState()
                           : RefreshIndicator(
                               onRefresh: _refreshData,
-                              child: FadeTransition(
-                                opacity: _fadeController,
-                                child: ListView.builder(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  itemCount: _facturas.length,
-                                  itemBuilder: (ctx, i) => _buildFacturaCard(_facturas[i], theme, isDark),
-                                ),
+                              child: ListView.builder(
+                                padding: const EdgeInsets.only(bottom: 80),
+                                itemCount: _facturas.length,
+                                itemBuilder: (context, index) {
+                                  final factura = _facturas[index];
+                                  return _buildFacturaCard(factura);
+                                },
                               ),
                             ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryCards() {
+    if (_summary == null) return const SizedBox.shrink();
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          _buildSummaryItem(
+            icon: Icons.receipt_long,
+            label: 'Facturas',
+            value: '${_summary!.totalFacturas}',
+            color: Colors.blue,
+          ),
+          const SizedBox(width: 8),
+          _buildSummaryItem(
+            icon: Icons.euro,
+            label: 'Total',
+            value: '${_summary!.totalImporte.toStringAsFixed(2)}€',
+            color: Colors.green,
+          ),
+          const SizedBox(width: 8),
+          _buildSummaryItem(
+            icon: Icons.percent,
+            label: 'Impuestos',
+            value: '${_summary!.totalIva.toStringAsFixed(2)}€',
+            color: Colors.orange,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E2746) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(
+            color: isDark ? Colors.white10 : Colors.grey.shade100,
+          ),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isDark ? Colors.white60 : Colors.grey,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
       ),
     );
   }
-  
-  Widget _buildHeader(ThemeData theme, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF1E3A5F), const Color(0xFF0D1117)]
-              : [const Color(0xFF2D5A87), const Color(0xFF1E3A5F)],
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.receipt_long, color: Colors.white, size: 28),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Facturas',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: () {
-               _clientSearchController.clear();
-               _facturaSearchController.clear();
-               setState(() {
-                 _dateFrom = null;
-                 _dateTo = null;
-               });
-               _loadInitialData();
-            },
-            icon: const Icon(Icons.refresh, color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildFiltersSection(ThemeData theme, bool isDark) {
-    final months = [
-      'Todos', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+
+  Widget _buildFilters(BuildContext context) {
+    // Replaced with improved date picker theme logic in _selectDate
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Month / Year Row
+          // Search Row
           Row(
             children: [
-              // Year
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF21262D) : Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: _selectedYear,
-                    items: _years.map((y) => DropdownMenuItem(
-                      value: y,
-                      child: Text('$y'),
-                    )).toList(),
-                    onChanged: _onYearChanged,
-                    icon: const Icon(Icons.keyboard_arrow_down),
-                  ),
+              Expanded(
+                child: _buildSearchField(
+                  controller: _clientSearchController,
+                  hint: 'Buscar cliente...',
+                  icon: Icons.person_search,
                 ),
               ),
-              const SizedBox(width: 12),
-              // Month
+              const SizedBox(width: 8),
               Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF21262D) : Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<int?>(
-                      value: _selectedMonth,
-                      isExpanded: true,
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('Todos los meses')),
-                        ...List.generate(12, (i) => DropdownMenuItem(
-                          value: i + 1,
-                          child: Text(months[i + 1]),
-                        )),
-                      ],
-                      onChanged: _onMonthChanged,
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                    ),
-                  ),
+                child: _buildSearchField(
+                  controller: _facturaSearchController,
+                  hint: 'Nº Factura...',
+                  icon: Icons.receipt,
                 ),
               ),
             ],
           ),
-          
-          const SizedBox(height: 12),
-          
-          // Date Range Header
-          const Text(
-            'Rango de fechas (opcional)',
-            style: TextStyle(
-              fontSize: 12, 
-              fontWeight: FontWeight.bold, 
-              color: Colors.blue
-            ),
-          ),
           const SizedBox(height: 8),
           
-          // Date Range Pickers
+          // Month & Year Row
           Row(
             children: [
-              // From
               Expanded(
-                child: InkWell(
-                  onTap: () => _selectDate(context, true),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF21262D) : Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: _dateFrom != null ? Colors.blue.withOpacity(0.5) : Colors.transparent
-                      ),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
-                      ],
+                child: _buildDropdown<int>(
+                  value: _selectedMonth,
+                  items: [
+                    const DropdownMenuItem<int>(
+                      value: null,
+                      child: Text('Todos los meses'),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _dateFrom != null 
-                              ? "${_dateFrom!.day}/${_dateFrom!.month}/${_dateFrom!.year}"
-                              : 'Desde',
-                          style: TextStyle(
-                            color: _dateFrom != null ? (isDark ? Colors.white : Colors.black) : Colors.grey,
-                          ),
-                        ),
-                        const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                      ],
-                    ),
-                  ),
+                    ...List.generate(12, (index) {
+                      final monthName = DateFormat('MMMM', 'es_ES').format(DateTime(2024, index + 1));
+                      final capitalized = monthName[0].toUpperCase() + monthName.substring(1);
+                      return DropdownMenuItem<int>(
+                        value: index + 1,
+                        child: Text(capitalized),
+                      );
+                    }),
+                  ],
+                  onChanged: _onMonthChanged,
+                  hint: 'Mes',
+                  icon: Icons.calendar_month,
                 ),
               ),
-              const SizedBox(width: 12),
-              // To
+              const SizedBox(width: 8),
               Expanded(
-                child: InkWell(
+                child: _buildDropdown<int>(
+                  value: _selectedYear,
+                  items: _years.map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
+                  onChanged: _onYearChanged,
+                  hint: 'Año',
+                  icon: Icons.calendar_today,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Date Range Row
+          Row(
+            children: [
+              Expanded(
+                child: _buildDateButton(
+                  label: _dateFrom == null ? 'Desde' : DateFormat('dd/MM/yyyy').format(_dateFrom!),
+                  onTap: () => _selectDate(context, true),
+                  isActive: _dateFrom != null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildDateButton(
+                  label: _dateTo == null ? 'Hasta' : DateFormat('dd/MM/yyyy').format(_dateTo!),
                   onTap: () => _selectDate(context, false),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF21262D) : Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: _dateTo != null ? Colors.blue.withOpacity(0.5) : Colors.transparent
-                      ),
-                      boxShadow: [
-                         BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _dateTo != null 
-                              ? "${_dateTo!.day}/${_dateTo!.month}/${_dateTo!.year}"
-                              : 'Hasta',
-                          style: TextStyle(
-                            color: _dateTo != null ? (isDark ? Colors.white : Colors.black) : Colors.grey,
-                          ),
-                        ),
-                        const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                      ],
-                    ),
-                  ),
+                  isActive: _dateTo != null,
                 ),
               ),
               if (_dateFrom != null || _dateTo != null)
                 IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
+                  icon: const Icon(Icons.clear, color: Colors.red),
                   onPressed: () {
                     setState(() {
                       _dateFrom = null;
@@ -588,528 +627,211 @@ Equipo Granja Mari Pepa''';
                 ),
             ],
           ),
+          
+          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildSearchFilters(ThemeData theme, bool isDark) {
+  Widget _buildDateButton({
+    required String label,
+    required VoidCallback onTap,
+    required bool isActive,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isActive 
+              ? const Color(0xFF2D5A87).withOpacity(0.1)
+              : (isDark ? const Color(0xFF1E2746) : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isActive 
+                ? const Color(0xFF2D5A87) 
+                : (isDark ? Colors.white10 : Colors.transparent),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.date_range, 
+              size: 18, 
+              color: isActive ? const Color(0xFF2D5A87) : Colors.grey,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? const Color(0xFF2D5A87) : (isDark ? Colors.white : Colors.black87),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        children: [
-          // Client Search
-          Expanded(
-            flex: 3,
-            child: Container(
-              height: 48,
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF21262D) : Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
-                ],
-              ),
-              child: TextField(
-                controller: _clientSearchController,
-                decoration: const InputDecoration(
-                  hintText: 'Cliente...',
-                  prefixIcon: Icon(Icons.person_search, size: 20),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                ),
-                onChanged: (_) => _onSearchChanged(),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Factura Search
-          Expanded(
-            flex: 2,
-            child: Container(
-              height: 48,
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF21262D) : Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
-                ],
-              ),
-              child: TextField(
-                controller: _facturaSearchController,
-                keyboardType: TextInputType.text,
-                decoration: const InputDecoration(
-                  hintText: 'Factura #',
-                  prefixIcon: Icon(Icons.numbers, size: 20),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                ),
-                onChanged: (_) => _onSearchChanged(),
-              ),
-            ),
-          ),
-        ],
+      height: 48,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.transparent),
+      ),
+      child: TextField(
+        controller: controller,
+        onChanged: (_) => _onSearchChanged(),
+        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey),
+          prefixIcon: Icon(icon, color: Colors.grey, size: 20),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        ),
       ),
     );
   }
   
-  Widget _buildSummary(ThemeData theme, bool isDark) {
+  Widget _buildDropdown<T>({
+    required T? value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+    required String hint,
+    required IconData icon,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.transparent),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          items: items,
+          onChanged: onChanged,
+          hint: Row(
+            children: [
+              Icon(icon, size: 18, color: Colors.grey),
+              const SizedBox(width: 8),
+              Text(hint, style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)),
+            ],
+          ),
+          icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+          dropdownColor: isDark ? const Color(0xFF1E2746) : Colors.white,
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+          isExpanded: true,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFacturaCard(Factura factura) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF21262D), const Color(0xFF161B22)]
-              : [Colors.white, const Color(0xFFF8FAFC)],
-        ),
+        color: isDark ? const Color(0xFF1E2746) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildSummaryItem(
-            icon: Icons.receipt,
-            label: 'Facturas',
-            value: '${_summary!.totalFacturas}',
-            color: Colors.blue,
-          ),
-          Container(height: 40, width: 1, color: Colors.grey.withOpacity(0.3)),
-          _buildSummaryItem(
-            icon: Icons.euro,
-            label: 'Total',
-            value: '${_summary!.totalImporte.toStringAsFixed(2)}€',
-            color: Colors.green,
-          ),
-          Container(height: 40, width: 1, color: Colors.grey.withOpacity(0.3)),
-          _buildSummaryItem(
-            icon: Icons.percent,
-            label: 'IVA',
-            value: '${_summary!.totalIva.toStringAsFixed(2)}€',
-            color: Colors.orange,
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildSummaryItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildFacturaCard(Factura factura, ThemeData theme, bool isDark) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF21262D) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.transparent,
+        ),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => _showFacturaDetail(factura),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2D5A87).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Icon(Icons.receipt_long, color: Color(0xFF2D5A87)),
+              ),
+            ),
+            title: Text(
+              factura.clienteNombre,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Icon
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                  color: const Color(0xFF2D5A87).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.description,
-                    color: Color(0xFF2D5A87),
-                    size: 24,
-                  ),
+                const SizedBox(height: 4),
+                Text(
+                  '${factura.numeroFormateado} • ${factura.fecha}',
+                  style: TextStyle(color: isDark ? Colors.white60 : Colors.grey[600]),
                 ),
-                const SizedBox(width: 12),
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        factura.numeroFormateado,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        factura.clienteNombre,
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 13,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        factura.fecha,
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
+              ],
+            ),
+            trailing: Text(
+              '${factura.total.toStringAsFixed(2)} €',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Color(0xFF1B4332), // Dark green
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _downloadFactura(factura),
+                  icon: const Icon(Icons.download, size: 20, color: Color(0xFF2D5A87)),
+                  label: const Text('PDF', style: TextStyle(color: Color(0xFF2D5A87))),
                 ),
-                // Amount
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${factura.total.toStringAsFixed(2)} €',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: Color(0xFF059669),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.share, size: 20),
-                      color: Colors.blue[600],
-                      onPressed: () => _shareFacturaPdf(factura),
-                      tooltip: 'Compartir PDF',
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      padding: EdgeInsets.zero,
-                    ),
-                  ],
+                TextButton.icon(
+                  onPressed: () => _shareFacturaPdf(factura),
+                  icon: const Icon(Icons.share, size: 20, color: Color(0xFF2D5A87)),
+                  label: const Text('Compartir', style: TextStyle(color: Color(0xFF2D5A87))),
                 ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Detail sheet for a factura
-class _FacturaDetailSheet extends StatefulWidget {
-  final Factura factura;
-  final Function(Factura) onShare;
-
-  const _FacturaDetailSheet({
-    required this.factura,
-    required this.onShare,
-  });
-
-  @override
-  State<_FacturaDetailSheet> createState() => _FacturaDetailSheetState();
-}
-
-class _FacturaDetailSheetState extends State<_FacturaDetailSheet> {
-  FacturaDetail? _detail;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDetail();
-  }
-
-  Future<void> _loadDetail() async {
-    final detail = await FacturasService.getDetail(
-      widget.factura.serie,
-      widget.factura.numero,
-      widget.factura.ejercicio,
-    );
-    if (mounted) {
-      setState(() {
-        _detail = detail;
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      maxChildSize: 0.95,
-      minChildSize: 0.5,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF161B22) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle
-              Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              // Header
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [const Color(0xFF1E3A5F), const Color(0xFF2D5A87)],
-                  ),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.receipt_long, color: Colors.white, size: 32),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Factura ${widget.factura.numeroFormateado}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            widget.factura.fecha,
-                            style: TextStyle(color: Colors.white.withOpacity(0.8)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      '${widget.factura.total.toStringAsFixed(2)} €',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Content
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _detail == null
-                        ? const Center(child: Text('Error cargando detalle'))
-                        : ListView(
-                            controller: scrollController,
-                            padding: const EdgeInsets.all(16),
-                            children: [
-                              // Client info
-                              _buildInfoCard(
-                                title: 'Cliente',
-                                children: [
-                                  _buildInfoRow('Nombre', _detail!.header.clienteNombre),
-                                  _buildInfoRow('NIF', _detail!.header.clienteNif),
-                                  _buildInfoRow('Dirección', _detail!.header.clienteDireccion),
-                                  _buildInfoRow('Población', _detail!.header.clientePoblacion),
-                                ],
-                                isDark: isDark,
-                              ),
-                              const SizedBox(height: 16),
-                              // Lines
-                              _buildInfoCard(
-                                title: 'Líneas (${_detail!.lines.length})',
-                                children: _detail!.lines.map((l) => Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? Colors.black12 : Colors.grey[50],
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              l.descripcion,
-                                              style: const TextStyle(fontWeight: FontWeight.w500),
-                                            ),
-                                            Text(
-                                              '${l.cantidad} x ${l.precio.toStringAsFixed(2)} €',
-                                              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Text(
-                                        '${l.importe.toStringAsFixed(2)} €',
-                                        style: const TextStyle(fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                )).toList(),
-                                isDark: isDark,
-                              ),
-                              const SizedBox(height: 16),
-                              // Totals
-                              _buildInfoCard(
-                                title: 'Totales',
-                                children: [
-                                  ..._detail!.header.bases.map((b) => 
-                                    _buildInfoRow('Base ${b.pct.toStringAsFixed(0)}%', '${b.base.toStringAsFixed(2)} € + ${b.iva.toStringAsFixed(2)} € IVA'),
-                                  ),
-                                  const Divider(),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                      Text(
-                                        '${_detail!.header.total.toStringAsFixed(2)} €',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 20,
-                                          color: Color(0xFF059669),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                                isDark: isDark,
-                              ),
-                              const SizedBox(height: 24),
-                              // Actions
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    widget.onShare(widget.factura);
-                                  },
-                                  icon: const Icon(Icons.share),
-                                  label: const Text('Compartir PDF (WhatsApp/Email)'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF2D5A87),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildInfoCard({
-    required String title,
-    required List<Widget> children,
-    required bool isDark,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF21262D) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              color: Color(0xFF2D5A87),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...children,
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    if (value.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-            ),
-          ),
-          Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 14)),
-          ),
-        ],
-      ),
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Text('No hay facturas'),
     );
   }
 }
