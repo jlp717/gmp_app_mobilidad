@@ -11,14 +11,13 @@ const logger = require('../middleware/logger');
 class FacturasService {
 
     async getFacturas(params) {
-        const { vendedorCodes, year, month, search, clientId } = params;
+        const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
 
         if (!vendedorCodes) {
             throw new Error('vendedorCodes is required');
         }
 
         const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
-        const currentYear = year || new Date().getFullYear();
 
         let sql = `
       SELECT 
@@ -35,25 +34,63 @@ class FacturasService {
         CAC.IMPORTEIVA1 + CAC.IMPORTEIVA2 + CAC.IMPORTEIVA3 as IVA
       FROM DSEDAC.CAC CAC
       LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
-      WHERE CAC.EJERCICIOFACTURA = ${currentYear}
-        AND CAC.NUMEROFACTURA > 0
+      WHERE CAC.NUMEROFACTURA > 0
         AND TRIM(CAC.CODIGOVENDEDOR) IN (${vendorList})
     `;
 
-        if (month) {
-            sql += ` AND CAC.MESFACTURA = ${month}`;
+        // Date Filtering Logic
+        let dateFilterApplied = false;
+
+        if (dateFrom && dateTo) {
+            // dateFrom/To expected as 'YYYY-MM-DD'
+            const fromInt = parseInt(dateFrom.replace(/-/g, ''));
+            const toInt = parseInt(dateTo.replace(/-/g, ''));
+            if (!isNaN(fromInt) && !isNaN(toInt)) {
+                sql += ` AND (CAC.ANOFACTURA * 10000 + CAC.MESFACTURA * 100 + CAC.DIAFACTURA) BETWEEN ${fromInt} AND ${toInt}`;
+                dateFilterApplied = true;
+            }
+        }
+
+        if (!dateFilterApplied) {
+            const currentYear = year || new Date().getFullYear();
+            sql += ` AND CAC.EJERCICIOFACTURA = ${currentYear}`;
+
+            if (month) {
+                sql += ` AND CAC.MESFACTURA = ${month}`;
+            }
         }
 
         if (clientId) {
             sql += ` AND TRIM(CAC.CODIGOCLIENTEFACTURA) = '${clientId.trim()}'`;
         }
 
+        // Specific Client Search
+        if (clientSearch) {
+            const safeClientSearch = clientSearch.toUpperCase().replace(/'/g, "''");
+            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${safeClientSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${safeClientSearch}%')`;
+        }
+
+        // Specific Doc Search (Factura/Client Code)
+        if (docSearch) {
+            const safeDocSearch = docSearch.toUpperCase().replace(/'/g, "''");
+            const searchNum = parseFloat(docSearch);
+            const isNum = !isNaN(searchNum);
+            sql += ` AND (
+                TRIM(CAC.SERIEFACTURA) LIKE '%${safeDocSearch}%' OR 
+                TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE '%${safeDocSearch}%'
+                ${isNum ? `OR CAC.NUMEROFACTURA = ${searchNum}` : ''}
+            )`;
+        }
+
+        // Legacy Global Search (if provided)
         if (search) {
             const safeSearch = search.toUpperCase().replace(/'/g, "''");
+            const searchNum = parseFloat(search);
+            const isNum = !isNaN(searchNum);
             sql += ` AND (
         UPPER(CLI.NOMBRECLIENTE) LIKE '%${safeSearch}%' OR
         UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${safeSearch}%' OR
-        CAST(CAC.NUMEROFACTURA AS CHAR(20)) LIKE '%${safeSearch}%' OR
+        ${isNum ? `CAC.NUMEROFACTURA = ${searchNum} OR` : ''} 
         TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE '%${safeSearch}%'
       )`;
         }

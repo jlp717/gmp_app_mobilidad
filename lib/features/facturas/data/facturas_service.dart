@@ -2,14 +2,10 @@
 /// =====================
 /// API client for invoice operations in commercial profile
 
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/api/api_client.dart';
-import '../../../core/api/api_config.dart';
 
 /// Model for invoice list item
 class Factura {
@@ -199,13 +195,24 @@ class FacturasService {
     int? month,
     String? search,
     String? clientId,
+    String? clientSearch,
+    String? docSearch,
+    String? dateFrom,
+    String? dateTo,
   }) async {
     try {
       String url = '/facturas?vendedorCodes=$vendedorCodes';
-      if (year != null) url += '&year=$year';
-      if (month != null) url += '&month=$month';
+      if (dateFrom != null && dateTo != null) {
+        url += '&dateFrom=$dateFrom&dateTo=$dateTo';
+      } else {
+        if (year != null) url += '&year=$year';
+        if (month != null) url += '&month=$month';
+      }
+      
       if (search != null && search.isNotEmpty) url += '&search=${Uri.encodeComponent(search)}';
       if (clientId != null) url += '&clientId=$clientId';
+      if (clientSearch != null && clientSearch.isNotEmpty) url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
+      if (docSearch != null && docSearch.isNotEmpty) url += '&docSearch=${Uri.encodeComponent(docSearch)}';
 
       final response = await ApiClient.get(url);
       
@@ -331,26 +338,13 @@ class FacturasService {
   /// Download PDF
   static Future<File> downloadFacturaPdf(String serie, int numero, int ejercicio) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token') ?? '';
-      
-      final uri = Uri.parse('${ApiConfig.baseUrl}/facturas/$serie/$numero/$ejercicio/pdf');
+      // Use ApiClient to get bytes directly - authentication is handled automatically
+      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf');
 
-      final response = await http.get(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final dir = await getTemporaryDirectory();
-        final file = File('${dir.path}/Factura_${serie}_${numero}_${ejercicio}.pdf');
-        await file.writeAsBytes(response.bodyBytes);
-        return file;
-      } else {
-        throw Exception('Failed to download PDF: ${response.statusCode}');
-      }
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/Factura_${serie}_${numero}_${ejercicio}.pdf');
+      await file.writeAsBytes(bytes);
+      return file;
     } catch (e) {
       debugPrint('Error downloading PDF: $e');
       rethrow;

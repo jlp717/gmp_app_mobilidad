@@ -3,12 +3,15 @@
 /// Invoice listing with filters, search and actions for commercial profile
 /// Premium modern UI with smooth animations
 
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/providers/filter_provider.dart';
+import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../data/facturas_service.dart';
 
 class FacturasPage extends StatefulWidget {
@@ -25,11 +28,17 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
   bool _isLoading = true;
   String _error = '';
   
+  // Date Filters
   int _selectedYear = DateTime.now().year;
   int? _selectedMonth;
-  String _searchQuery = '';
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
   
-  final TextEditingController _searchController = TextEditingController();
+  // Search controllers
+  final TextEditingController _clientSearchController = TextEditingController();
+  final TextEditingController _facturaSearchController = TextEditingController();
+  Timer? _debounce;
+  
   late AnimationController _fadeController;
   
   @override
@@ -39,22 +48,37 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _loadInitialData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
   }
   
   @override
   void dispose() {
-    _searchController.dispose();
+    _clientSearchController.dispose();
+    _facturaSearchController.dispose();
+    _debounce?.cancel();
     _fadeController.dispose();
     super.dispose();
   }
   
   String get _vendedorCodes {
     final auth = context.read<AuthProvider>();
+    final filter = context.read<FilterProvider>();
+    if (auth.isDirector && filter.selectedVendor != null) {
+      return filter.selectedVendor!;
+    }
     return auth.vendorCodes.join(',');
   }
   
+  // Helper to format date
+  String? _formatDateParam(DateTime? date) {
+    if (date == null) return null;
+    return "${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}";
+  }
+  
   Future<void> _loadInitialData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = '';
@@ -70,14 +94,16 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
         return;
       }
       
-      // Load years and current data in parallel
       final results = await Future.wait([
         FacturasService.getAvailableYears(codes),
         FacturasService.getFacturas(
           vendedorCodes: codes,
           year: _selectedYear,
           month: _selectedMonth,
-          search: _searchQuery.isEmpty ? null : _searchQuery,
+          clientSearch: _clientSearchController.text,
+          docSearch: _facturaSearchController.text,
+          dateFrom: _formatDateParam(_dateFrom),
+          dateTo: _formatDateParam(_dateTo),
         ),
         FacturasService.getSummary(
           vendedorCodes: codes,
@@ -86,6 +112,8 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
         ),
       ]);
       
+      if (!mounted) return;
+
       setState(() {
         _years = results[0] as List<int>;
         _facturas = results[1] as List<Factura>;
@@ -95,6 +123,7 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
       
       _fadeController.forward();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Error cargando facturas: $e';
         _isLoading = false;
@@ -103,6 +132,7 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
   }
   
   Future<void> _refreshData() async {
+    if (!mounted) return;
     try {
       final codes = _vendedorCodes;
       
@@ -111,7 +141,10 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
           vendedorCodes: codes,
           year: _selectedYear,
           month: _selectedMonth,
-          search: _searchQuery.isEmpty ? null : _searchQuery,
+          clientSearch: _clientSearchController.text,
+          docSearch: _facturaSearchController.text,
+          dateFrom: _formatDateParam(_dateFrom),
+          dateTo: _formatDateParam(_dateTo),
         ),
         FacturasService.getSummary(
           vendedorCodes: codes,
@@ -120,11 +153,14 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
         ),
       ]);
       
+      if (!mounted) return;
+
       setState(() {
         _facturas = results[0] as List<Factura>;
         _summary = results[1] as FacturaSummary?;
       });
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
@@ -133,23 +169,62 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
   
   void _onYearChanged(int? year) {
     if (year != null && year != _selectedYear) {
-      setState(() => _selectedYear = year);
+      setState(() {
+        _selectedYear = year;
+        // Clear specific dates if year changed
+        _dateFrom = null;
+        _dateTo = null;
+      });
       _refreshData();
     }
   }
   
   void _onMonthChanged(int? month) {
     if (month != _selectedMonth) {
-      setState(() => _selectedMonth = month);
+      setState(() {
+        _selectedMonth = month;
+        // Clear specific dates if month changed
+        _dateFrom = null;
+        _dateTo = null;
+      });
+      _refreshData();
+    }
+  }
+
+  Future<void> _selectDate(BuildContext context, bool isFrom) async {
+    final initialDate = isFrom ? (_dateFrom ?? DateTime.now()) : (_dateTo ?? DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      locale: const Locale('es', 'ES'),
+    );
+
+    if (picked != null) {
+      setState(() {
+        if (isFrom) {
+          _dateFrom = picked;
+          // If To is null or before From, set To = From
+          if (_dateTo == null || _dateTo!.isBefore(picked)) {
+            _dateTo = picked; // auto-set logic or just leave it?
+          }
+        } else {
+          _dateTo = picked;
+        }
+        // If we select dates, we might want to clear Month filter visually? 
+        // Logic will handle it, but for UI clarity:
+        _selectedMonth = null; 
+      });
       _refreshData();
     }
   }
   
-  void _onSearch(String query) {
-    if (query != _searchQuery) {
-      _searchQuery = query;
+  void _onSearchChanged() {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
       _refreshData();
-    }
+    });
   }
   
   void _showFacturaDetail(Factura factura) {
@@ -166,7 +241,6 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
   
   Future<void> _shareFacturaPdf(Factura factura) async {
     try {
-      // Show loading
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -181,18 +255,14 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
         ),
       );
 
-      // Download PDF
       final file = await FacturasService.downloadFacturaPdf(
         factura.serie,
         factura.numero,
         factura.ejercicio,
       );
 
-      // Share PDF
       if (mounted) {
-        // Hide previous snackbar
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        
         await Share.shareXFiles(
           [XFile(file.path)],
           text: 'Factura ${factura.numeroFormateado} - ${factura.clienteNombre}',
@@ -213,22 +283,25 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final auth = context.watch<AuthProvider>();
     
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFF8FAFC),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            if (auth.isDirector)
+              GlobalVendorSelector(
+                isJefeVentas: true,
+                onChanged: _loadInitialData,
+              ),
+
             _buildHeader(theme, isDark),
+            _buildFiltersSection(theme, isDark),
+            _buildSearchFilters(theme, isDark),
             
-            // Filters
-            _buildFilters(theme, isDark),
-            
-            // Summary cards
             if (_summary != null) _buildSummary(theme, isDark),
             
-            // List
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -264,136 +337,273 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
               : [const Color(0xFF2D5A87), const Color(0xFF1E3A5F)],
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.receipt_long, color: Colors.white, size: 28),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Facturas',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: _loadInitialData,
-                icon: const Icon(Icons.refresh, color: Colors.white),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Search
           Container(
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Buscar por cliente, número...',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-                prefixIcon: const Icon(Icons.search, color: Colors.white70),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.white70),
-                        onPressed: () {
-                          _searchController.clear();
-                          _onSearch('');
-                        },
-                      )
-                    : null,
+            child: const Icon(Icons.receipt_long, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Facturas',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
               ),
-              onSubmitted: _onSearch,
             ),
+          ),
+          IconButton(
+            onPressed: () {
+               _clientSearchController.clear();
+               _facturaSearchController.clear();
+               setState(() {
+                 _dateFrom = null;
+                 _dateTo = null;
+               });
+               _loadInitialData();
+            },
+            icon: const Icon(Icons.refresh, color: Colors.white),
           ),
         ],
       ),
     );
   }
   
-  Widget _buildFilters(ThemeData theme, bool isDark) {
+  Widget _buildFiltersSection(ThemeData theme, bool isDark) {
     final months = [
       'Todos', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
     ];
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Year dropdown
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF21262D) : Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+          // Month / Year Row
+          Row(
+            children: [
+              // Year
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF21262D) : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                value: _selectedYear,
-                items: _years.map((y) => DropdownMenuItem(
-                  value: y,
-                  child: Text('$y'),
-                )).toList(),
-                onChanged: _onYearChanged,
-                icon: const Icon(Icons.keyboard_arrow_down),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _selectedYear,
+                    items: _years.map((y) => DropdownMenuItem(
+                      value: y,
+                      child: Text('$y'),
+                    )).toList(),
+                    onChanged: _onYearChanged,
+                    icon: const Icon(Icons.keyboard_arrow_down),
+                  ),
+                ),
               ),
+              const SizedBox(width: 12),
+              // Month
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF21262D) : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<int?>(
+                      value: _selectedMonth,
+                      isExpanded: true,
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('Todos los meses')),
+                        ...List.generate(12, (i) => DropdownMenuItem(
+                          value: i + 1,
+                          child: Text(months[i + 1]),
+                        )),
+                      ],
+                      onChanged: _onMonthChanged,
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Date Range Header
+          const Text(
+            'Rango de fechas (opcional)',
+            style: TextStyle(
+              fontSize: 12, 
+              fontWeight: FontWeight.bold, 
+              color: Colors.blue
             ),
           ),
-          const SizedBox(width: 12),
-          // Month dropdown
+          const SizedBox(height: 8),
+          
+          // Date Range Pickers
+          Row(
+            children: [
+              // From
+              Expanded(
+                child: InkWell(
+                  onTap: () => _selectDate(context, true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF21262D) : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _dateFrom != null ? Colors.blue.withOpacity(0.5) : Colors.transparent
+                      ),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _dateFrom != null 
+                              ? "${_dateFrom!.day}/${_dateFrom!.month}/${_dateFrom!.year}"
+                              : 'Desde',
+                          style: TextStyle(
+                            color: _dateFrom != null ? (isDark ? Colors.white : Colors.black) : Colors.grey,
+                          ),
+                        ),
+                        const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // To
+              Expanded(
+                child: InkWell(
+                  onTap: () => _selectDate(context, false),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF21262D) : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _dateTo != null ? Colors.blue.withOpacity(0.5) : Colors.transparent
+                      ),
+                      boxShadow: [
+                         BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _dateTo != null 
+                              ? "${_dateTo!.day}/${_dateTo!.month}/${_dateTo!.year}"
+                              : 'Hasta',
+                          style: TextStyle(
+                            color: _dateTo != null ? (isDark ? Colors.white : Colors.black) : Colors.grey,
+                          ),
+                        ),
+                        const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (_dateFrom != null || _dateTo != null)
+                IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () {
+                    setState(() {
+                      _dateFrom = null;
+                      _dateTo = null;
+                    });
+                    _refreshData();
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchFilters(ThemeData theme, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          // Client Search
           Expanded(
+            flex: 3,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              height: 48,
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF21262D) : Colors.white,
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
+                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
                 ],
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int?>(
-                  value: _selectedMonth,
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Todos los meses')),
-                    ...List.generate(12, (i) => DropdownMenuItem(
-                      value: i + 1,
-                      child: Text(months[i + 1]),
-                    )),
-                  ],
-                  onChanged: _onMonthChanged,
-                  icon: const Icon(Icons.keyboard_arrow_down),
+              child: TextField(
+                controller: _clientSearchController,
+                decoration: const InputDecoration(
+                  hintText: 'Cliente...',
+                  prefixIcon: Icon(Icons.person_search, size: 20),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
+                onChanged: (_) => _onSearchChanged(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Factura Search
+          Expanded(
+            flex: 2,
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF21262D) : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
+                ],
+              ),
+              child: TextField(
+                controller: _facturaSearchController,
+                keyboardType: TextInputType.text,
+                decoration: const InputDecoration(
+                  hintText: 'Factura #',
+                  prefixIcon: Icon(Icons.numbers, size: 20),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+                onChanged: (_) => _onSearchChanged(),
               ),
             ),
           ),
