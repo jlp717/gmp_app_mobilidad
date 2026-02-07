@@ -172,25 +172,21 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       lastDate: DateTime(2030),
       locale: const Locale('es', 'ES'),
       builder: (context, child) {
-        // Guaranteed High Contrast Light Theme
+        // Custom Dark Theme for DatePicker (High Contrast)
         return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: AppTheme.neonBlue,
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF0055AA), // Dark Blue header
-              onPrimary: Colors.white, // White text on header
-              surface: Colors.white, // White background
-              onSurface: Colors.black, // Black text
-              secondary: AppTheme.neonBlue, // Accent
+          data: ThemeData.dark().copyWith(
+            scaffoldBackgroundColor: AppTheme.darkSurface,
+            colorScheme: const ColorScheme.dark(
+              primary: AppTheme.neonBlue, // Header background & selected date
+              onPrimary: AppTheme.darkBase, // Text on header & selected date
+              surface: AppTheme.darkCard, // Dialog background
+              onSurface: Colors.white, // Standard dates text
+              onSurfaceVariant: Colors.white70, // Month navigation icons
             ),
-            dialogBackgroundColor: Colors.white,
-            textTheme: const TextTheme(
-              headlineMedium: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-              bodyMedium: TextStyle(color: Colors.black),
-            ),
+            dialogBackgroundColor: AppTheme.darkCard,
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF0055AA), // Button text
+                foregroundColor: AppTheme.neonBlue, // OK/Cancel buttons
                 textStyle: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -220,7 +216,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
 
   Widget _buildFacturaCard(Factura factura) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isPaid = factura.estado.toLowerCase() == 'cobrada';
+    // final isPaid = factura.estado.toLowerCase() == 'cobrada'; // Removed as property doesn't exist
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -263,15 +259,15 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: (isPaid ? Colors.green : const Color(0xFF2D5A87)).withOpacity(0.1),
+                        color: const Color(0xFF2D5A87).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: (isPaid ? Colors.green : const Color(0xFF2D5A87)).withOpacity(0.3),
+                          color: const Color(0xFF2D5A87).withOpacity(0.3),
                         ),
                       ),
-                      child: Icon(
-                        isPaid ? Icons.check_circle_outline : Icons.receipt_long,
-                        color: isPaid ? Colors.green : const Color(0xFF2D5A87),
+                      child: const Icon(
+                        Icons.receipt_long,
+                        color: Color(0xFF2D5A87),
                         size: 24,
                       ),
                     ),
