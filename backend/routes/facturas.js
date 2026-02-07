@@ -109,6 +109,37 @@ router.get('/:serie/:numero/:ejercicio', async (req, res, next) => {
 });
 
 /**
+ * GET /api/facturas/:serie/:numero/:ejercicio/pdf
+ */
+router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
+    try {
+        const { serie, numero, ejercicio } = req.params;
+
+        const factura = await facturasService.getFacturaDetail(
+            serie,
+            parseInt(numero),
+            parseInt(ejercicio)
+        );
+
+        if (!factura) {
+            return res.status(404).json({ success: false, error: 'Factura no encontrada' });
+        }
+
+        const pdfService = require('../services/pdf.service');
+        const pdfBuffer = await pdfService.generateInvoicePDF(factura);
+
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `attachment; filename=Factura_${serie}_${numero}_${ejercicio}.pdf`);
+        res.set('Content-Length', pdfBuffer.length);
+
+        res.send(pdfBuffer);
+    } catch (error) {
+        logger.error(`Error en GET /facturas/${req.params.serie}/${req.params.numero}/${req.params.ejercicio}/pdf: ${error.message}`);
+        next(error);
+    }
+});
+
+/**
  * POST /api/facturas/share/whatsapp
  */
 router.post('/share/whatsapp', async (req, res, next) => {

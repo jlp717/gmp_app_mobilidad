@@ -3,10 +3,11 @@
 /// Invoice listing with filters, search and actions for commercial profile
 /// Premium modern UI with smooth animations
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../data/facturas_service.dart';
 
@@ -158,118 +159,56 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
       backgroundColor: Colors.transparent,
       builder: (ctx) => _FacturaDetailSheet(
         factura: factura,
-        onWhatsApp: _shareWhatsApp,
-        onEmail: _shareEmail,
+        onShare: _shareFacturaPdf,
       ),
     );
   }
   
-  Future<void> _shareWhatsApp(Factura factura) async {
-    final phone = await _getClientPhone(factura);
-    if (phone == null) return;
-    
-    final url = await FacturasService.shareWhatsApp(
-      serie: factura.serie,
-      numero: factura.numero,
-      ejercicio: factura.ejercicio,
-      telefono: phone,
-      clienteNombre: factura.clienteNombre,
-    );
-    
-    if (url != null) {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error generando enlace WhatsApp')),
-        );
-      }
-    }
-  }
-  
-  Future<void> _shareEmail(Factura factura) async {
-    final email = await _getClientEmail(factura);
-    if (email == null) return;
-    
-    final url = await FacturasService.shareEmail(
-      serie: factura.serie,
-      numero: factura.numero,
-      ejercicio: factura.ejercicio,
-      destinatario: email,
-      clienteNombre: factura.clienteNombre,
-    );
-    
-    if (url != null) {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error preparando email')),
-        );
-      }
-    }
-  }
-  
-  Future<String?> _getClientPhone(Factura factura) async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Enviar por WhatsApp'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            labelText: 'Teléfono',
-            hintText: '+34 600 000 000',
-            prefixIcon: Icon(Icons.phone),
+  Future<void> _shareFacturaPdf(Factura factura) async {
+    try {
+      // Show loading
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+              SizedBox(width: 16),
+              Text('Generando y descargando PDF...'),
+            ],
           ),
-          autofocus: true,
+          duration: Duration(seconds: 2),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Enviar'),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Future<String?> _getClientEmail(Factura factura) async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Enviar por Email'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(
-            labelText: 'Email',
-            hintText: 'cliente@ejemplo.com',
-            prefixIcon: Icon(Icons.email),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Enviar'),
-          ),
-        ],
-      ),
-    );
-  }
+      );
 
+      // Download PDF
+      final file = await FacturasService.downloadFacturaPdf(
+        factura.serie,
+        factura.numero,
+        factura.ejercicio,
+      );
+
+      // Share PDF
+      if (mounted) {
+        // Hide previous snackbar
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Factura ${factura.numeroFormateado} - ${factura.clienteNombre}',
+          subject: 'Factura ${factura.numeroFormateado}',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error compartiendo PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -568,7 +507,7 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2D5A87).withOpacity(0.1),
+                  color: const Color(0xFF2D5A87).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
@@ -623,26 +562,13 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
                         color: Color(0xFF059669),
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.share, size: 20),
-                          color: Colors.green[600],
-                          onPressed: () => _shareWhatsApp(factura),
-                          tooltip: 'WhatsApp',
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                          padding: EdgeInsets.zero,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.email_outlined, size: 20),
-                          color: Colors.blue[600],
-                          onPressed: () => _shareEmail(factura),
-                          tooltip: 'Email',
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
+                    IconButton(
+                      icon: const Icon(Icons.share, size: 20),
+                      color: Colors.blue[600],
+                      onPressed: () => _shareFacturaPdf(factura),
+                      tooltip: 'Compartir PDF',
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      padding: EdgeInsets.zero,
                     ),
                   ],
                 ),
@@ -658,13 +584,11 @@ class _FacturasPageState extends State<FacturasPage> with TickerProviderStateMix
 /// Detail sheet for a factura
 class _FacturaDetailSheet extends StatefulWidget {
   final Factura factura;
-  final Function(Factura) onWhatsApp;
-  final Function(Factura) onEmail;
+  final Function(Factura) onShare;
 
   const _FacturaDetailSheet({
     required this.factura,
-    required this.onWhatsApp,
-    required this.onEmail,
+    required this.onShare,
   });
 
   @override
@@ -851,40 +775,24 @@ class _FacturaDetailSheetState extends State<_FacturaDetailSheet> {
                               ),
                               const SizedBox(height: 24),
                               // Actions
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pop(context);
-                                        widget.onWhatsApp(widget.factura);
-                                      },
-                                      icon: const Icon(Icons.message),
-                                      label: const Text('WhatsApp'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF25D366),
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
-                                      ),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    widget.onShare(widget.factura);
+                                  },
+                                  icon: const Icon(Icons.share),
+                                  label: const Text('Compartir PDF (WhatsApp/Email)'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2D5A87),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pop(context);
-                                        widget.onEmail(widget.factura);
-                                      },
-                                      icon: const Icon(Icons.email),
-                                      label: const Text('Email'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF2D5A87),
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ],
                           ),

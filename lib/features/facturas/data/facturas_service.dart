@@ -3,8 +3,13 @@
 /// API client for invoice operations in commercial profile
 
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/api/api_client.dart';
+import '../../../core/api/api_config.dart';
 
 /// Model for invoice list item
 class Factura {
@@ -320,6 +325,35 @@ class FacturasService {
     } catch (e) {
       debugPrint('Error in shareEmail: $e');
       return null;
+    }
+  }
+
+  /// Download PDF
+  static Future<File> downloadFacturaPdf(String serie, int numero, int ejercicio) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      
+      final uri = Uri.parse('${ApiConfig.baseUrl}/facturas/$serie/$numero/$ejercicio/pdf');
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final dir = await getTemporaryDirectory();
+        final file = File('${dir.path}/Factura_${serie}_${numero}_${ejercicio}.pdf');
+        await file.writeAsBytes(response.bodyBytes);
+        return file;
+      } else {
+        throw Exception('Failed to download PDF: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error downloading PDF: $e');
+      rethrow;
     }
   }
 }
