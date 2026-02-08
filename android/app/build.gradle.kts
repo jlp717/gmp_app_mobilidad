@@ -49,12 +49,7 @@ android {
         multiDexEnabled = true
     }
 
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-            keepDebugSymbols += setOf("**/*.so")
-        }
-    }
+
 
     buildTypes {
         getByName("release") {
@@ -77,5 +72,7 @@ flutter {
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
 }
+
+
 
 
