@@ -66,6 +66,10 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // CRITICAL FIX: Keep debug symbols to prevent NDK strip failure
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
     }
 }
@@ -76,4 +80,12 @@ flutter {
 
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
+}
+
+// WORKAROUND: Disable native stripping to fix "Release app bundle failed to strip"
+// This avoids needing NDK installed on Windows
+tasks.configureEach {
+    if (name.contains("strip") && name.contains("Release")) {
+        enabled = false
+    }
 }
