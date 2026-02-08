@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/modern_loading.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/commissions_service.dart';
@@ -631,7 +632,12 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
 
            Expanded(
-             child: _isLoading ? const Center(child: ModernLoading(message: 'Calculando...'))
+             // OPTIMIZATION: Use SkeletonList for perceived performance
+             child: _isLoading 
+               ? const Padding(
+                   padding: EdgeInsets.all(16.0),
+                   child: SkeletonList(itemCount: 6, itemHeight: 60),
+                 )
              : _error != null ? Center(child: Text('Error: $_error', style: const TextStyle(color: AppTheme.error)))
              : isAllMode
                ? _buildAllVendorsTable(breakdown)  // Show ALL vendors table

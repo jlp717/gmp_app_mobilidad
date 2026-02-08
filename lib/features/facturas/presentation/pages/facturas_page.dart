@@ -11,6 +11,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/widgets/optimized_list.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/providers/filter_provider.dart'; // Import FilterProvider
 import '../../data/facturas_service.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
@@ -668,14 +670,16 @@ Equipo Granja Mari Pepa''';
 
               Expanded(
                 child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  // OPTIMIZATION: Use SkeletonList for perceived performance
+                  ? const SkeletonList(itemCount: 8, itemHeight: 100)
                   : _error != null
                       ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
                       : _facturas.isEmpty
                           ? _buildEmptyState()
                           : RefreshIndicator(
                               onRefresh: _refreshData,
-                              child: ListView.builder(
+                              // OPTIMIZATION: Use OptimizedListView for smooth scrolling
+                              child: OptimizedListView(
                                 padding: const EdgeInsets.only(bottom: 80),
                                 itemCount: _facturas.length,
                                 itemBuilder: (context, index) {

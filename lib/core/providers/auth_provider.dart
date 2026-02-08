@@ -5,6 +5,7 @@ import '../api/api_config.dart';
 import '../models/user_model.dart';
 import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../services/cache_prewarmer.dart';
 
 /// Authentication provider with role detection
 class AuthProvider with ChangeNotifier {
@@ -74,6 +75,11 @@ class AuthProvider with ChangeNotifier {
         _isLoading = false;
         notifyListeners();
         debugPrint('[AuthProvider] Login SUCCESS');
+        
+        // OPTIMIZATION: Pre-warm cache for instant data access
+        // Run in background without awaiting to not block UI
+        CachePreWarmer.preWarmCache(this);
+        
         return true;
       } else {
         throw Exception('Respuesta inválida del servidor');
@@ -101,6 +107,10 @@ class AuthProvider with ChangeNotifier {
         if (codes != null) _vendedorCodes = codes;
         
         notifyListeners();
+        
+        // OPTIMIZATION: Pre-warm cache on auto-login too
+        CachePreWarmer.preWarmCache(this);
+        
         return true;
       }
       return false;

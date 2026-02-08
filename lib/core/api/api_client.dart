@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'isolate_transformer.dart';
 import 'api_config.dart';
 import '../cache/cache_service.dart';
 import '../services/network_service.dart';
@@ -41,22 +42,34 @@ class ApiClient {
     return _dio!;
   }
 
-  /// Create Dio instance with interceptors
+  /// Create Dio instance with OPTIMIZED settings
+  /// - Gzip compression for faster transfers
+  /// - Connection Keep-Alive for connection reuse
+  /// - Optimized timeouts for mobile networks
   static Dio _createDio() {
     final dio = Dio(BaseOptions(
       baseUrl: ApiConfig.baseUrl,
       connectTimeout: ApiConfig.connectTimeout,
       receiveTimeout: ApiConfig.receiveTimeout,
+      sendTimeout: const Duration(seconds: 30),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate', // Enable gzip compression
+        'Connection': 'keep-alive', // Connection pooling
       },
+      // Enable response compression
+      responseType: ResponseType.json,
+      validateStatus: (status) => status != null && status < 500,
     ));
+
+    // OPTIMIZATION: Parse JSON in background isolate
+    dio.transformer = BackgroundTransformer();
 
     // Add retry interceptor
     dio.interceptors.add(_RetryInterceptor(dio, _maxRetries, _retryDelay));
 
-    // Add logging interceptor in debug mode
+    // Add performance logging interceptor in debug mode
     if (kDebugMode) {
       dio.interceptors.add(LogInterceptor(
         requestBody: false,
