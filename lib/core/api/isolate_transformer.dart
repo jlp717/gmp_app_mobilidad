@@ -5,8 +5,8 @@ import '../utils/compute_helpers.dart';
 
 /// Dio Transformer that parses JSON in a background isolate
 /// preventing UI jank during large data processing
-class BackgroundTransformer extends DefaultTransformer {
-  BackgroundTransformer() : super(jsonDecodeCallback: _parseJson);
+class IsolateTransformer extends DefaultTransformer {
+  IsolateTransformer() : super(jsonDecodeCallback: _parseJson);
 }
 
 /// Parse JSON in background

@@ -64,7 +64,7 @@ class ApiClient {
     ));
 
     // OPTIMIZATION: Parse JSON in background isolate
-    dio.transformer = BackgroundTransformer();
+    dio.transformer = IsolateTransformer();
 
     // Add retry interceptor
     dio.interceptors.add(_RetryInterceptor(dio, _maxRetries, _retryDelay));
