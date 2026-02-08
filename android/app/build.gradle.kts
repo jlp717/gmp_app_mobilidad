@@ -78,11 +78,4 @@ dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
 }
 
-// WORKAROUND: Disable native stripping to fix "Release app bundle failed to strip"
-// This avoids needing NDK installed on Windows
-tasks.configureEach {
-    val taskName = name
-    if (taskName.contains("strip") && taskName.contains("Release")) {
-        enabled = false
-    }
-}
+
