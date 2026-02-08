@@ -1,8 +1,9 @@
 /// REPARTIDOR DATA SERVICE
 /// Cliente de API para obtener datos de cobros, comisiones e histórico desde backend
-/// Sustituye los datos mock por llamadas reales a DB2
+/// OPTIMIZED: Full caching support with intelligent TTLs
 
 import '../../../../core/api/api_client.dart';
+import '../../../../core/cache/cache_service.dart';
 
 /// Resultado del resumen de cobros
 class CollectionsSummary {
@@ -227,9 +228,14 @@ class RepartidorDataService {
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
       
+      // Cache key based on repartidor + period
+      final cacheKey = 'repartidor_summary_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
+      
       final response = await ApiClient.get(
         '/repartidor/collections/summary/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.shortTTL, // 5 minutes - collections change frequently
       );
       
       return CollectionsSummary.fromJson(response);
@@ -249,9 +255,13 @@ class RepartidorDataService {
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
       
+      final cacheKey = 'repartidor_daily_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
+      
       final response = await ApiClient.get(
         '/repartidor/collections/daily/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 10), // 10 minutes
       );
       
       final dailyList = (response['daily'] as List? ?? [])
@@ -275,9 +285,14 @@ class RepartidorDataService {
         queryParams['search'] = search;
       }
       
+      // Longer cache for client list - 30 min
+      final cacheKey = 'repartidor_clients_${repartidorId}_${search ?? 'all'}';
+      
       final response = await ApiClient.get(
         '/repartidor/history/clients/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.defaultTTL, // 30 minutes - client list stable
       );
       
       final clients = (response['clients'] as List? ?? [])
@@ -301,9 +316,13 @@ class RepartidorDataService {
         queryParams['repartidorId'] = repartidorId;
       }
       
+      final cacheKey = 'repartidor_docs_${clientId}_${repartidorId ?? 'all'}';
+      
       final response = await ApiClient.get(
         '/repartidor/history/documents/$clientId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 15), // 15 minutes
       );
       
       final docs = (response['documents'] as List? ?? [])
@@ -327,9 +346,13 @@ class RepartidorDataService {
         queryParams['clientId'] = clientId;
       }
       
+      final cacheKey = 'repartidor_objectives_${repartidorId}_${clientId ?? 'all'}';
+      
       final response = await ApiClient.get(
         '/repartidor/history/objectives/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.defaultTTL, // 30 minutes - objectives stable
       );
       
       final objectives = (response['objectives'] as List? ?? [])

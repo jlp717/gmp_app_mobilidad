@@ -1,11 +1,13 @@
 /// Facturas Data Service
 /// =====================
 /// API client for invoice operations in commercial profile
+/// OPTIMIZED: Full caching support with memory + disk layers
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/api/api_client.dart';
+import '../../../core/cache/cache_service.dart';
 
 /// Model for invoice list item
 class Factura {
@@ -214,7 +216,14 @@ class FacturasService {
       if (clientSearch != null && clientSearch.isNotEmpty) url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
       if (docSearch != null && docSearch.isNotEmpty) url += '&docSearch=${Uri.encodeComponent(docSearch)}';
 
-      final response = await ApiClient.get(url);
+      // Generate cache key based on all filter params
+      final cacheKey = 'facturas_${vendedorCodes}_${year ?? 'all'}_${month ?? 'all'}_${dateFrom ?? ''}_${dateTo ?? ''}_${clientSearch ?? ''}_${docSearch ?? ''}';
+      
+      final response = await ApiClient.get(
+        url,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.shortTTL, // 5 minutes - data changes frequently
+      );
       
       if (response['success'] == true && response['facturas'] != null) {
         final List<dynamic> list = response['facturas'];
@@ -230,7 +239,14 @@ class FacturasService {
   /// Get available years
   static Future<List<int>> getAvailableYears(String vendedorCodes) async {
     try {
-      final response = await ApiClient.get('/facturas/years?vendedorCodes=$vendedorCodes');
+      // Years rarely change - cache for 1 hour
+      final cacheKey = 'facturas_years_$vendedorCodes';
+      
+      final response = await ApiClient.get(
+        '/facturas/years?vendedorCodes=$vendedorCodes',
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.longTTL, // 24 hours - years don't change often
+      );
       
       if (response['success'] == true && response['years'] != null) {
         final List<dynamic> list = response['years'];
@@ -269,7 +285,14 @@ class FacturasService {
       if (clientSearch != null && clientSearch.isNotEmpty) url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
       if (docSearch != null && docSearch.isNotEmpty) url += '&docSearch=${Uri.encodeComponent(docSearch)}';
 
-      final response = await ApiClient.get(url);
+      // Cache summary with same key pattern as list
+      final cacheKey = 'facturas_summary_${vendedorCodes}_${year ?? 'all'}_${month ?? 'all'}_${dateFrom ?? ''}_${dateTo ?? ''}';
+      
+      final response = await ApiClient.get(
+        url,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.shortTTL, // 5 minutes
+      );
       
       if (response['success'] == true && response['summary'] != null) {
         return FacturaSummary.fromJson(response['summary']);

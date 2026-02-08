@@ -1,13 +1,18 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../../../core/api/api_config.dart';
+/// Sales History Service - OPTIMIZED
+/// ================================
+/// Refactored to use ApiClient with full caching support
+/// Replaces raw http.Client for consistency and performance
+
+import '../../../core/api/api_client.dart';
+import '../../../core/cache/cache_service.dart';
 import '../domain/product_history_item.dart';
 
 class SalesHistoryService {
-  final http.Client client;
+  // Singleton pattern - no need for http.Client instance
+  SalesHistoryService();
 
-  SalesHistoryService({http.Client? client}) : client = client ?? http.Client();
-
+  /// Get sales history with caching
+  /// TTL: 10 minutes (balance between freshness and performance)
   Future<Map<String, dynamic>> getSalesHistory({
     String? vendedorCodes,
     String? clientCode,
@@ -18,7 +23,7 @@ class SalesHistoryService {
     int offset = 0,
   }) async {
     try {
-      final queryParams = <String, String>{
+      final queryParams = <String, dynamic>{
         if (vendedorCodes != null) 'vendedorCodes': vendedorCodes,
         if (clientCode != null) 'clientCode': clientCode,
         if (productSearch != null && productSearch.isNotEmpty) 'productSearch': productSearch,
@@ -28,30 +33,31 @@ class SalesHistoryService {
         'offset': offset.toString(),
       };
 
-      final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.salesHistory}')
-          .replace(queryParameters: queryParams);
+      // Generate cache key from params
+      final cacheKey = 'sales_history_${vendedorCodes ?? 'all'}_${clientCode ?? 'all'}_${startDate ?? ''}_${endDate ?? ''}_${limit}_$offset';
 
-      final response = await client.get(uri);
+      final response = await ApiClient.get(
+        '/sales-history',
+        queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 10),
+      );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> rowsJson = data['rows'] ?? [];
-        
-        final items = rowsJson.map((json) => ProductHistoryItem.fromJson(json)).toList();
-        final count = data['count'] as int? ?? 0;
-        
-        return {
-          'items': items,
-          'count': count,
-        };
-      } else {
-        throw Exception('Failed to load sales history: ${response.statusCode}');
-      }
+      final List<dynamic> rowsJson = response['rows'] ?? [];
+      final items = rowsJson.map((json) => ProductHistoryItem.fromJson(json)).toList();
+      final count = response['count'] as int? ?? 0;
+      
+      return {
+        'items': items,
+        'count': count,
+      };
     } catch (e) {
       throw Exception('Error fetching sales history: $e');
     }
   }
 
+  /// Get sales history summary with caching
+  /// TTL: 10 minutes
   Future<Map<String, dynamic>> getSalesHistorySummary({
     String? vendedorCodes,
     String? clientCode,
@@ -60,7 +66,7 @@ class SalesHistoryService {
     String? endDate,
   }) async {
     try {
-      final queryParams = <String, String>{
+      final queryParams = <String, dynamic>{
         if (vendedorCodes != null) 'vendedorCodes': vendedorCodes,
         if (clientCode != null) 'clientCode': clientCode,
         if (productSearch != null && productSearch.isNotEmpty) 'productSearch': productSearch,
@@ -68,16 +74,14 @@ class SalesHistoryService {
         if (endDate != null) 'endDate': endDate,
       };
 
-      final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.salesHistory}/summary')
-          .replace(queryParameters: queryParams);
+      final cacheKey = 'sales_history_summary_${vendedorCodes ?? 'all'}_${clientCode ?? 'all'}_${startDate ?? ''}_${endDate ?? ''}';
 
-      final response = await client.get(uri);
-
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as Map<String, dynamic>;
-      } else {
-        throw Exception('Failed to load summary: ${response.statusCode}');
-      }
+      return await ApiClient.get(
+        '/sales-history/summary',
+        queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 10),
+      );
     } catch (e) {
       throw Exception('Error fetching summary: $e');
     }

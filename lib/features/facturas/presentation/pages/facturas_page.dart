@@ -168,26 +168,26 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     final picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
-      firstDate: DateTime(2020),
+      firstDate: DateTime(2015),
       lastDate: DateTime(2030),
       locale: const Locale('es', 'ES'),
       builder: (context, child) {
-        // Custom Dark Theme for DatePicker (High Contrast)
+        // Fully custom dark theme - explicit non-const colors
         return Theme(
-          data: ThemeData.dark().copyWith(
-            scaffoldBackgroundColor: AppTheme.darkSurface,
-            colorScheme: const ColorScheme.dark(
-              primary: AppTheme.neonBlue, // Header background & selected date
-              onPrimary: AppTheme.darkBase, // Text on header & selected date
-              surface: AppTheme.darkCard, // Dialog background
-              onSurface: Colors.white, // Standard dates text
-              onSurfaceVariant: Colors.white70, // Month navigation icons
+          data: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.dark(
+              primary: const Color(0xFF00D4FF), // Neon Blue for selection
+              onPrimary: const Color(0xFF0A0E27), // Dark text on blue
+              surface: const Color(0xFF252B48), // Dark card background
+              onSurface: Colors.white, // White text
+              onSurfaceVariant: Colors.white70, // Navigation icons
+              outline: const Color(0xFF333955), // Borders
             ),
-            dialogBackgroundColor: AppTheme.darkCard,
+            dialogBackgroundColor: const Color(0xFF252B48),
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
-                foregroundColor: AppTheme.neonBlue, // OK/Cancel buttons
-                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                foregroundColor: const Color(0xFF00D4FF), // OK/Cancel buttons
               ),
             ),
           ),
@@ -206,11 +206,14 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
         } else {
           _dateTo = picked;
         }
-        _selectedMonth = null; 
+        _selectedMonth = null;
+        _selectedYear = null; // Clear year when using date range
       });
       _refreshData();
     }
   }
+
+
 
   // ... (existing code)
 
@@ -480,23 +483,54 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   Future<void> _downloadFactura(Factura factura) async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Descargando factura...'), duration: Duration(seconds: 1)),
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+              SizedBox(width: 16),
+              Text('Descargando factura...'),
+            ],
+          ),
+          duration: Duration(seconds: 3),
+        ),
       );
       
-      final file = await FacturasService.downloadFacturaPdf(
+      final tempFile = await FacturasService.downloadFacturaPdf(
         factura.serie,
         factura.numero,
         factura.ejercicio,
       );
       
       if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       
-      await Share.shareXFiles([XFile(file.path)], text: 'Factura ${factura.numeroFormateado}');
+      // Copy to Downloads folder
+      final downloadsDir = Directory('/storage/emulated/0/Download');
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+      
+      final fileName = 'Factura_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
+      final savedFile = await tempFile.copy('${downloadsDir.path}/$fileName');
+      
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ Guardado en Descargas: $fileName'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'ABRIR',
+            textColor: Colors.white,
+            onPressed: () async {
+              await Share.shareXFiles([XFile(savedFile.path)]);
+            },
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error descargando PDF: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
