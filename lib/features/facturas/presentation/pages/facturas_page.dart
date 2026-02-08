@@ -174,24 +174,15 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       lastDate: DateTime(2030),
       locale: const Locale('es', 'ES'),
       builder: (context, child) {
-        // Fully custom dark theme - explicit non-const colors
         return Theme(
-          data: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.dark(
-              primary: const Color(0xFF00D4FF), // Neon Blue for selection
-              onPrimary: const Color(0xFF0A0E27), // Dark text on blue
-              surface: const Color(0xFF252B48), // Dark card background
-              onSurface: Colors.white, // White text
-              onSurfaceVariant: Colors.white70, // Navigation icons
-              outline: const Color(0xFF333955), // Borders
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppTheme.neonBlue, 
+              onPrimary: Colors.black, // Text on selected date
+              surface: Color(0xFF1E2746), // Background
+              onSurface: Colors.white, // Text on background
             ),
-            dialogBackgroundColor: const Color(0xFF252B48),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF00D4FF), // OK/Cancel buttons
-              ),
-            ),
+            dialogBackgroundColor: const Color(0xFF1E2746),
           ),
           child: child!,
         );
@@ -630,6 +621,9 @@ Equipo Granja Mari Pepa''';
            decoration: BoxDecoration(
              color: AppTheme.surfaceColor,
              border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+             boxShadow: [
+               BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, 2))
+             ]
            ),
            child: Column(
              children: [
@@ -645,13 +639,23 @@ Equipo Granja Mari Pepa''';
                       const SizedBox(width: 12),
                       Text('Mis Facturas', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                    ]),
+                   // Explicit Refresh Button
+                   IconButton(
+                     icon: const Icon(Icons.refresh),
+                     onPressed: _refreshData,
+                     tooltip: 'Recargar datos',
+                   )
                  ],
                ),
                if (auth.isDirector) ...[
                  const SizedBox(height: 12),
-                 GlobalVendorSelector(
-                   isJefeVentas: true,
-                   onChanged: _onVendorChanged,
+                 Container(
+                   constraints: const BoxConstraints(minHeight: 50),
+                   width: double.infinity,
+                   child: GlobalVendorSelector(
+                     isJefeVentas: true,
+                     onChanged: _onVendorChanged,
+                   ),
                  ),
                ]
              ],

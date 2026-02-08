@@ -222,12 +222,67 @@ class FacturasService {
       final response = await ApiClient.get(
         url,
         cacheKey: cacheKey,
-        cacheTTL: CacheService.shortTTL, // 5 minutes - data changes frequently
+        cacheTTL: CacheService.shortTTL, 
       );
       
       if (response['success'] == true && response['facturas'] != null) {
         final List<dynamic> list = response['facturas'];
-        return list.map((e) => Factura.fromJson(e)).toList();
+        var facturas = list.map((e) => Factura.fromJson(e)).toList();
+
+        // FAILSAFE: Client-side filtering to ensure data accuracy
+        // This handles cases where backend params might be ignored or cache is stale
+        if (dateFrom != null && dateTo != null) {
+          try {
+             final start = DateTime.parse(dateFrom); // dateFrom param is yyyy-MM-dd
+             final end = DateTime.parse(dateTo).add(const Duration(days: 1)); // End of day
+             
+             facturas = facturas.where((f) {
+               if (f.fecha.isEmpty) return false;
+               try {
+                 DateTime? facturaDate;
+                 // Try ISO first
+                 try {
+                   facturaDate = DateTime.parse(f.fecha);
+                 } catch (_) {
+                   // Try Europe format dd/MM/yyyy
+                   final parts = f.fecha.split('/');
+                   if (parts.length == 3) {
+                     facturaDate = DateTime(
+                       int.parse(parts[2]), // year
+                       int.parse(parts[1]), // month
+                       int.parse(parts[0]), // day
+                     );
+                   }
+                 }
+                 
+                 if (facturaDate != null) {
+                   return facturaDate.isAfter(start.subtract(const Duration(seconds: 1))) && 
+                          facturaDate.isBefore(end);
+                 }
+                 return true; // Keep if we can't parse, to avoid hiding valid data
+               } catch (_) { return true; }
+             }).toList();
+          } catch (_) {}
+        } else {
+          // Filter by Year
+          if (year != null) {
+            facturas = facturas.where((f) {
+               // strict check on ejercicio
+               if (f.ejercicio == year) return true;
+               // Double check year from date string if ejercicio is 0 or mismatch
+               // (Some endpoints might return previous year data by mistake)
+               if (f.fecha.isNotEmpty) {
+                  try {
+                    final parts = f.fecha.split('/');
+                    if (parts.length == 3 && int.parse(parts[2]) == year) return true;
+                  } catch (_) {}
+               }
+               return false; 
+            }).toList();
+          }
+        }
+        
+        return facturas;
       }
       return [];
     } catch (e) {
