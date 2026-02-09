@@ -258,7 +258,8 @@ function calculateCommission(actual, target, config) {
  */
 async function calculateVendorData(vendedorCode, selectedYear, config) {
     const prevYear = selectedYear - 1;
-    const isExcluded = EXCLUDED_VENDORS.includes(vendedorCode.trim());
+    const normalizedCode = vendedorCode.trim().replace(/^0+/, '') || vendedorCode.trim();
+    const isExcluded = EXCLUDED_VENDORS.includes(normalizedCode);
 
     // C. Get Vendor Route Days (for daily targets)
     const dayMap = {
@@ -634,12 +635,13 @@ router.get('/summary', async (req, res) => {
             let yearResult;
 
             if (vendedorCode === 'ALL') {
-                // ... Existing 'ALL' logic for single year ...
+                // Use R1_T8CDVD (same source as /rutero/vendedores dropdown) for consistent vendor list
                 const vendorRows = await query(`
-                    SELECT DISTINCT TRIM(L.LCCDVD) as VENDOR_CODE
+                    SELECT DISTINCT TRIM(L.R1_T8CDVD) as VENDOR_CODE
                     FROM DSED.LACLAE L
                     WHERE L.LCAADC IN (${yr}, ${yr - 1})
-                      AND ${LACLAE_SALES_FILTER}
+                      AND L.R1_T8CDVD IS NOT NULL
+                      AND TRIM(L.R1_T8CDVD) <> ''
                 `, false);
                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));

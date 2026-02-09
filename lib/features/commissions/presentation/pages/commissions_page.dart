@@ -145,14 +145,37 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Restriction for specific commercials
-    // Only block if NOT a manager and effectively is one of the restricted codes
+    // Restriction for specific commercials who don't participate in commissions
     final restrictedCodes = ['80', '13', '3', '93'];
-    final isRestricted = !widget.isJefeVentas && 
-                         restrictedCodes.any((c) => widget.employeeCode == c || widget.employeeCode.split(',').contains(c));
-    
+    // Normalize codes (strip leading zeros) for safe comparison
+    final userCodes = widget.employeeCode.split(',').map((c) => c.trim().replaceFirst(RegExp(r'^0+'), '')).toList();
+    final isRestricted = !widget.isJefeVentas &&
+                         restrictedCodes.any((c) => userCodes.contains(c));
+
     if (isRestricted) {
-      return const Center(child: Text("Sección no disponible para este usuario", style: TextStyle(color: Colors.white70)));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.money_off_rounded, size: 56, color: Colors.orange.withOpacity(0.6)),
+              const SizedBox(height: 16),
+              const Text(
+                'Este comercial no participa en el plan de comisiones',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 17, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Tu perfil no tiene asignado un sistema de comisiones. Si crees que esto es un error, contacta con tu responsable.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white38, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     // Check if we're in ALL mode (breakdown available)
@@ -831,8 +854,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     color: AppTheme.neonBlue,
                     size: 24,
                   ),
-                  const SizedBox(width: 8),
-                  // Code
+                  const SizedBox(width: 6),
+                  // Code badge
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
@@ -841,26 +864,33 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     ),
                     child: Text(code, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: 12)),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   // Name
                   Expanded(
                     child: Text(name, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis),
                   ),
+                  const SizedBox(width: 8),
                   if (isExcluded) ...[
+                    // Clear "NO COMISIONA" badge for excluded vendors
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                      child: const Text('EXCL', style: TextStyle(fontSize: 9, color: Colors.orange)),
+                      child: const Text('NO COMISIONA', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange)),
                     ),
                     const SizedBox(width: 8),
                   ],
-                  // Status icon
-                  Icon(vendorPositive ? Icons.check_circle : Icons.cancel, color: statusColor, size: 18),
-                  const SizedBox(width: 4),
-                  Text('${vendorPct.toStringAsFixed(0)}%', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                  // Compliance: labeled "Cumpl:" + percentage + icon
+                  Text('Cumpl: ', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                  Icon(vendorPositive ? Icons.check_circle : Icons.cancel, color: statusColor, size: 16),
+                  const SizedBox(width: 2),
+                  Text('${vendorPct.toStringAsFixed(1)}%', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
                   const SizedBox(width: 12),
-                  // Commission total
-                  Text(CurrencyFormatter.format(grandTotal), style: TextStyle(color: isExcluded ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 14)),
+                  // Commission: labeled with € and clear amount
+                  if (!isExcluded) ...[
+                    Text('Comisión: ', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                    Text(CurrencyFormatter.format(grandTotal), style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 14)),
+                  ] else
+                    Text('0,00 €', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
             ),
