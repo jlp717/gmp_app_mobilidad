@@ -50,6 +50,7 @@ class CommissionsService {
   }
 
   /// Register a commission payment (Restricted to Diego 9322)
+  /// NEW: Now includes observaciones parameter (required if amount < generatedAmount)
   static Future<Map<String, dynamic>> payCommission({
     required String vendedorCode,
     required int year,
@@ -59,6 +60,7 @@ class CommissionsService {
     double? generatedAmount,
     String? concept,
     required String adminCode,
+    String? observaciones, // NEW
   }) async {
     try {
       final response = await ApiClient.post(
@@ -72,12 +74,13 @@ class CommissionsService {
           'generatedAmount': generatedAmount ?? 0,
           'concept': concept,
           'adminCode': adminCode,
+          'observaciones': observaciones, // NEW
         },
       );
-      
+
       // Force cache clear for this vendor after payment
       CacheService.invalidate('commissions_${vendedorCode}_$year');
-      
+
       return response;
     } catch (e) {
       throw Exception('Error registrando pago: $e');

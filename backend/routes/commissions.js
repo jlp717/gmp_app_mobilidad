@@ -247,8 +247,6 @@ async function getClientsMonthlySales(clientCodes, year) {
 async function getBSales(vendorCode, year) {
     if (!vendorCode || vendorCode === 'ALL') return {};
 
-    // Normalize code: try to match how it's stored. 
-    // Usually '2', but input might be '02'.
     const rawCode = vendorCode.trim();
     const unpaddedCode = rawCode.replace(/^0+/, '');
 
@@ -266,10 +264,81 @@ async function getBSales(vendorCode, year) {
         });
         return monthlyMap;
     } catch (e) {
-        // Table may not exist - no B-sales
         logger.debug(`B-sales lookup: ${e.message}`);
         return {};
     }
+}
+
+/**
+ * Get aggregated payments for a vendor in a given year
+ * NEW: Now includes details per payment (observaciones, venta_comision)
+ */
+async function getVendorPayments(vendorCode, year) {
+    const payments = {
+        monthly: {},
+        quarterly: {},
+        total: 0,
+        details: {} // NEW: Store payment details by month
+    };
+
+    if (!vendorCode) return payments;
+
+    const normalizedCode = vendorCode.trim().replace(/^0+/, '') || vendorCode.trim();
+
+    try {
+        // Get all payment records with new columns
+        const rows = await query(`
+            SELECT
+                MES,
+                CUATRIMESTRE,
+                IMPORTE_PAGADO,
+                IMPORTE_GENERADO,
+                venta_comision,
+                observaciones,
+                FECHA_PAGO
+            FROM JAVIER.COMMISSION_PAYMENTS
+            WHERE (CODIGOVENDEDOR = '${vendorCode.trim()}' OR CODIGOVENDEDOR = '${normalizedCode}')
+              AND ANIO = ${year}
+            ORDER BY MES, FECHA_PAGO
+        `, false, false);
+
+        rows.forEach(r => {
+            const amount = parseFloat(r.IMPORTE_PAGADO) || 0;
+            const mes = r.MES;
+
+            payments.total += amount;
+
+            if (mes > 0) {
+                // Accumulate total paid per month
+                payments.monthly[mes] = (payments.monthly[mes] || 0) + amount;
+
+                // Store details for the month (aggregate if multiple payments)
+                if (!payments.details[mes]) {
+                    payments.details[mes] = {
+                        totalPaid: 0,
+                        ventaComision: parseFloat(r.venta_comision) || 0,
+                        observaciones: [],
+                        ultimaFecha: r.FECHA_PAGO
+                    };
+                }
+                payments.details[mes].totalPaid += amount;
+                if (r.observaciones && r.observaciones.trim()) {
+                    payments.details[mes].observaciones.push(r.observaciones.trim());
+                }
+                if (r.FECHA_PAGO && new Date(r.FECHA_PAGO) > new Date(payments.details[mes].ultimaFecha || 0)) {
+                    payments.details[mes].ultimaFecha = r.FECHA_PAGO;
+                }
+            }
+
+            if (r.CUATRIMESTRE > 0) {
+                payments.quarterly[r.CUATRIMESTRE] = (payments.quarterly[r.CUATRIMESTRE] || 0) + amount;
+            }
+        });
+    } catch (e) {
+        logger.debug(`Payment lookup error for ${vendorCode}: ${e.message}`);
+    }
+
+    return payments;
 }
 
 /**
@@ -308,42 +377,7 @@ function calculateWorkingDays(year, month, activeWeekDays) {
     return count;
 }
 
-/**
- * FIX #4: Get payment records for a vendor in a given year
- */
-async function getVendorPayments(vendorCode, year) {
-    try {
-        // Query safely. If table doesn't exist, this throws.
-        // We catch it and return 0s so the main flow continues.
-        const rows = await query(`
-            SELECT CUATRIMESTRE, MES, IMPORTE_PAGADO, FECHA_PAGO
-            FROM JAVIER.COMMISSION_PAYMENTS
-            WHERE TRIM(CODIGOVENDEDOR) = '${vendorCode.trim()}'
-              AND ANIO = ${year}
-            ORDER BY MES, CUATRIMESTRE
-        `, false, false);
-
-        const payments = { monthly: {}, quarterly: {}, total: 0 };
-        if (rows && rows.length > 0) {
-            for (const r of rows) {
-                const amount = parseFloat(r.IMPORTE_PAGADO) || 0;
-                if (r.MES && r.MES > 0) {
-                    payments.monthly[r.MES] = (payments.monthly[r.MES] || 0) + amount;
-                }
-                if (r.CUATRIMESTRE && r.CUATRIMESTRE > 0) {
-                    payments.quarterly[r.CUATRIMESTRE] = (payments.quarterly[r.CUATRIMESTRE] || 0) + amount;
-                }
-                payments.total += amount;
-            }
-        }
-        return payments;
-    } catch (e) {
-        // Table likely missing or SQL error. Return empty to allow app to function.
-        // Only log verbose if needed, otherwise keep it clean.
-        // console.log(`[COMMISSIONS] Payments lookup warning for ${vendorCode}: ${e.message}`);
-        return { monthly: {}, quarterly: {}, total: 0 };
-    }
-}
+// REMOVED: Duplicate function - using the enhanced version above (line ~275)
 
 /**
  * Core Commission Logic:
@@ -830,8 +864,13 @@ router.get('/summary', async (req, res) => {
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
                 const results = await Promise.all(promises);
 
-                results.sort((a, b) => b.grandTotalCommission - a.grandTotalCommission); // Sort by comm or sales?
-                const globalTotal = results.reduce((s, r) => s + r.grandTotalCommission, 0);
+                results.sort((a, b) => {
+                    const valA = a.grandTotalCommission || 0;
+                    const valB = b.grandTotalCommission || 0;
+                    return valB - valA;
+                });
+                const globalTotal = results.reduce((s, r) => s + (r.grandTotalCommission || 0), 0);
+                const totalPaid = results.reduce((s, r) => s + (r.payments?.total || 0), 0);
 
                 // Aggregate Months/Quarters for this year (Team View)
                 const aggMonths = [];
@@ -860,9 +899,11 @@ router.get('/summary', async (req, res) => {
                 yearResult = {
                     config: config,
                     grandTotalCommission: globalTotal,
+                    totals: { commission: globalTotal },
                     breakdown: results,
                     months: aggMonths,
-                    quarters: aggQuarters
+                    quarters: aggQuarters,
+                    payments: { total: totalPaid, monthly: {}, quarterly: {} }
                 };
 
             } else {
@@ -900,8 +941,9 @@ router.get('/summary', async (req, res) => {
 });
 
 // FIX #5: Endpoint to register a payment (Restricted to Diego 9322)
+// NEW: Validates observaciones requirement and captures venta_comision snapshot
 router.post('/pay', async (req, res) => {
-    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode } = req.body;
+    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones } = req.body;
 
     // Security check: Only Diego (9322) can pay
     if (adminCode !== '9322') {
@@ -913,25 +955,68 @@ router.post('/pay', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Faltan datos obligatorios (Comercial, Año, Importe)' });
     }
 
+    // NEW: Validate observaciones if paying less than generated amount
+    const amountNum = parseFloat(amount);
+    const generatedNum = parseFloat(generatedAmount) || 0;
+    if (amountNum < generatedNum && (!observaciones || observaciones.trim() === '')) {
+        logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode}`);
+        return res.status(400).json({
+            success: false,
+            error: 'Debes indicar una observación explicando por qué se paga menos de lo correspondiente'
+        });
+    }
+
     try {
-        // We use a simplified insert. Note: ID is generated always as identity in the creation script.
-        // FASE 2: Now including IMPORTE_GENERADO for snapshot accuracy
+        // NEW: Get venta_comision (snapshot of sales for the specific month)
+        let ventaComision = 0;
+        if (month && month > 0) {
+            try {
+                const vendedorFilter = buildVendedorFilterLACLAE(vendedorCode, 'L');
+                const salesQuery = `
+                    SELECT SUM(L.LCIMVT) as SALES
+                    FROM DSED.LACLAE L
+                    WHERE L.LCAADC = ${year}
+                      AND L.LCMMDC = ${month}
+                      AND ${LACLAE_SALES_FILTER}
+                      ${vendedorFilter}
+                `;
+                const salesRows = await query(salesQuery, false, false);
+                if (salesRows && salesRows.length > 0) {
+                    ventaComision = parseFloat(salesRows[0].SALES) || 0;
+                }
+
+                // Add B-Sales if exist
+                const bSales = await getBSales(vendedorCode, year);
+                ventaComision += (bSales[month] || 0);
+
+                logger.info(`[COMMISSIONS] Captured venta_comision for ${vendedorCode} ${year}/${month}: ${ventaComision.toFixed(2)}€`);
+            } catch (salesErr) {
+                logger.warn(`[COMMISSIONS] Could not capture venta_comision: ${salesErr.message}`);
+            }
+        }
+
+        // Escape observaciones to prevent SQL injection
+        const safeObservaciones = (observaciones || '').replace(/'/g, "''").substring(0, 500);
+
+        // Insert with new columns
         await query(`
-            INSERT INTO JAVIER.COMMISSION_PAYMENTS 
-            (CODIGOVENDEDOR, ANIO, MES, CUATRIMESTRE, IMPORTE_PAGADO, IMPORTE_GENERADO, FECHA_PAGO, CONCEPTO)
+            INSERT INTO JAVIER.COMMISSION_PAYMENTS
+            (CODIGOVENDEDOR, ANIO, MES, CUATRIMESTRE, IMPORTE_PAGADO, IMPORTE_GENERADO, venta_comision, observaciones, FECHA_PAGO, CONCEPTO)
             VALUES (
-                '${vendedorCode.trim()}', 
-                ${year}, 
-                ${month || 0}, 
-                ${quarter || 0}, 
-                ${amount}, 
-                ${generatedAmount || 0},
-                CURRENT DATE, 
-                '${(concept || 'Pago Comisiones').substring(0, 100)}'
+                '${vendedorCode.trim()}',
+                ${year},
+                ${month || 0},
+                ${quarter || 0},
+                ${amount},
+                ${generatedNum},
+                ${ventaComision},
+                '${safeObservaciones}',
+                CURRENT DATE,
+                '${(concept || 'Pago Comisiones').replace(/'/g, "''").substring(0, 100)}'
             )
         `, true);
 
-        logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedAmount}€ gen) by ${adminCode}`);
+        logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${adminCode}${observaciones ? ' [with observaciones]' : ''}`);
         res.json({ success: true, message: 'Pago registrado correctamente' });
     } catch (e) {
         logger.error(`[COMMISSIONS] Payment error: ${e.message}`);
