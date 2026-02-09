@@ -271,15 +271,13 @@ class _MainShellState extends State<MainShell> {
       color: Colors.orange,
     ));
     
-    final showCommissions = user?.showCommissions ?? true; 
-    if (showCommissions || isJefeVentas) {
-      items.add(_NavItem(
-        icon: Icons.euro_outlined,
-        selectedIcon: Icons.euro,
-        label: 'Comisiones',
-        color: AppTheme.neonGreen,
-      ));
-    }
+    // Comisiones tab always visible for all sales roles (Jefe + Comercial)
+    items.add(_NavItem(
+      icon: Icons.euro_outlined,
+      selectedIcon: Icons.euro,
+      label: 'Comisiones',
+      color: AppTheme.neonGreen,
+    ));
     
     items.add(_NavItem(
       icon: Icons.receipt_long_outlined,
@@ -839,38 +837,24 @@ class _MainShellState extends State<MainShell> {
     }
     
     // ===============================================
-    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Chat
-    // (Cobros removido - ahora exclusivo de Repartidor)
+    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Facturas, 5=Chat
     // ===============================================
-    // ===============================================
-    // COMERCIAL: Dynamic Routing based on "showCommissions"
-    // ===============================================
-    final showCommissions = user?.showCommissions ?? true;
-    
-    // 1. Clientes
-    if (_currentIndex == 0) return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-    
-    // 2. Ruta
-    if (_currentIndex == 1) return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-    
-    // 3. Objetivos
-    if (_currentIndex == 2) return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-    
-    // Dynamic handling for 3+
-    int adjIndex = _currentIndex;
-    
-    if (showCommissions) {
-      // Sequence: 3=Commissions, 4=Facturas, 5=Chat
-      if (adjIndex == 3) return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      if (adjIndex == 4) return const FacturasPage();
-      if (adjIndex == 5) return ChatbotPage(vendedorCodes: vendedorCodes);
-    } else {
-      // Sequence: 3=Facturas, 4=Chat (Commissions skipped)
-      if (adjIndex == 3) return const FacturasPage();
-      if (adjIndex == 4) return ChatbotPage(vendedorCodes: vendedorCodes);
+    switch (_currentIndex) {
+      case 0:
+        return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+      case 1:
+        return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+      case 2:
+        return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+      case 3:
+        return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
+      case 4:
+        return const FacturasPage();
+      case 5:
+        return ChatbotPage(vendedorCodes: vendedorCodes);
+      default:
+        return const Center(child: Text('Página no encontrada'));
     }
-
-    return const Center(child: Text('Página no encontrada'));
   }
 }
 

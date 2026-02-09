@@ -17,10 +17,11 @@ class FacturasService {
             throw new Error('vendedorCodes is required');
         }
 
-        const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
+        const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
+        const vendorList = isAll ? null : vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
 
         let sql = `
-      SELECT 
+      SELECT
         TRIM(CAC.SERIEFACTURA) as SERIE,
         CAC.NUMEROFACTURA as NUMERO,
         CAC.EJERCICIOFACTURA as EJERCICIO,
@@ -35,8 +36,11 @@ class FacturasService {
       FROM DSEDAC.CAC CAC
       LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
       WHERE CAC.NUMEROFACTURA > 0
-        AND TRIM(CAC.CODIGOVENDEDOR) IN (${vendorList})
     `;
+
+        if (!isAll) {
+            sql += ` AND TRIM(CAC.CODIGOVENDEDOR) IN (${vendorList})`;
+        }
 
         // Date Filtering Logic
         let dateFilterApplied = false;
@@ -131,15 +135,18 @@ class FacturasService {
             throw new Error('vendedorCodes is required');
         }
 
-        const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
+        const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
+        const vendorList = isAll ? null : vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
 
-        const sql = `
+        let sql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
       FROM DSEDAC.CAC
       WHERE NUMEROFACTURA > 0
-        AND TRIM(CODIGOVENDEDOR) IN (${vendorList})
-      ORDER BY YEAR DESC
     `;
+        if (!isAll) {
+            sql += ` AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
+        }
+        sql += ` ORDER BY YEAR DESC`;
 
         try {
             const rows = await query(sql);
@@ -157,11 +164,12 @@ class FacturasService {
             throw new Error('vendedorCodes is required');
         }
 
-        const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
+        const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
+        const vendorList = isAll ? null : vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
         const currentYear = year || new Date().getFullYear();
 
         let sql = `
-      SELECT 
+      SELECT
         COUNT(DISTINCT TRIM(SERIEFACTURA) || '-' || NUMEROFACTURA) as NUM_FACTURAS,
         SUM(IMPORTETOTAL) as TOTAL,
         SUM(IMPORTEBASEIMPONIBLE1 + IMPORTEBASEIMPONIBLE2 + IMPORTEBASEIMPONIBLE3) as BASE,
@@ -169,8 +177,11 @@ class FacturasService {
       FROM DSEDAC.CAC
       WHERE EJERCICIOFACTURA = ${currentYear}
         AND NUMEROFACTURA > 0
-        AND TRIM(CODIGOVENDEDOR) IN (${vendorList})
     `;
+
+        if (!isAll) {
+            sql += ` AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
+        }
 
         if (month) {
             sql += ` AND MESFACTURA = ${month}`;

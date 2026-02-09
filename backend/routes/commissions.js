@@ -9,7 +9,7 @@ const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendo
 // =============================================================================
 // CONFIGURATION & CONSTANTS
 // =============================================================================
-const EXCLUDED_VENDORS = ['3', '13']; // Vendors who see data but don't earn commissions
+const EXCLUDED_VENDORS = ['3', '13', '93', '80']; // Vendors who see data but don't earn commissions
 const DEFAULT_CONFIG_2026 = {
     ipc: 3.0,
     tiers: [

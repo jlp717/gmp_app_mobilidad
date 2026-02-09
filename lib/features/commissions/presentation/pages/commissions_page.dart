@@ -147,7 +147,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
   Widget build(BuildContext context) {
     // Restriction for specific commercials
     // Only block if NOT a manager and effectively is one of the restricted codes
-    final restrictedCodes = ['80', '13'];
+    final restrictedCodes = ['80', '13', '3', '93'];
     final isRestricted = !widget.isJefeVentas && 
                          restrictedCodes.any((c) => widget.employeeCode == c || widget.employeeCode.split(',').contains(c));
     
@@ -643,26 +643,23 @@ class _CommissionsPageState extends State<CommissionsPage> {
                ? _buildAllVendorsTable(breakdown)  // Show ALL vendors table
              : totalTarget <= 0 && !isInformative // ZERO TARGET WARNING
                ? Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    margin: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppTheme.darkSurface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.orange.withOpacity(0.5)),
-                    ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.info_outline, color: Colors.orange, size: 48),
+                        const Icon(Icons.search_off_rounded, size: 56, color: Colors.white24),
                         const SizedBox(height: 16),
-                        const Text('Sin Objetivo de Comisiones',
-                            style: TextStyle(color: Colors.orange, fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 12),
                         const Text(
-                          'No se han encontrado ventas comisionables (Tipos AB/VT) en el año anterior para calcular el objetivo 2026.\nLas ventas de tipo "CM" u otros no generan objetivo ni comisiones.',
+                          'No se han encontrado comisiones para los filtros seleccionados',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white70, fontSize: 14),
+                          style: TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Prueba a seleccionar otro comercial o verifica que existan datos de ventas disponibles.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white38, fontSize: 13),
                         ),
                       ],
                     ),
@@ -737,12 +734,25 @@ class _CommissionsPageState extends State<CommissionsPage> {
   /// Builds the ALL vendors expandable list showing each vendor with their monthly data
   Widget _buildAllVendorsTable(List<dynamic> breakdown) {
     if (breakdown.isEmpty) {
-      return const Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.group_off, size: 48, color: Colors.white24),
-          SizedBox(height: 16),
-          Text("No hay datos de vendedores", style: TextStyle(color: Colors.white54))
-        ])
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.search_off_rounded, size: 56, color: Colors.white24),
+            const SizedBox(height: 16),
+            const Text(
+              'No se han encontrado comisiones para los filtros seleccionados',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Prueba a seleccionar otro comercial o verifica que existan datos de ventas disponibles.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white38, fontSize: 13),
+            ),
+          ]),
+        ),
       );
     }
 

@@ -1098,8 +1098,68 @@ Equipo Granja Mari Pepa''';
   }
 
   Widget _buildEmptyState() {
-    return const Center(
-      child: Text('No hay facturas'),
+    final hasFilters = _selectedMonth != null ||
+                       _dateFrom != null ||
+                       _dateTo != null ||
+                       _clientSearchController.text.isNotEmpty ||
+                       _facturaSearchController.text.isNotEmpty;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasFilters ? Icons.search_off_rounded : Icons.receipt_long_outlined,
+              size: 56,
+              color: Colors.white24,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              hasFilters
+                  ? 'No se han encontrado facturas para los filtros seleccionados'
+                  : 'No hay facturas disponibles',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              hasFilters
+                  ? 'Prueba a seleccionar otro comercial, ampliar el rango de fechas o modificar la búsqueda.'
+                  : 'Las facturas aparecerán aquí cuando estén disponibles.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white38, fontSize: 13),
+            ),
+            if (hasFilters) ...[
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _selectedMonth = null;
+                    _dateFrom = null;
+                    _dateTo = null;
+                    _clientSearchController.clear();
+                    _facturaSearchController.clear();
+                  });
+                  _refreshData();
+                },
+                icon: const Icon(Icons.filter_alt_off, size: 18),
+                label: const Text('Limpiar filtros'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white54,
+                  side: const BorderSide(color: Colors.white24),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
