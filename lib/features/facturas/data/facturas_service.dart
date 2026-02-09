@@ -298,9 +298,9 @@ class FacturasService {
            facturas = facturas.where((f) {
               // 1. Check 'ejercicio' field (Fast & Reliable)
               if (f.ejercicio != 0) {
-                 // Debug leaky filter
+                 // STRICT CHECK: Ensure types align
                  if (f.ejercicio != year) {
-                     // print('Excluded Item: ${f.numeroFormateado} (Year: ${f.ejercicio})');
+                     // print('Excluded Item: ${f.numeroFormateado} (Year: ${f.ejercicio} vs Target: $year)');
                      return false;
                  }
                  return true;
@@ -308,7 +308,7 @@ class FacturasService {
               
               // 2. Fallback: Parse date if ejercicio is 0 or missing
                try {
-                  if (f.fecha.isEmpty) return false;
+                  if (f.fecha.isEmpty) return false; // No date, SAFE to hide if year filtered
                   
                   int? docYear;
                   // Try ISO
@@ -322,8 +322,14 @@ class FacturasService {
                      }
                   }
                   
-                  if (docYear != year) return false;
-                  return true;
+                  if (docYear != null && docYear != year) {
+                      return false;
+                  }
+                  
+                  // If we can't determine year, should we show it? 
+                  // User wants STRICT filtering. If we assume 'all' then we leak.
+                  // BETTER: If year filter is active, only show items CONFIRMED to be in that year.
+                  return docYear == year;
                } catch (e) {
                  return false; 
                }

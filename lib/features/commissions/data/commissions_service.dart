@@ -48,4 +48,37 @@ class CommissionsService {
       return [];
     }
   }
+
+  /// Register a commission payment (Restricted to Diego 9322)
+  static Future<Map<String, dynamic>> payCommission({
+    required String vendedorCode,
+    required int year,
+    int? month,
+    int? quarter,
+    required double amount,
+    String? concept,
+    required String adminCode,
+  }) async {
+    try {
+      final response = await ApiClient.post(
+        '/commissions/pay',
+        {
+          'vendedorCode': vendedorCode,
+          'year': year,
+          'month': month ?? 0,
+          'quarter': quarter ?? 0,
+          'amount': amount,
+          'concept': concept,
+          'adminCode': adminCode,
+        },
+      );
+      
+      // Force cache clear for this vendor after payment
+      CacheService.invalidate('commissions_${vendedorCode}_$year');
+      
+      return response;
+    } catch (e) {
+      throw Exception('Error registrando pago: $e');
+    }
+  }
 }

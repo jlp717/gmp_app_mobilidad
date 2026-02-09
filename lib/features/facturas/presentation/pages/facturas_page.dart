@@ -188,27 +188,13 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     // 3. Show Date Picker with standard simplified theme
     try {
       // 3. Show Date Picker with safe theme or fallback
+      // 3. Show Date Picker with safe theme or fallback
       final picked = await showDatePicker(
         context: context,
         initialDate: clampedInitial,
         firstDate: firstDate,
         lastDate: lastDate,
         locale: const Locale('es', 'ES'),
-        builder: (context, child) {
-           // FIX: potentially crashing theme wrapper removed or simplified
-           return Theme(
-             data: Theme.of(context).copyWith(
-               colorScheme: const ColorScheme.dark(
-                 primary: AppTheme.neonBlue,
-                 onPrimary: Colors.white,
-                 surface: Color(0xFF1E293B),
-                 onSurface: Colors.white,
-               ),
-               dialogBackgroundColor: const Color(0xFF1E293B),
-             ),
-             child: child!,
-           );
-        },
       );
       
       if (picked != null) {

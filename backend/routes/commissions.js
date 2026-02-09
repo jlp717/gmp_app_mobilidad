@@ -9,8 +9,9 @@ const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendo
 // =============================================================================
 // CONFIGURATION & CONSTANTS
 // =============================================================================
-// FIX #1: Dynamic excluded vendors - loaded from DB
-let EXCLUDED_VENDORS = [];
+// FIX #1: Dynamic excluded vendors - loaded from DB with safety fallback
+const DEFAULT_EXCLUDED = ['3', '13', '93', '80'];
+let EXCLUDED_VENDORS = [...DEFAULT_EXCLUDED];
 let _excludedVendorsLastLoad = 0;
 const EXCLUDED_CACHE_TTL = 5 * 60 * 1000; // Reload every 5 min
 
@@ -27,13 +28,13 @@ async function loadExcludedVendors() {
             const dbCodes = rows.map(r => r.CODE);
             const normalizedCodes = rows.map(r => (r.CODE || '').replace(/^0+/, ''));
 
-            // Merge unique
-            EXCLUDED_VENDORS = [...new Set([...dbCodes, ...normalizedCodes])];
+            // Merge unique with hardcoded safety list
+            EXCLUDED_VENDORS = [...new Set([...DEFAULT_EXCLUDED, ...dbCodes, ...normalizedCodes])];
 
             console.log(`[COMMISSIONS] Loaded ${rows.length} excluded rules. Effective list: [${EXCLUDED_VENDORS.join(', ')}]`);
         } else {
-            EXCLUDED_VENDORS = [];
-            console.log(`[COMMISSIONS] No excluded vendors found in DB.`);
+            EXCLUDED_VENDORS = [...DEFAULT_EXCLUDED];
+            console.log(`[COMMISSIONS] No excluded vendors found in DB. Using fallback: [${EXCLUDED_VENDORS.join(', ')}]`);
         }
         _excludedVendorsLastLoad = Date.now();
     } catch (e) {
@@ -885,6 +886,45 @@ router.get('/summary', async (req, res) => {
     }
 });
 
+// FIX #5: Endpoint to register a payment (Restricted to Diego 9322)
+router.post('/pay', async (req, res) => {
+    const { vendedorCode, year, month, quarter, amount, concept, adminCode } = req.body;
+
+    // Security check: Only Diego (9322) can pay
+    if (adminCode !== '9322') {
+        logger.warn(`[COMMISSIONS] Unauthorized payment attempt by user: ${adminCode}`);
+        return res.status(403).json({ success: false, error: 'Solo el administrador (Diego) puede registrar pagos.' });
+    }
+
+    if (!vendedorCode || !year || !amount) {
+        return res.status(400).json({ success: false, error: 'Faltan datos obligatorios (Comercial, Año, Importe)' });
+    }
+
+    try {
+        // We use a simplified insert. Note: ID is generated always as identity in the creation script.
+        // If the table was created without identity, this might need ID handling.
+        await query(`
+            INSERT INTO JAVIER.COMMISSION_PAYMENTS 
+            (CODIGOVENDEDOR, ANIO, MES, CUATRIMESTRE, IMPORTE_PAGADO, FECHA_PAGO, CONCEPTO)
+            VALUES (
+                '${vendedorCode.trim()}', 
+                ${year}, 
+                ${month || 0}, 
+                ${quarter || 0}, 
+                ${amount}, 
+                CURRENT DATE, 
+                '${(concept || 'Pago Comisiones').substring(0, 100)}'
+            )
+        `, true);
+
+        logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ by ${adminCode}`);
+        res.json({ success: true, message: 'Pago registrado correctamente' });
+    } catch (e) {
+        logger.error(`[COMMISSIONS] Payment error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Error al registrar el pago en DB', details: e.message });
+    }
+});
+
 // FIX #1: Route to get excluded vendor codes (for frontend dynamic loading)
 router.get('/excluded-vendors', async (req, res) => {
     try {
@@ -893,7 +933,7 @@ router.get('/excluded-vendors', async (req, res) => {
         res.json({ success: true, excludedVendors: EXCLUDED_VENDORS });
     } catch (e) {
         console.log(`[COMMISSIONS] /excluded-vendors error: ${e.message}`);
-        res.json({ success: true, excludedVendors: ['3', '13', '93', '80'] }); // Fallback
+        res.json({ success: true, excludedVendors: DEFAULT_EXCLUDED }); // Fallback
     }
 });
 

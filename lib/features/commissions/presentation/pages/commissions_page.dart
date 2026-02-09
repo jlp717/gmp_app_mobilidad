@@ -10,6 +10,8 @@ import 'package:provider/provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../features/rutero/presentation/pages/rutero_page.dart'; // Deep link to sibling feature
+import '../../../../core/providers/auth_provider.dart';
+
 
 class CommissionsPage extends StatefulWidget {
   final String employeeCode;
@@ -131,6 +133,90 @@ class _CommissionsPageState extends State<CommissionsPage> {
     );
   }
 
+  Future<void> _showPayDialog(String vendorCode, String vendorName) async {
+    final amountController = TextEditingController();
+    final conceptController = TextEditingController(text: 'Pago Comisiones');
+    int selectedMonth = DateTime.now().month;
+    
+    // Get current user code from AuthProvider
+    final adminCode = context.read<AuthProvider>().currentUser?.code ?? '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          title: Text('Pagar a $vendorName', style: const TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Importe (€)',
+                  labelStyle: const TextStyle(color: Colors.white60),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5))),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: selectedMonth,
+                dropdownColor: AppTheme.surfaceColor,
+                items: List.generate(12, (index) => DropdownMenuItem(
+                  value: index + 1,
+                  child: Text(_getMonthName(index + 1), style: const TextStyle(color: Colors.white)),
+                )),
+                onChanged: (val) => setStateDialog(() => selectedMonth = val!),
+                decoration: const InputDecoration(labelText: 'Mes Correspondiente', labelStyle: TextStyle(color: Colors.white60)),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: conceptController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Concepto (Opcional)',
+                  labelStyle: TextStyle(color: Colors.white60),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.white60))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
+              onPressed: () async {
+                final amount = double.tryParse(amountController.text) ?? 0;
+                if (amount <= 0) return;
+                
+                try {
+                  final res = await CommissionsService.payCommission(
+                    vendedorCode: vendorCode, 
+                    year: 2026, 
+                    month: selectedMonth,
+                    amount: amount,
+                    concept: conceptController.text,
+                    adminCode: adminCode,
+                  );
+                  
+                  if (res['success'] == true) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pago registrado correctamente'), backgroundColor: Colors.green));
+                    _loadData(); // Refresh
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+                }
+              }, 
+              child: const Text('Registrar Pago', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   Widget _buildStep(String title, String desc) {
     return Column(
@@ -234,6 +320,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final rhythmCompliance = totalProRatedTarget > 0 ? (totalActualSales / totalProRatedTarget) * 100 : 100;
     final isOnRhythm = rhythmCompliance >= 100;
     final rhythmStatus = rhythmCompliance >= 105 ? 'Adelantado' : (rhythmCompliance >= 95 ? 'En ritmo' : 'Rezagado');
+
+    // Get Admin status for payment buttons
+    final authProvider = context.watch<AuthProvider>();
+    final curUserCode = authProvider.currentUser?.code ?? '';
+    final isDiego = curUserCode == '9322';
 
 
     // Prepare table rows (interleaving quarters)
@@ -488,7 +579,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
                              Text('Generado: ${CurrencyFormatter.format(grandTotal)}', 
                                style: const TextStyle(color: AppTheme.neonGreen, fontSize: 13, fontWeight: FontWeight.bold)),
                              const SizedBox(height: 2),
-                             Text('Pagado: ${CurrencyFormatter.format(totalPaid)} (${((grandTotal > 0) ? (totalPaid/grandTotal*100) : 0).toStringAsFixed(1)}%)', 
+                             // User Request: "Pagado 100,20€; 100.000€ de 120.000€"
+                             // We don't have exact "this month paid" in aggregated header easily without checking date. 
+                             // We will show: Pagado Total: Y de Z
+                             Text('Pagado: ${CurrencyFormatter.format(totalPaid)} de ${CurrencyFormatter.format(grandTotal)}', 
                                style: const TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
                            ],
                          ),
@@ -770,20 +864,26 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
     try {
       // Sort by vendor code but handle potential nulls/types
-      final sorted = List<dynamic>.from(breakdown);
-      sorted.sort((a, b) {
-        final cA = a['vendedorCode']?.toString() ?? '';
-        final cB = b['vendedorCode']?.toString() ?? '';
-        return cA.compareTo(cB);
-      });
+      final sorted = List<Map<String, dynamic>>.from(breakdown);
+    sorted.sort((a, b) => (b['grandTotalCommission'] as num).compareTo(a['grandTotalCommission'] as num));
 
-      return ListView.builder(
+    // Get Admin status for payment buttons
+    final authProvider = context.watch<AuthProvider>();
+    final curUserCode = authProvider.currentUser?.code ?? '';
+    final isDiego = curUserCode == '9322';
+
+    return Container(
+      color: AppTheme.darkBase,
+      child: ListView.builder(
         itemCount: sorted.length,
         itemBuilder: (context, index) {
           try {
+            final r = sorted[index];
             return _VendorExpandableCard(
-              vendor: sorted[index],
+              data: r,
+              isDiego: isDiego,
               getMonthName: _getMonthName,
+              onPay: (code, name) => _showPayDialog(code, name),
             );
           } catch (itemErr) {
              print('Error rendering vendor card index $index: $itemErr');
@@ -794,7 +894,8 @@ class _CommissionsPageState extends State<CommissionsPage> {
              );
           }
         },
-      );
+      ),
+    );
     } catch (e) {
       print('Error sorting/building vendors table: $e');
        return Center(child: Text('Error mostrando lista: $e', style: const TextStyle(color: Colors.red)));
@@ -804,10 +905,18 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
 /// Expandable card for each vendor in ALL mode
 class _VendorExpandableCard extends StatefulWidget {
-  final dynamic vendor;
+  final Map<String, dynamic> data;
+  final bool isDiego;
   final String Function(int) getMonthName;
+  final Function(String, String)? onPay;
 
-  const _VendorExpandableCard({required this.vendor, required this.getMonthName});
+  const _VendorExpandableCard({
+    super.key,
+    required this.data,
+    this.isDiego = false,
+    required this.getMonthName,
+    this.onPay,
+  });
 
   @override
   State<_VendorExpandableCard> createState() => _VendorExpandableCardState();
@@ -818,15 +927,16 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
 
   @override
   Widget build(BuildContext context) {
-    final v = widget.vendor;
-    final code = v['vendedorCode'] as String? ?? '?';
-    final name = v['vendorName'] as String? ?? 'Sin Nombre';
-    final grandTotal = (v['grandTotalCommission'] as num?)?.toDouble() ?? 0;
-    final isExcluded = (v['isExcluded'] as bool?) ?? false;
-    final months = (v['months'] as List?) ?? [];
-    final quarters = (v['quarters'] as List?) ?? [];
-    final payments = (v['payments'] as Map<String, dynamic>?) ?? {};
-    final totalPaid = (payments['total'] as num?)?.toDouble() ?? 0.0;
+    final data = widget.data;
+    final vendorCode = data['vendedorCode']?.toString() ?? '???';
+    final vendorName = data['vendorName']?.toString() ?? 'Vendedor';
+    final isExcluded = (data['isExcluded'] as bool?) ?? false;
+    final grandTotal = (data['grandTotalCommission'] as num?)?.toDouble() ?? 0;
+
+    final payments = (data['payments'] as Map?) ?? {};
+    final totalPaid = (payments['total'] as num?)?.toDouble() ?? 0;
+    final months = (data['months'] as List?) ?? [];
+    final quarters = (data['quarters'] as List?) ?? [];
 
     // Calculate vendor totals
     double totalTarget = 0, totalActual = 0;
@@ -859,26 +969,17 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
               ),
               child: Row(
                 children: [
-                  // Expand/Collapse arrow
-                  Icon(
-                    _isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                    color: AppTheme.neonBlue,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 6),
-                  // Code badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(code, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: 12)),
+                   // Left: Circle Avatar with Vendor Code
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: isExcluded ? Colors.grey.withOpacity(0.2) : AppTheme.neonBlue.withOpacity(0.1),
+                    child: Text(vendorCode, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: 10)),
                   ),
                   const SizedBox(width: 8),
-                  // Name
+
+                  // Center: Name
                   Expanded(
-                    child: Text(name, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis),
+                    child: Text(vendorName, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis),
                   ),
                   const SizedBox(width: 8),
                   if (isExcluded) ...[
@@ -902,11 +1003,32 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('Gen: ${CurrencyFormatter.format(grandTotal)}', style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 12)),
-                        Text('Pag: ${CurrencyFormatter.format(totalPaid)} (${((grandTotal > 0) ? (totalPaid/grandTotal*100) : 0).toStringAsFixed(0)}%)', 
-                          style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 11)),
+                         // Calculate "Paid Month" if possible. Default to 0 if not found for current month.
+                        Builder(builder: (context) {
+                             final now = DateTime.now();
+                             final currentMonthKey = now.month.toString();
+                             final monthlyMap = (payments['monthly'] as Map?);
+                             final paidMonth = (monthlyMap?[currentMonthKey] as num?)?.toDouble() ?? 0.0;
+                             
+                             return Column(
+                               crossAxisAlignment: CrossAxisAlignment.end,
+                               children: [
+                                  Text('Gen: ${CurrencyFormatter.format(grandTotal)}', style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 12)),
+                                  // Format: "Pagado X; Y de Z"
+                                  Text('Pagado ${CurrencyFormatter.format(paidMonth)}; ${CurrencyFormatter.format(totalPaid)} de ${CurrencyFormatter.format(grandTotal)}', 
+                                    style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 9)),
+                               ],
+                             );
+                        }),
                       ],
-                    )
+                    ),
+                    if (widget.isDiego)
+                       IconButton(
+                         icon: const Icon(Icons.payment_rounded, color: AppTheme.neonBlue, size: 20),
+                         onPressed: () => widget.onPay?.call(vendorCode, vendorName),
+                         padding: EdgeInsets.zero,
+                         constraints: const BoxConstraints(),
+                       ),
                   ] else
                     Text('0,00 €', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
