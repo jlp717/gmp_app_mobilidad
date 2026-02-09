@@ -482,13 +482,16 @@ class _CommissionsPageState extends State<CommissionsPage> {
                        if (isInformative)
                          const Text('Modo Informativo (No Comisionable)', style: TextStyle(color: Colors.grey, fontSize: 11))
                        else
-                         Row(children: [
-                           Text('Generado: ${CurrencyFormatter.format(grandTotal)}', 
-                             style: const TextStyle(color: AppTheme.neonGreen, fontSize: 13, fontWeight: FontWeight.bold)),
-                           const SizedBox(width: 12),
-                           Text('Pagado: ${CurrencyFormatter.format(totalPaid)}', 
-                             style: const TextStyle(color: AppTheme.neonBlue, fontSize: 13, fontWeight: FontWeight.bold)),
-                         ]),
+                         Column(
+                           crossAxisAlignment: CrossAxisAlignment.end,
+                           children: [
+                             Text('Generado: ${CurrencyFormatter.format(grandTotal)}', 
+                               style: const TextStyle(color: AppTheme.neonGreen, fontSize: 13, fontWeight: FontWeight.bold)),
+                             const SizedBox(height: 2),
+                             Text('Pagado: ${CurrencyFormatter.format(totalPaid)} (${((grandTotal > 0) ? (totalPaid/grandTotal*100) : 0).toStringAsFixed(1)}%)', 
+                               style: const TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                           ],
+                         ),
                      ],
                    ),
                  ),
@@ -900,7 +903,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text('Gen: ${CurrencyFormatter.format(grandTotal)}', style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 12)),
-                        Text('Pag: ${CurrencyFormatter.format(totalPaid)}', style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text('Pag: ${CurrencyFormatter.format(totalPaid)} (${((grandTotal > 0) ? (totalPaid/grandTotal*100) : 0).toStringAsFixed(0)}%)', 
+                          style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 11)),
                       ],
                     )
                   ] else

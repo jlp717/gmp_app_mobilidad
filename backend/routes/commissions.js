@@ -299,10 +299,12 @@ function calculateWorkingDays(year, month, activeWeekDays) {
  */
 async function getVendorPayments(vendorCode, year) {
     try {
+        // Query safely. If table doesn't exist, this throws.
+        // We catch it and return 0s so the main flow continues.
         const rows = await query(`
             SELECT CUATRIMESTRE, MES, IMPORTE_PAGADO, FECHA_PAGO
             FROM JAVIER.COMMISSION_PAYMENTS
-            WHERE TRIM(CODIGOVENDEDOR) = '${vendorCode}'
+            WHERE TRIM(CODIGOVENDEDOR) = '${vendorCode.trim()}'
               AND ANIO = ${year}
             ORDER BY MES, CUATRIMESTRE
         `, false, false);
@@ -319,11 +321,12 @@ async function getVendorPayments(vendorCode, year) {
                 }
                 payments.total += amount;
             }
-            console.log(`[COMMISSIONS] Payments for ${vendorCode}/${year}: total=${payments.total.toFixed(2)}, monthly=${JSON.stringify(payments.monthly)}`);
         }
         return payments;
     } catch (e) {
-        console.log(`[COMMISSIONS] Payments lookup for ${vendorCode}: ${e.message}`);
+        // Table likely missing or SQL error. Return empty to allow app to function.
+        // Only log verbose if needed, otherwise keep it clean.
+        // console.log(`[COMMISSIONS] Payments lookup warning for ${vendorCode}: ${e.message}`);
         return { monthly: {}, quarterly: {}, total: 0 };
     }
 }
