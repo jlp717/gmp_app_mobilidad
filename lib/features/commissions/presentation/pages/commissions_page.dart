@@ -133,8 +133,8 @@ class _CommissionsPageState extends State<CommissionsPage> {
     );
   }
 
-  Future<void> _showPayDialog(String vendorCode, String vendorName) async {
-    final amountController = TextEditingController();
+  Future<void> _showPayDialog(String vendorCode, String vendorName, double currentGenerated) async {
+    final amountController = TextEditingController(text: currentGenerated.toStringAsFixed(2));
     final conceptController = TextEditingController(text: 'Pago Comisiones');
     int selectedMonth = DateTime.now().month;
     
@@ -196,6 +196,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                     year: 2026, 
                     month: selectedMonth,
                     amount: amount,
+                    generatedAmount: currentGenerated, // Snapshotted commission
                     concept: conceptController.text,
                     adminCode: adminCode,
                   );
@@ -231,38 +232,8 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // FIX: Using dynamic exclusion from backend instead of hardcoded list
-    // The backend now sends 'isExcluded' flag in the response data
-    final isExcludedGlobal = (_data?['isExcluded'] as bool?) ?? false;
-
-    if (isExcludedGlobal) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.money_off_rounded, size: 56, color: Colors.orange.withOpacity(0.6)),
-              const SizedBox(height: 16),
-              const Text(
-                'Este comercial no participa en el plan de comisiones',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 17, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Tu perfil no tiene asignado un sistema de comisiones. Si crees que esto es un error, contacta con tu responsable.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white38, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     // Check if we're in ALL mode (breakdown available)
-    final breakdown = (_data?['breakdown'] as List?) ?? [];
+    final breakdown = (_data?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final isAllMode = breakdown.isNotEmpty;
 
     // ... vars ...
@@ -589,6 +560,13 @@ class _CommissionsPageState extends State<CommissionsPage> {
                      ],
                    ),
                  ),
+                 if (isDiego && !isAllMode)
+                   IconButton(
+                     icon: const Icon(Icons.payment_rounded, color: AppTheme.neonBlue, size: 28),
+                     // We need the ID/Code of the current single vendor
+                     onPressed: () => _showPayDialog(_data?['vendor'] ?? widget.employeeCode.split(',').first, 'Vendedor', grandTotal),
+                     tooltip: 'Registrar Pago',
+                   ),
                  IconButton(
                    icon: const Icon(Icons.info_outline, color: AppTheme.neonBlue),
                    onPressed: _showExplanationModal,
@@ -597,6 +575,31 @@ class _CommissionsPageState extends State<CommissionsPage> {
                ],
              ),
            ),
+           
+           // FASE 2: Inline exclusion banner instead of full screen block
+           if ((_data?['isExcluded'] as bool?) ?? false)
+             Container(
+               width: double.infinity,
+               margin: const EdgeInsets.all(12),
+               padding: const EdgeInsets.all(12),
+               decoration: BoxDecoration(
+                 color: Colors.orange.withOpacity(0.1),
+                 borderRadius: BorderRadius.circular(8),
+                 border: Border.all(color: Colors.orange.withOpacity(0.3)),
+               ),
+               child: const Row(
+                 children: [
+                   Icon(Icons.money_off_rounded, color: Colors.orange, size: 20),
+                   SizedBox(width: 8),
+                   Expanded(
+                     child: Text(
+                       'Este comercial no participa en el plan de comisiones',
+                       style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.bold),
+                     ),
+                   ),
+                 ],
+               ),
+             ),
            
            // === SUMMARY CARDS ===
            if (!_isLoading && _error == null && !isInformative) ...[
@@ -863,27 +866,32 @@ class _CommissionsPageState extends State<CommissionsPage> {
     }
 
     try {
-      // Sort by vendor code but handle potential nulls/types
-      final sorted = List<Map<String, dynamic>>.from(breakdown);
-    sorted.sort((a, b) => (b['grandTotalCommission'] as num).compareTo(a['grandTotalCommission'] as num));
+      // Sort by grand total descending, handle nulls defensively
+      final List<Map<String, dynamic>> sorted = List<Map<String, dynamic>>.from(breakdown);
+      sorted.sort((a, b) {
+        final valA = (a['grandTotalCommission'] as num?)?.toDouble() ?? 0.0;
+        final valB = (b['grandTotalCommission'] as num?)?.toDouble() ?? 0.0;
+        return valB.compareTo(valA); // Descending
+      });
 
-    // Get Admin status for payment buttons
-    final authProvider = context.watch<AuthProvider>();
-    final curUserCode = authProvider.currentUser?.code ?? '';
-    final isDiego = curUserCode == '9322';
+      // Get Admin status for payment buttons
+      final authProvider = context.watch<AuthProvider>();
+      final curUserCode = authProvider.currentUser?.code ?? '';
+      final isDiego = curUserCode == '9322';
 
-    return Container(
-      color: AppTheme.darkBase,
-      child: ListView.builder(
-        itemCount: sorted.length,
-        itemBuilder: (context, index) {
+      return Container(
+        color: AppTheme.darkBase,
+        child: ListView.builder(
+          itemCount: sorted.length,
+          itemBuilder: (context, index) {
           try {
             final r = sorted[index];
+            final grandTotal = (r['grandTotalCommission'] as num?)?.toDouble() ?? 0.0;
             return _VendorExpandableCard(
               data: r,
               isDiego: isDiego,
               getMonthName: _getMonthName,
-              onPay: (code, name) => _showPayDialog(code, name),
+              onPay: (code, name) => _showPayDialog(code, name, grandTotal),
             );
           } catch (itemErr) {
              print('Error rendering vendor card index $index: $itemErr');
@@ -1023,11 +1031,15 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                       ],
                     ),
                     if (widget.isDiego)
-                       IconButton(
-                         icon: const Icon(Icons.payment_rounded, color: AppTheme.neonBlue, size: 20),
-                         onPressed: () => widget.onPay?.call(vendorCode, vendorName),
-                         padding: EdgeInsets.zero,
-                         constraints: const BoxConstraints(),
+                       Padding(
+                         padding: const EdgeInsets.only(left: 8.0),
+                         child: IconButton(
+                           icon: const Icon(Icons.payment_rounded, color: AppTheme.neonBlue, size: 22),
+                           onPressed: () => widget.onPay?.call(vendorCode, vendorName),
+                           tooltip: 'Pagar',
+                           padding: EdgeInsets.zero,
+                           constraints: const BoxConstraints(),
+                         ),
                        ),
                   ] else
                     Text('0,00 €', style: TextStyle(color: Colors.grey, fontSize: 12)),

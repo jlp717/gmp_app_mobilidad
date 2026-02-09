@@ -159,6 +159,19 @@ async function initCommissionTables() {
         }
     }
 
+    // FIX FASE 2: Add IMPORTE_GENERADO column for snapshot support
+    try {
+        await query(`SELECT IMPORTE_GENERADO FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
+    } catch (colErr) {
+        logger.info('⚙️ Adding IMPORTE_GENERADO column to COMMISSION_PAYMENTS...');
+        try {
+            await query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN IMPORTE_GENERADO DECIMAL(12,2) DEFAULT 0`);
+            logger.info('✅ IMPORTE_GENERADO column added.');
+        } catch (alterErr) {
+            logger.warn(`⚠️ Could not add snapshot column: ${alterErr.message}`);
+        }
+    }
+
     // Load excluded vendors into memory
     await loadExcludedVendors();
     logger.info(`✅ Commission system initialized. Excluded vendors: [${EXCLUDED_VENDORS.join(', ')}]`);
@@ -888,7 +901,7 @@ router.get('/summary', async (req, res) => {
 
 // FIX #5: Endpoint to register a payment (Restricted to Diego 9322)
 router.post('/pay', async (req, res) => {
-    const { vendedorCode, year, month, quarter, amount, concept, adminCode } = req.body;
+    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode } = req.body;
 
     // Security check: Only Diego (9322) can pay
     if (adminCode !== '9322') {
@@ -902,22 +915,23 @@ router.post('/pay', async (req, res) => {
 
     try {
         // We use a simplified insert. Note: ID is generated always as identity in the creation script.
-        // If the table was created without identity, this might need ID handling.
+        // FASE 2: Now including IMPORTE_GENERADO for snapshot accuracy
         await query(`
             INSERT INTO JAVIER.COMMISSION_PAYMENTS 
-            (CODIGOVENDEDOR, ANIO, MES, CUATRIMESTRE, IMPORTE_PAGADO, FECHA_PAGO, CONCEPTO)
+            (CODIGOVENDEDOR, ANIO, MES, CUATRIMESTRE, IMPORTE_PAGADO, IMPORTE_GENERADO, FECHA_PAGO, CONCEPTO)
             VALUES (
                 '${vendedorCode.trim()}', 
                 ${year}, 
                 ${month || 0}, 
                 ${quarter || 0}, 
                 ${amount}, 
+                ${generatedAmount || 0},
                 CURRENT DATE, 
                 '${(concept || 'Pago Comisiones').substring(0, 100)}'
             )
         `, true);
 
-        logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ by ${adminCode}`);
+        logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedAmount}€ gen) by ${adminCode}`);
         res.json({ success: true, message: 'Pago registrado correctamente' });
     } catch (e) {
         logger.error(`[COMMISSIONS] Payment error: ${e.message}`);

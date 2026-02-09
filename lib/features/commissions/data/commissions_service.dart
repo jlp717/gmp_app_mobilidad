@@ -56,6 +56,7 @@ class CommissionsService {
     int? month,
     int? quarter,
     required double amount,
+    double? generatedAmount,
     String? concept,
     required String adminCode,
   }) async {
@@ -68,6 +69,7 @@ class CommissionsService {
           'month': month ?? 0,
           'quarter': quarter ?? 0,
           'amount': amount,
+          'generatedAmount': generatedAmount ?? 0,
           'concept': concept,
           'adminCode': adminCode,
         },
