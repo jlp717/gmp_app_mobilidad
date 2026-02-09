@@ -298,22 +298,29 @@ class FacturasService {
                  return f.ejercicio == year;
               }
               
-              // 2. Fallback: Check date string if ejercicio is 0
-              if (f.fecha.isNotEmpty) {
-                 if (f.fecha.contains('/')) {
-                    final parts = f.fecha.split('/');
-                    if (parts.length == 3) {
-                       return int.tryParse(parts[2]) == year;
-                    }
-                 } else if (f.fecha.contains('-')) {
-                    return DateTime.tryParse(f.fecha)?.year == year;
-                 }
-              }
-              
-              return false; // Safest default: hide if unknown
+              // 2. Fallback: Parse date if ejercicio is 0 or missing
+              // Strict parsing to ensure we don't show 2026 in 2025
+               try {
+                  if (f.fecha.isEmpty) return false;
+                  
+                  int? docYear;
+                  // Try ISO
+                  try { docYear = DateTime.parse(f.fecha).year; } catch (_) {}
+                  
+                  // Try dd/MM/yyyy
+                  if (docYear == null && f.fecha.contains('/')) {
+                     final parts = f.fecha.split('/');
+                     if (parts.length == 3) {
+                       docYear = int.tryParse(parts[2]);
+                     }
+                  }
+                  
+                  // Strict equality: if we can't parse year, we hide it to be safe
+                  return docYear == year;
+               } catch (e) {
+                 return false; // exclude if date invalid
+               }
            }).toList();
-           
-           debugPrint('[FacturasService] Year $year Filter: Keeping ${facturas.length} results');
         }
 
         return facturas;

@@ -170,15 +170,20 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   // ... (existing code)
 
   Future<void> _selectDate(BuildContext context, bool isFrom) async {
-    // SENIOR FIX: Clamp date to prevent crash
-    final initialDate = isFrom ? (_dateFrom ?? DateTime.now()) : (_dateTo ?? DateTime.now());
-    final firstDate = DateTime(2015);
+    // 1. Determine initial date
+    final initialDate = isFrom 
+        ? (_dateFrom ?? DateTime.now()) 
+        : (_dateTo ?? DateTime.now());
+    
+    // 2. Safe clamping to prevent crashes with out-of-bounds dates
+    final firstDate = DateTime(2020); // Restricted to reasonable business range
     final lastDate = DateTime(2030);
     
     DateTime clampedInitial = initialDate;
-    if (initialDate.isBefore(firstDate)) clampedInitial = firstDate;
-    if (initialDate.isAfter(lastDate)) clampedInitial = lastDate;
+    if (clampedInitial.isBefore(firstDate)) clampedInitial = firstDate;
+    if (clampedInitial.isAfter(lastDate)) clampedInitial = lastDate;
 
+    // 3. Show Date Picker with standard simplified theme
     final picked = await showDatePicker(
       context: context,
       initialDate: clampedInitial,
@@ -186,20 +191,10 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       lastDate: lastDate,
       locale: const Locale('es', 'ES'),
       builder: (context, child) {
-        // SENIOR FIX: Simplified Theme to prevent crash
-        // Using standard dark theme overlay to avoid null safety issues in complex theme data
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: AppTheme.neonBlue,
-              onPrimary: Colors.white,
-              surface: Color(0xFF1E2746),
-              onSurface: Colors.white,
-            ),
-            dialogBackgroundColor: const Color(0xFF1E2746),
-          ),
-          child: child!,
-        );
+         return Theme(
+           data: AppTheme.darkTheme, // Restore standard app theme for consistency
+           child: child!,
+         );
       },
     );
 
@@ -207,14 +202,21 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       setState(() {
         if (isFrom) {
           _dateFrom = picked;
+          // Auto-adjust 'To' date if invalid
           if (_dateTo == null || _dateTo!.isBefore(picked)) {
-            _dateTo = picked;
+             _dateTo = picked; 
           }
         } else {
           _dateTo = picked;
+           // Auto-adjust 'From' date if invalid
+          if (_dateFrom == null || _dateFrom!.isAfter(picked)) {
+             _dateFrom = picked; 
+          }
         }
+        
+        // CRITICAL: Clear Year/Month filters when using specific dates
         _selectedMonth = null;
-        _selectedYear = null; // Clear year when using date range
+        _selectedYear = null; 
       });
       _refreshData();
     }
@@ -279,66 +281,66 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                   children: [
                     // Icon Box
                     Container(
-                      width: 44,
-                      height: 44,
+                      width: 48, // Slightly larger
+                      height: 48,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF2D5A87).withOpacity(0.1),
+                        color: const Color(0xFF2D5A87).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: const Color(0xFF2D5A87).withOpacity(0.3),
+                          color: const Color(0xFF2D5A87).withOpacity(0.5),
                         ),
                       ),
                       child: const Icon(
-                        Icons.receipt_long,
-                        color: Color(0xFF2D5A87),
-                        size: 24,
+                        Icons.receipt_long_rounded, // Rounded
+                        color: Color(0xFF1976D2), // Brighter blue
+                        size: 26,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     
                     // Info
                     Expanded(
+                      flex: 4, // Give more space to Client Name
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             factura.clienteNombre,
                             style: TextStyle(
-                              fontWeight: FontWeight.w800, // Extra Bold
-                              fontSize: 19, // Use 19 for prominence
-                              color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF0D47A1), // Blue accent
+                              fontWeight: FontWeight.w900, // MAX weight
+                              fontSize: 19, 
+                              color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF0D47A1), // Lighter blue in dark mode, Deep blue in light
+                              letterSpacing: 0.3,
                             ),
-                            maxLines: 1,
+                            maxLines: 2, // Allow 2 lines for long names
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300),
+                                  color: isDark ? Colors.white.withOpacity(0.12) : Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade400),
                                 ),
                                 child: Text(
-                                  '${factura.numeroFormateado}',
+                                  factura.numeroFormateado, // ALBARAN
                                   style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black, // High contrast
-                                    fontWeight: FontWeight.w900, // Heavy weight
-                                    fontSize: 17, // Larger Albaran
-                                    letterSpacing: 0.5,
+                                    color: isDark ? Colors.white : Colors.black87,
+                                    fontWeight: FontWeight.w900, // Heavy
+                                    fontSize: 16,
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              // Date next to Albaran as secondary info
                               Text(
                                 factura.fecha,
                                 style: TextStyle(
-                                  color: isDark ? Colors.white60 : Colors.grey[700],
+                                  color: isDark ? Colors.white70 : Colors.grey[800],
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -347,27 +349,25 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                       ),
                     ),
                     
-                    // Amount
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${factura.total.toStringAsFixed(2)} €',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900, // Maximum weight
-                            fontSize: 22, // Huge price
-                            color: isDark ? AppTheme.neonGreen : Colors.black, // Distinctive
-                          ),
-                        ),
-                        if (factura.base > 0)
+                    const SizedBox(width: 8),
+
+                    // Amount (Right Aligned)
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
                           Text(
-                            'Base: ${factura.base.toStringAsFixed(2)}€',
+                            '${factura.total.toStringAsFixed(2)} €',
                             style: TextStyle(
-                              fontSize: 10,
-                              color: isDark ? Colors.white38 : Colors.grey[600],
+                              fontWeight: FontWeight.w900, 
+                              fontSize: 22, 
+                              color: isDark ? AppTheme.neonGreen : const Color(0xFF2E7D32), // Green
                             ),
+                            textAlign: TextAlign.right,
                           ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ),
