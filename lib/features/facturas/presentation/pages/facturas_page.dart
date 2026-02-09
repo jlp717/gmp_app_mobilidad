@@ -121,6 +121,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
         }
       });
 
+      print('[FACTURAS] Loading data. Codes: $codes. Year: $_selectedYear. DateFrom: $_dateFrom. DateTo: $_dateTo');
+
       final results = await Future.wait([
         FacturasService.getAvailableYears(codes),
         FacturasService.getFacturas(
@@ -184,41 +186,56 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     if (clampedInitial.isAfter(lastDate)) clampedInitial = lastDate;
 
     // 3. Show Date Picker with standard simplified theme
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: clampedInitial,
-      firstDate: firstDate,
-      lastDate: lastDate,
-      locale: const Locale('es', 'ES'),
-      builder: (context, child) {
-         return Theme(
-           data: AppTheme.darkTheme, // Restore standard app theme for consistency
-           child: child!,
-         );
-      },
-    );
-
-    if (picked != null) {
-      setState(() {
-        if (isFrom) {
-          _dateFrom = picked;
-          // Auto-adjust 'To' date if invalid
-          if (_dateTo == null || _dateTo!.isBefore(picked)) {
-             _dateTo = picked; 
+    try {
+      // 3. Show Date Picker with safe theme or fallback
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: clampedInitial,
+        firstDate: firstDate,
+        lastDate: lastDate,
+        locale: const Locale('es', 'ES'),
+        builder: (context, child) {
+           // FIX: potentially crashing theme wrapper removed or simplified
+           return Theme(
+             data: Theme.of(context).copyWith(
+               colorScheme: const ColorScheme.dark(
+                 primary: AppTheme.neonBlue,
+                 onPrimary: Colors.white,
+                 surface: Color(0xFF1E293B),
+                 onSurface: Colors.white,
+               ),
+               dialogBackgroundColor: const Color(0xFF1E293B),
+             ),
+             child: child!,
+           );
+        },
+      );
+      
+      if (picked != null) {
+        print('[FACTURAS] Date picked: $picked. IsFrom: $isFrom');
+        setState(() {
+          if (isFrom) {
+            _dateFrom = picked;
+            if (_dateTo == null || _dateTo!.isBefore(picked)) {
+               _dateTo = picked; 
+            }
+          } else {
+            _dateTo = picked;
+            if (_dateFrom == null || _dateFrom!.isAfter(picked)) {
+               _dateFrom = picked; 
+            }
           }
-        } else {
-          _dateTo = picked;
-           // Auto-adjust 'From' date if invalid
-          if (_dateFrom == null || _dateFrom!.isAfter(picked)) {
-             _dateFrom = picked; 
-          }
-        }
-        
-        // CRITICAL: Clear Year/Month filters when using specific dates
-        _selectedMonth = null;
-        _selectedYear = null; 
-      });
-      _refreshData();
+          
+          _selectedMonth = null;
+          _selectedYear = null; 
+        });
+        _refreshData();
+      }
+    } catch (e) {
+      print('[FACTURAS] DatePicker Error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error abriendo calendario: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -467,6 +484,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     try {
       final codes = _vendedorCodes;
       
+      print('[FACTURAS] Refreshing. Codes: $codes. Year: $_selectedYear. Month: $_selectedMonth. Range: ${_formatDateParam(_dateFrom)} - ${_formatDateParam(_dateTo)}');
+      
       final results = await Future.wait([
         FacturasService.getFacturas(
           vendedorCodes: codes,
@@ -487,6 +506,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
           dateTo: _formatDateParam(_dateTo),
         ),
       ]);
+      
+      print('[FACTURAS] Refresh complete. Found ${(results[0] as List).length} facturas.');
       
       if (!mounted) return;
 

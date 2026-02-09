@@ -292,14 +292,21 @@ class FacturasService {
         } 
         // Scenario B: Year Filter (Strict)
         else if (year != null) {
+           print('[FACTURAS_SERVICE] Filtering by Year: $year. Input Items: ${facturas.length}');
+           final originalCount = facturas.length;
+           
            facturas = facturas.where((f) {
               // 1. Check 'ejercicio' field (Fast & Reliable)
               if (f.ejercicio != 0) {
-                 return f.ejercicio == year;
+                 // Debug leaky filter
+                 if (f.ejercicio != year) {
+                     // print('Excluded Item: ${f.numeroFormateado} (Year: ${f.ejercicio})');
+                     return false;
+                 }
+                 return true;
               }
               
               // 2. Fallback: Parse date if ejercicio is 0 or missing
-              // Strict parsing to ensure we don't show 2026 in 2025
                try {
                   if (f.fecha.isEmpty) return false;
                   
@@ -315,12 +322,14 @@ class FacturasService {
                      }
                   }
                   
-                  // Strict equality: if we can't parse year, we hide it to be safe
-                  return docYear == year;
+                  if (docYear != year) return false;
+                  return true;
                } catch (e) {
-                 return false; // exclude if date invalid
+                 return false; 
                }
            }).toList();
+           
+           print('[FACTURAS_SERVICE] After Year Filter: ${facturas.length} (Filtered out ${originalCount - facturas.length})');
         }
 
         return facturas;

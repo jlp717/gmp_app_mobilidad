@@ -158,7 +158,7 @@ class FacturasService {
     }
 
     async getSummary(params) {
-        const { vendedorCodes, year, month } = params;
+        const { vendedorCodes, year, month, dateFrom, dateTo } = params;
 
         if (!vendedorCodes) {
             throw new Error('vendedorCodes is required');
@@ -166,7 +166,6 @@ class FacturasService {
 
         const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
         const vendorList = isAll ? null : vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
-        const currentYear = year || new Date().getFullYear();
 
         let sql = `
       SELECT
@@ -175,16 +174,31 @@ class FacturasService {
         SUM(IMPORTEBASEIMPONIBLE1 + IMPORTEBASEIMPONIBLE2 + IMPORTEBASEIMPONIBLE3) as BASE,
         SUM(IMPORTEIVA1 + IMPORTEIVA2 + IMPORTEIVA3) as IVA
       FROM DSEDAC.CAC
-      WHERE EJERCICIOFACTURA = ${currentYear}
-        AND NUMEROFACTURA > 0
+      WHERE NUMEROFACTURA > 0
     `;
 
         if (!isAll) {
             sql += ` AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
         }
 
-        if (month) {
-            sql += ` AND MESFACTURA = ${month}`;
+        // FIX #2: Support dateFrom/dateTo in summary (was missing - caused wrong totals)
+        let dateFilterApplied = false;
+        if (dateFrom && dateTo) {
+            const fromInt = parseInt(dateFrom.replace(/-/g, ''));
+            const toInt = parseInt(dateTo.replace(/-/g, ''));
+            if (!isNaN(fromInt) && !isNaN(toInt)) {
+                sql += ` AND (ANOFACTURA * 10000 + MESFACTURA * 100 + DIAFACTURA) BETWEEN ${fromInt} AND ${toInt}`;
+                dateFilterApplied = true;
+            }
+        }
+
+        if (!dateFilterApplied) {
+            const currentYear = year || new Date().getFullYear();
+            sql += ` AND EJERCICIOFACTURA = ${currentYear}`;
+
+            if (month) {
+                sql += ` AND MESFACTURA = ${month}`;
+            }
         }
 
         try {

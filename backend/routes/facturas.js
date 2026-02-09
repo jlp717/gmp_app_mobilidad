@@ -70,11 +70,15 @@ router.get('/years', async (req, res, next) => {
  */
 router.get('/summary', async (req, res, next) => {
     try {
+        // FIX #2: Pass dateFrom/dateTo to summary (was missing - caused wrong totals)
         const params = {
             vendedorCodes: req.query.vendedorCodes,
             year: req.query.year ? parseInt(req.query.year) : undefined,
-            month: req.query.month ? parseInt(req.query.month) : undefined
+            month: req.query.month ? parseInt(req.query.month) : undefined,
+            dateFrom: req.query.dateFrom,
+            dateTo: req.query.dateTo
         };
+        console.log(`[FACTURAS] /summary params: vendor=${params.vendedorCodes}, year=${params.year}, dateFrom=${params.dateFrom}, dateTo=${params.dateTo}`);
 
         if (!params.vendedorCodes) {
             return res.status(400).json({ success: false, error: 'vendedorCodes is required' });

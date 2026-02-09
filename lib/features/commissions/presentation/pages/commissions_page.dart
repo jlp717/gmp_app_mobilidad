@@ -145,14 +145,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Restriction for specific commercials who don't participate in commissions
-    final restrictedCodes = ['80', '13', '3', '93'];
-    // Normalize codes (strip leading zeros) for safe comparison
-    final userCodes = widget.employeeCode.split(',').map((c) => c.trim().replaceFirst(RegExp(r'^0+'), '')).toList();
-    final isRestricted = !widget.isJefeVentas &&
-                         restrictedCodes.any((c) => userCodes.contains(c));
+    // FIX: Using dynamic exclusion from backend instead of hardcoded list
+    // The backend now sends 'isExcluded' flag in the response data
+    final isExcludedGlobal = (_data?['isExcluded'] as bool?) ?? false;
 
-    if (isRestricted) {
+    if (isExcludedGlobal) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -189,6 +186,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final isInformative = status == 'informative';
     final grandTotal = (_data?['grandTotalCommission'] as num?)?.toDouble() ??
                        (_data?['totals']?['commission'] as num?)?.toDouble() ?? 0;
+    
+    // Payments Data (Fix #4)
+    final paymentsData = _data?['payments'] as Map<String, dynamic>? ?? {};
+    final totalPaid = (paymentsData['total'] as num?)?.toDouble() ?? 0.0;
 
     // Calculate summary stats
     double totalProvisionalCommission = 0;
@@ -481,8 +482,13 @@ class _CommissionsPageState extends State<CommissionsPage> {
                        if (isInformative)
                          const Text('Modo Informativo (No Comisionable)', style: TextStyle(color: Colors.grey, fontSize: 11))
                        else
-                         Text('Total Acumulado: ${CurrencyFormatter.format(grandTotal)}', 
-                             style: const TextStyle(color: AppTheme.neonGreen, fontSize: 14)),
+                         Row(children: [
+                           Text('Generado: ${CurrencyFormatter.format(grandTotal)}', 
+                             style: const TextStyle(color: AppTheme.neonGreen, fontSize: 13, fontWeight: FontWeight.bold)),
+                           const SizedBox(width: 12),
+                           Text('Pagado: ${CurrencyFormatter.format(totalPaid)}', 
+                             style: const TextStyle(color: AppTheme.neonBlue, fontSize: 13, fontWeight: FontWeight.bold)),
+                         ]),
                      ],
                    ),
                  ),
@@ -754,42 +760,42 @@ class _CommissionsPageState extends State<CommissionsPage> {
     );
   }
 
-  /// Builds the ALL vendors expandable list showing each vendor with their monthly data
   Widget _buildAllVendorsTable(List<dynamic> breakdown) {
     if (breakdown.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.search_off_rounded, size: 56, color: Colors.white24),
-            const SizedBox(height: 16),
-            const Text(
-              'No se han encontrado comisiones para los filtros seleccionados',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Prueba a seleccionar otro comercial o verifica que existan datos de ventas disponibles.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white38, fontSize: 13),
-            ),
-          ]),
-        ),
-      );
+      return const Center(child: Text('No hay datos disponibles', style: TextStyle(color: Colors.white54)));
     }
 
-    // Sort by vendor code ascending
-    final sorted = List<dynamic>.from(breakdown);
-    sorted.sort((a, b) => (a['vendedorCode'] as String? ?? '').compareTo(b['vendedorCode'] as String? ?? ''));
+    try {
+      // Sort by vendor code but handle potential nulls/types
+      final sorted = List<dynamic>.from(breakdown);
+      sorted.sort((a, b) {
+        final cA = a['vendedorCode']?.toString() ?? '';
+        final cB = b['vendedorCode']?.toString() ?? '';
+        return cA.compareTo(cB);
+      });
 
-    return ListView.builder(
-      itemCount: sorted.length,
-      itemBuilder: (context, index) => _VendorExpandableCard(
-        vendor: sorted[index],
-        getMonthName: _getMonthName,
-      ),
-    );
+      return ListView.builder(
+        itemCount: sorted.length,
+        itemBuilder: (context, index) {
+          try {
+            return _VendorExpandableCard(
+              vendor: sorted[index],
+              getMonthName: _getMonthName,
+            );
+          } catch (itemErr) {
+             print('Error rendering vendor card index $index: $itemErr');
+             return Container(
+               padding: const EdgeInsets.all(8),
+               color: Colors.red.withOpacity(0.1),
+               child: Text('Error mostrando vendedor: ${sorted[index]['vendedorCode'] ?? '?'}', style: const TextStyle(color: Colors.red)),
+             );
+          }
+        },
+      );
+    } catch (e) {
+      print('Error sorting/building vendors table: $e');
+       return Center(child: Text('Error mostrando lista: $e', style: const TextStyle(color: Colors.red)));
+    }
   }
 }
 
@@ -816,6 +822,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
     final isExcluded = (v['isExcluded'] as bool?) ?? false;
     final months = (v['months'] as List?) ?? [];
     final quarters = (v['quarters'] as List?) ?? [];
+    final payments = (v['payments'] as Map<String, dynamic>?) ?? {};
+    final totalPaid = (payments['total'] as num?)?.toDouble() ?? 0.0;
 
     // Calculate vendor totals
     double totalTarget = 0, totalActual = 0;
@@ -885,10 +893,16 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   const SizedBox(width: 2),
                   Text('${vendorPct.toStringAsFixed(1)}%', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
                   const SizedBox(width: 12),
-                  // Commission: labeled with € and clear amount
+                  // Commission & Payment
                   if (!isExcluded) ...[
-                    Text('Comisión: ', style: TextStyle(color: Colors.white38, fontSize: 11)),
-                    Text(CurrencyFormatter.format(grandTotal), style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 14)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('Gen: ${CurrencyFormatter.format(grandTotal)}', style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text('Pag: ${CurrencyFormatter.format(totalPaid)}', style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    )
                   ] else
                     Text('0,00 €', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ],

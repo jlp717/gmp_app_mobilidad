@@ -9,7 +9,43 @@ const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendo
 // =============================================================================
 // CONFIGURATION & CONSTANTS
 // =============================================================================
-const EXCLUDED_VENDORS = ['3', '13', '93', '80']; // Vendors who see data but don't earn commissions
+// FIX #1: Dynamic excluded vendors - loaded from DB
+let EXCLUDED_VENDORS = [];
+let _excludedVendorsLastLoad = 0;
+const EXCLUDED_CACHE_TTL = 5 * 60 * 1000; // Reload every 5 min
+
+async function loadExcludedVendors() {
+    try {
+        const rows = await query(`
+            SELECT TRIM(CODIGOVENDEDOR) as CODE
+            FROM JAVIER.COMMISSION_EXCEPTIONS
+            WHERE EXCLUIDO_COMISIONES = 'Y'
+        `, false, false);
+
+        if (rows && rows.length > 0) {
+            // Keep original code from DB ('03') AND normalized version ('3') to be safe
+            const dbCodes = rows.map(r => r.CODE);
+            const normalizedCodes = rows.map(r => (r.CODE || '').replace(/^0+/, ''));
+
+            // Merge unique
+            EXCLUDED_VENDORS = [...new Set([...dbCodes, ...normalizedCodes])];
+
+            console.log(`[COMMISSIONS] Loaded ${rows.length} excluded rules. Effective list: [${EXCLUDED_VENDORS.join(', ')}]`);
+        } else {
+            EXCLUDED_VENDORS = [];
+            console.log(`[COMMISSIONS] No excluded vendors found in DB.`);
+        }
+        _excludedVendorsLastLoad = Date.now();
+    } catch (e) {
+        console.log(`[COMMISSIONS] Error loading excluded vendors: ${e.message}. Keeping current list: [${EXCLUDED_VENDORS.join(', ')}]`);
+    }
+}
+
+async function ensureExcludedVendorsLoaded() {
+    if (Date.now() - _excludedVendorsLastLoad > EXCLUDED_CACHE_TTL || EXCLUDED_VENDORS.length === 0) {
+        await loadExcludedVendors();
+    }
+}
 const DEFAULT_CONFIG_2026 = {
     ipc: 3.0,
     tiers: [
@@ -63,10 +99,68 @@ async function initCommissionTables() {
         logger.info('🌱 JAVIER.COMM_CONFIG seeded default values.');
 
     } catch (error) {
-        // If it fails (e.g., race condition or permission), we log but don't crash. 
+        // If it fails (e.g., race condition or permission), we log but don't crash.
         // Logic will fall back to DEFAULT_CONFIG_2026.
         logger.warn(`⚠️ DB Init Warning: ${error.message}. Using default memory config.`);
     }
+
+    // FIX #1: Ensure EXCLUIDO_COMISIONES column exists in COMMISSION_EXCEPTIONS
+    try {
+        await query(`SELECT EXCLUIDO_COMISIONES FROM JAVIER.COMMISSION_EXCEPTIONS FETCH FIRST 1 ROWS ONLY`, false, false);
+        logger.info('✅ EXCLUIDO_COMISIONES column exists.');
+    } catch (colErr) {
+        logger.info('⚙️ Adding EXCLUIDO_COMISIONES column to COMMISSION_EXCEPTIONS...');
+        try {
+            await query(`ALTER TABLE JAVIER.COMMISSION_EXCEPTIONS ADD COLUMN EXCLUIDO_COMISIONES CHAR(1) DEFAULT 'N'`);
+            logger.info('✅ EXCLUIDO_COMISIONES column added.');
+        } catch (alterErr) {
+            logger.warn(`⚠️ Could not add column (may already exist): ${alterErr.message}`);
+        }
+    }
+
+    // Seed default excluded vendors - ONLY if table is empty to avoid overriding user changes
+    try {
+        const count = await query(`SELECT COUNT(*) as CNT FROM JAVIER.COMMISSION_EXCEPTIONS`, false, false);
+        if (count && count[0].CNT == 0) {
+            const defaultExcluded = ['03', '13', '93', '80']; // Use '03' to match typical DB format
+            for (const code of defaultExcluded) {
+                await query(`INSERT INTO JAVIER.COMMISSION_EXCEPTIONS (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES) VALUES ('${code}', 'N', 'Y')`);
+            }
+            logger.info(`🌱 Seeded default excluded vendors [${defaultExcluded.join(',')}] into empty table.`);
+        }
+    } catch (seedErr) {
+        logger.debug(`Seed check error: ${seedErr.message}`);
+    }
+
+    // FIX #4: Create COMMISSION_PAYMENTS table if not exists
+    try {
+        await query(`SELECT 1 FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
+        logger.info('✅ JAVIER.COMMISSION_PAYMENTS table exists.');
+    } catch (e) {
+        logger.info('⚙️ Creating JAVIER.COMMISSION_PAYMENTS table...');
+        try {
+            await query(`
+                CREATE TABLE JAVIER.COMMISSION_PAYMENTS (
+                    ID INT NOT NULL,
+                    CODIGOVENDEDOR VARCHAR(10) NOT NULL,
+                    ANIO INT NOT NULL,
+                    CUATRIMESTRE INT DEFAULT 0,
+                    MES INT DEFAULT 0,
+                    IMPORTE_PAGADO DECIMAL(12,2) DEFAULT 0,
+                    FECHA_PAGO DATE,
+                    CONCEPTO VARCHAR(100),
+                    PRIMARY KEY (ID)
+                )
+            `);
+            logger.info('✅ JAVIER.COMMISSION_PAYMENTS table created.');
+        } catch (createErr) {
+            logger.warn(`⚠️ Could not create COMMISSION_PAYMENTS: ${createErr.message}`);
+        }
+    }
+
+    // Load excluded vendors into memory
+    await loadExcludedVendors();
+    logger.info(`✅ Commission system initialized. Excluded vendors: [${EXCLUDED_VENDORS.join(', ')}]`);
 }
 
 // Run initialization on module load
@@ -201,7 +295,41 @@ function calculateWorkingDays(year, month, activeWeekDays) {
 }
 
 /**
- * Core Commission Logic: 
+ * FIX #4: Get payment records for a vendor in a given year
+ */
+async function getVendorPayments(vendorCode, year) {
+    try {
+        const rows = await query(`
+            SELECT CUATRIMESTRE, MES, IMPORTE_PAGADO, FECHA_PAGO
+            FROM JAVIER.COMMISSION_PAYMENTS
+            WHERE TRIM(CODIGOVENDEDOR) = '${vendorCode}'
+              AND ANIO = ${year}
+            ORDER BY MES, CUATRIMESTRE
+        `, false, false);
+
+        const payments = { monthly: {}, quarterly: {}, total: 0 };
+        if (rows && rows.length > 0) {
+            for (const r of rows) {
+                const amount = parseFloat(r.IMPORTE_PAGADO) || 0;
+                if (r.MES && r.MES > 0) {
+                    payments.monthly[r.MES] = (payments.monthly[r.MES] || 0) + amount;
+                }
+                if (r.CUATRIMESTRE && r.CUATRIMESTRE > 0) {
+                    payments.quarterly[r.CUATRIMESTRE] = (payments.quarterly[r.CUATRIMESTRE] || 0) + amount;
+                }
+                payments.total += amount;
+            }
+            console.log(`[COMMISSIONS] Payments for ${vendorCode}/${year}: total=${payments.total.toFixed(2)}, monthly=${JSON.stringify(payments.monthly)}`);
+        }
+        return payments;
+    } catch (e) {
+        console.log(`[COMMISSIONS] Payments lookup for ${vendorCode}: ${e.message}`);
+        return { monthly: {}, quarterly: {}, total: 0 };
+    }
+}
+
+/**
+ * Core Commission Logic:
  * 1. Check Compliance % (Actual / Target)
  * 2. If > 100%, determine Tier
  * 3. Calculate Commission = (Actual - Target) * TierRate
@@ -259,7 +387,9 @@ function calculateCommission(actual, target, config) {
 async function calculateVendorData(vendedorCode, selectedYear, config) {
     const prevYear = selectedYear - 1;
     const normalizedCode = vendedorCode.trim().replace(/^0+/, '') || vendedorCode.trim();
+    // FIX #1: Use dynamic excluded list (refreshed from DB)
     const isExcluded = EXCLUDED_VENDORS.includes(normalizedCode);
+    console.log(`[COMMISSIONS] calculateVendorData: vendor=${vendedorCode} (normalized=${normalizedCode}), year=${selectedYear}, isExcluded=${isExcluded}`);
 
     // C. Get Vendor Route Days (for daily targets)
     const dayMap = {
@@ -482,13 +612,19 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
         };
     });
 
+    // FIX #4: Load payment data
+    const payments = await getVendorPayments(vendedorCode, selectedYear);
+
+    console.log(`[COMMISSIONS] Result for ${vendedorCode}: grandTotal=${grandTotalCommission.toFixed(2)}, totalPaid=${payments.total.toFixed(2)}, excluded=${isExcluded}`);
+
     return {
         vendedorCode,
         vendorName: await getVendorName(vendedorCode),
         months,
         quarters,
         grandTotalCommission,
-        isExcluded
+        isExcluded,
+        payments
     };
 }
 
@@ -502,12 +638,17 @@ router.get('/summary', async (req, res) => {
         const { vendedorCode, year } = req.query;
         if (!vendedorCode) return res.status(400).json({ success: false, error: 'Falta codigo vendedor' });
 
+        // FIX #1: Refresh excluded vendors from DB (with TTL cache)
+        await ensureExcludedVendorsLoaded();
+        console.log(`[COMMISSIONS] /summary request: vendedorCode=${vendedorCode}, year=${year}, excludedVendors=[${EXCLUDED_VENDORS.join(',')}]`);
+
         // Parse Years (Multi-Select)
-        const yearParam = year ? year.toString() : getCurrentYear().toString();
+        const currentYear = new Date().getFullYear();
+        const yearParam = year ? year.toString() : currentYear.toString();
         const years = yearParam.split(',').map(y => parseInt(y.trim())).filter(n => !isNaN(n));
 
         // If no valid year, use current
-        if (years.length === 0) years.push(getCurrentYear());
+        if (years.length === 0) years.push(currentYear);
 
         const selectedYear = years[0]; // Primary year for reference (Config loading)
 
@@ -560,13 +701,15 @@ router.get('/summary', async (req, res) => {
             return {
                 success: true,
                 config: resA.config, // Use first
+                isExcluded: resA.isExcluded || resB.isExcluded, // Retain exclusion flag
                 grandTotalCommission: (resA.grandTotalCommission || 0) + (resB.grandTotalCommission || 0),
                 breakdown: mergeBreakdowns(resA.breakdown, resB.breakdown),
                 months: mergeTimeUnits(resA.months, resB.months),
                 quarters: mergeTimeUnits(resA.quarters, resB.quarters),
                 totals: {
                     commission: (resA.totals?.commission || 0) + (resB.totals?.commission || 0)
-                }
+                },
+                payments: mergePayments(resA.payments, resB.payments) // FIX: Merge payments
             };
         };
 
@@ -624,6 +767,29 @@ router.get('/summary', async (req, res) => {
                 }
                 merged.push(base);
             }
+            return merged;
+        };
+
+        const mergePayments = (pA, pB) => {
+            if (!pA) return pB || { monthly: {}, quarterly: {}, total: 0 };
+            if (!pB) return pA || { monthly: {}, quarterly: {}, total: 0 };
+
+            const merged = {
+                monthly: { ...pA.monthly },
+                quarterly: { ...pA.quarterly },
+                total: (pA.total || 0) + (pB.total || 0)
+            };
+
+            // Merge Monthly
+            Object.keys(pB.monthly || {}).forEach(m => {
+                merged.monthly[m] = (merged.monthly[m] || 0) + (pB.monthly[m] || 0);
+            });
+
+            // Merge Quarterly
+            Object.keys(pB.quarterly || {}).forEach(q => {
+                merged.quarterly[q] = (merged.quarterly[q] || 0) + (pB.quarterly[q] || 0);
+            });
+
             return merged;
         };
 
@@ -692,7 +858,9 @@ router.get('/summary', async (req, res) => {
                     months: data.months,
                     quarters: data.quarters,
                     vendor: data.vendedorCode,
-                    breakdown: [] // No breakdown for single
+                    breakdown: [], // No breakdown for single
+                    isExcluded: data.isExcluded, // FIX: Pass exclusion flag
+                    payments: data.payments      // FIX: Pass payments data
                 };
             }
 
@@ -711,6 +879,18 @@ router.get('/summary', async (req, res) => {
     } catch (error) {
         logger.error(`Commissions error: ${error.message}`);
         res.status(500).json({ success: false, error: 'Error calculando comisiones', details: error.message });
+    }
+});
+
+// FIX #1: Route to get excluded vendor codes (for frontend dynamic loading)
+router.get('/excluded-vendors', async (req, res) => {
+    try {
+        await loadExcludedVendors(); // Force fresh load
+        console.log(`[COMMISSIONS] /excluded-vendors returning: [${EXCLUDED_VENDORS.join(', ')}]`);
+        res.json({ success: true, excludedVendors: EXCLUDED_VENDORS });
+    } catch (e) {
+        console.log(`[COMMISSIONS] /excluded-vendors error: ${e.message}`);
+        res.json({ success: true, excludedVendors: ['3', '13', '93', '80'] }); // Fallback
     }
 });
 
