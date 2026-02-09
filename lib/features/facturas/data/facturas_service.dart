@@ -36,9 +36,9 @@ class Factura {
   });
 
   factory Factura.fromJson(Map<String, dynamic> json) {
-    final double serverTotal = (json['total'] is num ? json['total'] : double.tryParse(json['total']?.toString() ?? '0') ?? 0).toDouble();
-    final double base = (json['base'] is num ? json['base'] : double.tryParse(json['base']?.toString() ?? '0') ?? 0).toDouble();
-    final double iva = (json['iva'] is num ? json['iva'] : double.tryParse(json['iva']?.toString() ?? '0') ?? 0).toDouble();
+    final double serverTotal = (json['total'] is num ? (json['total'] as num).toDouble() : double.tryParse(json['total']?.toString() ?? '0') ?? 0.0);
+    final double base = (json['base'] is num ? (json['base'] as num).toDouble() : double.tryParse(json['base']?.toString() ?? '0') ?? 0.0);
+    final double iva = (json['iva'] is num ? (json['iva'] as num).toDouble() : double.tryParse(json['iva']?.toString() ?? '0') ?? 0.0);
     
     // SENIOR MATH LOGIC: If total != base + iva, trust the sum if the difference is significant
     // but also consider multi-base invoices where the list only shows one base.
@@ -56,8 +56,8 @@ class Factura {
     return Factura(
       id: json['id']?.toString() ?? '',
       serie: json['serie']?.toString() ?? '',
-      numero: json['numero'] is int ? json['numero'] : int.tryParse(json['numero']?.toString() ?? '0') ?? 0,
-      ejercicio: json['ejercicio'] is int ? json['ejercicio'] : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
+      numero: json['numero'] is int ? (json['numero'] as int) : int.tryParse(json['numero']?.toString() ?? '0') ?? 0,
+      ejercicio: json['ejercicio'] is int ? (json['ejercicio'] as int) : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
       fecha: json['fecha']?.toString() ?? '',
       clienteId: json['clienteId']?.toString() ?? '',
       clienteNombre: json['clienteNombre']?.toString() ?? 'Cliente',
@@ -119,8 +119,8 @@ class FacturaHeader {
     final basesJson = json['bases'] as List? ?? [];
     return FacturaHeader(
       serie: json['serie']?.toString() ?? '',
-      numero: json['numero'] is int ? json['numero'] : int.tryParse(json['numero']?.toString() ?? '0') ?? 0,
-      ejercicio: json['ejercicio'] is int ? json['ejercicio'] : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
+      numero: json['numero'] is int ? (json['numero'] as int) : int.tryParse(json['numero']?.toString() ?? '0') ?? 0,
+      ejercicio: json['ejercicio'] is int ? (json['ejercicio'] as int) : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
       fecha: json['fecha']?.toString() ?? '',
       clienteId: json['clienteId']?.toString() ?? '',
       clienteNombre: json['clienteNombre']?.toString() ?? '',
@@ -144,9 +144,9 @@ class FacturaBase {
 
   factory FacturaBase.fromJson(Map<String, dynamic> json) {
     return FacturaBase(
-      base: (json['base'] is num ? json['base'] : double.tryParse(json['base']?.toString() ?? '0') ?? 0).toDouble(),
-      pct: (json['pct'] is num ? json['pct'] : double.tryParse(json['pct']?.toString() ?? '0') ?? 0).toDouble(),
-      iva: (json['iva'] is num ? json['iva'] : double.tryParse(json['iva']?.toString() ?? '0') ?? 0).toDouble(),
+      base: (json['base'] is num ? (json['base'] as num).toDouble() : double.tryParse(json['base']?.toString() ?? '0') ?? 0).toDouble(),
+      pct: (json['pct'] is num ? (json['pct'] as num).toDouble() : double.tryParse(json['pct']?.toString() ?? '0') ?? 0).toDouble(),
+      iva: (json['iva'] is num ? (json['iva'] as num).toDouble() : double.tryParse(json['iva']?.toString() ?? '0') ?? 0).toDouble(),
     );
   }
 }
@@ -172,10 +172,10 @@ class FacturaLine {
     return FacturaLine(
       codigo: json['codigo']?.toString() ?? '',
       descripcion: json['descripcion']?.toString() ?? '',
-      cantidad: (json['cantidad'] is num ? json['cantidad'] : double.tryParse(json['cantidad']?.toString() ?? '0') ?? 0).toDouble(),
-      precio: (json['precio'] is num ? json['precio'] : double.tryParse(json['precio']?.toString() ?? '0') ?? 0).toDouble(),
-      importe: (json['importe'] is num ? json['importe'] : double.tryParse(json['importe']?.toString() ?? '0') ?? 0).toDouble(),
-      descuento: (json['descuento'] is num ? json['descuento'] : double.tryParse(json['descuento']?.toString() ?? '0') ?? 0).toDouble(),
+      cantidad: (json['cantidad'] is num ? (json['cantidad'] as num).toDouble() : double.tryParse(json['cantidad']?.toString() ?? '0') ?? 0).toDouble(),
+      precio: (json['precio'] is num ? (json['precio'] as num).toDouble() : double.tryParse(json['precio']?.toString() ?? '0') ?? 0).toDouble(),
+      importe: (json['importe'] is num ? (json['importe'] as num).toDouble() : double.tryParse(json['importe']?.toString() ?? '0') ?? 0).toDouble(),
+      descuento: (json['descuento'] is num ? (json['descuento'] as num).toDouble() : double.tryParse(json['descuento']?.toString() ?? '0') ?? 0).toDouble(),
     );
   }
 }
@@ -196,10 +196,10 @@ class FacturaSummary {
 
   factory FacturaSummary.fromJson(Map<String, dynamic> json) {
     return FacturaSummary(
-      totalFacturas: json['totalFacturas'] is int ? json['totalFacturas'] : int.tryParse(json['totalFacturas']?.toString() ?? '0') ?? 0,
-      totalImporte: (json['totalImporte'] is num ? json['totalImporte'] : double.tryParse(json['totalImporte']?.toString() ?? '0') ?? 0).toDouble(),
-      totalBase: (json['totalBase'] is num ? json['totalBase'] : double.tryParse(json['totalBase']?.toString() ?? '0') ?? 0).toDouble(),
-      totalIva: (json['totalIva'] is num ? json['totalIva'] : double.tryParse(json['totalIva']?.toString() ?? '0') ?? 0).toDouble(),
+      totalFacturas: json['totalFacturas'] is int ? (json['totalFacturas'] as int) : int.tryParse(json['totalFacturas']?.toString() ?? '0') ?? 0,
+      totalImporte: (json['totalImporte'] is num ? (json['totalImporte'] as num).toDouble() : double.tryParse(json['totalImporte']?.toString() ?? '0') ?? 0).toDouble(),
+      totalBase: (json['totalBase'] is num ? (json['totalBase'] as num).toDouble() : double.tryParse(json['totalBase']?.toString() ?? '0') ?? 0).toDouble(),
+      totalIva: (json['totalIva'] is num ? (json['totalIva'] as num).toDouble() : double.tryParse(json['totalIva']?.toString() ?? '0') ?? 0).toDouble(),
     );
   }
 }
@@ -243,7 +243,7 @@ class FacturasService {
       );
       
       if (response['success'] == true && response['facturas'] != null) {
-        final List<dynamic> list = response['facturas'];
+        final List<dynamic> list = response['facturas'] as List<dynamic>;
         var facturas = list.map((e) => Factura.fromJson(e)).toList();
 
         // FAILSAFE: Client-side filtering to ensure data accuracy
@@ -285,7 +285,8 @@ class FacturasService {
           if (year != null) {
             facturas = facturas.where((f) {
                // Strict check on ejercicio
-               if (f.ejercicio != 0 && f.ejercicio == year) return true;
+               final matchesEjercicio = (f.ejercicio != 0 && f.ejercicio == year);
+               if (matchesEjercicio) return true;
                
                // Double check year from date string if ejercicio is 0 or mismatch
                if (f.fecha.isNotEmpty) {
@@ -301,6 +302,7 @@ class FacturasService {
                }
                return false; 
             }).toList();
+            debugPrint('[FacturasService] Filtered by year $year: ${facturas.length} results');
           }
         }
         
@@ -326,7 +328,7 @@ class FacturasService {
       );
       
       if (response['success'] == true && response['years'] != null) {
-        final List<dynamic> list = response['years'];
+        final List<dynamic> list = response['years'] as List<dynamic>;
         return list.map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0).toList();
       }
       return [DateTime.now().year];
@@ -372,7 +374,7 @@ class FacturasService {
       );
       
       if (response['success'] == true && response['summary'] != null) {
-        return FacturaSummary.fromJson(response['summary']);
+        return FacturaSummary.fromJson(response['summary'] as Map<String, dynamic>);
       }
       return null;
     } catch (e) {
@@ -387,7 +389,7 @@ class FacturasService {
       final response = await ApiClient.get('/facturas/$serie/$numero/$ejercicio');
       
       if (response['success'] == true && response['factura'] != null) {
-        return FacturaDetail.fromJson(response['factura']);
+        return FacturaDetail.fromJson(response['factura'] as Map<String, dynamic>);
       }
       return null;
     } catch (e) {

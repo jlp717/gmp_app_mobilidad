@@ -105,8 +105,13 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
         codes = user.vendedorCode!;
       }
 
-      if (user.role == 'director' && filter.selectedVendor != null) {
-        codes = filter.selectedVendor!;
+      // SENIOR FIX: Reactive Vendor Selection
+      // Always re-read the filter provider to ensure we have the latest selection
+      if (user.role == 'director' || user.isJefeVentas) {
+        final currentFilter = filter.selectedVendor;
+        if (currentFilter != null && currentFilter.isNotEmpty) {
+           codes = currentFilter;
+        }
       }
       
       setState(() {
@@ -165,13 +170,20 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   // ... (existing code)
 
   Future<void> _selectDate(BuildContext context, bool isFrom) async {
+    // SENIOR FIX: Clamp date to prevent crash
     final initialDate = isFrom ? (_dateFrom ?? DateTime.now()) : (_dateTo ?? DateTime.now());
+    final firstDate = DateTime(2015);
+    final lastDate = DateTime(2030);
+    
+    DateTime clampedInitial = initialDate;
+    if (initialDate.isBefore(firstDate)) clampedInitial = firstDate;
+    if (initialDate.isAfter(lastDate)) clampedInitial = lastDate;
 
     final picked = await showDatePicker(
       context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(2015),
-      lastDate: DateTime(2030),
+      initialDate: clampedInitial,
+      firstDate: firstDate,
+      lastDate: lastDate,
       locale: const Locale('es', 'ES'),
       builder: (context, child) {
         return Theme(
