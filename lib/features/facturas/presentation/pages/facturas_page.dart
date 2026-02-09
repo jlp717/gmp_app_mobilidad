@@ -258,8 +258,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
               ),
             ),
           ),
-      child: Material(
-        color: Colors.transparent,
+          Material(
+            color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {}, // Optional: Show details
@@ -383,8 +383,10 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
           ),
         ),
       ),
-    );
-  }
+    ],
+  ),
+);
+}
 
   Widget _buildActionButton({
     required IconData icon,

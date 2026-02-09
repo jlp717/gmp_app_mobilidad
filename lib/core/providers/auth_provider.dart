@@ -25,7 +25,9 @@ class AuthProvider with ChangeNotifier {
   bool get isAuthenticated => _currentUser != null;
   bool get isInitialized => _initialized;
   bool get updateAvailable => _updateAvailable;
+  bool get isMandatoryUpdate => _isMandatoryUpdate;
   String get updateMessage => _updateMessage;
+  String get playStoreUrl => _playStoreUrl;
   bool get isDirector => _currentUser?.isDirector ?? false;
   List<String> get vendorCodes => _vendedorCodes;
   // Alias for compatibility

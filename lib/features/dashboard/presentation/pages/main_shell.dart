@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -109,7 +110,7 @@ class _MainShellState extends State<MainShell> {
               )
             else
               TextButton(
-                onPressed: () => SystemChannels.platform.invokeMethod('SystemNavigator.pop'),
+                onPressed: () => SystemNavigator.pop(),
                 child: const Text('CERRAR APP', style: TextStyle(color: AppTheme.error)),
               ),
             ElevatedButton(
