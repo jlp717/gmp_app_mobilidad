@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/cache/cache_service.dart';
+import 'package:printing/printing.dart';
 
 /// Model for invoice list item
 class Factura {
@@ -208,6 +209,7 @@ class FacturaSummary {
 class FacturasService {
   
   /// Get list of invoices
+  /// Get list of invoices
   static Future<List<Factura>> getFacturas({
     required String vendedorCodes,
     int? year,
@@ -247,7 +249,6 @@ class FacturasService {
         var facturas = list.map((e) => Factura.fromJson(e)).toList();
 
         // FAILSAFE: Client-side filtering to ensure data accuracy
-        // This handles cases where backend params might be ignored or cache is stale
         if (dateFrom != null && dateTo != null) {
           try {
              final start = DateTime.parse(dateFrom); // dateFrom param is yyyy-MM-dd
@@ -284,11 +285,14 @@ class FacturasService {
           // Filter by Year
           if (year != null) {
             facturas = facturas.where((f) {
-               // Strict check on ejercicio
-               final matchesEjercicio = (f.ejercicio != 0 && f.ejercicio == year);
-               if (matchesEjercicio) return true;
+               // STRICT FILTERING:
+               // 1. If ejercicio exists and doesn't match, REJECT immediately.
+               if (f.ejercicio != 0 && f.ejercicio != year) return false;
+
+               // 2. If ejercicio matches, ACCEPT.
+               if (f.ejercicio == year) return true;
                
-               // Double check year from date string if ejercicio is 0 or mismatch
+               // 3. If ejercicio shows 0, check date.
                if (f.fecha.isNotEmpty) {
                   try {
                     // Handle ISO: yyyy-MM-dd
@@ -300,9 +304,10 @@ class FacturasService {
                     if (parts.length == 3 && int.parse(parts[2]) == year) return true;
                   } catch (_) {}
                }
+               // 4. Default: If we can't verify it matches, REJECT it strict mode.
                return false; 
             }).toList();
-            debugPrint('[FacturasService] Filtered by year $year: ${facturas.length} results');
+            debugPrint('[FacturasService] Filtered by year $year (Strict): ${facturas.length} results');
           }
         }
         
@@ -398,6 +403,24 @@ class FacturasService {
     }
   }
 
+  /// Preview PDF (uses Printing package as viewer)
+  static Future<void> previewFacturaPdf(String serie, int numero, int ejercicio) async {
+    try {
+      final file = await downloadFacturaPdf(serie, numero, ejercicio);
+      final bytes = await file.readAsBytes();
+      
+      // Use Printing package to "print" which opens a system preview
+      // This is the cleanest way to view a PDF and offers a print option
+      await Printing.layoutPdf(
+        onLayout: (_) => bytes,
+        name: 'Factura_${serie}_${numero}_$ejercicio',
+      );
+    } catch (e) {
+      debugPrint('Error previewing PDF: $e');
+      rethrow;
+    }
+  }
+
   /// Share via WhatsApp - returns URL to open
   static Future<String?> shareWhatsApp({
     required String serie,
@@ -416,7 +439,7 @@ class FacturasService {
       });
       
       if (response['success'] == true && response['whatsappUrl'] != null) {
-        return response['whatsappUrl'];
+        return response['whatsappUrl'] as String?;
       }
       return null;
     } catch (e) {
@@ -443,7 +466,7 @@ class FacturasService {
       });
       
       if (response['success'] == true && response['mailtoUrl'] != null) {
-        return response['mailtoUrl'];
+        return response['mailtoUrl'] as String?;
       }
       return null;
     } catch (e) {

@@ -186,6 +186,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       lastDate: lastDate,
       locale: const Locale('es', 'ES'),
       builder: (context, child) {
+        // SENIOR FIX: Simplified Theme to prevent crash
+        // Using standard dark theme overlay to avoid null safety issues in complex theme data
         return Theme(
           data: ThemeData.dark().copyWith(
             colorScheme: const ColorScheme.dark(
@@ -193,15 +195,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
               onPrimary: Colors.white,
               surface: Color(0xFF1E2746),
               onSurface: Colors.white,
-              secondary: AppTheme.neonBlue,
             ),
-            dialogBackgroundColor: const Color(0xFF0F172A), // Lighter than pitch black
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.neonBlue,
-                textStyle: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
+            dialogBackgroundColor: const Color(0xFF1E2746),
           ),
           child: child!,
         );
@@ -310,7 +305,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                             factura.clienteNombre,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                              fontSize: 18, // Larger Client Name
                               color: isDark ? Colors.white : Colors.black87,
                             ),
                             maxLines: 1,
@@ -322,17 +317,18 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                               Text(
                                 '${factura.numeroFormateado}',
                                 style: TextStyle(
-                                  color: isDark ? Colors.white70 : Colors.grey[700],
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 13,
+                                  color: isDark ? Colors.white : Colors.black87, // More visible
+                                  fontWeight: FontWeight.bold, // Bold Albaran
+                                  fontSize: 15, // Larger Albaran
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Text(
                                 '•   ${factura.fecha}',
                                 style: TextStyle(
-                                  color: isDark ? Colors.white38 : Colors.grey[500],
-                                  fontSize: 13,
+                                  color: isDark ? Colors.white70 : Colors.grey[600],
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
@@ -349,7 +345,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                           '${factura.total.toStringAsFixed(2)} €',
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
-                            fontSize: 18,
+                            fontSize: 20, // Larger Price
                             color: isDark ? AppTheme.neonGreen : const Color(0xFF2E7D32),
                             letterSpacing: 0.5,
                           ),
@@ -375,6 +371,13 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    _buildActionButton(
+                      icon: Icons.visibility,
+                      label: 'Ver',
+                      onTap: () => _previewFactura(factura),
+                      isPrimary: false, 
+                    ),
+                    const SizedBox(width: 8),
                     _buildActionButton(
                       icon: Icons.share_outlined,
                       label: 'Compartir',
@@ -515,6 +518,37 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   }
 
 
+
+  Future<void> _previewFactura(Factura factura) async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+              SizedBox(width: 16),
+              Text('Cargando previsualización...'),
+            ],
+          ),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      
+      await FacturasService.previewFacturaPdf(
+        factura.serie,
+        factura.numero,
+        factura.ejercicio,
+      );
+      
+      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al previsualizar: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
 
   Future<void> _downloadFactura(Factura factura) async {
     try {
