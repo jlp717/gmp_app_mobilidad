@@ -304,29 +304,39 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                           Text(
                             factura.clienteNombre,
                             style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18, // Larger Client Name
-                              color: isDark ? Colors.white : Colors.black87,
+                              fontWeight: FontWeight.w800, // Extra Bold
+                              fontSize: 19, // Use 19 for prominence
+                              color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF0D47A1), // Blue accent
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 8),
                           Row(
                             children: [
-                              Text(
-                                '${factura.numeroFormateado}',
-                                style: TextStyle(
-                                  color: isDark ? Colors.white : Colors.black87, // More visible
-                                  fontWeight: FontWeight.bold, // Bold Albaran
-                                  fontSize: 15, // Larger Albaran
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300),
+                                ),
+                                child: Text(
+                                  '${factura.numeroFormateado}',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : Colors.black, // High contrast
+                                    fontWeight: FontWeight.w900, // Heavy weight
+                                    fontSize: 17, // Larger Albaran
+                                    letterSpacing: 0.5,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 12),
+                              // Date next to Albaran as secondary info
                               Text(
-                                '•   ${factura.fecha}',
+                                factura.fecha,
                                 style: TextStyle(
-                                  color: isDark ? Colors.white70 : Colors.grey[600],
+                                  color: isDark ? Colors.white60 : Colors.grey[700],
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -344,10 +354,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                         Text(
                           '${factura.total.toStringAsFixed(2)} €',
                           style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 20, // Larger Price
-                            color: isDark ? AppTheme.neonGreen : const Color(0xFF2E7D32),
-                            letterSpacing: 0.5,
+                            fontWeight: FontWeight.w900, // Maximum weight
+                            fontSize: 22, // Huge price
+                            color: isDark ? AppTheme.neonGreen : Colors.black, // Distinctive
                           ),
                         ),
                         if (factura.base > 0)

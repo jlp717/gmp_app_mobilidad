@@ -210,6 +210,7 @@ class FacturasService {
   
   /// Get list of invoices
   /// Get list of invoices
+  /// Get list of invoices
   static Future<List<Factura>> getFacturas({
     required String vendedorCodes,
     int? year,
@@ -223,6 +224,7 @@ class FacturasService {
   }) async {
     try {
       String url = '/facturas?vendedorCodes=$vendedorCodes';
+      // Prioritize Date Range in URL if present
       if (dateFrom != null && dateTo != null) {
         url += '&dateFrom=$dateFrom&dateTo=$dateTo';
       } else {
@@ -235,7 +237,6 @@ class FacturasService {
       if (clientSearch != null && clientSearch.isNotEmpty) url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
       if (docSearch != null && docSearch.isNotEmpty) url += '&docSearch=${Uri.encodeComponent(docSearch)}';
 
-      // Generate cache key based on all filter params
       final cacheKey = 'facturas_${vendedorCodes}_${year ?? 'all'}_${month ?? 'all'}_${dateFrom ?? ''}_${dateTo ?? ''}_${clientSearch ?? ''}_${docSearch ?? ''}';
       
       final response = await ApiClient.get(
@@ -248,69 +249,73 @@ class FacturasService {
         final List<dynamic> list = response['facturas'] as List<dynamic>;
         var facturas = list.map((e) => Factura.fromJson(e)).toList();
 
-        // FAILSAFE: Client-side filtering to ensure data accuracy
+        // ---------------------------------------------------------
+        // SENIOR FIX: Strict Client-Side Filtering (v9.3)
+        // ---------------------------------------------------------
+        
+        // Scenario A: Date Range Filter (Prioritized)
         if (dateFrom != null && dateTo != null) {
-          try {
-             final start = DateTime.parse(dateFrom); // dateFrom param is yyyy-MM-dd
-             final end = DateTime.parse(dateTo).add(const Duration(days: 1)); // End of day
-             
-             facturas = facturas.where((f) {
-               if (f.fecha.isEmpty) return false;
-               try {
-                 DateTime? facturaDate;
-                 // Try ISO first
-                 try {
-                   facturaDate = DateTime.parse(f.fecha);
-                 } catch (_) {
-                   // Try Europe format dd/MM/yyyy
+           try {
+              // Parse params (yyyy-MM-dd)
+              final start = DateTime.parse(dateFrom); 
+              // End date inclusive: 2025-01-01 -> 2025-01-01 23:59:59
+              final end = DateTime.parse(dateTo).add(const Duration(days: 1)).subtract(const Duration(milliseconds: 1)); 
+              
+              facturas = facturas.where((f) {
+                if (f.fecha.isEmpty) return false;
+                DateTime? valDate;
+                
+                // 1. Try ISO
+                try { valDate = DateTime.parse(f.fecha); } catch (_) {}
+                
+                // 2. Try European (dd/MM/yyyy)
+                if (valDate == null && f.fecha.contains('/')) {
                    final parts = f.fecha.split('/');
                    if (parts.length == 3) {
-                     facturaDate = DateTime(
-                       int.parse(parts[2]), // year
-                       int.parse(parts[1]), // month
-                       int.parse(parts[0]), // day
-                     );
+                      valDate = DateTime(
+                        int.parse(parts[2]), // year
+                        int.parse(parts[1]), // month
+                        int.parse(parts[0]), // day
+                      );
                    }
-                 }
-                 
-                 if (facturaDate != null) {
-                   return facturaDate.isAfter(start.subtract(const Duration(seconds: 1))) && 
-                          facturaDate.isBefore(end);
-                 }
-                 return true; // Keep if we can't parse, to avoid hiding valid data
-               } catch (_) { return true; }
-             }).toList();
-          } catch (_) {}
-        } else {
-          // Filter by Year
-          if (year != null) {
-            facturas = facturas.where((f) {
-               // STRICT FILTERING:
-               // 1. If ejercicio exists and doesn't match, REJECT immediately.
-               if (f.ejercicio != 0 && f.ejercicio != year) return false;
-
-               // 2. If ejercicio matches, ACCEPT.
-               if (f.ejercicio == year) return true;
-               
-               // 3. If ejercicio shows 0, check date.
-               if (f.fecha.isNotEmpty) {
-                  try {
-                    // Handle ISO: yyyy-MM-dd
-                    if (f.fecha.contains('-')) {
-                      return DateTime.parse(f.fecha).year == year;
-                    }
-                    // Handle Europe: dd/MM/yyyy
+                }
+                
+                if (valDate == null) return false; // invalid date = hidden
+                
+                // Inclusive check
+                return valDate.isAfter(start.subtract(const Duration(milliseconds: 1))) && 
+                       valDate.isBefore(end.add(const Duration(milliseconds: 1)));
+              }).toList();
+           } catch (e) {
+             debugPrint('Error filtering range: $e');
+           }
+        } 
+        // Scenario B: Year Filter (Strict)
+        else if (year != null) {
+           facturas = facturas.where((f) {
+              // 1. Check 'ejercicio' field (Fast & Reliable)
+              if (f.ejercicio != 0) {
+                 return f.ejercicio == year;
+              }
+              
+              // 2. Fallback: Check date string if ejercicio is 0
+              if (f.fecha.isNotEmpty) {
+                 if (f.fecha.contains('/')) {
                     final parts = f.fecha.split('/');
-                    if (parts.length == 3 && int.parse(parts[2]) == year) return true;
-                  } catch (_) {}
-               }
-               // 4. Default: If we can't verify it matches, REJECT it strict mode.
-               return false; 
-            }).toList();
-            debugPrint('[FacturasService] Filtered by year $year (Strict): ${facturas.length} results');
-          }
+                    if (parts.length == 3) {
+                       return int.tryParse(parts[2]) == year;
+                    }
+                 } else if (f.fecha.contains('-')) {
+                    return DateTime.tryParse(f.fecha)?.year == year;
+                 }
+              }
+              
+              return false; // Safest default: hide if unknown
+           }).toList();
+           
+           debugPrint('[FacturasService] Year $year Filter: Keeping ${facturas.length} results');
         }
-        
+
         return facturas;
       }
       return [];
