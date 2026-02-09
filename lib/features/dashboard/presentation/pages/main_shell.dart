@@ -68,35 +68,69 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _checkForUpdates() {
-     final auth = context.read<AuthProvider>();
-     if (auth.updateAvailable) {
-        showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-                title: const Text('Actualización Disponible'),
-                content: Text(auth.updateMessage.isNotEmpty ? auth.updateMessage : 'Hay una nueva versión de la app.'),
-                backgroundColor: AppTheme.darkCard,
-                titleTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-                contentTextStyle: const TextStyle(color: Colors.white70),
-                actions: [
-                    TextButton(
-                        onPressed: () {
-                             Navigator.pop(context);
-                        },
-                        child: const Text('Más tarde'),
-                    ),
-                    ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonGreen),
-                        onPressed: () {
-                            launchUrl(Uri.parse('https://play.google.com/store/apps/details?id=com.maripepa.gmp_app_mobilidad'), mode: LaunchMode.externalApplication);
-                        },
-                        child: const Text('ACTUALIZAR', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                    ),
-                ],
+    final auth = context.read<AuthProvider>();
+    if (!auth.updateAvailable) return;
+
+    final bool isMandatory = auth.isMandatoryUpdate;
+
+    showDialog(
+      context: context,
+      barrierDismissible: !isMandatory,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => !isMandatory,
+        child: AlertDialog(
+          title: Text(
+            isMandatory ? 'Actualización Obligatoria' : 'Actualización Disponible',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                auth.updateMessage.isNotEmpty ? auth.updateMessage : 'Hay una nueva versión de la app con mejoras críticas.',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              if (isMandatory) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Esta actualización es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
+                  style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ],
+          ),
+          backgroundColor: AppTheme.darkCard,
+          actions: [
+            if (!isMandatory)
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('MÁS TARDE', style: TextStyle(color: Colors.white54)),
+              )
+            else
+              TextButton(
+                onPressed: () => SystemChannels.platform.invokeMethod('SystemNavigator.pop'),
+                child: const Text('CERRAR APP', style: TextStyle(color: AppTheme.error)),
+              ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonBlue,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                launchUrl(
+                  Uri.parse(auth.playStoreUrl),
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('ACTUALIZAR AHORA', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-        );
-     }
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _checkConnection() async {

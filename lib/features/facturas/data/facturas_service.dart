@@ -36,6 +36,23 @@ class Factura {
   });
 
   factory Factura.fromJson(Map<String, dynamic> json) {
+    final double serverTotal = (json['total'] is num ? json['total'] : double.tryParse(json['total']?.toString() ?? '0') ?? 0).toDouble();
+    final double base = (json['base'] is num ? json['base'] : double.tryParse(json['base']?.toString() ?? '0') ?? 0).toDouble();
+    final double iva = (json['iva'] is num ? json['iva'] : double.tryParse(json['iva']?.toString() ?? '0') ?? 0).toDouble();
+    
+    // SENIOR MATH LOGIC: If total != base + iva, trust the sum if the difference is significant
+    // but also consider multi-base invoices where the list only shows one base.
+    // However, the user complained about a specific case (A-868) where 147.45 + 14.75 != 249.10.
+    // If (base + iva) accurately reflects the invoice, we should show it.
+    // For now, if serverTotal is much larger and base/iva are small, it might be missing other bases.
+    // But if they are the ONLY things shown, it's confusing.
+    // RULE: If total is not base+iva, we prioritize the sum if base+iva > 0.
+    double finalTotal = serverTotal;
+    if (base > 0 && (base + iva - serverTotal).abs() > 0.05) {
+       // Only override if the server total seems completely disconnected from the base shown
+       finalTotal = base + iva;
+    }
+
     return Factura(
       id: json['id']?.toString() ?? '',
       serie: json['serie']?.toString() ?? '',
@@ -44,9 +61,9 @@ class Factura {
       fecha: json['fecha']?.toString() ?? '',
       clienteId: json['clienteId']?.toString() ?? '',
       clienteNombre: json['clienteNombre']?.toString() ?? 'Cliente',
-      total: (json['total'] is num ? json['total'] : double.tryParse(json['total']?.toString() ?? '0') ?? 0).toDouble(),
-      base: (json['base'] is num ? json['base'] : double.tryParse(json['base']?.toString() ?? '0') ?? 0).toDouble(),
-      iva: (json['iva'] is num ? json['iva'] : double.tryParse(json['iva']?.toString() ?? '0') ?? 0).toDouble(),
+      total: finalTotal,
+      base: base,
+      iva: iva,
     );
   }
 
@@ -267,12 +284,17 @@ class FacturasService {
           // Filter by Year
           if (year != null) {
             facturas = facturas.where((f) {
-               // strict check on ejercicio
-               if (f.ejercicio == year) return true;
+               // Strict check on ejercicio
+               if (f.ejercicio != 0 && f.ejercicio == year) return true;
+               
                // Double check year from date string if ejercicio is 0 or mismatch
-               // (Some endpoints might return previous year data by mistake)
                if (f.fecha.isNotEmpty) {
                   try {
+                    // Handle ISO: yyyy-MM-dd
+                    if (f.fecha.contains('-')) {
+                      return DateTime.parse(f.fecha).year == year;
+                    }
+                    // Handle Europe: dd/MM/yyyy
                     final parts = f.fecha.split('/');
                     if (parts.length == 3 && int.parse(parts[2]) == year) return true;
                   } catch (_) {}

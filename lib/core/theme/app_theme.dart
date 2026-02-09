@@ -9,11 +9,11 @@ class AppTheme {
   // COLOR PALETTE - Futuristic Dark with Neon Accents
   // ============================================================================
 
-  // Base colors
-  static const Color darkBase = Color(0xFF0A0E27);
-  static const Color darkSurface = Color(0xFF1A1F3A);
-  static const Color darkCard = Color(0xFF252B48);
-  static const Color borderColor = Color(0xFF333955);
+  // Base colors - SLIGHTLY LIGHTER FOR BETTER DEPTH (Senior Redesign)
+  static const Color darkBase = Color(0xFF0F172A); 
+  static const Color darkSurface = Color(0xFF1E293B);
+  static const Color darkCard = Color(0xFF334155);
+  static const Color borderColor = Color(0xFF475569);
   
   // Added for compatibility
   static const Color surfaceColor = darkSurface;

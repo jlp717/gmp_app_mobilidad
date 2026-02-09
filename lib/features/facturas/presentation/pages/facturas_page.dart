@@ -175,14 +175,21 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       locale: const Locale('es', 'ES'),
       builder: (context, child) {
         return Theme(
-          data: Theme.of(context).copyWith(
+          data: ThemeData.dark().copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: AppTheme.neonBlue, 
-              onPrimary: Colors.black, // Text on selected date
-              surface: Color(0xFF1E2746), // Background
-              onSurface: Colors.white, // Text on background
+              primary: AppTheme.neonBlue,
+              onPrimary: Colors.white,
+              surface: Color(0xFF1E2746),
+              onSurface: Colors.white,
+              secondary: AppTheme.neonBlue,
             ),
-            dialogBackgroundColor: const Color(0xFF1E2746),
+            dialogBackgroundColor: const Color(0xFF0F172A), // Lighter than pitch black
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.neonBlue,
+                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
           child: child!,
         );
@@ -217,27 +224,40 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2746) : Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white, // Slighly lighter navy
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
         border: Border.all(
-          color: isDark ? Colors.white10 : Colors.grey.shade200,
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200,
         ),
-        gradient: isDark ? LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF1E2746),
-            const Color(0xFF252B48),
-          ],
-        ) : null,
       ),
+      child: Stack(
+        children: [
+          // Color accent bar on the left
+          Positioned(
+            left: 0,
+            top: 20,
+            bottom: 20,
+            child: Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.neonBlue,
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(4),
+                  bottomRight: Radius.circular(4),
+                ),
+                boxShadow: [
+                  BoxShadow(color: AppTheme.neonBlue.withOpacity(0.5), blurRadius: 4),
+                ],
+              ),
+            ),
+          ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -316,11 +336,20 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                         Text(
                           '${factura.total.toStringAsFixed(2)} €',
                           style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: isDark ? AppTheme.neonBlue : const Color(0xFF1565C0),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                            color: isDark ? AppTheme.neonGreen : const Color(0xFF2E7D32),
+                            letterSpacing: 0.5,
                           ),
                         ),
+                        if (factura.base > 0)
+                          Text(
+                            'Base: ${factura.base.toStringAsFixed(2)}€',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? Colors.white38 : Colors.grey[600],
+                            ),
+                          ),
                       ],
                     ),
                   ],
