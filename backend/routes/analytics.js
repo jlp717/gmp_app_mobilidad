@@ -315,23 +315,18 @@ router.get('/sales-history', async (req, res) => {
 
         const vendedorFilter = buildVendedorFilter(vendedorCodes);
 
-        // We'll use a parameters array for safe execution
-        const queryParams = [];
         let whereClause = `WHERE 1=1 ${vendedorFilter}`;
 
-        // Filter by Client - Parameterized
+        // Filter by Client - safe interpolation
         if (clientCode) {
-            whereClause += ` AND CODIGOCLIENTEALBARAN = ?`;
-            queryParams.push(clientCode.trim());
+            const safeClientCode = clientCode.trim().replace(/[^a-zA-Z0-9]/g, '');
+            whereClause += ` AND CODIGOCLIENTEALBARAN = '${safeClientCode}'`;
         }
 
-        // Filter by Product (Code or Description) or Batch/Reference - Parameterized
+        // Filter by Product (Code or Description) or Batch/Reference - safe interpolation
         if (productSearch) {
-            const term = productSearch.toUpperCase().trim();
-            whereClause += ` AND (UPPER(DESCRIPCION) LIKE ? OR CODIGOARTICULO LIKE ? OR REFERENCIA LIKE ?)`;
-            // We pass the LIKE pattern as parameter
-            const likePattern = `%${term}%`;
-            queryParams.push(likePattern, likePattern, likePattern);
+            const safeTerm = productSearch.toUpperCase().trim().replace(/'/g, "''").replace(/[%_\\]/g, '');
+            whereClause += ` AND (UPPER(DESCRIPCION) LIKE '%${safeTerm}%' OR CODIGOARTICULO LIKE '%${safeTerm}%' OR REFERENCIA LIKE '%${safeTerm}%')`;
         }
 
         // Filter by Date Range (YYYY-MM-DD)
@@ -348,9 +343,6 @@ router.get('/sales-history', async (req, res) => {
         } else {
             whereClause += ` AND ANODOCUMENTO >= ${MIN_YEAR}`;
         }
-
-        // Use parameterized query helper
-        const { queryWithParams } = require('../config/db');
 
         // Construct query
         const querySql = `
@@ -375,7 +367,7 @@ router.get('/sales-history', async (req, res) => {
     `;
 
         // Detailed history is usually NOT cached due to high filter variability
-        const rows = await queryWithParams(querySql, queryParams);
+        const rows = await query(querySql);
 
         // Format for frontend
         const formattedRows = rows.map(r => ({

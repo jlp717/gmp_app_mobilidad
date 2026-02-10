@@ -680,15 +680,18 @@ router.post('/uploads/signature', async (req, res) => {
         if (clientCode && dni) {
             try {
                 // Upsert logic (Delete + Insert is safest fallback)
-                await queryWithParams(`
+                const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
+                const safeDni = dni.replace(/[^a-zA-Z0-9]/g, '');
+                const safeNombre = (nombre || '').replace(/'/g, "''").replace(/[^a-zA-Z0-9 .,'áéíóúñÁÉÍÓÚÑ()-]/g, '');
+                await query(`
                     DELETE FROM JAVIER.CLIENT_SIGNERS 
-                    WHERE CODIGOCLIENTE = ? AND DNI = ?
-                `, [clientCode, dni], false, false);
+                    WHERE CODIGOCLIENTE = '${safeClientCode}' AND DNI = '${safeDni}'
+                `, false, false);
 
-                await queryWithParams(`
+                await query(`
                     INSERT INTO JAVIER.CLIENT_SIGNERS (CODIGOCLIENTE, DNI, NOMBRE, LAST_USED, USAGE_COUNT)
-                    VALUES (?, ?, ?, CURRENT DATE, 1)
-                `, [clientCode, dni, nombre], false, true);
+                    VALUES ('${safeClientCode}', '${safeDni}', '${safeNombre}', CURRENT DATE, 1)
+                `, false, true);
 
                 logger.info(`[SIGN] Saved signer info for client ${clientCode}: ${dni} - ${nombre}`);
             } catch (dbError) {
@@ -711,13 +714,14 @@ router.post('/uploads/signature', async (req, res) => {
 router.get('/signers/:clientCode', async (req, res) => {
     try {
         const { clientCode } = req.params;
-        const rows = await queryWithParams(`
+        const safeCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
+        const rows = await query(`
             SELECT DNI, NOMBRE
             FROM JAVIER.CLIENT_SIGNERS
-            WHERE CODIGOCLIENTE = ?
+            WHERE CODIGOCLIENTE = '${safeCode}'
             ORDER BY LAST_USED DESC
             FETCH FIRST 5 ROWS ONLY
-        `, [clientCode]);
+        `);
 
         res.json({ success: true, signers: rows });
     } catch (error) {

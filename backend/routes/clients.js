@@ -263,10 +263,11 @@ router.get('/:code', async (req, res) => {
     const { vendedorCodes } = req.query;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
+    const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
 
-    // Basic client info - using parameterized query
+    // Basic client info
     // Include all phone fields for WhatsApp feature
-    const clientInfo = await queryWithParams(`
+    const clientInfo = await query(`
       SELECT C.CODIGOCLIENTE as code, C.NOMBRECLIENTE as name, C.NIF as nif,
   C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
   C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
@@ -274,9 +275,9 @@ router.get('/:code', async (req, res) => {
   C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
   C.OBSERVACIONES1 as notes, C.ANOALTA as yearCreated
       FROM DSEDAC.CLI C
-      WHERE C.CODIGOCLIENTE = ?
+      WHERE C.CODIGOCLIENTE = '${safeClientCode}'
       FETCH FIRST 1 ROWS ONLY
-  `, [clientCode]);
+  `);
 
     if (clientInfo.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
@@ -303,8 +304,8 @@ router.get('/:code', async (req, res) => {
       logger.debug(`CLIENT_NOTES table not found: ${e.message}`);
     }
 
-    // Sales summary - parameterized query
-    const salesSummary = await queryWithParams(`
+    // Sales summary
+    const salesSummary = await query(`
       SELECT 
         SUM(IMPORTEVENTA) as totalSales,
         SUM(IMPORTEMARGENREAL) as totalMargin,
@@ -312,20 +313,20 @@ router.get('/:code', async (req, res) => {
         COUNT(*) as totalLines,
         COUNT(DISTINCT ANODOCUMENTO || '-' || MESDOCUMENTO || '-' || DIADOCUMENTO) as numOrders
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = ? 
+      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
         AND ANODOCUMENTO >= ${MIN_YEAR} 
         AND TIPOVENTA IN ('CC', 'VC')
         AND TIPOLINEA IN ('AB', 'VT') -- Assuming TIPOLINEA exists in LINDTO
         AND SERIEALBARAN NOT IN ('N', 'Z')
         ${vendedorFilter}
-    `, [clientCode]);
+    `);
 
-    // Monthly sales trend (last 12 months) - parameterized
-    const monthlyTrend = await queryWithParams(`
+    // Monthly sales trend (last 12 months)
+    const monthlyTrend = await query(`
       SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
         SUM(IMPORTEVENTA) as sales, SUM(IMPORTEMARGENREAL) as margin
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = ? 
+      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
         AND ANODOCUMENTO >= ${MIN_YEAR} 
         AND TIPOVENTA IN ('CC', 'VC')
         AND TIPOLINEA IN ('AB', 'VT')
@@ -334,10 +335,10 @@ router.get('/:code', async (req, res) => {
       GROUP BY ANODOCUMENTO, MESDOCUMENTO
       ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
       FETCH FIRST 12 ROWS ONLY
-  `, [clientCode]);
+  `);
 
-    // Top products for this client - parameterized
-    const topProducts = await queryWithParams(`
+    // Top products for this client
+    const topProducts = await query(`
       SELECT L.CODIGOARTICULO as code,
   COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION)) as name,
   SUM(L.IMPORTEVENTA) as totalSales,
@@ -345,21 +346,21 @@ router.get('/:code', async (req, res) => {
   COUNT(*) as timesOrdered
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.ART A ON TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
-      WHERE L.CODIGOCLIENTEALBARAN = ? AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
+      WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
       ORDER BY totalSales DESC
       FETCH FIRST 10 ROWS ONLY
-  `, [clientCode]);
+  `);
 
-    // Payment status from CVC - Fixed missing safeCode variable by using parameterization
-    const paymentStatus = await queryWithParams(`
+    // Payment status from CVC
+    const paymentStatus = await query(`
       SELECT
         SUM(CASE WHEN SITUACION = 'C' THEN IMPORTEVENCIMIENTO ELSE 0 END) as paid,
         SUM(CASE WHEN SITUACION = 'P' THEN IMPORTEPENDIENTE ELSE 0 END) as pending,
         COUNT(CASE WHEN SITUACION = 'P' THEN 1 END) as pendingCount
       FROM DSEDAC.CVC
-      WHERE CODIGOCLIENTEALBARAN = ? AND ANOEMISION >= ${MIN_YEAR}
-`, [clientCode]);
+      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' AND ANOEMISION >= ${MIN_YEAR}
+`);
 
     const c = clientInfo[0];
     const s = salesSummary[0] || {};
@@ -531,9 +532,10 @@ router.get('/:code/sales-history', async (req, res) => {
     const { vendedorCodes, limit = 50, offset = 0 } = req.query;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
+    const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
 
-    // Parameterized query for safety
-    const sales = await queryWithParams(`
+    // Safe query for sales history
+    const sales = await query(`
       SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
   CODIGOARTICULO as productCode,
   COALESCE(DESCRIPCION, 'Sin descripción') as productName,
@@ -541,7 +543,7 @@ router.get('/:code/sales-history', async (req, res) => {
   IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
   CODIGOVENDEDOR as vendedor
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = ? AND ANODOCUMENTO >= ${MIN_YEAR} 
+      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' AND ANODOCUMENTO >= ${MIN_YEAR} 
         AND TIPOVENTA IN ('CC', 'VC')
         AND TIPOLINEA IN ('AB', 'VT')
         AND SERIEALBARAN NOT IN ('N', 'Z')
@@ -549,7 +551,7 @@ router.get('/:code/sales-history', async (req, res) => {
       ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
       OFFSET ${parseInt(offset)} ROWS
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `, [clientCode]);
+    `);
 
     res.json({
       history: sales.map(s => ({

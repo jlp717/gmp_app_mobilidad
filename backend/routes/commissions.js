@@ -215,23 +215,25 @@ setTimeout(initCommissionTables, 3000);
  * Get all clients currently managed by a vendor (from current year or most recent data)
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
-    const rows = await queryWithParams(`
+    const safeCode = vendorCode.replace(/[^a-zA-Z0-9]/g, '');
+    const safeYear = parseInt(currentYear);
+    const rows = await query(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE TRIM(L.LCCDVD) = ?
-          AND L.LCYEAB = ?
+        WHERE TRIM(L.LCCDVD) = '${safeCode}'
+          AND L.LCYEAB = ${safeYear}
           AND ${LACLAE_SALES_FILTER}
-    `, [vendorCode, currentYear], false);
+    `, false);
 
     // If no clients in current year, try previous year
     if (rows.length === 0) {
-        const prevRows = await queryWithParams(`
+        const prevRows = await query(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDVD) = ?
-              AND L.LCYEAB = ?
+            WHERE TRIM(L.LCCDVD) = '${safeCode}'
+              AND L.LCYEAB = ${safeYear - 1}
               AND ${LACLAE_SALES_FILTER}
-        `, [vendorCode, currentYear - 1], false);
+        `, false);
         return prevRows.map(r => r.CLIENT_CODE);
     }
 
@@ -245,19 +247,19 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
 async function getClientsMonthlySales(clientCodes, year) {
     if (!clientCodes || clientCodes.length === 0) return {};
 
-    // Build safe parameterized IN-clause with placeholders
-    const placeholders = clientCodes.map(() => '?').join(',');
+    // Build safe IN-clause with sanitized values
+    const safeInClause = clientCodes.map(c => `'${String(c).replace(/[^a-zA-Z0-9]/g, '')}'`).join(',');
 
-    const rows = await queryWithParams(`
+    const rows = await query(`
         SELECT 
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES
         FROM DSED.LACLAE L
-        WHERE TRIM(L.LCCDCL) IN (${placeholders})
-          AND L.LCYEAB = ?
+        WHERE TRIM(L.LCCDCL) IN (${safeInClause})
+          AND L.LCYEAB = ${parseInt(year)}
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
-    `, [...clientCodes, year], false);
+    `, false);
 
     // Build map: month -> total sales
     const monthlyMap = {};
@@ -279,12 +281,14 @@ async function getBSales(vendorCode, year) {
     const unpaddedCode = rawCode.replace(/^0+/, '');
 
     try {
-        const rows = await queryWithParams(`
+        const safeRaw = rawCode.replace(/[^a-zA-Z0-9]/g, '');
+        const safeUnpadded = unpaddedCode.replace(/[^a-zA-Z0-9]/g, '');
+        const rows = await query(`
             SELECT MES, IMPORTE
             FROM JAVIER.VENTAS_B
-            WHERE (CODIGOVENDEDOR = ? OR CODIGOVENDEDOR = ?)
-              AND EJERCICIO = ?
-        `, [rawCode, unpaddedCode, year], false, false);
+            WHERE (CODIGOVENDEDOR = '${safeRaw}' OR CODIGOVENDEDOR = '${safeUnpadded}')
+              AND EJERCICIO = ${parseInt(year)}
+        `, false, false);
 
         const monthlyMap = {};
         rows.forEach(r => {
@@ -315,7 +319,9 @@ async function getVendorPayments(vendorCode, year) {
 
     try {
         // Get all payment records with new columns
-        const rows = await queryWithParams(`
+        const safeVCode = vendorCode.trim().replace(/[^a-zA-Z0-9]/g, '');
+        const safeNCode = normalizedCode.replace(/[^a-zA-Z0-9]/g, '');
+        const rows = await query(`
             SELECT
                 MES,
                 IMPORTE_PAGADO,
@@ -325,10 +331,10 @@ async function getVendorPayments(vendorCode, year) {
                 OBSERVACIONES,
                 FECHA_PAGO
             FROM JAVIER.COMMISSION_PAYMENTS
-            WHERE (VENDEDOR_CODIGO = ? OR VENDEDOR_CODIGO = ?)
-              AND ANIO = ?
+            WHERE (VENDEDOR_CODIGO = '${safeVCode}' OR VENDEDOR_CODIGO = '${safeNCode}')
+              AND ANIO = ${parseInt(year)}
             ORDER BY MES, FECHA_PAGO
-        `, [vendorCode.trim(), normalizedCode, year], false, false);
+        `, false, false);
 
         rows.forEach(r => {
             const amount = parseFloat(r.IMPORTE_PAGADO) || 0;
@@ -520,16 +526,17 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     let fixedCommissionBase = null;
     try {
         const currentMonth = new Date().getMonth() + 1;
-        const fixedRows = await queryWithParams(`
+        const safeVendor = vendedorCode.replace(/[^a-zA-Z0-9]/g, '');
+        const fixedRows = await query(`
             SELECT IMPORTE_BASE_COMISION
             FROM JAVIER.COMMERCIAL_TARGETS
-            WHERE CODIGOVENDEDOR = ?
-              AND ANIO = ?
-              AND (MES = ? OR MES IS NULL)
+            WHERE CODIGOVENDEDOR = '${safeVendor}'
+              AND ANIO = ${parseInt(selectedYear)}
+              AND (MES = ${parseInt(currentMonth)} OR MES IS NULL)
               AND ACTIVO = 1
             ORDER BY MES DESC
             FETCH FIRST 1 ROWS ONLY
-        `, [vendedorCode, selectedYear, currentMonth], false);
+        `, false);
 
         if (fixedRows && fixedRows.length > 0) {
             fixedCommissionBase = parseFloat(fixedRows[0].IMPORTE_BASE_COMISION) || null;
@@ -882,13 +889,14 @@ router.get('/summary', async (req, res) => {
 
             if (safeVendorCode === 'ALL') {
                 // Use R1_T8CDVD (same source as /rutero/vendedores dropdown) for consistent vendor list
-                const vendorRows = await queryWithParams(`
+                const safeYr = parseInt(yr);
+                const vendorRows = await query(`
                     SELECT DISTINCT TRIM(L.R1_T8CDVD) as VENDOR_CODE
                     FROM DSED.LACLAE L
-                    WHERE L.LCAADC IN (?, ?)
+                    WHERE L.LCAADC IN (${safeYr}, ${safeYr - 1})
                       AND L.R1_T8CDVD IS NOT NULL
                       AND TRIM(L.R1_T8CDVD) <> ''
-                `, [yr, yr - 1], false);
+                `, false);
                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
                 const settled = await Promise.allSettled(promises);
@@ -1061,22 +1069,14 @@ router.post('/pay', async (req, res) => {
         const ventasSobreObjetivoNum = parseFloat(ventasSobreObjetivo) || 0;
 
         // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
-        await queryWithParams(`
+        const safePayVendor = vendedorCode.trim().replace(/'/g, "''").replace(/[^a-zA-Z0-9']/g, '');
+        const safePayObs = (observaciones || '').substring(0, 1000).replace(/'/g, "''");
+        const safePayAdmin = (adminCode || 'unknown').substring(0, 50).replace(/'/g, "''");
+        await query(`
             INSERT INTO JAVIER.COMMISSION_PAYMENTS
             (VENDEDOR_CODIGO, ANIO, MES, VENTAS_REAL, OBJETIVO_MES, VENTAS_SOBRE_OBJETIVO, COMISION_GENERADA, IMPORTE_PAGADO, FECHA_PAGO, OBSERVACIONES, CREADO_POR)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
-        `, [
-            vendedorCode.trim(),
-            parseInt(year),
-            parseInt(month) || 0,
-            ventaComision,
-            objetivoMesNum,
-            ventasSobreObjetivoNum,
-            generatedNum,
-            amountNum,
-            (observaciones || '').substring(0, 1000),
-            (adminCode || 'unknown').substring(0, 50)
-        ]);
+            VALUES ('${safePayVendor}', ${parseInt(year)}, ${parseInt(month) || 0}, ${parseFloat(ventaComision) || 0}, ${parseFloat(objetivoMesNum) || 0}, ${parseFloat(ventasSobreObjetivoNum) || 0}, ${parseFloat(generatedNum) || 0}, ${parseFloat(amountNum) || 0}, CURRENT_TIMESTAMP, '${safePayObs}', '${safePayAdmin}')
+        `, false);
 
         logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${adminCode}${observaciones ? ' [with observaciones]' : ''}`);
         res.json({ success: true, message: 'Pago registrado correctamente' });
