@@ -948,7 +948,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                      ],
                    ),
                  ),
-                 if (canPay && !isAllMode)
+                 if (canPay && !isAllMode && !((_data?['isExcluded'] as bool?) ?? false))
                    IconButton(
                      icon: const Icon(Icons.payment_rounded, color: AppTheme.neonBlue, size: 28),
                      // We need the ID/Code of the current single vendor
@@ -1398,7 +1398,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   ],
                   // Compliance: Obj vs Venta for active months only
                   Tooltip(
-                    message: 'Cumplimiento acumulado: Venta real vs Objetivo (solo meses activos)',
+                    message: 'Cumplimiento acumulado: ${vendorPct.toStringAsFixed(1)}%\nVenta: ${CurrencyFormatter.format(totalActual)}\nObjetivo: ${CurrencyFormatter.format(totalTarget)}\n(Solo meses activos)',
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
