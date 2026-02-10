@@ -198,6 +198,36 @@ class AppTheme {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: neonBlue, width: 2)),
       ),
+
+      // DatePicker Theme for dark mode visibility
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: darkSurface,
+        headerBackgroundColor: neonBlue,
+        headerForegroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        dayForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return darkBase;
+          if (states.contains(WidgetState.disabled)) return Colors.grey;
+          return Colors.white;
+        }),
+        dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return neonBlue;
+          return Colors.transparent;
+        }),
+        todayForegroundColor: WidgetStateProperty.all(neonBlue),
+        todayBackgroundColor: WidgetStateProperty.all(Colors.transparent),
+        todayBorder: BorderSide(color: neonBlue, width: 1),
+        yearForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return darkBase;
+          return Colors.white;
+        }),
+        yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return neonBlue;
+          return Colors.transparent;
+        }),
+        rangeSelectionBackgroundColor: neonBlue.withValues(alpha: 0.2),
+        dividerColor: Colors.white24,
+      ),
     );
   }
 

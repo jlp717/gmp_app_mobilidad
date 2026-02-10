@@ -601,10 +601,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final isOnRhythm = rhythmCompliance >= 100;
     final rhythmStatus = rhythmCompliance >= 105 ? 'Adelantado' : (rhythmCompliance >= 95 ? 'En ritmo' : 'Rezagado');
 
-    // Get Admin status for payment buttons
+    // Get Admin/Jefe status for payment buttons
     final authProvider = context.watch<AuthProvider>();
     final curUserCode = authProvider.currentUser?.code ?? '';
-    final isDiego = authProvider.currentUser?.tipoVendedor == 'ADMIN';
+    final canPay = authProvider.currentUser?.tipoVendedor == 'ADMIN' 
+        || authProvider.currentUser?.isJefeVentas == true;
 
 
     // Prepare table rows (interleaving quarters)
@@ -776,6 +777,17 @@ class _CommissionsPageState extends State<CommissionsPage> {
                   )
                 : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10));
           })),
+          // OBJ. REAL (snapshot al momento del pago)
+          DataCell(Builder(builder: (context) {
+            final details = (paymentsData['details'] as Map?)?[monthNum] as Map?;
+            final objetivoReal = (details?['objetivoReal'] as num?)?.toDouble() ?? 0;
+            return objetivoReal > 0
+                ? Text(
+                    CurrencyFormatter.format(objetivoReal),
+                    style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold)
+                  )
+                : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10));
+          })),
           // OBSERVACIONES
           DataCell(Builder(builder: (context) {
             final details = (paymentsData['details'] as Map?)?[monthNum] as Map?;
@@ -842,6 +854,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
             const DataCell(SizedBox()), // COM. PROV.
             const DataCell(SizedBox()), // IMP. PAGADO (NEW)
             const DataCell(SizedBox()), // VENTA REAL (NEW)
+            const DataCell(SizedBox()), // OBJ. REAL (NEW)
             const DataCell(SizedBox()), // OBSERVACIONES (NEW)
          ]
        ));
@@ -911,7 +924,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                      ],
                    ),
                  ),
-                 if (isDiego && !isAllMode)
+                 if (canPay && !isAllMode)
                    IconButton(
                      icon: const Icon(Icons.payment_rounded, color: AppTheme.neonBlue, size: 28),
                      // We need the ID/Code of the current single vendor
@@ -1169,6 +1182,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                         // === PAGOS (NEW) ===
                         DataColumn(label: Text('IMP. PAGADO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue))),
                         DataColumn(label: Text('VENTA REAL', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue))),
+                        DataColumn(label: Text('OBJ. REAL', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue))),
                         DataColumn(label: Text('OBSERVACIONES', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue))),
                       ],
 
@@ -1229,9 +1243,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
         return valB.compareTo(valA); // Descending
       });
 
-      // Get Admin status for payment buttons
+      // Get Admin/Jefe status for payment buttons
       final authProvider = context.watch<AuthProvider>();
-      final isDiego = authProvider.currentUser?.tipoVendedor == 'ADMIN';
+      final canPay = authProvider.currentUser?.tipoVendedor == 'ADMIN'
+          || authProvider.currentUser?.isJefeVentas == true;
 
       return Container(
         color: AppTheme.darkBase,
@@ -1243,7 +1258,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
             final grandTotal = (r['grandTotalCommission'] as num?)?.toDouble() ?? 0.0;
             return _VendorExpandableCard(
               data: r,
-              isDiego: isDiego,
+              canPay: canPay,
               getMonthName: _getMonthName,
               onPay: (code, name) => _showPayDialog(code, name, grandTotal),
             );
@@ -1268,14 +1283,14 @@ class _CommissionsPageState extends State<CommissionsPage> {
 /// Expandable card for each vendor in ALL mode
 class _VendorExpandableCard extends StatefulWidget {
   final Map<String, dynamic> data;
-  final bool isDiego;
+  final bool canPay;
   final String Function(int) getMonthName;
   final Function(String, String)? onPay;
 
   const _VendorExpandableCard({
     super.key,
     required this.data,
-    this.isDiego = false,
+    this.canPay = false,
     required this.getMonthName,
     this.onPay,
   });
@@ -1376,7 +1391,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         ),
                       ],
                     ),
-                    if (widget.isDiego)
+                    if (widget.canPay)
                        Padding(
                          padding: const EdgeInsets.only(left: 8.0),
                          child: IconButton(
@@ -1465,6 +1480,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         DataColumn(label: Text('COM.PRV', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10))),
         DataColumn(label: Text('IMP.PAG', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 10))),
         DataColumn(label: Text('V.REAL', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 10))),
+        DataColumn(label: Text('OBJ.REAL', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 10))),
         DataColumn(label: Text('OBSERV.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 10))),
       ],
       rows: rows,
@@ -1562,6 +1578,18 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                 )
               : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9));
         })),
+        // OBJ. REAL (snapshot al momento del pago)
+        DataCell(Builder(builder: (context) {
+          final payments = widget.data['payments'] as Map?;
+          final details = (payments?['details'] as Map?)?[monthNum] as Map?;
+          final objetivoReal = (details?['objetivoReal'] as num?)?.toDouble() ?? 0;
+          return objetivoReal > 0
+              ? Text(
+                  CurrencyFormatter.format(objetivoReal),
+                  style: const TextStyle(color: Colors.amber, fontSize: 9, fontWeight: FontWeight.bold)
+                )
+              : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9));
+        })),
         // OBSERVACIONES
         DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
@@ -1622,6 +1650,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         const DataCell(SizedBox()),
         const DataCell(SizedBox()), // IMP. PAGADO (NEW)
         const DataCell(SizedBox()), // VENTA REAL (NEW)
+        const DataCell(SizedBox()), // OBJ. REAL (NEW)
         const DataCell(SizedBox()), // OBSERVACIONES (NEW)
       ],
     );

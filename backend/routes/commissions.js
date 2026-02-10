@@ -321,6 +321,7 @@ async function getVendorPayments(vendorCode, year) {
                 IMPORTE_PAGADO,
                 COMISION_GENERADA,
                 VENTAS_REAL,
+                OBJETIVO_MES,
                 OBSERVACIONES,
                 FECHA_PAGO
             FROM JAVIER.COMMISSION_PAYMENTS
@@ -342,6 +343,7 @@ async function getVendorPayments(vendorCode, year) {
                     payments.details[mes] = {
                         totalPaid: 0,
                         ventaComision: parseFloat(r.VENTAS_REAL) || 0,
+                        objetivoReal: parseFloat(r.OBJETIVO_MES) || 0,
                         observaciones: [],
                         ultimaFecha: r.FECHA_PAGO
                     };
@@ -982,23 +984,28 @@ router.get('/summary', async (req, res) => {
 router.post('/pay', async (req, res) => {
     const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventasSobreObjetivo } = req.body;
 
-    // Security check: Verify that the admin user has TIPOVENDEDOR = 'ADMIN' in DB
+    // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or JEFEVENTASSN = 'S' in DB
     try {
+        const trimmedAdmin = adminCode ? adminCode.trim() : '';
         const adminRows = await queryWithParams(`
-            SELECT TIPOVENDEDOR
-            FROM DSEDAC.VDC
-            WHERE TRIM(CODIGOVENDEDOR) = ?
-              AND SUBEMPRESA = 'GMP'
+            SELECT V.TIPOVENDEDOR, COALESCE(X.JEFEVENTASSN, 'N') AS JEFEVENTASSN
+            FROM DSEDAC.VDC V
+            LEFT JOIN DSEDAC.VDDX X ON TRIM(V.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
+            WHERE TRIM(V.CODIGOVENDEDOR) = ?
+              AND V.SUBEMPRESA = 'GMP'
             FETCH FIRST 1 ROWS ONLY
-        `, [adminCode ? adminCode.trim() : '']);
+        `, [trimmedAdmin]);
 
         const adminTipo = (adminRows && adminRows.length > 0)
             ? (adminRows[0].TIPOVENDEDOR || '').trim()
             : '';
+        const isJefe = (adminRows && adminRows.length > 0)
+            ? (adminRows[0].JEFEVENTASSN || '').trim() === 'S'
+            : false;
 
-        if (adminTipo !== 'ADMIN') {
-            logger.warn(`[COMMISSIONS] Unauthorized payment attempt by user: ${adminCode} (tipoVendedor: ${adminTipo})`);
-            return res.status(403).json({ success: false, error: 'Solo el administrador puede registrar pagos.' });
+        if (adminTipo !== 'ADMIN' && !isJefe) {
+            logger.warn(`[COMMISSIONS] Unauthorized payment attempt by user: ${adminCode} (tipoVendedor: ${adminTipo}, isJefe: ${isJefe})`);
+            return res.status(403).json({ success: false, error: 'Solo administradores o jefes de ventas pueden registrar pagos.' });
         }
     } catch (authErr) {
         logger.error(`[COMMISSIONS] Admin validation DB error: ${authErr.message}`);

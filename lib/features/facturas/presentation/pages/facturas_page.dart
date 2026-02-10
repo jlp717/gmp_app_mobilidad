@@ -121,7 +121,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
         }
       });
 
-      print('[FACTURAS] Loading data. Codes: $codes. Year: $_selectedYear. DateFrom: $_dateFrom. DateTo: $_dateTo');
+      debugPrint('[FACTURAS] Loading data. Codes: $codes. Year: $_selectedYear. DateFrom: $_dateFrom. DateTo: $_dateTo');
 
       final results = await Future.wait([
         FacturasService.getAvailableYears(codes),
@@ -185,10 +185,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     if (clampedInitial.isBefore(firstDate)) clampedInitial = firstDate;
     if (clampedInitial.isAfter(lastDate)) clampedInitial = lastDate;
 
-    // 3. Show Date Picker with standard simplified theme
+    // Show Date Picker with dark theme
     try {
-      // 3. Show Date Picker with safe theme or fallback
-      // 3. Show Date Picker with safe theme or fallback
       final picked = await showDatePicker(
         context: context,
         initialDate: clampedInitial,
@@ -198,7 +196,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       );
       
       if (picked != null) {
-        print('[FACTURAS] Date picked: $picked. IsFrom: $isFrom');
+        debugPrint('[FACTURAS] Date picked: $picked. IsFrom: $isFrom');
         setState(() {
           if (isFrom) {
             _dateFrom = picked;
@@ -218,7 +216,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
         _refreshData();
       }
     } catch (e) {
-      print('[FACTURAS] DatePicker Error: $e');
+      debugPrint('[FACTURAS] DatePicker Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error abriendo calendario: $e'), backgroundColor: Colors.red),
       );
@@ -470,7 +468,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     try {
       final codes = _vendedorCodes;
       
-      print('[FACTURAS] Refreshing. Codes: $codes. Year: $_selectedYear. Month: $_selectedMonth. Range: ${_formatDateParam(_dateFrom)} - ${_formatDateParam(_dateTo)}');
+      debugPrint('[FACTURAS] Refreshing. Codes: $codes. Year: $_selectedYear. Month: $_selectedMonth. Range: ${_formatDateParam(_dateFrom)} - ${_formatDateParam(_dateTo)}');
       
       final results = await Future.wait([
         FacturasService.getFacturas(
@@ -493,7 +491,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
         ),
       ]);
       
-      print('[FACTURAS] Refresh complete. Found ${(results[0] as List).length} facturas.');
+      debugPrint('[FACTURAS] Refresh complete. Found ${(results[0] as List).length} facturas.');
       
       if (!mounted) return;
 

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/providers/auth_provider.dart';
@@ -114,6 +115,16 @@ class _GMPSalesAnalyticsAppState extends State<GMPSalesAnalyticsApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
         routerConfig: _router,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('es', 'ES'),
+          Locale('en', 'US'),
+        ],
+        locale: const Locale('es', 'ES'),
       ),
     );
   }

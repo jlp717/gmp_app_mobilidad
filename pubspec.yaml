@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   cupertino_icons: ^1.0.6
 
   # State Management
@@ -30,8 +32,8 @@ dependencies:
 
   # Charts & Visualizations
   fl_chart: ^0.66.0
-  syncfusion_flutter_charts: ^24.2.4
-  syncfusion_flutter_calendar: ^24.2.4
+  syncfusion_flutter_charts: ^28.1.33
+  syncfusion_flutter_calendar: ^28.1.33
 
   # Maps (OpenStreetMap - 100% Free)
   flutter_map: ^6.1.0
@@ -45,7 +47,7 @@ dependencies:
   flutter_animate: ^4.5.0
 
   # Data Formatting & Utilities
-  intl: ^0.19.0
+  intl: any
 
   # Navigation
   go_router: ^13.2.0
