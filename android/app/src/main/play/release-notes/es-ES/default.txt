@@ -1,6 +1,6 @@
-Novedades en v3.1.1:
+Novedades en v3.1.2:
 
-• Tooltip mejorado en "Ver como todos": ahora muestra cumplimiento detallado con venta y objetivo en valores absolutos.
+• Cumplimiento detallado visible: muestra porcentaje, venta y objetivo directamente en "Ver como todos".
 • Ocultar botón de pago para comerciales excluidos de comisión.
 • Cache inteligente en Comisiones: datos en tiempo real tras pagos o sincronización manual.
 • Correcciones de estabilidad en consultas SQL y login.

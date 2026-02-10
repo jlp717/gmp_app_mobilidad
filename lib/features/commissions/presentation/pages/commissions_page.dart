@@ -1398,13 +1398,16 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   ],
                   // Compliance: Obj vs Venta for active months only
                   Tooltip(
-                    message: 'Cumplimiento acumulado: ${vendorPct.toStringAsFixed(1)}%\nVenta: ${CurrencyFormatter.format(totalActual)}\nObjetivo: ${CurrencyFormatter.format(totalTarget)}\n(Solo meses activos)',
+                    message: 'Cumplimiento acumulado de meses activos (excluyendo futuros)',
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(vendorPositive ? Icons.trending_up : Icons.trending_down, color: statusColor, size: 14),
-                        const SizedBox(width: 2),
-                        Text('${vendorPct.toStringAsFixed(1)}%', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Cumpl: ${vendorPct.toStringAsFixed(1)}% (Vta: ${CurrencyFormatter.format(totalActual)} / Obj: ${CurrencyFormatter.format(totalTarget)})',
+                          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10),
+                        ),
                       ],
                     ),
                   ),
