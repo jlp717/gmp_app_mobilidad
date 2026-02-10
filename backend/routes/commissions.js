@@ -31,14 +31,14 @@ async function loadExcludedVendors() {
             // Merge unique with hardcoded safety list
             EXCLUDED_VENDORS = [...new Set([...DEFAULT_EXCLUDED, ...dbCodes, ...normalizedCodes])];
 
-            console.log(`[COMMISSIONS] Loaded ${rows.length} excluded rules. Effective list: [${EXCLUDED_VENDORS.join(', ')}]`);
+            logger.info(`[COMMISSIONS] Loaded ${rows.length} excluded rules. Effective list: [${EXCLUDED_VENDORS.join(', ')}]`);
         } else {
             EXCLUDED_VENDORS = [...DEFAULT_EXCLUDED];
-            console.log(`[COMMISSIONS] No excluded vendors found in DB. Using fallback: [${EXCLUDED_VENDORS.join(', ')}]`);
+            logger.info(`[COMMISSIONS] No excluded vendors found in DB. Using fallback: [${EXCLUDED_VENDORS.join(', ')}]`);
         }
         _excludedVendorsLastLoad = Date.now();
     } catch (e) {
-        console.log(`[COMMISSIONS] Error loading excluded vendors: ${e.message}. Keeping current list: [${EXCLUDED_VENDORS.join(', ')}]`);
+        logger.warn(`[COMMISSIONS] Error loading excluded vendors: ${e.message}. Keeping current list: [${EXCLUDED_VENDORS.join(', ')}]`);
     }
 }
 
@@ -215,23 +215,23 @@ setTimeout(initCommissionTables, 3000);
  * Get all clients currently managed by a vendor (from current year or most recent data)
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
-    const rows = await query(`
+    const rows = await queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE TRIM(L.LCCDVD) = '${vendorCode}'
-          AND L.LCYEAB = ${currentYear}
+        WHERE TRIM(L.LCCDVD) = ?
+          AND L.LCYEAB = ?
           AND ${LACLAE_SALES_FILTER}
-    `, false);
+    `, [vendorCode, currentYear], false);
 
     // If no clients in current year, try previous year
     if (rows.length === 0) {
-        const prevRows = await query(`
+        const prevRows = await queryWithParams(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDVD) = '${vendorCode}'
-              AND L.LCYEAB = ${currentYear - 1}
+            WHERE TRIM(L.LCCDVD) = ?
+              AND L.LCYEAB = ?
               AND ${LACLAE_SALES_FILTER}
-        `, false);
+        `, [vendorCode, currentYear - 1], false);
         return prevRows.map(r => r.CLIENT_CODE);
     }
 
@@ -245,18 +245,19 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
 async function getClientsMonthlySales(clientCodes, year) {
     if (!clientCodes || clientCodes.length === 0) return {};
 
-    const clientList = clientCodes.map(c => `'${c}'`).join(',');
+    // Build safe parameterized IN-clause with placeholders
+    const placeholders = clientCodes.map(() => '?').join(',');
 
-    const rows = await query(`
+    const rows = await queryWithParams(`
         SELECT 
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES
         FROM DSED.LACLAE L
-        WHERE TRIM(L.LCCDCL) IN (${clientList})
-          AND L.LCYEAB = ${year}
+        WHERE TRIM(L.LCCDCL) IN (${placeholders})
+          AND L.LCYEAB = ?
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
-    `, false);
+    `, [...clientCodes, year], false);
 
     // Build map: month -> total sales
     const monthlyMap = {};
@@ -278,12 +279,12 @@ async function getBSales(vendorCode, year) {
     const unpaddedCode = rawCode.replace(/^0+/, '');
 
     try {
-        const rows = await query(`
+        const rows = await queryWithParams(`
             SELECT MES, IMPORTE
             FROM JAVIER.VENTAS_B
-            WHERE (CODIGOVENDEDOR = '${rawCode}' OR CODIGOVENDEDOR = '${unpaddedCode}')
-              AND EJERCICIO = ${year}
-        `, false, false);
+            WHERE (CODIGOVENDEDOR = ? OR CODIGOVENDEDOR = ?)
+              AND EJERCICIO = ?
+        `, [rawCode, unpaddedCode, year], false, false);
 
         const monthlyMap = {};
         rows.forEach(r => {
@@ -314,7 +315,7 @@ async function getVendorPayments(vendorCode, year) {
 
     try {
         // Get all payment records with new columns
-        const rows = await query(`
+        const rows = await queryWithParams(`
             SELECT
                 MES,
                 IMPORTE_PAGADO,
@@ -323,10 +324,10 @@ async function getVendorPayments(vendorCode, year) {
                 OBSERVACIONES,
                 FECHA_PAGO
             FROM JAVIER.COMMISSION_PAYMENTS
-            WHERE (VENDEDOR_CODIGO = '${vendorCode.trim()}' OR VENDEDOR_CODIGO = '${normalizedCode}')
-              AND ANIO = ${year}
+            WHERE (VENDEDOR_CODIGO = ? OR VENDEDOR_CODIGO = ?)
+              AND ANIO = ?
             ORDER BY MES, FECHA_PAGO
-        `, false, false);
+        `, [vendorCode.trim(), normalizedCode, year], false, false);
 
         rows.forEach(r => {
             const amount = parseFloat(r.IMPORTE_PAGADO) || 0;
@@ -460,7 +461,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     const normalizedCode = vendedorCode.trim().replace(/^0+/, '') || vendedorCode.trim();
     // FIX #1: Use dynamic excluded list (refreshed from DB)
     const isExcluded = EXCLUDED_VENDORS.includes(normalizedCode);
-    console.log(`[COMMISSIONS] calculateVendorData: vendor=${vendedorCode} (normalized=${normalizedCode}), year=${selectedYear}, isExcluded=${isExcluded}`);
+    logger.debug(`[COMMISSIONS] calculateVendorData: vendor=${vendedorCode} (normalized=${normalizedCode}), year=${selectedYear}, isExcluded=${isExcluded}`);
 
     // C. Get Vendor Route Days (for daily targets)
     const dayMap = {
@@ -517,16 +518,16 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     let fixedCommissionBase = null;
     try {
         const currentMonth = new Date().getMonth() + 1;
-        const fixedRows = await query(`
+        const fixedRows = await queryWithParams(`
             SELECT IMPORTE_BASE_COMISION
             FROM JAVIER.COMMERCIAL_TARGETS
-            WHERE CODIGOVENDEDOR = '${vendedorCode}'
-              AND ANIO = ${selectedYear}
-              AND (MES = ${currentMonth} OR MES IS NULL)
+            WHERE CODIGOVENDEDOR = ?
+              AND ANIO = ?
+              AND (MES = ? OR MES IS NULL)
               AND ACTIVO = 1
             ORDER BY MES DESC
             FETCH FIRST 1 ROWS ONLY
-        `, false);
+        `, [vendedorCode, selectedYear, currentMonth], false);
 
         if (fixedRows && fixedRows.length > 0) {
             fixedCommissionBase = parseFloat(fixedRows[0].IMPORTE_BASE_COMISION) || null;
@@ -686,7 +687,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     // FIX #4: Load payment data
     const payments = await getVendorPayments(vendedorCode, selectedYear);
 
-    console.log(`[COMMISSIONS] Result for ${vendedorCode}: grandTotal=${grandTotalCommission.toFixed(2)}, totalPaid=${payments.total.toFixed(2)}, excluded=${isExcluded}`);
+    logger.debug(`[COMMISSIONS] Result for ${vendedorCode}: grandTotal=${grandTotalCommission.toFixed(2)}, totalPaid=${payments.total.toFixed(2)}, excluded=${isExcluded}`);
 
     return {
         vendedorCode,
@@ -709,14 +710,20 @@ router.get('/summary', async (req, res) => {
         const { vendedorCode, year } = req.query;
         if (!vendedorCode) return res.status(400).json({ success: false, error: 'Falta codigo vendedor' });
 
+        // Input sanitization — prevent injection via query params
+        const safeVendorCode = vendedorCode.toString().replace(/[^a-zA-Z0-9,]/g, '').substring(0, 50);
+        if (!safeVendorCode) return res.status(400).json({ success: false, error: 'Código vendedor inválido' });
+
         // FIX #1: Refresh excluded vendors from DB (with TTL cache)
         await ensureExcludedVendorsLoaded();
-        console.log(`[COMMISSIONS] /summary request: vendedorCode=${vendedorCode}, year=${year}, excludedVendors=[${EXCLUDED_VENDORS.join(',')}]`);
+        logger.info(`[COMMISSIONS] /summary request: vendedorCode=${safeVendorCode}, year=${year}`);
 
-        // Parse Years (Multi-Select)
+        // Parse Years (Multi-Select) with bounds validation
         const currentYear = new Date().getFullYear();
-        const yearParam = year ? year.toString() : currentYear.toString();
-        const years = yearParam.split(',').map(y => parseInt(y.trim())).filter(n => !isNaN(n));
+        const yearParam = year ? year.toString().replace(/[^0-9,]/g, '') : currentYear.toString();
+        const years = yearParam.split(',')
+            .map(y => parseInt(y.trim()))
+            .filter(n => !isNaN(n) && n >= 2020 && n <= currentYear + 1);
 
         // If no valid year, use current
         if (years.length === 0) years.push(currentYear);
@@ -751,7 +758,7 @@ router.get('/summary', async (req, res) => {
                 };
             }
         } catch (e) {
-            console.error('Error loading config, using default', e);
+            logger.error('Error loading commissions config, using default', e);
             config = {
                 ipc: 3.0,
                 TIER1_MAX: 103.00, TIER1_PCT: 1.0,
@@ -871,15 +878,15 @@ router.get('/summary', async (req, res) => {
             // Process Year
             let yearResult;
 
-            if (vendedorCode === 'ALL') {
+            if (safeVendorCode === 'ALL') {
                 // Use R1_T8CDVD (same source as /rutero/vendedores dropdown) for consistent vendor list
-                const vendorRows = await query(`
+                const vendorRows = await queryWithParams(`
                     SELECT DISTINCT TRIM(L.R1_T8CDVD) as VENDOR_CODE
                     FROM DSED.LACLAE L
-                    WHERE L.LCAADC IN (${yr}, ${yr - 1})
+                    WHERE L.LCAADC IN (?, ?)
                       AND L.R1_T8CDVD IS NOT NULL
                       AND TRIM(L.R1_T8CDVD) <> ''
-                `, false);
+                `, [yr, yr - 1], false);
                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
                 const settled = await Promise.allSettled(promises);
@@ -937,7 +944,7 @@ router.get('/summary', async (req, res) => {
 
             } else {
                 // Single Vendor
-                const data = await calculateVendorData(vendedorCode, yr, config);
+                const data = await calculateVendorData(safeVendorCode, yr, config);
                 yearResult = {
                     config: config,
                     grandTotalCommission: data.grandTotalCommission,
@@ -1076,10 +1083,10 @@ router.post('/pay', async (req, res) => {
 router.get('/excluded-vendors', async (req, res) => {
     try {
         await loadExcludedVendors(); // Force fresh load
-        console.log(`[COMMISSIONS] /excluded-vendors returning: [${EXCLUDED_VENDORS.join(', ')}]`);
+        logger.debug(`[COMMISSIONS] /excluded-vendors returning: [${EXCLUDED_VENDORS.join(', ')}]`);
         res.json({ success: true, excludedVendors: EXCLUDED_VENDORS });
     } catch (e) {
-        console.log(`[COMMISSIONS] /excluded-vendors error: ${e.message}`);
+        logger.warn(`[COMMISSIONS] /excluded-vendors error: ${e.message}`);
         res.json({ success: true, excludedVendors: DEFAULT_EXCLUDED }); // Fallback
     }
 });

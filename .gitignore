@@ -55,9 +55,32 @@ backend/db_probe_results.json
 *.log
 nul
 ~$*.docx
+*.docx
+*.pdf
 server.log
 debug_output.txt
 flutter_*.log
+
+# Analysis / audit / build temp files
+an.txt
+an_utf8.txt
+analysis*.txt
+build_error*.txt
+build_log.txt
+audit_report.txt
+temp_*.js
+tmpclaude*
+
+# Scripts that shouldn't be in repo
+copy_sdk36_admin.bat
+install_cmake.bat
+run_app.bat
+update_ip_config.ps1
+
+# Root-level node artifacts (backend has its own)
+/node_modules/
+/package.json
+/package-lock.json
 
 # Environment files (keep .env.example)
 .env

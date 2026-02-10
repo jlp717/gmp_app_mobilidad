@@ -83,9 +83,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[AuthProvider] Calling ApiClient.post...');
-      debugPrint('[AuthProvider] Endpoint: ${ApiConfig.login}');
-      debugPrint('[AuthProvider] BaseUrl: ${ApiConfig.baseUrl}');
+      if (kDebugMode) debugPrint('[AuthProvider] Calling API login...');
       
       final response = await ApiClient.post(
         ApiConfig.login,
@@ -112,7 +110,7 @@ class AuthProvider with ChangeNotifier {
 
         _isLoading = false;
         notifyListeners();
-        debugPrint('[AuthProvider] Login SUCCESS');
+        if (kDebugMode) debugPrint('[AuthProvider] Login SUCCESS');
         
         // OPTIMIZATION: Pre-warm cache for instant data access
         // Run in background without awaiting to not block UI
@@ -123,7 +121,7 @@ class AuthProvider with ChangeNotifier {
         throw Exception('Respuesta inválida del servidor');
       }
     } catch (e) {
-      debugPrint('[AuthProvider] Login ERROR: $e');
+      if (kDebugMode) debugPrint('[AuthProvider] Login ERROR: $e');
       _error = e.toString().replaceAll('Exception: ', '');
       _isLoading = false;
       notifyListeners();
@@ -157,13 +155,15 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// Logout
+  /// Logout — clears only auth-related data (not all preferences)
   Future<void> logout() async {
     _currentUser = null;
     _vendedorCodes = [];
     ApiClient.clearAuthToken();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    await prefs.remove('user_token');
+    await prefs.remove('user_data');
+    await prefs.remove('vendedor_codes');
     notifyListeners();
   }
 

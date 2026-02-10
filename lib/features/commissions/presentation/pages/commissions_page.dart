@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/modern_loading.dart';
@@ -9,7 +9,6 @@ import '../../data/commissions_service.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
-import '../../../../features/rutero/presentation/pages/rutero_page.dart'; // Deep link to sibling feature
 import '../../../../core/providers/auth_provider.dart';
 
 
@@ -200,7 +199,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                       labelStyle: const TextStyle(color: Colors.white60),
                       helperText: 'Comision generada: ${currentGenerated.toStringAsFixed(2)} \u20ac',
                       helperStyle: const TextStyle(color: AppTheme.neonGreen, fontSize: 11),
-                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5))),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.5))),
                     ),
                     onChanged: (val) => setStateDialog(() {}),
                   ),
@@ -239,7 +238,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                       ),
                       enabledBorder: UnderlineInputBorder(
                         borderSide: BorderSide(
-                          color: observacionesRequired ? Colors.orange.withOpacity(0.7) : AppTheme.neonBlue.withOpacity(0.5),
+                          color: observacionesRequired ? Colors.orange.withValues(alpha: 0.7) : AppTheme.neonBlue.withValues(alpha: 0.5),
                         ),
                       ),
                     ),
@@ -282,19 +281,29 @@ class _CommissionsPageState extends State<CommissionsPage> {
                     return;
                   }
 
-                  // Close input dialog, open confirmation modal
+                  // Close input dialog, dispose controllers, open confirmation modal
                   Navigator.pop(ctx);
 
-                  final monthSnapshot = _getMonthDataForVendor(vendorCode, selectedMonth);
+                  final capturedAmount = amount;
+                  final capturedMonth = selectedMonth;
+                  final capturedConcept = conceptController.text;
+                  final capturedObs = observacionesController.text.trim();
+
+                  // Dispose controllers to prevent memory leaks
+                  amountController.dispose();
+                  conceptController.dispose();
+                  observacionesController.dispose();
+
+                  final monthSnapshot = _getMonthDataForVendor(vendorCode, capturedMonth);
 
                   _showPayConfirmation(
                     vendorCode: vendorCode,
                     vendorName: vendorName,
-                    month: selectedMonth,
-                    amount: amount,
+                    month: capturedMonth,
+                    amount: capturedAmount,
                     generatedAmount: currentGenerated,
-                    concept: conceptController.text,
-                    observaciones: observacionesController.text.trim(),
+                    concept: capturedConcept,
+                    observaciones: capturedObs,
                     adminCode: adminCode,
                     objetivoMes: monthSnapshot['objetivoMes'] ?? 0,
                     ventaActual: monthSnapshot['ventaActual'] ?? 0,
@@ -1239,7 +1248,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
               onPay: (code, name) => _showPayDialog(code, name, grandTotal),
             );
           } catch (itemErr) {
-             print('Error rendering vendor card index $index: $itemErr');
+             debugPrint('Error rendering vendor card index $index: $itemErr');
              return Container(
                padding: const EdgeInsets.all(8),
                color: Colors.red.withOpacity(0.1),
@@ -1250,7 +1259,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
       ),
     );
     } catch (e) {
-      print('Error sorting/building vendors table: $e');
+      debugPrint('Error sorting/building vendors table: $e');
        return Center(child: Text('Error mostrando lista: $e', style: const TextStyle(color: Colors.red)));
     }
   }

@@ -42,8 +42,13 @@ const app = express();
 app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
 const PORT = process.env.PORT || 3334;
 
-// Middleware
-app.use(cors());
+// Middleware — Security
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || true, // Restrict in production via CORS_ORIGIN env var
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400 // Cache preflight for 24h
+}));
 app.use(helmet());
 app.use(compression());
 app.use(express.json({ limit: '10kb' }));
@@ -84,38 +89,7 @@ app.get('/api/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       mode: 'modular',
       security: 'enabled',
-      dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' },
-      endpoints: [
-        '/api/auth/login',
-        '/api/dashboard/metrics',
-        '/api/dashboard/sales-evolution',
-        '/api/dashboard/matrix-data',
-        '/api/dashboard/recent-sales',
-        '/api/clients',
-        '/api/clients/:code',
-        '/api/clients/:code/sales-history',
-        '/api/clients/compare',
-        '/api/router/calendar',
-        '/api/rutero/week',
-        '/api/rutero/day/:day',
-        '/api/rutero/client/:code/status',
-        '/api/rutero/client/:code/detail',
-        '/api/analytics/yoy-comparison',
-        '/api/analytics/top-clients',
-        '/api/analytics/top-products',
-        '/api/analytics/margins',
-        '/api/analytics/trends',
-        '/api/analytics/sales-history',
-        '/api/objectives',
-        '/api/objectives/matrix',
-        '/api/objectives/evolution',
-        '/api/objectives/by-client',
-        '/api/export/client-report',
-        '/api/chatbot/message',
-        '/api/products',
-        '/api/vendedores',
-        '/api/commissions/summary'
-      ]
+      dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' }
     });
   } catch (error) {
     res.status(500).json({ status: 'error', error: error.message });
@@ -179,10 +153,10 @@ async function startServer() {
   // Start server first so it's responsive
   app.listen(PORT, '0.0.0.0', () => {
     logger.info('═'.repeat(60));
-    logger.info(`  GMP Sales Analytics Server - http://192.168.1.238:${PORT}`);
+    logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);
     logger.info(`  Listening on ALL interfaces (0.0.0.0:${PORT})`);
     logger.info(`  Connected to DB2 via ODBC - Real Data`);
-    logger.info(`  Security: TOKEN AUTH ENFORCED 🔒`);
+    logger.info(`  Security: HMAC TOKEN AUTH 🔒`);
     logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
     logger.info('═'.repeat(60));
 

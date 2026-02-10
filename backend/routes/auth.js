@@ -1,24 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const rateLimit = require('express-rate-limit');
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
-const authenticateToken = require('../middleware/auth'); // Ensure this is imported for /repartidores
+const authenticateToken = require('../middleware/auth');
+const { signToken } = require('../middleware/auth');
+const { loginLimiter } = require('../middleware/security');
 
 // Track failed login attempts per username (in-memory)
 const failedLoginAttempts = new Map();
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_TIME = 30 * 60 * 1000; // 30 minutes lockout
-
-// STRICT rate limiter for login endpoint
-// STRICT rate limiter for login endpoint
-const loginLimiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 minute (Reduced for debug)
-    max: 100, // Increased for debug
-    message: { error: 'Demasiados intentos de login. Espera 1 minuto.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
 
 // Helper to handle failed logins
 function failLogin(res, safeUser, requestId, message) {
@@ -90,7 +81,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         // ===================================================================
         logger.info(`[${requestId}] 🔍 Attempting login for: ${safeUser}`);
 
-        let pinRecord = await query(`
+        let pinRecord = await queryWithParams(`
             SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
                    TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
                    V.TIPOVENDEDOR, X.JEFEVENTASSN,
@@ -100,9 +91,9 @@ router.post('/login', loginLimiter, async (req, res) => {
             JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
             LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
             LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON P.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-            WHERE TRIM(P.CODIGOVENDEDOR) = '${safeUser}'
+            WHERE TRIM(P.CODIGOVENDEDOR) = ?
             FETCH FIRST 1 ROWS ONLY
-        `, false);
+        `, [safeUser], false);
 
         // ===================================================================
         // STEP 2: If not found by code, try to find by NAME in VDD
@@ -111,7 +102,7 @@ router.post('/login', loginLimiter, async (req, res) => {
             logger.info(`[${requestId}] 🔄 Not found by code, searching by name...`);
 
             // Search by name - compare without spaces to handle "MARICARMEN" vs "93 MARI CARMEN"
-            const nameSearch = await query(`
+            const nameSearch = await queryWithParams(`
                 SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
                        TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
                        V.TIPOVENDEDOR, X.JEFEVENTASSN,
@@ -121,9 +112,9 @@ router.post('/login', loginLimiter, async (req, res) => {
                 JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
                 LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
                 LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON D.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%${safeUser.replace(/\s/g, '')}%'
+                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE CONCAT('%', REPLACE(?, ' ', ''), '%')
                 FETCH FIRST 1 ROWS ONLY
-            `, false);
+            `, [safeUser], false);
 
             if (nameSearch.length > 0) {
                 pinRecord = nameSearch;
@@ -162,12 +153,12 @@ router.post('/login', loginLimiter, async (req, res) => {
         let matriculaVehiculo = null;
 
         try {
-            const vehCheck = await query(`
+            const vehCheck = await queryWithParams(`
                 SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA 
                 FROM DSEDAC.VEH 
-                WHERE TRIM(CODIGOVENDEDOR) = '${vendedorCode}' 
+                WHERE TRIM(CODIGOVENDEDOR) = ? 
                 FETCH FIRST 1 ROWS ONLY
-            `, false);
+            `, [vendedorCode], false);
 
             if (vehCheck.length > 0) {
                 isRepartidor = true;
@@ -202,8 +193,8 @@ router.post('/login', loginLimiter, async (req, res) => {
             vendedorCodes = Array.from(existingCodes);
         }
 
-        // FIX: Token must have 3 parts (ID:USER:TIMESTAMP) to satisfy middleware
-        const token = Buffer.from(`V${vendedorCode}:${vendedorCode}:${Date.now()}`).toString('base64');
+        // SECURITY: HMAC-signed token — prevents forgery
+        const token = signToken({ id: `V${vendedorCode}`, user: vendedorCode, timestamp: Date.now() });
 
         const response = {
             user: {
@@ -245,24 +236,25 @@ router.post('/login', loginLimiter, async (req, res) => {
 // =============================================================================
 // SWITCH ROLE ENDPOINT - For Jefes / Multi-role users
 // =============================================================================
-router.post('/switch-role', async (req, res) => {
+router.post('/switch-role', authenticateToken, async (req, res) => {
     try {
         const { userId, newRole, viewAs } = req.body;
 
-        // In a real implementation with signed JWT, we would verify the token here again
-        // AND check if the user actually has permission for 'newRole'.
-        // consistently using the existing logic (mock or DB check).
-
         logger.info(`[Auth] Role switch request: User ${userId} -> ${newRole}`);
 
-        // Simple validation
+        // Validate role
         if (!['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR'].includes(newRole)) {
             return res.status(400).json({ error: 'Rol no válido' });
         }
 
-        // Regenerate token with new context (simple base64 as per existing implementation)
-        // Format: V{Code}:{Code}:{Timestamp}:{Role} - appending role to track context if needed
-        const token = Buffer.from(`${userId}:${userId}:${Date.now()}:${newRole}`).toString('base64');
+        // Verify the requesting user matches the userId
+        if (req.user.code !== userId) {
+            logger.warn(`[Auth] Role switch denied: ${req.user.code} tried to switch as ${userId}`);
+            return res.status(403).json({ error: 'No tienes permiso para cambiar este rol' });
+        }
+
+        // SECURITY: HMAC-signed token
+        const token = signToken({ id: userId, user: userId, timestamp: Date.now(), role: newRole });
 
         res.json({
             success: true,
@@ -291,8 +283,8 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
         const result = await query(sql);
         res.json(result);
     } catch (error) {
-        console.error('Error fetching repartidores:', error);
-        res.status(500).json({ error: 'Database error' });
+        logger.error(`Error fetching repartidores: ${error.message}`);
+        res.status(500).json({ error: 'Error de base de datos' });
     }
 });
 
