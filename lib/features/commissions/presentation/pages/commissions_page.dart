@@ -759,8 +759,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
           // === PAGOS (NEW) ===
           // IMPORTE PAGADO
           DataCell(Builder(builder: (context) {
-            final details = (paymentsData['details'] as Map?)?[monthNum] as Map?;
-            final importePagado = (details?['totalPaid'] as num?)?.toDouble() ?? 0;
+            final detailsMap = paymentsData['details'] as Map?;
+            final details = detailsMap?[monthNum] ?? detailsMap?['$monthNum'] ?? detailsMap?[monthNum.toString()];
+            final importePagado = ((details as Map?)?['totalPaid'] as num?)?.toDouble() ?? 0;
             return importePagado > 0
                 ? Text(
                     CurrencyFormatter.format(importePagado),
@@ -770,8 +771,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
           })),
           // VENTA REAL (momento pago)
           DataCell(Builder(builder: (context) {
-            final details = (paymentsData['details'] as Map?)?[monthNum] as Map?;
-            final ventaComision = (details?['ventaComision'] as num?)?.toDouble() ?? 0;
+            final detailsMap = paymentsData['details'] as Map?;
+            final details = detailsMap?[monthNum] ?? detailsMap?['$monthNum'] ?? detailsMap?[monthNum.toString()];
+            final ventaComision = ((details as Map?)?['ventaComision'] as num?)?.toDouble() ?? 0;
             return ventaComision > 0
                 ? Text(
                     CurrencyFormatter.format(ventaComision),
@@ -781,8 +783,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
           })),
           // OBJ. REAL (snapshot al momento del pago)
           DataCell(Builder(builder: (context) {
-            final details = (paymentsData['details'] as Map?)?[monthNum] as Map?;
-            final objetivoReal = (details?['objetivoReal'] as num?)?.toDouble() ?? 0;
+            final detailsMap = paymentsData['details'] as Map?;
+            final details = detailsMap?[monthNum] ?? detailsMap?['$monthNum'] ?? detailsMap?[monthNum.toString()];
+            final objetivoReal = ((details as Map?)?['objetivoReal'] as num?)?.toDouble() ?? 0;
             return objetivoReal > 0
                 ? Text(
                     CurrencyFormatter.format(objetivoReal),
@@ -792,8 +795,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
           })),
           // OBSERVACIONES
           DataCell(Builder(builder: (context) {
-            final details = (paymentsData['details'] as Map?)?[monthNum] as Map?;
-            final observaciones = (details?['observaciones'] as List?)?.join(' | ') ?? '';
+            final detailsMap = paymentsData['details'] as Map?;
+            final details = detailsMap?[monthNum] ?? detailsMap?['$monthNum'] ?? detailsMap?[monthNum.toString()];
+            final observaciones = ((details as Map?)?['observaciones'] as List?)?.join(' | ') ?? '';
             return observaciones.isNotEmpty
                 ? Tooltip(
                     message: observaciones,
@@ -828,7 +832,22 @@ class _CommissionsPageState extends State<CommissionsPage> {
        final commission = (q['commission'] as num?)?.toDouble() ?? 0;
        final additional = (q['additionalPayment'] as num?)?.toDouble() ?? 0;
        final total = commission + additional;
-       final paid = commission; 
+
+       // Calculate REAL paid for this quarter from paymentsData
+       final qMonthRanges = {
+         0: [1, 2, 3, 4],
+         1: [5, 6, 7, 8],
+         2: [9, 10, 11, 12],
+       };
+       final qMonths = qMonthRanges[qIndex] ?? [];
+       double quarterPaid = 0;
+       final monthlyPaidMap = (paymentsData['monthly'] as Map?) ?? {};
+       for (final m in qMonths) {
+         quarterPaid += (monthlyPaidMap[m] as num?)?.toDouble()
+             ?? (monthlyPaidMap['$m'] as num?)?.toDouble()
+             ?? (monthlyPaidMap[m.toString()] as num?)?.toDouble()
+             ?? 0;
+       }
 
        final bgColor = isPast ? Colors.black26 : (isCurrent ? AppTheme.neonPurple.withOpacity(0.15) : Colors.transparent);
        final textColor = isPast ? Colors.grey : (isCurrent ? AppTheme.neonPurple : Colors.white24);
@@ -846,7 +865,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Generado: ${CurrencyFormatter.format(total)}', style: TextStyle(fontSize: 11, color: isPast ? Colors.grey : Colors.white70)),
-                  Text('Pagado: ${CurrencyFormatter.format(paid)}', style: TextStyle(fontSize: 12, color: isPast ? Colors.white60 : AppTheme.neonGreen, fontWeight: FontWeight.bold)),
+                  Text('Pagado: ${CurrencyFormatter.format(quarterPaid)}', style: TextStyle(fontSize: 12, color: isPast ? Colors.white60 : AppTheme.neonGreen, fontWeight: FontWeight.bold)),
                 ]
             )),
             const DataCell(SizedBox()), // DÍAS
@@ -1318,11 +1337,14 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
     final months = (data['months'] as List?) ?? [];
     final quarters = (data['quarters'] as List?) ?? [];
 
-    // Calculate vendor totals
+    // Calculate vendor totals (only non-future months for meaningful %)
     double totalTarget = 0, totalActual = 0;
     for (var m in months) {
-      totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
-      totalActual += (m['actual'] as num?)?.toDouble() ?? 0;
+      final isFuture = (m['isFuture'] as bool?) ?? false;
+      if (!isFuture) {
+        totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
+        totalActual += (m['actual'] as num?)?.toDouble() ?? 0;
+      }
     }
     final vendorPct = totalTarget > 0 ? (totalActual / totalTarget * 100) : 0.0;
     final vendorPositive = totalActual >= totalTarget && totalTarget > 0;
@@ -1371,11 +1393,18 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     ),
                     const SizedBox(width: 8),
                   ],
-                  // Compliance: labeled "Cumpl:" + percentage + icon
-                  Text('Cumpl: ', style: TextStyle(color: Colors.white38, fontSize: 11)),
-                  Icon(vendorPositive ? Icons.check_circle : Icons.cancel, color: statusColor, size: 16),
-                  const SizedBox(width: 2),
-                  Text('${vendorPct.toStringAsFixed(1)}%', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                  // Compliance: Obj vs Venta for active months only
+                  Tooltip(
+                    message: 'Cumplimiento acumulado: Venta real vs Objetivo (solo meses activos)',
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(vendorPositive ? Icons.trending_up : Icons.trending_down, color: statusColor, size: 14),
+                        const SizedBox(width: 2),
+                        Text('${vendorPct.toStringAsFixed(1)}%', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   // Commission & Payment
                   if (!isExcluded) ...[
@@ -1560,8 +1589,9 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         // IMPORTE PAGADO
         DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
-          final details = (payments?['details'] as Map?)?[monthNum] as Map?;
-          final importePagado = (details?['totalPaid'] as num?)?.toDouble() ?? 0;
+          final detailsMap = payments?['details'] as Map?;
+          final details = detailsMap?[monthNum] ?? detailsMap?['$monthNum'] ?? detailsMap?[monthNum.toString()];
+          final importePagado = ((details as Map?)?['totalPaid'] as num?)?.toDouble() ?? 0;
           return importePagado > 0
               ? Text(
                   CurrencyFormatter.format(importePagado),
@@ -1572,8 +1602,9 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         // VENTA REAL (momento pago)
         DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
-          final details = (payments?['details'] as Map?)?[monthNum] as Map?;
-          final ventaComision = (details?['ventaComision'] as num?)?.toDouble() ?? 0;
+          final detailsMap = payments?['details'] as Map?;
+          final details = detailsMap?[monthNum] ?? detailsMap?['$monthNum'] ?? detailsMap?[monthNum.toString()];
+          final ventaComision = ((details as Map?)?['ventaComision'] as num?)?.toDouble() ?? 0;
           return ventaComision > 0
               ? Text(
                   CurrencyFormatter.format(ventaComision),
@@ -1584,8 +1615,9 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         // OBJ. REAL (snapshot al momento del pago)
         DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
-          final details = (payments?['details'] as Map?)?[monthNum] as Map?;
-          final objetivoReal = (details?['objetivoReal'] as num?)?.toDouble() ?? 0;
+          final detailsMap = payments?['details'] as Map?;
+          final details = detailsMap?[monthNum] ?? detailsMap?['$monthNum'] ?? detailsMap?[monthNum.toString()];
+          final objetivoReal = ((details as Map?)?['objetivoReal'] as num?)?.toDouble() ?? 0;
           return objetivoReal > 0
               ? Text(
                   CurrencyFormatter.format(objetivoReal),
@@ -1596,8 +1628,9 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         // OBSERVACIONES
         DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
-          final details = (payments?['details'] as Map?)?[monthNum] as Map?;
-          final observaciones = (details?['observaciones'] as List?)?.join(' | ') ?? '';
+          final detailsMap = payments?['details'] as Map?;
+          final details = detailsMap?[monthNum] ?? detailsMap?['$monthNum'] ?? detailsMap?[monthNum.toString()];
+          final observaciones = ((details as Map?)?['observaciones'] as List?)?.join(' | ') ?? '';
           return observaciones.isNotEmpty
               ? Tooltip(
                   message: observaciones,
@@ -1624,6 +1657,19 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
     final additional = (qData?['additionalPayment'] as num?)?.toDouble() ?? 0;
     final total = commission + additional;
 
+    // Calculate REAL paid for this quarter from vendor payment data
+    final startMonth = qr['start'] as int;
+    final endMonth = qr['end'] as int;
+    final payments = widget.data['payments'] as Map?;
+    final monthlyPaidMap = (payments?['monthly'] as Map?) ?? {};
+    double quarterPaid = 0;
+    for (int m = startMonth; m <= endMonth; m++) {
+      quarterPaid += (monthlyPaidMap[m] as num?)?.toDouble()
+          ?? (monthlyPaidMap['$m'] as num?)?.toDouble()
+          ?? (monthlyPaidMap[m.toString()] as num?)?.toDouble()
+          ?? 0;
+    }
+
     return DataRow(
       color: WidgetStateProperty.all(AppTheme.neonPurple.withOpacity(0.1)),
       cells: [
@@ -1643,7 +1689,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Gen: ${CurrencyFormatter.format(total)}', style: TextStyle(fontSize: 9, color: isExcluded ? Colors.grey : Colors.white70)),
-            Text('Pag: ${CurrencyFormatter.format(commission)}', style: TextStyle(fontSize: 10, color: isExcluded ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold)),
+            Text('Pag: ${CurrencyFormatter.format(quarterPaid)}', style: TextStyle(fontSize: 10, color: isExcluded ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold)),
           ],
         )),
         const DataCell(SizedBox()),
