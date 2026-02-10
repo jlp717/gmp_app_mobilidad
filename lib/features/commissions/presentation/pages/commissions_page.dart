@@ -133,48 +133,78 @@ class _CommissionsPageState extends State<CommissionsPage> {
     );
   }
 
+  /// Extracts month target/sales data for a vendor from current loaded _data
+  Map<String, double> _getMonthDataForVendor(String vendorCode, int month) {
+    double objetivoMes = 0;
+    double ventasSobreObjetivo = 0;
+    double ventaActual = 0;
+
+    List? vendorMonths;
+    final breakdown = (_data?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (breakdown.isNotEmpty) {
+      final vendorData = breakdown.firstWhere(
+        (v) => v['vendedorCode']?.toString() == vendorCode,
+        orElse: () => <String, dynamic>{},
+      );
+      vendorMonths = vendorData['months'] as List?;
+    } else {
+      vendorMonths = _data?['months'] as List?;
+    }
+
+    if (vendorMonths != null) {
+      final monthData = vendorMonths.cast<Map<String, dynamic>>().firstWhere(
+        (m) => (m['month'] as num?)?.toInt() == month,
+        orElse: () => <String, dynamic>{},
+      );
+      objetivoMes = (monthData['target'] as num?)?.toDouble() ?? 0;
+      ventaActual = (monthData['actual'] as num?)?.toDouble() ?? 0;
+      ventasSobreObjetivo = ventaActual - objetivoMes;
+    }
+
+    return {
+      'objetivoMes': objetivoMes,
+      'ventaActual': ventaActual,
+      'ventasSobreObjetivo': ventasSobreObjetivo,
+    };
+  }
+
   Future<void> _showPayDialog(String vendorCode, String vendorName, double currentGenerated) async {
     final amountController = TextEditingController(text: currentGenerated.toStringAsFixed(2));
     final conceptController = TextEditingController(text: 'Pago Comisiones');
-    final observacionesController = TextEditingController(); // NEW
+    final observacionesController = TextEditingController();
     int selectedMonth = DateTime.now().month;
-    bool observacionesRequired = false; // NEW
 
-    // Get current user code from AuthProvider
     final adminCode = context.read<AuthProvider>().currentUser?.code ?? '';
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
-          // Check if observaciones should be required
           final currentAmount = double.tryParse(amountController.text) ?? 0;
-          observacionesRequired = currentAmount < currentGenerated && currentAmount > 0;
+          final observacionesRequired = currentAmount < currentGenerated && currentAmount > 0;
 
           return AlertDialog(
             backgroundColor: AppTheme.surfaceColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Text('Pagar a $vendorName', style: const TextStyle(color: Colors.white)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Amount field
                   TextField(
                     controller: amountController,
                     keyboardType: TextInputType.number,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      labelText: 'Importe (€) *',
+                      labelText: 'Importe (\u20ac) *',
                       labelStyle: const TextStyle(color: Colors.white60),
-                      helperText: 'Comisión generada: ${currentGenerated.toStringAsFixed(2)} €',
+                      helperText: 'Comision generada: ${currentGenerated.toStringAsFixed(2)} \u20ac',
                       helperStyle: const TextStyle(color: AppTheme.neonGreen, fontSize: 11),
                       enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5))),
                     ),
-                    onChanged: (val) => setStateDialog(() {}), // Trigger rebuild to check validation
+                    onChanged: (val) => setStateDialog(() {}),
                   ),
                   const SizedBox(height: 16),
-
-                  // Month selector
                   DropdownButtonFormField<int>(
                     value: selectedMonth,
                     dropdownColor: AppTheme.surfaceColor,
@@ -185,12 +215,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
                     onChanged: (val) => setStateDialog(() => selectedMonth = val!),
                     decoration: const InputDecoration(
                       labelText: 'Mes Correspondiente *',
-                      labelStyle: TextStyle(color: Colors.white60)
+                      labelStyle: TextStyle(color: Colors.white60),
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // NEW: Observaciones field (becomes required if paying less)
                   TextField(
                     controller: observacionesController,
                     style: const TextStyle(color: Colors.white),
@@ -200,25 +228,23 @@ class _CommissionsPageState extends State<CommissionsPage> {
                       labelText: observacionesRequired ? 'Observaciones * (OBLIGATORIO)' : 'Observaciones (Opcional)',
                       labelStyle: TextStyle(
                         color: observacionesRequired ? Colors.orange : Colors.white60,
-                        fontWeight: observacionesRequired ? FontWeight.bold : FontWeight.normal
+                        fontWeight: observacionesRequired ? FontWeight.bold : FontWeight.normal,
                       ),
                       helperText: observacionesRequired
-                          ? '⚠️ Debes explicar por qué se paga menos de lo correspondiente'
+                          ? 'Debes explicar por que se paga menos de lo correspondiente'
                           : 'Notas adicionales sobre este pago',
                       helperStyle: TextStyle(
                         color: observacionesRequired ? Colors.orange : Colors.white38,
-                        fontSize: 10
+                        fontSize: 10,
                       ),
                       enabledBorder: UnderlineInputBorder(
                         borderSide: BorderSide(
-                          color: observacionesRequired ? Colors.orange.withOpacity(0.7) : AppTheme.neonBlue.withOpacity(0.5)
-                        )
+                          color: observacionesRequired ? Colors.orange.withOpacity(0.7) : AppTheme.neonBlue.withOpacity(0.5),
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // Concept field
                   TextField(
                     controller: conceptController,
                     style: const TextStyle(color: Colors.white),
@@ -233,63 +259,256 @@ class _CommissionsPageState extends State<CommissionsPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancelar', style: TextStyle(color: Colors.white60))
+                child: const Text('Cancelar', style: TextStyle(color: Colors.white60)),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
-                onPressed: () async {
+                onPressed: () {
                   final amount = double.tryParse(amountController.text) ?? 0;
                   if (amount <= 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('El importe debe ser mayor que 0'), backgroundColor: Colors.red)
+                      const SnackBar(content: Text('El importe debe ser mayor que 0'), backgroundColor: Colors.red),
                     );
                     return;
                   }
-
-                  // NEW: Validate observaciones requirement
                   if (observacionesRequired && observacionesController.text.trim().isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Debes indicar una observación explicando por qué se paga menos de lo correspondiente'),
+                        content: Text('Debes indicar una observacion explicando por que se paga menos'),
                         backgroundColor: Colors.orange,
-                        duration: Duration(seconds: 4)
-                      )
+                        duration: Duration(seconds: 4),
+                      ),
                     );
                     return;
                   }
 
-                  try {
-                    final res = await CommissionsService.payCommission(
-                      vendedorCode: vendorCode,
-                      year: 2026,
-                      month: selectedMonth,
-                      amount: amount,
-                      generatedAmount: currentGenerated,
-                      concept: conceptController.text,
-                      adminCode: adminCode,
-                      observaciones: observacionesController.text.trim(), // NEW
-                    );
+                  // Close input dialog, open confirmation modal
+                  Navigator.pop(ctx);
 
-                    if (res['success'] == true) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Pago registrado correctamente'), backgroundColor: Colors.green)
-                      );
-                      _loadData(); // Refresh
-                    } else {
-                      throw Exception(res['error'] ?? 'Error desconocido');
-                    }
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red)
-                    );
-                  }
+                  final monthSnapshot = _getMonthDataForVendor(vendorCode, selectedMonth);
+
+                  _showPayConfirmation(
+                    vendorCode: vendorCode,
+                    vendorName: vendorName,
+                    month: selectedMonth,
+                    amount: amount,
+                    generatedAmount: currentGenerated,
+                    concept: conceptController.text,
+                    observaciones: observacionesController.text.trim(),
+                    adminCode: adminCode,
+                    objetivoMes: monthSnapshot['objetivoMes'] ?? 0,
+                    ventaActual: monthSnapshot['ventaActual'] ?? 0,
+                    ventasSobreObjetivo: monthSnapshot['ventasSobreObjetivo'] ?? 0,
+                  );
                 },
-                child: const Text('Registrar Pago', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                child: const Text('Revisar y Confirmar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  /// Step 2: Confirmation modal with full details and safety warnings.
+  /// Pagos son solo INSERT – no UPDATE. Snapshot historico intencional.
+  Future<void> _showPayConfirmation({
+    required String vendorCode,
+    required String vendorName,
+    required int month,
+    required double amount,
+    required double generatedAmount,
+    required String concept,
+    required String observaciones,
+    required String adminCode,
+    required double objetivoMes,
+    required double ventaActual,
+    required double ventasSobreObjetivo,
+  }) async {
+    final isPartialPay = amount < generatedAmount && amount > 0;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Confirmar Registro de Pago',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Estas a punto de registrar un pago de comision:',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              _confirmRow('Comercial', vendorName),
+              _confirmRow('Mes', '${_getMonthName(month)} / 2026'),
+              const Divider(color: Colors.white12, height: 16),
+              _confirmRow('Venta del mes', '${CurrencyFormatter.format(ventaActual)}'),
+              _confirmRow('Objetivo del mes', '${CurrencyFormatter.format(objetivoMes)}'),
+              _confirmRow('Ventas sobre objetivo', '${CurrencyFormatter.format(ventasSobreObjetivo)}',
+                  valueColor: ventasSobreObjetivo >= 0 ? AppTheme.neonGreen : AppTheme.error),
+              const Divider(color: Colors.white12, height: 16),
+              _confirmRow('Comision generada', '${CurrencyFormatter.format(generatedAmount)}'),
+              _confirmRow('Importe a pagar', '${CurrencyFormatter.format(amount)}',
+                  valueColor: isPartialPay ? Colors.orange : AppTheme.neonGreen),
+              _confirmRow('Observaciones', observaciones.isEmpty ? 'Ninguna' : observaciones),
+              const SizedBox(height: 12),
+
+              if (isPartialPay)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withOpacity(0.4)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red, size: 18),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'PAGO PARCIAL \u2013 se ha indicado observacion',
+                          style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 12),
+
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Este pago se guardara como un nuevo registro historico (snapshot). '
+                  'No se puede modificar despues.',
+                  style: TextStyle(color: Colors.lightBlue, fontSize: 11),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Los valores de ventas/objetivo/comision son una foto del momento '
+                  'y pueden diferir de datos futuros.',
+                  style: TextStyle(color: Colors.lightBlue, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text('CANCELAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.neonGreen,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      try {
+                        final res = await CommissionsService.payCommission(
+                          vendedorCode: vendorCode,
+                          year: 2026,
+                          month: month,
+                          amount: amount,
+                          generatedAmount: generatedAmount,
+                          concept: concept,
+                          adminCode: adminCode,
+                          observaciones: observaciones,
+                          objetivoMes: objetivoMes,
+                          ventasSobreObjetivo: ventasSobreObjetivo,
+                        );
+
+                        if (mounted && res['success'] == true) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Pago registrado correctamente'), backgroundColor: Colors.green),
+                          );
+                          _loadData();
+                        } else {
+                          throw Exception(res['error'] ?? 'Error desconocido');
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text(
+                      'CONFIRMAR Y REGISTRAR PAGO',
+                      style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _confirmRow(String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 150,
+            child: Text('$label:', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ),
+          Expanded(
+            child: Text(value, style: TextStyle(color: valueColor ?? Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
       ),
     );
   }
@@ -376,7 +595,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
     // Get Admin status for payment buttons
     final authProvider = context.watch<AuthProvider>();
     final curUserCode = authProvider.currentUser?.code ?? '';
-    final isDiego = curUserCode == '9322';
+    final isDiego = authProvider.currentUser?.tipoVendedor == 'ADMIN';
 
 
     // Prepare table rows (interleaving quarters)
@@ -673,11 +892,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
                          Column(
                            crossAxisAlignment: CrossAxisAlignment.end,
                            children: [
-                             Text('Generado: ${CurrencyFormatter.format(grandTotal)}', 
+                             Text('Generado: ${CurrencyFormatter.format(grandTotal)}',
                                style: const TextStyle(color: AppTheme.neonGreen, fontSize: 13, fontWeight: FontWeight.bold)),
                              const SizedBox(height: 2),
-                             // User Request: "Pagado X; Y de Z"
-                             Text('Pagado ${CurrencyFormatter.format(paidThisMonth)}; ${CurrencyFormatter.format(totalPaid)} de ${CurrencyFormatter.format(grandTotal)}', 
+                             Text('Pagado: ${CurrencyFormatter.format(totalPaid)}',
                                style: const TextStyle(color: AppTheme.neonBlue, fontSize: 11, fontWeight: FontWeight.bold)),
                            ],
                          ),
@@ -1004,8 +1222,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
       // Get Admin status for payment buttons
       final authProvider = context.watch<AuthProvider>();
-      final curUserCode = authProvider.currentUser?.code ?? '';
-      final isDiego = curUserCode == '9322';
+      final isDiego = authProvider.currentUser?.tipoVendedor == 'ADMIN';
 
       return Container(
         color: AppTheme.darkBase,
@@ -1140,22 +1357,14 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                          // Calculate "Paid Month" if possible. Default to 0 if not found for current month.
-                        Builder(builder: (context) {
-                             final now = DateTime.now();
-                             final currentMonthKey = now.month.toString();
-                             final monthlyMap = (payments['monthly'] as Map?);
-                             final paidMonth = (monthlyMap?[currentMonthKey] as num?)?.toDouble() ?? 0.0;
-                             
-                             return Column(
-                               crossAxisAlignment: CrossAxisAlignment.end,
-                               children: [
-                                  Text('Gen: ${CurrencyFormatter.format(grandTotal)}', style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 12)),
-                                  // Format: "Pagado X; Y de Z"
-                                  Text('Pagado ${CurrencyFormatter.format(paidMonth)}; ${CurrencyFormatter.format(totalPaid)} de ${CurrencyFormatter.format(grandTotal)}', 
-                                    style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 9)),
-                               ],
-                             );
-                        }),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                             Text('Generado: ${CurrencyFormatter.format(grandTotal)}', style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 12)),
+                             Text('Pagado: ${CurrencyFormatter.format(totalPaid)}',
+                               style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 9)),
+                          ],
+                        ),
                       ],
                     ),
                     if (widget.isDiego)

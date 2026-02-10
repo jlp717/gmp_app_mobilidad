@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed } = require('../utils/common');
@@ -61,44 +61,44 @@ const DEFAULT_CONFIG_2026 = {
 // DATABASE INITIALIZATION (JAVIER Schema)
 // =============================================================================
 async function initCommissionTables() {
+    // 1. Initialize COMM_CONFIG table
     try {
-        // 1. Check if table exists (Explicit JAVIER schema)
-        // We use a simple select to check existence.
+        let commConfigExists = false;
         try {
             await query(`SELECT 1 FROM JAVIER.COMM_CONFIG FETCH FIRST 1 ROWS ONLY`, false, false);
+            commConfigExists = true;
             logger.info('✅ JAVIER.COMM_CONFIG found and ready.');
-            return;
         } catch (e) {
             // Table likely not found, proceed to create
             logger.info('⚙️ Initializing JAVIER.COMM_CONFIG table...');
         }
 
-        // 2. Create Table
-        // Note: DB2 syntax.
-        await query(`
-             CREATE TABLE JAVIER.COMM_CONFIG (
-                 ID INT NOT NULL,
-                 YEAR INT NOT NULL,
-                 IPC_PCT DECIMAL(5,2) DEFAULT 3.00,
-                 TIER1_MAX DECIMAL(5,2) DEFAULT 103.00,
-                 TIER1_PCT DECIMAL(5,2) DEFAULT 1.00,
-                 TIER2_MAX DECIMAL(5,2) DEFAULT 106.00,
-                 TIER2_PCT DECIMAL(5,2) DEFAULT 1.30,
-                 TIER3_MAX DECIMAL(5,2) DEFAULT 110.00,
-                 TIER3_PCT DECIMAL(5,2) DEFAULT 1.60,
-                 TIER4_PCT DECIMAL(5,2) DEFAULT 2.00,
-                 PRIMARY KEY (ID)
-             )
-        `);
-        logger.info('✅ JAVIER.COMM_CONFIG table created.');
+        if (!commConfigExists) {
+            // 2. Create Table (DB2 syntax)
+            await query(`
+                 CREATE TABLE JAVIER.COMM_CONFIG (
+                     ID INT NOT NULL,
+                     YEAR INT NOT NULL,
+                     IPC_PCT DECIMAL(5,2) DEFAULT 3.00,
+                     TIER1_MAX DECIMAL(5,2) DEFAULT 103.00,
+                     TIER1_PCT DECIMAL(5,2) DEFAULT 1.00,
+                     TIER2_MAX DECIMAL(5,2) DEFAULT 106.00,
+                     TIER2_PCT DECIMAL(5,2) DEFAULT 1.30,
+                     TIER3_MAX DECIMAL(5,2) DEFAULT 110.00,
+                     TIER3_PCT DECIMAL(5,2) DEFAULT 1.60,
+                     TIER4_PCT DECIMAL(5,2) DEFAULT 2.00,
+                     PRIMARY KEY (ID)
+                 )
+            `);
+            logger.info('✅ JAVIER.COMM_CONFIG table created.');
 
-        // 3. Seed Data
-        await query(`
-            INSERT INTO JAVIER.COMM_CONFIG (ID, YEAR, IPC_PCT, TIER1_MAX, TIER1_PCT, TIER2_MAX, TIER2_PCT, TIER3_MAX, TIER3_PCT, TIER4_PCT)
-            VALUES (1, 2026, 3.00, 103.00, 1.00, 106.00, 1.30, 110.00, 1.60, 2.00)
-        `);
-        logger.info('🌱 JAVIER.COMM_CONFIG seeded default values.');
-
+            // 3. Seed Data
+            await query(`
+                INSERT INTO JAVIER.COMM_CONFIG (ID, YEAR, IPC_PCT, TIER1_MAX, TIER1_PCT, TIER2_MAX, TIER2_PCT, TIER3_MAX, TIER3_PCT, TIER4_PCT)
+                VALUES (1, 2026, 3.00, 103.00, 1.00, 106.00, 1.30, 110.00, 1.60, 2.00)
+            `);
+            logger.info('🌱 JAVIER.COMM_CONFIG seeded default values.');
+        }
     } catch (error) {
         // If it fails (e.g., race condition or permission), we log but don't crash.
         // Logic will fall back to DEFAULT_CONFIG_2026.
@@ -142,14 +142,19 @@ async function initCommissionTables() {
         try {
             await query(`
                 CREATE TABLE JAVIER.COMMISSION_PAYMENTS (
-                    ID INT NOT NULL,
-                    CODIGOVENDEDOR VARCHAR(10) NOT NULL,
+                    ID INT NOT NULL GENERATED ALWAYS AS IDENTITY,
+                    VENDEDOR_CODIGO VARCHAR(10) NOT NULL,
                     ANIO INT NOT NULL,
-                    CUATRIMESTRE INT DEFAULT 0,
-                    MES INT DEFAULT 0,
-                    IMPORTE_PAGADO DECIMAL(12,2) DEFAULT 0,
-                    FECHA_PAGO DATE,
-                    CONCEPTO VARCHAR(100),
+                    MES INT NOT NULL,
+                    VENTAS_REAL DECIMAL(14,2) NOT NULL DEFAULT 0,
+                    OBJETIVO_MES DECIMAL(14,2) NOT NULL DEFAULT 0,
+                    VENTAS_SOBRE_OBJETIVO DECIMAL(14,2) NOT NULL DEFAULT 0,
+                    COMISION_GENERADA DECIMAL(12,2) NOT NULL DEFAULT 0,
+                    IMPORTE_PAGADO DECIMAL(12,2) NOT NULL DEFAULT 0,
+                    FECHA_PAGO TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    OBSERVACIONES VARCHAR(1000) NOT NULL DEFAULT '',
+                    CREADO_POR VARCHAR(50) NOT NULL DEFAULT 'unknown',
+                    FECHA_CREACION TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (ID)
                 )
             `);
@@ -159,17 +164,39 @@ async function initCommissionTables() {
         }
     }
 
-    // FIX FASE 2: Add IMPORTE_GENERADO column for snapshot support
+    // Add OBJETIVO_MES column for snapshot (idempotent - skipped if exists)
     try {
-        await query(`SELECT IMPORTE_GENERADO FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
+        await query(`SELECT OBJETIVO_MES FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
     } catch (colErr) {
-        logger.info('⚙️ Adding IMPORTE_GENERADO column to COMMISSION_PAYMENTS...');
+        logger.info('⚙️ Adding OBJETIVO_MES column to COMMISSION_PAYMENTS...');
         try {
-            await query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN IMPORTE_GENERADO DECIMAL(12,2) DEFAULT 0`);
-            logger.info('✅ IMPORTE_GENERADO column added.');
+            await query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN OBJETIVO_MES DECIMAL(12,2) DEFAULT 0`);
+            logger.info('✅ OBJETIVO_MES column added.');
         } catch (alterErr) {
-            logger.warn(`⚠️ Could not add snapshot column: ${alterErr.message}`);
+            logger.warn(`⚠️ Could not add OBJETIVO_MES column: ${alterErr.message}`);
         }
+    }
+
+    // Add VENTAS_SOBRE_OBJETIVO column for snapshot
+    try {
+        await query(`SELECT VENTAS_SOBRE_OBJETIVO FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
+    } catch (colErr) {
+        logger.info('⚙️ Adding VENTAS_SOBRE_OBJETIVO column to COMMISSION_PAYMENTS...');
+        try {
+            await query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN VENTAS_SOBRE_OBJETIVO DECIMAL(12,2) DEFAULT 0`);
+            logger.info('✅ VENTAS_SOBRE_OBJETIVO column added.');
+        } catch (alterErr) {
+            logger.warn(`⚠️ Could not add VENTAS_SOBRE_OBJETIVO column: ${alterErr.message}`);
+        }
+    }
+
+    // Performance index for payment lookups
+    try {
+        await query(`CREATE INDEX IDX_CP_VENDOR_YEAR ON JAVIER.COMMISSION_PAYMENTS(VENDEDOR_CODIGO, ANIO)`, false, false);
+        logger.info('✅ Index IDX_CP_VENDOR_YEAR created.');
+    } catch (idxErr) {
+        // Index may already exist - expected after first run
+        logger.debug(`Index creation note: ${idxErr.message}`);
     }
 
     // Load excluded vendors into memory
@@ -290,14 +317,13 @@ async function getVendorPayments(vendorCode, year) {
         const rows = await query(`
             SELECT
                 MES,
-                CUATRIMESTRE,
                 IMPORTE_PAGADO,
-                IMPORTE_GENERADO,
-                venta_comision,
-                observaciones,
+                COMISION_GENERADA,
+                VENTAS_REAL,
+                OBSERVACIONES,
                 FECHA_PAGO
             FROM JAVIER.COMMISSION_PAYMENTS
-            WHERE (CODIGOVENDEDOR = '${vendorCode.trim()}' OR CODIGOVENDEDOR = '${normalizedCode}')
+            WHERE (VENDEDOR_CODIGO = '${vendorCode.trim()}' OR VENDEDOR_CODIGO = '${normalizedCode}')
               AND ANIO = ${year}
             ORDER BY MES, FECHA_PAGO
         `, false, false);
@@ -309,29 +335,23 @@ async function getVendorPayments(vendorCode, year) {
             payments.total += amount;
 
             if (mes > 0) {
-                // Accumulate total paid per month
                 payments.monthly[mes] = (payments.monthly[mes] || 0) + amount;
 
-                // Store details for the month (aggregate if multiple payments)
                 if (!payments.details[mes]) {
                     payments.details[mes] = {
                         totalPaid: 0,
-                        ventaComision: parseFloat(r.venta_comision) || 0,
+                        ventaComision: parseFloat(r.VENTAS_REAL) || 0,
                         observaciones: [],
                         ultimaFecha: r.FECHA_PAGO
                     };
                 }
                 payments.details[mes].totalPaid += amount;
-                if (r.observaciones && r.observaciones.trim()) {
-                    payments.details[mes].observaciones.push(r.observaciones.trim());
+                if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
+                    payments.details[mes].observaciones.push(r.OBSERVACIONES.trim());
                 }
                 if (r.FECHA_PAGO && new Date(r.FECHA_PAGO) > new Date(payments.details[mes].ultimaFecha || 0)) {
                     payments.details[mes].ultimaFecha = r.FECHA_PAGO;
                 }
-            }
-
-            if (r.CUATRIMESTRE > 0) {
-                payments.quarterly[r.CUATRIMESTRE] = (payments.quarterly[r.CUATRIMESTRE] || 0) + amount;
             }
         });
     } catch (e) {
@@ -862,7 +882,16 @@ router.get('/summary', async (req, res) => {
                 `, false);
                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
-                const results = await Promise.all(promises);
+                const settled = await Promise.allSettled(promises);
+                const results = settled
+                    .filter(r => r.status === 'fulfilled')
+                    .map(r => r.value);
+
+                // Log failed vendors for debugging (does not break the page)
+                const failed = settled.filter(r => r.status === 'rejected');
+                if (failed.length > 0) {
+                    logger.warn(`[COMMISSIONS] ${failed.length} vendor(s) failed in ALL mode: ${failed.map(f => f.reason?.message || f.reason).join('; ')}`);
+                }
 
                 results.sort((a, b) => {
                     const valA = a.grandTotalCommission || 0;
@@ -940,15 +969,33 @@ router.get('/summary', async (req, res) => {
     }
 });
 
-// FIX #5: Endpoint to register a payment (Restricted to Diego 9322)
+// FIX #5: Endpoint to register a payment (Restricted to ADMIN users via TIPOVENDEDOR lookup)
 // NEW: Validates observaciones requirement and captures venta_comision snapshot
+// Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
 router.post('/pay', async (req, res) => {
-    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones } = req.body;
+    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventasSobreObjetivo } = req.body;
 
-    // Security check: Only Diego (9322) can pay
-    if (adminCode !== '9322') {
-        logger.warn(`[COMMISSIONS] Unauthorized payment attempt by user: ${adminCode}`);
-        return res.status(403).json({ success: false, error: 'Solo el administrador (Diego) puede registrar pagos.' });
+    // Security check: Verify that the admin user has TIPOVENDEDOR = 'ADMIN' in DB
+    try {
+        const adminRows = await queryWithParams(`
+            SELECT TIPOVENDEDOR
+            FROM DSEDAC.VDC
+            WHERE TRIM(CODIGOVENDEDOR) = ?
+              AND SUBEMPRESA = 'GMP'
+            FETCH FIRST 1 ROWS ONLY
+        `, [adminCode ? adminCode.trim() : '']);
+
+        const adminTipo = (adminRows && adminRows.length > 0)
+            ? (adminRows[0].TIPOVENDEDOR || '').trim()
+            : '';
+
+        if (adminTipo !== 'ADMIN') {
+            logger.warn(`[COMMISSIONS] Unauthorized payment attempt by user: ${adminCode} (tipoVendedor: ${adminTipo})`);
+            return res.status(403).json({ success: false, error: 'Solo el administrador puede registrar pagos.' });
+        }
+    } catch (authErr) {
+        logger.error(`[COMMISSIONS] Admin validation DB error: ${authErr.message}`);
+        return res.status(500).json({ success: false, error: 'Error validando permisos de administrador.' });
     }
 
     if (!vendedorCode || !year || !amount) {
@@ -995,26 +1042,27 @@ router.post('/pay', async (req, res) => {
             }
         }
 
-        // Escape observaciones to prevent SQL injection
-        const safeObservaciones = (observaciones || '').replace(/'/g, "''").substring(0, 500);
+        // Snapshot fields from request
+        const objetivoMesNum = parseFloat(objetivoMes) || 0;
+        const ventasSobreObjetivoNum = parseFloat(ventasSobreObjetivo) || 0;
 
-        // Insert with new columns
-        await query(`
+        // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
+        await queryWithParams(`
             INSERT INTO JAVIER.COMMISSION_PAYMENTS
-            (CODIGOVENDEDOR, ANIO, MES, CUATRIMESTRE, IMPORTE_PAGADO, IMPORTE_GENERADO, venta_comision, observaciones, FECHA_PAGO, CONCEPTO)
-            VALUES (
-                '${vendedorCode.trim()}',
-                ${year},
-                ${month || 0},
-                ${quarter || 0},
-                ${amount},
-                ${generatedNum},
-                ${ventaComision},
-                '${safeObservaciones}',
-                CURRENT DATE,
-                '${(concept || 'Pago Comisiones').replace(/'/g, "''").substring(0, 100)}'
-            )
-        `, true);
+            (VENDEDOR_CODIGO, ANIO, MES, VENTAS_REAL, OBJETIVO_MES, VENTAS_SOBRE_OBJETIVO, COMISION_GENERADA, IMPORTE_PAGADO, FECHA_PAGO, OBSERVACIONES, CREADO_POR)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+        `, [
+            vendedorCode.trim(),
+            parseInt(year),
+            parseInt(month) || 0,
+            ventaComision,
+            objetivoMesNum,
+            ventasSobreObjetivoNum,
+            generatedNum,
+            amountNum,
+            (observaciones || '').substring(0, 1000),
+            (adminCode || 'unknown').substring(0, 50)
+        ]);
 
         logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${adminCode}${observaciones ? ' [with observaciones]' : ''}`);
         res.json({ success: true, message: 'Pago registrado correctamente' });

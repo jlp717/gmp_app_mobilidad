@@ -49,7 +49,7 @@ class CommissionsService {
     }
   }
 
-  /// Register a commission payment (Restricted to Diego 9322)
+  /// Register a commission payment (Restricted to ADMIN users via TIPOVENDEDOR)
   /// NEW: Now includes observaciones parameter (required if amount < generatedAmount)
   static Future<Map<String, dynamic>> payCommission({
     required String vendedorCode,
@@ -60,7 +60,9 @@ class CommissionsService {
     double? generatedAmount,
     String? concept,
     required String adminCode,
-    String? observaciones, // NEW
+    String? observaciones,
+    double? objetivoMes,
+    double? ventasSobreObjetivo,
   }) async {
     try {
       final response = await ApiClient.post(
@@ -74,7 +76,9 @@ class CommissionsService {
           'generatedAmount': generatedAmount ?? 0,
           'concept': concept,
           'adminCode': adminCode,
-          'observaciones': observaciones, // NEW
+          'observaciones': observaciones,
+          'objetivoMes': objetivoMes ?? 0,
+          'ventasSobreObjetivo': ventasSobreObjetivo ?? 0,
         },
       );
 
