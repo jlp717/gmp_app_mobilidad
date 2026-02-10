@@ -8,6 +8,7 @@ class CommissionsService {
   static Future<Map<String, dynamic>> getSummary({
     required String vendedorCode, 
     dynamic year = 2026,
+    bool forceRefresh = false,
   }) async {
     try {
       final cacheKey = 'commissions_${vendedorCode}_$year';
@@ -19,7 +20,8 @@ class CommissionsService {
           'year': year.toString(),
         },
         cacheKey: cacheKey,
-        cacheTTL: const Duration(minutes: 15), // Commission data changes infrequently
+        cacheTTL: const Duration(minutes: 15),
+        forceRefresh: forceRefresh,
       );
       return response;
     } catch (e) {
@@ -82,8 +84,9 @@ class CommissionsService {
         },
       );
 
-      // Force cache clear for this vendor after payment
+      // Force cache clear for this vendor AND the ALL view after payment
       CacheService.invalidate('commissions_${vendedorCode}_$year');
+      CacheService.invalidateByPrefix('commissions_ALL_');
 
       return response;
     } catch (e) {

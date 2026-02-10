@@ -1,0 +1,7 @@
+Novedades en v3.1.0:
+
+• Cache inteligente en Comisiones: los datos se actualizan en tiempo real tras registrar un pago o pulsar sincronizar, manteniendo la optimización de caché para navegación normal.
+• Corrección de columnas de detalle de pagos que no se mostraban.
+• Los resúmenes trimestrales ahora muestran el importe real pagado (antes duplicaba el generado).
+• El porcentaje de cumplimiento ahora solo considera meses activos (no futuros).
+• Correcciones de estabilidad en consultas SQL y pantalla de login.

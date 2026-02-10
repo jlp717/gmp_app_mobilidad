@@ -40,7 +40,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
 
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool forceRefresh = false}) async {
     setState(() { _isLoading = true; _error = null; });
     try {
       final defaultCode = widget.employeeCode.split(',').first;
@@ -59,7 +59,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
         code = filterCode ?? defaultCode;
       }
 
-      final res = await CommissionsService.getSummary(vendedorCode: code);
+      final res = await CommissionsService.getSummary(
+        vendedorCode: code,
+        forceRefresh: forceRefresh,
+      );
       setState(() {
         _data = res;
         _isLoading = false;
@@ -477,7 +480,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Pago registrado correctamente'), backgroundColor: Colors.green),
                           );
-                          _loadData();
+                          _loadData(forceRefresh: true);
                         } else {
                           throw Exception(res['error'] ?? 'Error desconocido');
                         }
@@ -906,7 +909,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
              subtitle: 'Seguimiento y Objetivos',
              lastSync: _lastFetchTime,
              isLoading: _isLoading,
-             onSync: _loadData,
+             onSync: () => _loadData(forceRefresh: true),
            ),
            // Header
            Container(
