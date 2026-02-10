@@ -984,23 +984,24 @@ router.get('/summary', async (req, res) => {
 router.post('/pay', async (req, res) => {
     const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventasSobreObjetivo } = req.body;
 
-    // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or is specifically authorized (code 9322)
+    // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or is specifically authorized (code 98 = DIEGO)
     try {
         const trimmedAdmin = adminCode ? adminCode.trim() : '';
-        const adminRows = await queryWithParams(`
+        const adminRows = await query(`
             SELECT TIPOVENDEDOR
             FROM DSEDAC.VDC
-            WHERE TRIM(CODIGOVENDEDOR) = ?
+            WHERE TRIM(CODIGOVENDEDOR) = '${trimmedAdmin.replace(/[^a-zA-Z0-9]/g, '')}'
               AND SUBEMPRESA = 'GMP'
             FETCH FIRST 1 ROWS ONLY
-        `, [trimmedAdmin]);
+        `, false);
 
         const adminTipo = (adminRows && adminRows.length > 0)
             ? (adminRows[0].TIPOVENDEDOR || '').trim()
             : '';
 
-        // Only ADMIN or specifically authorized user code 9322 (DIEGO)
-        const isAuthorized = adminTipo === 'ADMIN' || trimmedAdmin === '9322';
+        // Only ADMIN or specifically authorized user code 98 (DIEGO)
+        const normalizedCode = trimmedAdmin.replace(/^0+/, '') || trimmedAdmin;
+        const isAuthorized = adminTipo === 'ADMIN' || normalizedCode === '98';
 
         if (!isAuthorized) {
             logger.warn(`[COMMISSIONS] Unauthorized payment attempt by user: ${adminCode} (tipoVendedor: ${adminTipo})`);

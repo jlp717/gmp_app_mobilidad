@@ -81,7 +81,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         // ===================================================================
         logger.info(`[${requestId}] 🔍 Attempting login for: ${safeUser}`);
 
-        let pinRecord = await queryWithParams(`
+        let pinRecord = await query(`
             SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
                    TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
                    V.TIPOVENDEDOR, X.JEFEVENTASSN,
@@ -91,9 +91,9 @@ router.post('/login', loginLimiter, async (req, res) => {
             JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
             LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
             LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON P.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-            WHERE TRIM(P.CODIGOVENDEDOR) = ?
+            WHERE TRIM(P.CODIGOVENDEDOR) = '${safeUser}'
             FETCH FIRST 1 ROWS ONLY
-        `, [safeUser], false);
+        `, false);
 
         // ===================================================================
         // STEP 2: If not found by code, try to find by NAME in VDD
@@ -102,7 +102,7 @@ router.post('/login', loginLimiter, async (req, res) => {
             logger.info(`[${requestId}] 🔄 Not found by code, searching by name...`);
 
             // Search by name - compare without spaces to handle "MARICARMEN" vs "93 MARI CARMEN"
-            const nameSearch = await queryWithParams(`
+            const nameSearch = await query(`
                 SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
                        TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
                        V.TIPOVENDEDOR, X.JEFEVENTASSN,
@@ -112,9 +112,9 @@ router.post('/login', loginLimiter, async (req, res) => {
                 JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
                 LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
                 LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON D.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE CONCAT('%', REPLACE(?, ' ', ''), '%')
+                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%' CONCAT REPLACE('${safeUser}', ' ', '') CONCAT '%'
                 FETCH FIRST 1 ROWS ONLY
-            `, [safeUser], false);
+            `, false);
 
             if (nameSearch.length > 0) {
                 pinRecord = nameSearch;
@@ -153,12 +153,12 @@ router.post('/login', loginLimiter, async (req, res) => {
         let matriculaVehiculo = null;
 
         try {
-            const vehCheck = await queryWithParams(`
+            const vehCheck = await query(`
                 SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA 
                 FROM DSEDAC.VEH 
-                WHERE TRIM(CODIGOVENDEDOR) = ? 
+                WHERE TRIM(CODIGOVENDEDOR) = '${vendedorCode}' 
                 FETCH FIRST 1 ROWS ONLY
-            `, [vendedorCode], false);
+            `, false);
 
             if (vehCheck.length > 0) {
                 isRepartidor = true;

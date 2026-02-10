@@ -601,11 +601,13 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final isOnRhythm = rhythmCompliance >= 100;
     final rhythmStatus = rhythmCompliance >= 105 ? 'Adelantado' : (rhythmCompliance >= 95 ? 'En ritmo' : 'Rezagado');
 
-    // Get Admin/Jefe status for payment buttons
+    // Get payment authorization status
     final authProvider = context.watch<AuthProvider>();
-    final curUserCode = authProvider.currentUser?.code ?? '';
+    final curUserCode = authProvider.currentUser?.code?.trim() ?? '';
+    // Allow payment for ADMIN users or specifically DIEGO (code 98)
+    final normalizedCode = curUserCode.replaceFirst(RegExp(r'^0+'), '');
     final canPay = authProvider.currentUser?.tipoVendedor == 'ADMIN' 
-        || curUserCode == '9322';
+        || normalizedCode == '98';
 
 
     // Prepare table rows (interleaving quarters)
@@ -1245,8 +1247,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
 
       // Get payment authorization status
       final authProvider = context.watch<AuthProvider>();
+      final curCode = (authProvider.currentUser?.code?.trim() ?? '').replaceFirst(RegExp(r'^0+'), '');
       final canPay = authProvider.currentUser?.tipoVendedor == 'ADMIN'
-          || (authProvider.currentUser?.code ?? '') == '9322';
+          || curCode == '98';
 
       return Container(
         color: AppTheme.darkBase,
