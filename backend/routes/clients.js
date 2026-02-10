@@ -43,10 +43,16 @@ const getClientsHandler = async (req, res) => {
       const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
 
       if (cachedClientCodes && cachedClientCodes.length > 0) {
-        // Use cached client codes directly - no subqueries needed!
-        const codesList = cachedClientCodes.slice(0, 2000).map(c => `'${c}'`).join(',');
-        clientCodesFilter = `AND C.CODIGOCLIENTE IN (${codesList})`;
-        logger.info(`[CLIENTS] Using cached client codes: ${cachedClientCodes.length} clients for vendor ${vendedorCodes}`);
+        // Use chunked IN clauses to handle unlimited client codes
+        // DB2 IN clause has a practical limit, so we chunk into groups of 1000
+        const CHUNK_SIZE = 1000;
+        const chunks = [];
+        for (let i = 0; i < cachedClientCodes.length; i += CHUNK_SIZE) {
+          const chunk = cachedClientCodes.slice(i, i + CHUNK_SIZE).map(c => `'${c}'`).join(',');
+          chunks.push(`C.CODIGOCLIENTE IN (${chunk})`);
+        }
+        clientCodesFilter = `AND (${chunks.join(' OR ')})`;
+        logger.info(`[CLIENTS] Using cached client codes: ${cachedClientCodes.length} clients (${chunks.length} chunks) for vendor ${vendedorCodes}`);
       }
     }
 

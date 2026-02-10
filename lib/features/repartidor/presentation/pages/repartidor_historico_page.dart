@@ -34,7 +34,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   List<ClientSummary> _clients = [];
   List<DocumentHistory> _documents = [];
   List<MonthlyObjective> _objectives = [];
-  
+
+  // === VENTAS DETALLE (jerarquía) ===
+  Map<String, dynamic>? _objectivesDetail;
+  int _selectedYear = DateTime.now().year;
+  final Set<String> _expandedNodes = {};
+  bool _isLoadingDetail = false;
+
   // === FILTROS MODERNOS ===
   DateTime? _dateFrom;
   DateTime? _dateTo;
@@ -127,8 +133,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         repartidorId: widget.repartidorId,
         clientId: clientId,
       );
-      
+
       _objectives = objectives;
+
+      // Cargar desglose jerárquico
+      _loadObjectivesDetail(clientId);
     } catch (e) {
       _documents = [];
       _objectives = [];
@@ -136,6 +145,26 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     if (mounted) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadObjectivesDetail([String? clientId]) async {
+    setState(() => _isLoadingDetail = true);
+    try {
+      final data = await RepartidorDataService.getObjectivesDetail(
+        repartidorId: widget.repartidorId,
+        year: _selectedYear,
+        clientId: clientId ?? _selectedClientId,
+      );
+      if (mounted) {
+        setState(() {
+          _objectivesDetail = data;
+          _isLoadingDetail = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[History] Error loading objectives detail: $e');
+      if (mounted) setState(() => _isLoadingDetail = false);
     }
   }
 
@@ -212,6 +241,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   _selectedClientId = null;
                   _selectedClientName = null;
                   _documents = [];
+                  _objectives = [];
+                  _objectivesDetail = null;
+                  _expandedNodes.clear();
                   _clearFilters();
               }),
               icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
@@ -395,6 +427,24 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           ),
         ),
         
+        // Contador de clientes
+        if (!_isLoading && _clients.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Icon(Icons.people, size: 14, color: AppTheme.textSecondary),
+                const SizedBox(width: 6),
+                Text(
+                  _searchController.text.isNotEmpty
+                      ? '${_filteredClients.length} de ${_clients.length} clientes'
+                      : '${_clients.length} clientes',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 8),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator(color: AppTheme.neonPurple))
@@ -409,10 +459,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _filteredClients.length,
-                      itemBuilder: (context, index) => _buildClientCard(_filteredClients[index]),
+                  : RefreshIndicator(
+                      onRefresh: () => _loadClients(_searchController.text.isNotEmpty ? _searchController.text : null),
+                      color: AppTheme.neonPurple,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _filteredClients.length,
+                        itemBuilder: (context, index) => _buildClientCard(_filteredClients[index]),
+                      ),
                     ),
         ),
       ],
@@ -1176,63 +1230,288 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }
 
   Widget _buildObjectivesTable() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Progreso Objetivo',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+    return Column(
+      children: [
+        // Selector de año
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(
+            children: [
+              const Text('Desglose de ventas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _selectedYear,
+                    isDense: true,
+                    dropdownColor: AppTheme.surfaceColor,
+                    style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+                    items: List.generate(5, (i) => DateTime.now().year - i)
+                        .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
+                        .toList(),
+                    onChanged: (y) {
+                      if (y != null && y != _selectedYear) {
+                        setState(() { _selectedYear = y; _expandedNodes.clear(); });
+                        _loadObjectivesDetail();
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Seguimiento del porcentaje cobrado por mes',
-            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-          ),
-          const SizedBox(height: 16),
-          Container(
+        ),
+
+        // Contenido jerárquico
+        Expanded(
+          child: _isLoadingDetail
+              ? const Center(child: CircularProgressIndicator(color: AppTheme.neonPurple))
+              : _buildHierarchyContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHierarchyContent() {
+    final clients = (_objectivesDetail?['clients'] as List?) ?? [];
+    final grandTotal = _objectivesDetail?['grandTotal'] as Map<String, dynamic>?;
+
+    if (clients.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.bar_chart, size: 48, color: AppTheme.textSecondary.withOpacity(0.5)),
+            const SizedBox(height: 16),
+            Text('Sin datos de ventas para $_selectedYear', style: TextStyle(color: AppTheme.textSecondary)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: clients.length + (grandTotal != null ? 1 : 0),
+      itemBuilder: (ctx, index) {
+        // Cabecera de totales
+        if (grandTotal != null && index == 0) {
+          final sales = (grandTotal['sales'] as num?)?.toDouble() ?? 0;
+          final margin = (grandTotal['margin'] as num?)?.toDouble() ?? 0;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceColor,
-              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(colors: [AppTheme.neonPurple.withOpacity(0.15), AppTheme.neonBlue.withOpacity(0.1)]),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
             ),
-            child: DataTable(
-              columnSpacing: 20,
-              headingRowColor: WidgetStateProperty.all(AppTheme.darkBase),
-              columns: const [
-                DataColumn(label: Text('Mes', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
-                DataColumn(label: Text('Cobrable', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
-                DataColumn(label: Text('Cobrado', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
-                DataColumn(label: Text('% Acum.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
+            child: Row(
+              children: [
+                const Icon(Icons.summarize, color: AppTheme.neonPurple, size: 20),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Total $_selectedYear', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                    Text(CurrencyFormatter.format(sales), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                  ],
+                ),
+                const Spacer(),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('Margen', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                    Text('${margin.toStringAsFixed(1)}%', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: margin >= 20 ? AppTheme.success : Colors.orange)),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Text('${clients.length} clientes', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
               ],
-              rows: _objectives.map((obj) {
-                final isThresholdMet = obj.percentage >= 30;
-                return DataRow(cells: [
-                  DataCell(Text(obj.month, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12))),
-                  DataCell(Text(CurrencyFormatter.format(obj.collectable), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12))),
-                  DataCell(Text(CurrencyFormatter.format(obj.collected), style: const TextStyle(color: AppTheme.neonBlue, fontSize: 12))),
-                  DataCell(Row(
+            ),
+          );
+        }
+
+        final clientIdx = grandTotal != null ? index - 1 : index;
+        final client = Map<String, dynamic>.from(clients[clientIdx] as Map);
+        return _buildClientNode(client);
+      },
+    );
+  }
+
+  Widget _buildClientNode(Map<String, dynamic> client) {
+    final code = client['code'] as String? ?? '';
+    final name = client['name'] as String? ?? code;
+    final sales = (client['totalSales'] as num?)?.toDouble() ?? 0;
+    final margin = (client['margin'] as num?)?.toDouble() ?? 0;
+    final productCount = client['productCount'] ?? 0;
+    final nodeKey = 'client_$code';
+    final expanded = _expandedNodes.contains(nodeKey);
+    final families = (client['families'] as List?) ?? [];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: expanded ? AppTheme.neonPurple.withOpacity(0.4) : Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: families.isNotEmpty ? () => setState(() {
+              if (expanded) _expandedNodes.remove(nodeKey); else _expandedNodes.add(nodeKey);
+            }) : null,
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  if (families.isNotEmpty)
+                    Icon(expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, color: AppTheme.neonPurple, size: 20)
+                  else
+                    const SizedBox(width: 20),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                    child: Text(code, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('$productCount productos', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Icon(
-                        isThresholdMet ? Icons.check_circle : Icons.warning,
-                        size: 14,
-                        color: isThresholdMet ? AppTheme.success : Colors.orange,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${obj.percentage.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          color: isThresholdMet ? AppTheme.success : Colors.orange,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
+                      Text(CurrencyFormatter.format(sales), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                      Text('${margin.toStringAsFixed(1)}%', style: TextStyle(fontSize: 10, color: margin >= 20 ? AppTheme.success : Colors.orange)),
                     ],
-                  )),
-                ]);
-              }).toList(),
+                  ),
+                ],
+              ),
             ),
           ),
+          if (expanded && families.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 4, bottom: 6),
+              child: Column(children: families.map((fi1) => _buildFiNode(Map<String, dynamic>.from(fi1 as Map), 1, 'client_$code')).toList()),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFiNode(Map<String, dynamic> node, int level, String parentKey) {
+    final code = node['code'] as String? ?? '';
+    final name = node['name'] as String? ?? code;
+    final sales = (node['totalSales'] as num?)?.toDouble() ?? 0;
+    final nodeKey = '${parentKey}_fi${level}_$code';
+    final expanded = _expandedNodes.contains(nodeKey);
+
+    final children = (node['children'] as List?) ?? [];
+    final products = (node['products'] as List?) ?? [];
+    final hasChildren = children.isNotEmpty || products.isNotEmpty;
+
+    // Colores por nivel
+    final colors = [AppTheme.neonPurple, AppTheme.neonBlue, Colors.teal, Colors.amber];
+    final levelColor = colors[(level - 1) % colors.length];
+    final levelLabels = ['FI1', 'FI2', 'FI3', 'FI4'];
+    final levelLabel = level <= 4 ? levelLabels[level - 1] : 'FI';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 3),
+      decoration: BoxDecoration(
+        color: levelColor.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: levelColor.withOpacity(expanded ? 0.3 : 0.1)),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: hasChildren ? () => setState(() {
+              if (expanded) _expandedNodes.remove(nodeKey); else _expandedNodes.add(nodeKey);
+            }) : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  if (hasChildren)
+                    Icon(expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, color: levelColor, size: 18)
+                  else
+                    const SizedBox(width: 18),
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(color: levelColor.withOpacity(0.2), borderRadius: BorderRadius.circular(3)),
+                    child: Text(levelLabel, style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: levelColor)),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(name, style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                  Text(CurrencyFormatter.format(sales), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: levelColor)),
+                ],
+              ),
+            ),
+          ),
+          if (expanded && hasChildren)
+            Padding(
+              padding: const EdgeInsets.only(left: 14, right: 2, bottom: 4),
+              child: Column(
+                children: [
+                  ...children.map((child) => _buildFiNode(Map<String, dynamic>.from(child as Map), level + 1, nodeKey)),
+                  ...products.map((p) => _buildProductRow(Map<String, dynamic>.from(p as Map))),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductRow(Map<String, dynamic> product) {
+    final code = product['code'] as String? ?? '';
+    final name = product['name'] as String? ?? code;
+    final sales = (product['totalSales'] as num?)?.toDouble() ?? 0;
+    final units = (product['totalUnits'] as num?)?.toDouble() ?? 0;
+    final unitType = product['unitType'] as String? ?? 'UDS';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.darkBase.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 22),
+          Icon(Icons.inventory_2, size: 12, color: AppTheme.textSecondary.withOpacity(0.5)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontSize: 10, color: AppTheme.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(code, style: TextStyle(fontSize: 8, color: AppTheme.textSecondary.withOpacity(0.7))),
+              ],
+            ),
+          ),
+          Text('${units.toStringAsFixed(units == units.roundToDouble() ? 0 : 1)} $unitType', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+          const SizedBox(width: 10),
+          Text(CurrencyFormatter.format(sales), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.neonGreen)),
         ],
       ),
     );

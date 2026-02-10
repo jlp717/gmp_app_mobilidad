@@ -54,7 +54,7 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
         const sql = `
             SELECT 
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as NOMBRE_CLIENTE,
+                TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
                 CPC.CODIGOFORMAPAGO as FORMA_PAGO,
                 SUM(CPC.IMPORTETOTAL) as TOTAL_COBRABLE,
                 SUM(CASE 
@@ -75,7 +75,7 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
             WHERE OPP.MESREPARTO = ${selectedMonth}
               AND OPP.ANOREPARTO = ${selectedYear}
               AND TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
-            GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), CPC.CODIGOFORMAPAGO
+            GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), CPC.CODIGOFORMAPAGO
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
         `;
@@ -251,10 +251,11 @@ router.get('/history/documents/:clientId', async (req, res) => {
         let repartidorJoin = '';
         let repartidorFilter = '';
         if (repartidorId) {
+            const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
             repartidorJoin = `
-                INNER JOIN DSEDAC.OPP OPP 
+                INNER JOIN DSEDAC.OPP OPP
                     ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION`;
-            repartidorFilter = `AND TRIM(OPP.CODIGOREPARTIDOR) = '${repartidorId.toString().trim()}'`;
+            repartidorFilter = `AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
         }
 
         const sql = `
@@ -384,6 +385,265 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
 
     } catch (error) {
         logger.error(`[REPARTIDOR] Error in history/objectives: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// GET /history/objectives-detail/:repartidorId
+// Desglose jerárquico: Año → Cliente → FI1 → FI2 → FI3 → FI4 → Productos
+// =============================================================================
+router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
+    try {
+        const { repartidorId } = req.params;
+        const { year, clientId } = req.query;
+
+        const selectedYear = parseInt(year) || new Date().getFullYear();
+        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+
+        logger.info(`[REPARTIDOR] Objectives detail for ${repartidorId}, year ${selectedYear}${clientId ? `, client ${clientId}` : ''}`);
+
+        // 1. Get client codes delivered by this repartidor in this year
+        let clientFilter = '';
+        if (clientId) {
+            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'`;
+        }
+
+        const clientsSql = `
+            SELECT DISTINCT TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENT_CODE,
+                TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as CLIENT_NAME
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
+              AND OPP.ANOREPARTO = ${selectedYear}
+              ${clientFilter}
+        `;
+
+        const clientRows = await query(clientsSql, false);
+        if (clientRows.length === 0) {
+            return res.json({ success: true, clients: [], year: selectedYear });
+        }
+
+        // Build client name map
+        const clientNames = {};
+        clientRows.forEach(r => {
+            const code = (r.CLIENT_CODE || '').trim();
+            clientNames[code] = (r.CLIENT_NAME || '').trim() || `CLIENTE ${code}`;
+        });
+
+        // 2. Query LACLAE for all those clients with FI hierarchy
+        const CHUNK_SIZE = 500;
+        const allCodes = Object.keys(clientNames);
+        const chunks = [];
+        for (let i = 0; i < allCodes.length; i += CHUNK_SIZE) {
+            const chunk = allCodes.slice(i, i + CHUNK_SIZE).map(c => `'${c}'`).join(',');
+            chunks.push(`L.LCCDCL IN (${chunk})`);
+        }
+        const clientInFilter = `(${chunks.join(' OR ')})`;
+
+        const LACLAE_SALES_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT')`;
+
+        const dataSql = `
+            SELECT
+                TRIM(L.LCCDCL) as CLIENT_CODE,
+                TRIM(L.LCCDRF) as PRODUCT_CODE,
+                COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCDESC)) as PRODUCT_NAME,
+                COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
+                L.LCMMDC as MONTH,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST,
+                SUM(L.LCCTUD) as UNITS,
+                COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
+                COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
+                COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
+                COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
+            WHERE ${clientInFilter}
+              AND L.LCAADC = ${selectedYear}
+              AND ${LACLAE_SALES_FILTER}
+            GROUP BY L.LCCDCL, L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.UNIDADMEDIDA, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04
+            ORDER BY SALES DESC
+        `;
+
+        const rows = await query(dataSql, false);
+
+        // 3. Load FI names from metadata cache
+        let fi1Names = {}, fi2Names = {}, fi3Names = {}, fi4Names = {};
+        try {
+            const { isCacheReady, getCachedFi1Names, getCachedFi2Names, getCachedFi3Names, getCachedFi4Names } = require('../services/metadataCache');
+            if (isCacheReady()) {
+                fi1Names = getCachedFi1Names() || {};
+                fi2Names = getCachedFi2Names() || {};
+                fi3Names = getCachedFi3Names() || {};
+                fi4Names = getCachedFi4Names() || {};
+            } else {
+                const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false);
+                fi1Rows.forEach(r => { fi1Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
+                const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false);
+                fi2Rows.forEach(r => { fi2Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
+                const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false);
+                fi3Rows.forEach(r => { fi3Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
+                const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false);
+                fi4Rows.forEach(r => { fi4Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
+            }
+        } catch (e) {
+            logger.warn(`[REPARTIDOR] Could not load FI names: ${e.message}`);
+        }
+
+        // 4. Build hierarchy: Client → FI1 → FI2 → FI3 → FI4 → Products
+        const clientMap = new Map();
+
+        rows.forEach(row => {
+            const cCode = (row.CLIENT_CODE || '').trim();
+            const pCode = (row.PRODUCT_CODE || '').trim();
+            const pName = (row.PRODUCT_NAME || '').trim() || 'Sin nombre';
+            const unitType = (row.UNIT_TYPE || '').trim();
+            const month = parseInt(row.MONTH);
+            const sales = parseFloat(row.SALES) || 0;
+            const cost = parseFloat(row.COST) || 0;
+            const units = parseFloat(row.UNITS) || 0;
+            const fi1 = (row.FI1_CODE || '').trim() || 'SIN_CAT';
+            const fi2 = (row.FI2_CODE || '').trim() || 'General';
+            const fi3 = (row.FI3_CODE || '').trim() || '';
+            const fi4 = (row.FI4_CODE || '').trim() || '';
+
+            // Client level
+            if (!clientMap.has(cCode)) {
+                clientMap.set(cCode, {
+                    code: cCode,
+                    name: clientNames[cCode] || `CLIENTE ${cCode}`,
+                    totalSales: 0, totalCost: 0, totalUnits: 0,
+                    productCount: new Set(),
+                    families: new Map()
+                });
+            }
+            const client = clientMap.get(cCode);
+            client.totalSales += sales;
+            client.totalCost += cost;
+            client.totalUnits += units;
+            client.productCount.add(pCode);
+
+            // FI1 level
+            if (!client.families.has(fi1)) {
+                client.families.set(fi1, {
+                    code: fi1,
+                    name: fi1Names[fi1] ? `${fi1} - ${fi1Names[fi1]}` : (fi1 === 'SIN_CAT' ? 'Sin Categoría' : fi1),
+                    totalSales: 0, totalCost: 0, totalUnits: 0,
+                    children: new Map()
+                });
+            }
+            const fi1Level = client.families.get(fi1);
+            fi1Level.totalSales += sales;
+            fi1Level.totalCost += cost;
+            fi1Level.totalUnits += units;
+
+            // FI2 level
+            if (!fi1Level.children.has(fi2)) {
+                fi1Level.children.set(fi2, {
+                    code: fi2,
+                    name: fi2Names[fi2] ? `${fi2} - ${fi2Names[fi2]}` : fi2,
+                    totalSales: 0, totalCost: 0, totalUnits: 0,
+                    children: new Map()
+                });
+            }
+            const fi2Level = fi1Level.children.get(fi2);
+            fi2Level.totalSales += sales;
+            fi2Level.totalCost += cost;
+            fi2Level.totalUnits += units;
+
+            // FI3 level (skip if empty)
+            const fi3Key = fi3 || '_default';
+            if (!fi2Level.children.has(fi3Key)) {
+                fi2Level.children.set(fi3Key, {
+                    code: fi3 || '',
+                    name: fi3 && fi3Names[fi3] ? `${fi3} - ${fi3Names[fi3]}` : (fi3 || 'General'),
+                    totalSales: 0, totalCost: 0, totalUnits: 0,
+                    children: new Map()
+                });
+            }
+            const fi3Level = fi2Level.children.get(fi3Key);
+            fi3Level.totalSales += sales;
+            fi3Level.totalCost += cost;
+            fi3Level.totalUnits += units;
+
+            // FI4 level (skip if empty)
+            const fi4Key = fi4 || '_default';
+            if (!fi3Level.children.has(fi4Key)) {
+                fi3Level.children.set(fi4Key, {
+                    code: fi4 || '',
+                    name: fi4 && fi4Names[fi4] ? `${fi4} - ${fi4Names[fi4]}` : (fi4 || 'General'),
+                    totalSales: 0, totalCost: 0, totalUnits: 0,
+                    products: new Map()
+                });
+            }
+            const fi4Level = fi3Level.children.get(fi4Key);
+            fi4Level.totalSales += sales;
+            fi4Level.totalCost += cost;
+            fi4Level.totalUnits += units;
+
+            // Product level
+            if (!fi4Level.products.has(pCode)) {
+                fi4Level.products.set(pCode, {
+                    code: pCode, name: pName, unitType,
+                    totalSales: 0, totalCost: 0, totalUnits: 0,
+                    monthlyData: {}
+                });
+            }
+            const product = fi4Level.products.get(pCode);
+            product.totalSales += sales;
+            product.totalCost += cost;
+            product.totalUnits += units;
+            product.monthlyData[month] = (product.monthlyData[month] || 0) + sales;
+        });
+
+        // 5. Convert Maps to arrays for JSON, sorted by sales desc
+        const mapToArray = (map) => Array.from(map.values()).sort((a, b) => (b.totalSales || 0) - (a.totalSales || 0));
+
+        const clients = mapToArray(clientMap).map(client => ({
+            code: client.code,
+            name: client.name,
+            totalSales: client.totalSales,
+            totalCost: client.totalCost,
+            totalUnits: client.totalUnits,
+            productCount: client.productCount.size,
+            margin: client.totalSales > 0 ? ((client.totalSales - client.totalCost) / client.totalSales * 100) : 0,
+            families: mapToArray(client.families).map(fi1 => ({
+                code: fi1.code, name: fi1.name,
+                totalSales: fi1.totalSales, totalCost: fi1.totalCost, totalUnits: fi1.totalUnits,
+                children: mapToArray(fi1.children).map(fi2 => ({
+                    code: fi2.code, name: fi2.name,
+                    totalSales: fi2.totalSales, totalCost: fi2.totalCost, totalUnits: fi2.totalUnits,
+                    children: mapToArray(fi2.children).map(fi3 => ({
+                        code: fi3.code, name: fi3.name,
+                        totalSales: fi3.totalSales, totalCost: fi3.totalCost, totalUnits: fi3.totalUnits,
+                        children: mapToArray(fi3.children).map(fi4 => ({
+                            code: fi4.code, name: fi4.name,
+                            totalSales: fi4.totalSales, totalCost: fi4.totalCost, totalUnits: fi4.totalUnits,
+                            products: Array.from(fi4.products.values()).sort((a, b) => b.totalSales - a.totalSales)
+                        }))
+                    }))
+                }))
+            }))
+        }));
+
+        // Grand totals
+        let grandSales = 0, grandCost = 0, grandUnits = 0;
+        clients.forEach(c => { grandSales += c.totalSales; grandCost += c.totalCost; grandUnits += c.totalUnits; });
+
+        logger.info(`[REPARTIDOR] Objectives detail: ${clients.length} clients, ${rows.length} data rows`);
+
+        res.json({
+            success: true,
+            year: selectedYear,
+            grandTotal: { sales: grandSales, cost: grandCost, units: grandUnits, margin: grandSales > 0 ? ((grandSales - grandCost) / grandSales * 100) : 0 },
+            clients
+        });
+
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in objectives-detail: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -986,7 +1246,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
         let sql = `
             SELECT
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as NAME,
+                TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
                 COUNT(CPC.NUMEROALBARAN) as TOTAL_DOCS,
                 MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
@@ -1003,7 +1263,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
             sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CPC.CODIGOCLIENTEALBARAN) LIKE '%${cleanSearch}%')`;
         }
 
-        sql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
+        sql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
                  ORDER BY LAST_VISIT DESC`;
 
         logger.info(`[REPARTIDOR] History SQL with repartidorId ${repartidorId}: ${sql.replace(/\s+/g, ' ')}`);

@@ -365,6 +365,32 @@ class RepartidorDataService {
     }
   }
 
+  /// Obtener desglose jerárquico de ventas: Cliente → FI1 → FI2 → FI3 → FI4 → Productos
+  static Future<Map<String, dynamic>> getObjectivesDetail({
+    required String repartidorId,
+    int? year,
+    String? clientId,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (year != null) queryParams['year'] = year.toString();
+      if (clientId != null) queryParams['clientId'] = clientId;
+
+      final cacheKey = 'repartidor_objectives_detail_${repartidorId}_${year ?? 'current'}_${clientId ?? 'all'}';
+
+      final response = await ApiClient.get(
+        '/repartidor/history/objectives-detail/$repartidorId',
+        queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.defaultTTL,
+      );
+
+      return response;
+    } catch (e) {
+      throw Exception('Error cargando desglose de ventas: $e');
+    }
+  }
+
   /// Descargar documento PDF
   static Future<List<int>> downloadDocument({
     required int year,

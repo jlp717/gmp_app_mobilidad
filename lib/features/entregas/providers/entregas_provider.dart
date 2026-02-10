@@ -156,6 +156,7 @@ class AlbaranEntrega {
   final String direccion;
   final String poblacion;
   final String telefono;
+  final String telefono2;
   final String emailCliente;
   final String fecha;
   final double importeTotal;
@@ -190,6 +191,7 @@ class AlbaranEntrega {
     this.direccion = '',
     this.poblacion = '',
     this.telefono = '',
+    this.telefono2 = '',
     this.emailCliente = '',
     required this.fecha,
     required this.importeTotal,
@@ -227,6 +229,7 @@ class AlbaranEntrega {
       direccion: json['direccion']?.toString() ?? '',
       poblacion: json['poblacion']?.toString() ?? '',
       telefono: json['telefono']?.toString() ?? '',
+      telefono2: json['telefono2']?.toString() ?? '',
       emailCliente: json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
       fecha: json['fecha']?.toString() ?? '',
       importeTotal: (json['importe'] ?? json['importeTotal'] ?? 0).toDouble(),
@@ -533,6 +536,71 @@ class EntregasProvider extends ChangeNotifier {
       latitud: latitud,
       longitud: longitud,
     );
+  }
+
+  /// Generar recibo de entrega PDF (retorna base64 y fileName)
+  Future<Map<String, dynamic>?> generateReceipt({
+    required AlbaranEntrega albaran,
+  }) async {
+    try {
+      final response = await ApiClient.post('/entregas/receipt/${albaran.id}', {
+        'signaturePath': albaran.firma,
+        'items': albaran.items.map((i) => {
+          'cantidad': i.cantidadPedida,
+          'descripcion': i.descripcion,
+          'precio': i.precioUnitario,
+        }).toList(),
+        'clientCode': albaran.codigoCliente,
+        'clientName': albaran.nombreCliente,
+        'albaranNum': albaran.numeroAlbaran,
+        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
+        'fecha': albaran.fecha,
+        'subtotal': albaran.importeTotal,
+        'iva': 0,
+        'total': albaran.importeTotal,
+        'formaPago': albaran.formaPagoDesc,
+        'repartidor': _repartidorId,
+      });
+      if (response['success'] == true) {
+        return response;
+      }
+      return null;
+    } catch (e) {
+      print('[ENTREGAS_PROVIDER] Error generating receipt: $e');
+      return null;
+    }
+  }
+
+  /// Enviar recibo por email
+  Future<bool> sendReceiptByEmail({
+    required AlbaranEntrega albaran,
+    required String email,
+  }) async {
+    try {
+      final response = await ApiClient.post('/entregas/receipt/${albaran.id}/email', {
+        'email': email,
+        'signaturePath': albaran.firma,
+        'items': albaran.items.map((i) => {
+          'cantidad': i.cantidadPedida,
+          'descripcion': i.descripcion,
+          'precio': i.precioUnitario,
+        }).toList(),
+        'clientCode': albaran.codigoCliente,
+        'clientName': albaran.nombreCliente,
+        'albaranNum': albaran.numeroAlbaran,
+        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
+        'fecha': albaran.fecha,
+        'subtotal': albaran.importeTotal,
+        'iva': 0,
+        'total': albaran.importeTotal,
+        'formaPago': albaran.formaPagoDesc,
+        'repartidor': _repartidorId,
+      });
+      return response['success'] == true;
+    } catch (e) {
+      print('[ENTREGAS_PROVIDER] Error sending receipt email: $e');
+      return false;
+    }
   }
 
   /// Marcar albarán como parcial

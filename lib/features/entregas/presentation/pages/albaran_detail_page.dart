@@ -1,7 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../providers/entregas_provider.dart';
 import '../widgets/signature_pad.dart';
 
@@ -638,13 +642,9 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
       );
 
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✓ Entrega registrada correctamente'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context);
+        setState(() => _isProcessing = false);
+        await _showPostDeliveryDialog();
+        return;
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -656,6 +656,16 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
+  }
+
+  /// Diálogo post-entrega con opciones de ticket
+  Future<void> _showPostDeliveryDialog() async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _PostDeliveryDialog(albaran: widget.albaran),
+    );
+    if (mounted) Navigator.pop(context);
   }
 
   Future<void> _marcarParcial() async {
@@ -739,5 +749,265 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
         ],
       ),
     );
+  }
+}
+
+/// Diálogo post-entrega con opciones de descarga/envío del ticket
+class _PostDeliveryDialog extends StatefulWidget {
+  final AlbaranEntrega albaran;
+  const _PostDeliveryDialog({required this.albaran});
+
+  @override
+  State<_PostDeliveryDialog> createState() => _PostDeliveryDialogState();
+}
+
+class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
+  bool _isProcessing = false;
+  String? _processingAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Column(
+        children: [
+          const Icon(Icons.check_circle, color: Colors.green, size: 56),
+          const SizedBox(height: 12),
+          const Text(
+            'Entrega realizada con éxito',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Albarán ${widget.albaran.numeroAlbaran}',
+            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Enviar nota de entrega al cliente:',
+            style: TextStyle(fontSize: 14, color: Colors.black87),
+          ),
+          const SizedBox(height: 16),
+
+          // Descargar PDF
+          _buildActionButton(
+            icon: Icons.download,
+            label: 'Descargar PDF',
+            color: Colors.blue,
+            actionKey: 'download',
+            onTap: _downloadReceipt,
+          ),
+          const SizedBox(height: 10),
+
+          // WhatsApp
+          _buildActionButton(
+            icon: Icons.share,
+            label: 'Compartir (WhatsApp...)',
+            color: Colors.green,
+            actionKey: 'whatsapp',
+            onTap: _shareReceipt,
+          ),
+          const SizedBox(height: 10),
+
+          // Email
+          _buildActionButton(
+            icon: Icons.email,
+            label: 'Enviar por Email',
+            color: Colors.orange,
+            actionKey: 'email',
+            onTap: _sendByEmail,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isProcessing ? null : () => Navigator.pop(context),
+          child: const Text('Cerrar'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required String actionKey,
+    required VoidCallback onTap,
+  }) {
+    final isThisProcessing = _isProcessing && _processingAction == actionKey;
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: _isProcessing ? null : onTap,
+        icon: isThisProcessing
+            ? const SizedBox(
+                width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              )
+            : Icon(icon, size: 20),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _downloadReceipt() async {
+    setState(() { _isProcessing = true; _processingAction = 'download'; });
+    try {
+      final provider = context.read<EntregasProvider>();
+      final result = await provider.generateReceipt(albaran: widget.albaran);
+
+      if (result == null || result['pdfBase64'] == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error al generar el recibo'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+
+      final Uint8List bytes = base64Decode(result['pdfBase64']);
+      final dir = await getTemporaryDirectory();
+      final fileName = result['fileName'] ?? 'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Nota de entrega - Albarán ${widget.albaran.numeroAlbaran}',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PDF generado correctamente'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _isProcessing = false; _processingAction = null; });
+    }
+  }
+
+  Future<void> _shareReceipt() async {
+    setState(() { _isProcessing = true; _processingAction = 'whatsapp'; });
+    try {
+      final provider = context.read<EntregasProvider>();
+      final result = await provider.generateReceipt(albaran: widget.albaran);
+
+      if (result == null || result['pdfBase64'] == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error al generar el recibo'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+
+      final Uint8List bytes = base64Decode(result['pdfBase64']);
+      final dir = await getTemporaryDirectory();
+      final fileName = result['fileName'] ?? 'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+
+      // Usar share sheet que permite seleccionar WhatsApp
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Nota de entrega - Albarán ${widget.albaran.numeroAlbaran}\n'
+              'Cliente: ${widget.albaran.nombreCliente}\n'
+              'Total: ${widget.albaran.importeTotal.toStringAsFixed(2)} EUR',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _isProcessing = false; _processingAction = null; });
+    }
+  }
+
+  Future<void> _sendByEmail() async {
+    // Pedir email al repartidor
+    final emailController = TextEditingController();
+    final email = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enviar por Email'),
+        content: TextField(
+          controller: emailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Email del cliente',
+            hintText: 'ejemplo@email.com',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.email),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = emailController.text.trim();
+              if (value.isNotEmpty && value.contains('@') && value.contains('.')) {
+                Navigator.pop(ctx, value);
+              } else {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Email no válido'), backgroundColor: Colors.orange),
+                );
+              }
+            },
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+
+    if (email == null || email.isEmpty) return;
+
+    setState(() { _isProcessing = true; _processingAction = 'email'; });
+    try {
+      final provider = context.read<EntregasProvider>();
+      final success = await provider.sendReceiptByEmail(
+        albaran: widget.albaran,
+        email: email,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Email enviado a $email' : 'Error al enviar email'),
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _isProcessing = false; _processingAction = null; });
+    }
   }
 }
