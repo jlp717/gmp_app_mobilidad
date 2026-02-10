@@ -740,7 +740,7 @@ Equipo Granja Mari Pepa''';
                    )
                  ],
                ),
-               if (auth.isDirector) ...[
+               if (auth.currentUser?.isJefeVentas ?? false) ...[
                  const SizedBox(height: 12),
                  Container(
                    constraints: const BoxConstraints(minHeight: 50),

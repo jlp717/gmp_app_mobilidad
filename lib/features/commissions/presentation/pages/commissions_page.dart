@@ -526,8 +526,19 @@ class _CommissionsPageState extends State<CommissionsPage> {
               )
           ),
           // === PAGOS (NEW) ===
-          // VENTA ORIGEN
-          DataCell(() {
+          // IMPORTE PAGADO
+          DataCell(Builder(builder: (context) {
+            final details = (paymentsData['details'] as Map?)?[monthNum] as Map?;
+            final importePagado = (details?['totalPaid'] as num?)?.toDouble() ?? 0;
+            return importePagado > 0
+                ? Text(
+                    CurrencyFormatter.format(importePagado),
+                    style: const TextStyle(color: AppTheme.neonGreen, fontSize: 10, fontWeight: FontWeight.bold)
+                  )
+                : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10));
+          })),
+          // VENTA REAL (momento pago)
+          DataCell(Builder(builder: (context) {
             final details = (paymentsData['details'] as Map?)?[monthNum] as Map?;
             final ventaComision = (details?['ventaComision'] as num?)?.toDouble() ?? 0;
             return ventaComision > 0
@@ -536,9 +547,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
                     style: const TextStyle(color: AppTheme.neonBlue, fontSize: 10, fontWeight: FontWeight.bold)
                   )
                 : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10));
-          }()),
+          })),
           // OBSERVACIONES
-          DataCell(() {
+          DataCell(Builder(builder: (context) {
             final details = (paymentsData['details'] as Map?)?[monthNum] as Map?;
             final observaciones = (details?['observaciones'] as List?)?.join(' | ') ?? '';
             return observaciones.isNotEmpty
@@ -555,7 +566,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                     ),
                   )
                 : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10));
-          }()),
+          })),
         ],
       ));
     }
@@ -601,7 +612,8 @@ class _CommissionsPageState extends State<CommissionsPage> {
             const DataCell(SizedBox()), // RITMO
             const DataCell(SizedBox()), // DIFF
             const DataCell(SizedBox()), // COM. PROV.
-            const DataCell(SizedBox()), // VENTA ORIGEN (NEW)
+            const DataCell(SizedBox()), // IMP. PAGADO (NEW)
+            const DataCell(SizedBox()), // VENTA REAL (NEW)
             const DataCell(SizedBox()), // OBSERVACIONES (NEW)
          ]
        ));
@@ -928,7 +940,8 @@ class _CommissionsPageState extends State<CommissionsPage> {
                         DataColumn(label: Text('DIFF', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
                         DataColumn(label: Text('COM. PROV.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple))),
                         // === PAGOS (NEW) ===
-                        DataColumn(label: Text('VENTA ORIGEN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue))),
+                        DataColumn(label: Text('IMP. PAGADO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue))),
+                        DataColumn(label: Text('VENTA REAL', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue))),
                         DataColumn(label: Text('OBSERVACIONES', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue))),
                       ],
 
@@ -1232,7 +1245,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         DataColumn(label: Text('RITMO', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10))),
         DataColumn(label: Text('DIFF', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10))),
         DataColumn(label: Text('COM.PRV', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10))),
-        DataColumn(label: Text('V.ORIGEN', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 10))),
+        DataColumn(label: Text('IMP.PAG', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 10))),
+        DataColumn(label: Text('V.REAL', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 10))),
         DataColumn(label: Text('OBSERV.', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue, fontSize: 10))),
       ],
       rows: rows,
@@ -1306,8 +1320,20 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
           style: TextStyle(color: provisionalCommission > 0 ? AppTheme.neonPurple : Colors.grey, fontWeight: FontWeight.bold, fontSize: 9),
         )),
         // === PAGOS (NEW) ===
-        // VENTA ORIGEN
-        DataCell(() {
+        // IMPORTE PAGADO
+        DataCell(Builder(builder: (context) {
+          final payments = widget.data['payments'] as Map?;
+          final details = (payments?['details'] as Map?)?[monthNum] as Map?;
+          final importePagado = (details?['totalPaid'] as num?)?.toDouble() ?? 0;
+          return importePagado > 0
+              ? Text(
+                  CurrencyFormatter.format(importePagado),
+                  style: const TextStyle(color: AppTheme.neonGreen, fontSize: 9, fontWeight: FontWeight.bold)
+                )
+              : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9));
+        })),
+        // VENTA REAL (momento pago)
+        DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
           final details = (payments?['details'] as Map?)?[monthNum] as Map?;
           final ventaComision = (details?['ventaComision'] as num?)?.toDouble() ?? 0;
@@ -1317,9 +1343,9 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   style: const TextStyle(color: AppTheme.neonBlue, fontSize: 9, fontWeight: FontWeight.bold)
                 )
               : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9));
-        }()),
+        })),
         // OBSERVACIONES
-        DataCell(() {
+        DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
           final details = (payments?['details'] as Map?)?[monthNum] as Map?;
           final observaciones = (details?['observaciones'] as List?)?.join(' | ') ?? '';
@@ -1337,7 +1363,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   ),
                 )
               : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9));
-        }()),
+        })),
       ],
     );
   }
@@ -1376,7 +1402,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         const DataCell(SizedBox()),
         const DataCell(SizedBox()),
         const DataCell(SizedBox()),
-        const DataCell(SizedBox()), // VENTA ORIGEN (NEW)
+        const DataCell(SizedBox()), // IMP. PAGADO (NEW)
+        const DataCell(SizedBox()), // VENTA REAL (NEW)
         const DataCell(SizedBox()), // OBSERVACIONES (NEW)
       ],
     );
