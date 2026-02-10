@@ -605,7 +605,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final authProvider = context.watch<AuthProvider>();
     final curUserCode = authProvider.currentUser?.code ?? '';
     final canPay = authProvider.currentUser?.tipoVendedor == 'ADMIN' 
-        || authProvider.currentUser?.isJefeVentas == true;
+        || curUserCode == '9322';
 
 
     // Prepare table rows (interleaving quarters)
@@ -1243,10 +1243,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
         return valB.compareTo(valA); // Descending
       });
 
-      // Get Admin/Jefe status for payment buttons
+      // Get payment authorization status
       final authProvider = context.watch<AuthProvider>();
       final canPay = authProvider.currentUser?.tipoVendedor == 'ADMIN'
-          || authProvider.currentUser?.isJefeVentas == true;
+          || (authProvider.currentUser?.code ?? '') == '9322';
 
       return Container(
         color: AppTheme.darkBase,

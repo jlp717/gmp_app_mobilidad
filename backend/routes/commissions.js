@@ -984,28 +984,27 @@ router.get('/summary', async (req, res) => {
 router.post('/pay', async (req, res) => {
     const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventasSobreObjetivo } = req.body;
 
-    // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or JEFEVENTASSN = 'S' in DB
+    // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or is specifically authorized (code 9322)
     try {
         const trimmedAdmin = adminCode ? adminCode.trim() : '';
         const adminRows = await queryWithParams(`
-            SELECT V.TIPOVENDEDOR, COALESCE(X.JEFEVENTASSN, 'N') AS JEFEVENTASSN
-            FROM DSEDAC.VDC V
-            LEFT JOIN DSEDAC.VDDX X ON TRIM(V.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
-            WHERE TRIM(V.CODIGOVENDEDOR) = ?
-              AND V.SUBEMPRESA = 'GMP'
+            SELECT TIPOVENDEDOR
+            FROM DSEDAC.VDC
+            WHERE TRIM(CODIGOVENDEDOR) = ?
+              AND SUBEMPRESA = 'GMP'
             FETCH FIRST 1 ROWS ONLY
         `, [trimmedAdmin]);
 
         const adminTipo = (adminRows && adminRows.length > 0)
             ? (adminRows[0].TIPOVENDEDOR || '').trim()
             : '';
-        const isJefe = (adminRows && adminRows.length > 0)
-            ? (adminRows[0].JEFEVENTASSN || '').trim() === 'S'
-            : false;
 
-        if (adminTipo !== 'ADMIN' && !isJefe) {
-            logger.warn(`[COMMISSIONS] Unauthorized payment attempt by user: ${adminCode} (tipoVendedor: ${adminTipo}, isJefe: ${isJefe})`);
-            return res.status(403).json({ success: false, error: 'Solo administradores o jefes de ventas pueden registrar pagos.' });
+        // Only ADMIN or specifically authorized user code 9322 (DIEGO)
+        const isAuthorized = adminTipo === 'ADMIN' || trimmedAdmin === '9322';
+
+        if (!isAuthorized) {
+            logger.warn(`[COMMISSIONS] Unauthorized payment attempt by user: ${adminCode} (tipoVendedor: ${adminTipo})`);
+            return res.status(403).json({ success: false, error: 'No tienes permisos para registrar pagos.' });
         }
     } catch (authErr) {
         logger.error(`[COMMISSIONS] Admin validation DB error: ${authErr.message}`);
