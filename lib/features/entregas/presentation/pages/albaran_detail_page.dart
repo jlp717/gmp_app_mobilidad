@@ -39,7 +39,28 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
         title: Text('Albarán ${widget.albaran.numeroAlbaran}'),
         elevation: 0,
         actions: [
-          if (widget.albaran.esCTR)
+          if (widget.albaran.estado == EstadoEntrega.entregado)
+            Container(
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, size: 16, color: Colors.white),
+                  SizedBox(width: 4),
+                  Text('ENTREGADO', style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontSize: 12,
+                  )),
+                ],
+              ),
+            )
+          else if (widget.albaran.esCTR)
             Container(
               margin: const EdgeInsets.only(right: 12),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -53,7 +74,7 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
                   Icon(Icons.euro, size: 16, color: Colors.black87),
                   SizedBox(width: 4),
                   Text('COBRAR', style: TextStyle(
-                    fontWeight: FontWeight.bold, 
+                    fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   )),
                 ],
@@ -69,27 +90,30 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
             // Info cliente
             _buildClienteCard(),
             const SizedBox(height: 16),
-            
+
             // Items del albarán
             _buildItemsCard(),
             const SizedBox(height: 16),
-            
+
             // Importe y forma de pago
             _buildImporteCard(),
             const SizedBox(height: 16),
-            
-            // Fotos
-            _buildFotosSection(),
-            const SizedBox(height: 16),
-            
-            // Firma
-            _buildFirmaSection(),
-            const SizedBox(height: 16),
-            
-            // Observaciones
-            _buildObservacionesSection(),
-            const SizedBox(height: 24),
-            
+
+            // Solo mostrar secciones editables si NO está entregado
+            if (widget.albaran.estado != EstadoEntrega.entregado) ...[
+              // Fotos
+              _buildFotosSection(),
+              const SizedBox(height: 16),
+
+              // Firma
+              _buildFirmaSection(),
+              const SizedBox(height: 16),
+
+              // Observaciones
+              _buildObservacionesSection(),
+              const SizedBox(height: 24),
+            ],
+
             // Botones de acción
             _buildAcciones(),
             const SizedBox(height: 40),
@@ -499,27 +523,51 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
 
   Widget _buildAcciones() {
     if (widget.albaran.estado == EstadoEntrega.entregado) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.green.shade50,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle, color: Colors.green.shade700, size: 32),
-            const SizedBox(width: 12),
-            Text(
-              '¡Entrega completada!',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.green.shade800,
+      return Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.check_circle, color: Colors.green.shade700, size: 32),
+                const SizedBox(width: 12),
+                Text(
+                  '¡Entrega completada!',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: () => _showPostDeliveryDialog(popOnClose: false, isResend: true),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blue.shade700,
+                side: BorderSide(color: Colors.blue.shade300),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.receipt_long, size: 20),
+              label: const Text(
+                'Reenviar nota de entrega',
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
@@ -639,9 +687,18 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
         observaciones: _observacionesController.text,
         firma: _firmaBase64,
         fotos: _fotos.isNotEmpty ? _fotos : null,
+        clientCode: widget.albaran.codigoCliente,
       );
 
       if (success && mounted) {
+        // Sync updated firma path from provider (server returned the stored path)
+        final updated = provider.albaranes.firstWhere(
+          (a) => a.id == widget.albaran.id,
+          orElse: () => widget.albaran,
+        );
+        widget.albaran.firma = updated.firma;
+        widget.albaran.estado = EstadoEntrega.entregado;
+
         setState(() => _isProcessing = false);
         await _showPostDeliveryDialog();
         return;
@@ -659,13 +716,14 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
   }
 
   /// Diálogo post-entrega con opciones de ticket
-  Future<void> _showPostDeliveryDialog() async {
+  /// [popOnClose] controla si al cerrar el diálogo se vuelve a la lista
+  Future<void> _showPostDeliveryDialog({bool popOnClose = true, bool isResend = false}) async {
     await showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _PostDeliveryDialog(albaran: widget.albaran),
+      barrierDismissible: isResend,
+      builder: (ctx) => _PostDeliveryDialog(albaran: widget.albaran, isResend: isResend),
     );
-    if (mounted) Navigator.pop(context);
+    if (popOnClose && mounted) Navigator.pop(context);
   }
 
   Future<void> _marcarParcial() async {
@@ -755,7 +813,8 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
 /// Diálogo post-entrega con opciones de descarga/envío del ticket
 class _PostDeliveryDialog extends StatefulWidget {
   final AlbaranEntrega albaran;
-  const _PostDeliveryDialog({required this.albaran});
+  final bool isResend;
+  const _PostDeliveryDialog({required this.albaran, this.isResend = false});
 
   @override
   State<_PostDeliveryDialog> createState() => _PostDeliveryDialogState();
@@ -771,12 +830,16 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Column(
         children: [
-          const Icon(Icons.check_circle, color: Colors.green, size: 56),
+          Icon(
+            widget.isResend ? Icons.receipt_long : Icons.check_circle,
+            color: widget.isResend ? Colors.blue : Colors.green,
+            size: 56,
+          ),
           const SizedBox(height: 12),
-          const Text(
-            'Entrega realizada con éxito',
+          Text(
+            widget.isResend ? 'Reenviar nota de entrega' : 'Entrega realizada con éxito',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(

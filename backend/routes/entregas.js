@@ -760,10 +760,19 @@ router.post('/receipt/:entregaId', async (req, res) => {
         let fullSignaturePath = null;
         if (signaturePath) {
             fullSignaturePath = path.join(photosDir, signaturePath);
+            logger.info(`[RECEIPT] Signature path: relative='${signaturePath}' full='${fullSignaturePath}' exists=${fs.existsSync(fullSignaturePath)}`);
             if (!fs.existsSync(fullSignaturePath)) {
-                fullSignaturePath = null;
-                logger.warn(`[RECEIPT] Signature not found: ${signaturePath}`);
+                // Try absolute path directly (in case signaturePath is already absolute)
+                if (fs.existsSync(signaturePath)) {
+                    fullSignaturePath = signaturePath;
+                    logger.info(`[RECEIPT] Using absolute signature path: ${signaturePath}`);
+                } else {
+                    fullSignaturePath = null;
+                    logger.warn(`[RECEIPT] Signature not found at either path`);
+                }
             }
+        } else {
+            logger.info(`[RECEIPT] No signature path provided for ${entregaId}`);
         }
 
         const result = await saveReceipt(deliveryData, fullSignaturePath);
@@ -771,7 +780,7 @@ router.post('/receipt/:entregaId', async (req, res) => {
         // Convert PDF to base64 for mobile sharing
         const pdfBase64 = result.buffer.toString('base64');
 
-        logger.info(`[RECEIPT] Generated receipt for ${entregaId}`);
+        logger.info(`[RECEIPT] Generated receipt for ${entregaId} (signature: ${fullSignaturePath ? 'YES' : 'NO'})`);
         res.json({
             success: true,
             pdfPath: result.relativePath,
@@ -818,7 +827,12 @@ router.post('/receipt/:entregaId/email', async (req, res) => {
         if (signaturePath) {
             fullSignaturePath = path.join(photosDir, signaturePath);
             if (!fs.existsSync(fullSignaturePath)) {
-                fullSignaturePath = null;
+                if (fs.existsSync(signaturePath)) {
+                    fullSignaturePath = signaturePath;
+                } else {
+                    fullSignaturePath = null;
+                    logger.warn(`[RECEIPT-EMAIL] Signature not found: ${signaturePath}`);
+                }
             }
         }
 
