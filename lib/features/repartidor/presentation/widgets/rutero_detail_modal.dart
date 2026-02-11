@@ -162,6 +162,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool get _isFactura => widget.albaran.numeroFactura > 0;
   bool get _isUrgent => widget.albaran.esCTR;
 
+  bool get _isCompleted => widget.albaran.estado == EstadoEntrega.entregado;
+
   @override
   Widget build(BuildContext context) {
     return SlideTransition(
@@ -173,12 +175,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         curve: Curves.easeOutCubic,
       )),
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.92,
+        height: MediaQuery.of(context).size.height * (_isCompleted ? 0.70 : 0.92),
         decoration: BoxDecoration(
           color: AppTheme.darkBase,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           border: Border.all(
-            color: AppTheme.neonBlue.withOpacity(0.2),
+            color: _isCompleted
+                ? AppTheme.success.withOpacity(0.3)
+                : AppTheme.neonBlue.withOpacity(0.2),
             width: 1,
           ),
         ),
@@ -198,25 +202,215 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             // Header
             _buildHeader(),
 
-            // Tab bar
-            _buildTabBar(),
+            if (_isCompleted)
+              // Read-only completed view
+              Expanded(child: _buildCompletedView())
+            else ...[
+              // Tab bar
+              _buildTabBar(),
 
-            // Tab content
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                physics: const NeverScrollableScrollPhysics(), // Prevent swipe conflict with signature
-                children: [
-                  _buildProductsTab(),
-                  _buildPaymentTab(),
-                  _buildFinalizeTab(),
-                ],
+              // Tab content
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildProductsTab(),
+                    _buildPaymentTab(),
+                    _buildFinalizeTab(),
+                  ],
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  /// Vista solo-lectura para entregas ya completadas
+  Widget _buildCompletedView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          // Success banner
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.success.withOpacity(0.15),
+                  AppTheme.success.withOpacity(0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.success.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.check_circle, color: AppTheme.success, size: 32),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'ENTREGA COMPLETADA',
+                        style: TextStyle(
+                          color: AppTheme.success,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _isFactura
+                            ? 'Factura ${widget.albaran.numeroFactura}'
+                            : 'Albarán ${widget.albaran.numeroAlbaran}',
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Summary info
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.darkCard,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Column(
+              children: [
+                _buildInfoRow(Icons.store, 'Cliente', widget.albaran.nombreCliente),
+                const Divider(color: AppTheme.borderColor, height: 20),
+                _buildInfoRow(Icons.location_on, 'Dirección', '${widget.albaran.direccion}, ${widget.albaran.poblacion}'),
+                const Divider(color: AppTheme.borderColor, height: 20),
+                _buildInfoRow(Icons.euro, 'Importe', '${widget.albaran.importeTotal.toStringAsFixed(2)} €'),
+                const Divider(color: AppTheme.borderColor, height: 20),
+                _buildInfoRow(Icons.payment, 'Forma pago', widget.albaran.formaPagoDesc),
+                if (widget.albaran.observaciones != null && widget.albaran.observaciones!.isNotEmpty) ...[
+                  const Divider(color: AppTheme.borderColor, height: 20),
+                  _buildInfoRow(Icons.notes, 'Observaciones', widget.albaran.observaciones!),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Share buttons
+          const Text(
+            'REENVIAR NOTA DE ENTREGA',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Download PDF
+          _buildShareButton(
+            icon: Icons.download,
+            label: 'Descargar PDF',
+            color: AppTheme.neonBlue,
+            onTap: _downloadReceiptPdf,
+          ),
+          const SizedBox(height: 10),
+
+          // WhatsApp
+          _buildShareButton(
+            icon: Icons.chat,
+            label: 'Enviar por WhatsApp',
+            color: const Color(0xFF25D366),
+            onTap: () async {
+              await _shareViaWhatsApp();
+            },
+          ),
+          const SizedBox(height: 10),
+
+          // Email
+          _buildShareButton(
+            icon: Icons.email,
+            label: 'Enviar por Email',
+            color: AppTheme.neonCyan,
+            onTap: () async {
+              await _shareViaEmail();
+            },
+          ),
+
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: AppTheme.textTertiary),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 80,
+          child: Text(label, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+        ),
+        Expanded(
+          child: Text(value, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+        ),
+      ],
+    );
+  }
+
+  /// Descargar el PDF y abrirlo con share sheet
+  Future<void> _downloadReceiptPdf() async {
+    try {
+      final pdfData = await _generateReceiptPdf();
+      if (pdfData == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error al generar el PDF'), backgroundColor: AppTheme.error),
+          );
+        }
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final docLabel = widget.albaran.numeroFactura > 0
+          ? 'Factura_${widget.albaran.numeroFactura}'
+          : 'Albaran_${widget.albaran.numeroAlbaran}';
+      final file = File('${tempDir.path}/Nota_Entrega_$docLabel.pdf');
+      await file.writeAsBytes(base64Decode(pdfData));
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Nota de entrega - $docLabel',
+      );
+    } catch (e) {
+      debugPrint('[RECEIPT] Error downloading PDF: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
   }
 
   Widget _buildHeader() {
@@ -301,9 +495,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      _isUrgent ? '⚠ COBRO OBLIGATORIO' : '✓ COBRO OPCIONAL',
+                      _isCompleted
+                          ? '✓ ENTREGADO'
+                          : _isUrgent ? '⚠ COBRO OBLIGATORIO' : '✓ COBRO OPCIONAL',
                       style: TextStyle(
-                        color: _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                        color: _isCompleted
+                            ? AppTheme.success
+                            : _isUrgent ? AppTheme.obligatorio : AppTheme.success,
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1633,6 +1831,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
       if (success) {
         HapticFeedback.heavyImpact();
+        // Sync firma path from provider (marcarEntregado uploaded and got server path)
+        final updated = provider.albaranes.firstWhere(
+          (a) => a.id == widget.albaran.id,
+          orElse: () => widget.albaran,
+        );
+        widget.albaran.firma = updated.firma;
+        widget.albaran.estado = EstadoEntrega.entregado;
         // Show share dialog before closing
         await _showShareReceiptDialog();
         if (!mounted) return;
@@ -1742,6 +1947,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               style: TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 20),
+            // Download PDF
+            _buildShareButton(
+              icon: Icons.download,
+              label: 'Descargar PDF',
+              color: AppTheme.neonCyan,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _downloadReceiptPdf();
+              },
+            ),
+            const SizedBox(height: 12),
             // WhatsApp button
             _buildShareButton(
               icon: Icons.chat,
@@ -1848,20 +2064,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (email == null || email.isEmpty) return;
 
       // Send via API
-      // Send via API
       final response = await ApiClient.post(
         '/entregas/receipt/${widget.albaran.id}/email',
         {
           'email': email,
+          'signaturePath': widget.albaran.firma,
           'clientCode': widget.albaran.codigoCliente,
           'clientName': widget.albaran.nombreCliente,
           'albaranNum': widget.albaran.numeroAlbaran.toString(),
           'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
           'fecha': widget.albaran.fecha,
-          'subtotal': widget.albaran.importeTotal * 0.96, // Approx base
-          'iva': widget.albaran.importeTotal * 0.04,
+          'subtotal': widget.albaran.importeTotal,
+          'iva': 0,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
+          'repartidor': Provider.of<EntregasProvider>(context, listen: false).repartidorId,
           'items': _items.map((i) => {
             'cantidad': i.cantidadPedida,
             'descripcion': i.descripcion,
@@ -2010,15 +2227,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final response = await ApiClient.post(
         '/entregas/receipt/${widget.albaran.id}',
         {
+          'signaturePath': widget.albaran.firma,
           'clientCode': widget.albaran.codigoCliente,
           'clientName': widget.albaran.nombreCliente,
           'albaranNum': widget.albaran.numeroAlbaran.toString(),
           'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
           'fecha': widget.albaran.fecha,
-          'subtotal': widget.albaran.importeTotal * 0.96,
-          'iva': widget.albaran.importeTotal * 0.04,
+          'subtotal': widget.albaran.importeTotal,
+          'iva': 0,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
+          'repartidor': Provider.of<EntregasProvider>(context, listen: false).repartidorId,
           'items': _items.map((i) => {
             'cantidad': i.cantidadPedida,
             'descripcion': i.descripcion,
@@ -2030,9 +2249,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (response['success'] == true) {
         return response['pdfBase64'] as String?;
       }
+      debugPrint('[RECEIPT] API error: ${response['error']}');
       return null;
     } catch (e) {
-      debugPrint('Error generating receipt: $e');
+      debugPrint('[RECEIPT] Error generating receipt: $e');
       return null;
     }
   }
