@@ -168,8 +168,14 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con CAC
         // IMPORTANTE: Usar IMPORTEBRUTO (sin IVA) para cobros
         // FIX: ID format must match exactly with frontend and update endpoint
+        // Check if requested date is in the past (all deliveries assumed completed)
+        const today = new Date();
+        const todayNum = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+        const requestNum = ano * 10000 + mes * 100 + dia;
+        const isPastDate = requestNum < todayNum;
+
         const sql = `
-            SELECT 
+            SELECT
               CAC.SUBEMPRESAALBARAN,
               CAC.EJERCICIOALBARAN,
               CAC.SERIEALBARAN,
@@ -188,19 +194,21 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
               TRIM(CPC.CODIGORUTA) as RUTA,
               TRIM(OPP.CODIGOREPARTIDOR) as CODIGO_REPARTIDOR,
+              CPC.DIALLEGADA, CPC.HORALLEGADA,
+              TRIM(CPC.CONFORMADOSN) as CONFORMADO,
               DS.STATUS as DS_STATUS,
               DS.OBSERVACIONES as DS_OBS,
               DS.FIRMA_PATH as DS_FIRMA
             FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC 
+            INNER JOIN DSEDAC.CPC CPC
               ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            INNER JOIN DSEDAC.CAC CAC 
+            INNER JOIN DSEDAC.CAC CAC
               ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
               AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
               AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
               AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS
               ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(COALESCE(CPC.SERIEALBARAN, '')) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids})
               AND OPP.DIAREPARTO = ${dia}
@@ -266,11 +274,24 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             const serieFactura = (row.SERIEFACTURA || '').trim();
             const esFactura = numeroFactura > 0;
 
-            // --- COLOR LOGIC (User Request) ---
-            // Valid colors match AppTheme: 'red' (Obligatorio/Opcional), 'purple' (Factura), 'green' (Entregado/Normal)
-            let colorEstado = 'green';
-            const status = (row.DS_STATUS || 'PENDIENTE').trim();
+            // --- DELIVERY STATUS LOGIC ---
+            // Priority: 1) DELIVERY_STATUS table (app confirmed)
+            //           2) Past date → all delivered
+            //           3) CPC.DIALLEGADA > 0 → arrived at client
+            //           4) Default: PENDIENTE
+            let status = (row.DS_STATUS || '').trim();
+            if (!status || status === '') {
+                if (isPastDate) {
+                    status = 'ENTREGADO'; // Past date = assumed delivered
+                } else if (row.DIALLEGADA > 0) {
+                    status = 'ENTREGADO'; // Arrival recorded by PDA/GPS
+                } else {
+                    status = 'PENDIENTE';
+                }
+            }
 
+            // --- COLOR LOGIC ---
+            let colorEstado = 'green';
             if (status === 'ENTREGADO') {
                 colorEstado = 'green';
             } else {
@@ -339,7 +360,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
                 ruta: row.RUTA?.trim(),
                 codigoRepartidor: row.CODIGO_REPARTIDOR?.trim() || '',
-                estado: (row.DS_STATUS || 'PENDIENTE').trim(),
+                estado: status,
                 observaciones: row.DS_OBS,
                 firma: row.DS_FIRMA
             };
@@ -742,8 +763,16 @@ router.post('/receipt/:entregaId', async (req, res) => {
 
         const { saveReceipt } = require('../app/services/deliveryReceiptService');
 
+        // Parse entregaId to get DB identifiers: "EJERCICIO-SERIE-TERMINAL-NUMERO"
+        const parts = entregaId.split('-');
+        const ejercicio = parts[0] ? parseInt(parts[0]) : null;
+        const serie = parts[1] || '';
+        const terminal = parts[2] ? parseInt(parts[2]) : null;
+        const numero = parts[3] ? parseInt(parts[3]) : null;
+
         const deliveryData = {
-            albaranNum,
+            ejercicio, serie, terminal, numero,
+            albaranNum: albaranNum || `${ejercicio}/${serie}${String(terminal || 0).padStart(2, '0')}/${numero}`,
             facturaNum,
             clientCode,
             clientName,
@@ -808,8 +837,16 @@ router.post('/receipt/:entregaId/email', async (req, res) => {
         const { saveReceipt } = require('../app/services/deliveryReceiptService');
         const { sendDeliveryReceipt } = require('../app/services/emailService');
 
+        // Parse entregaId for DB lookup
+        const parts = entregaId.split('-');
+        const ejercicio = parts[0] ? parseInt(parts[0]) : null;
+        const serie = parts[1] || '';
+        const terminal = parts[2] ? parseInt(parts[2]) : null;
+        const numero = parts[3] ? parseInt(parts[3]) : null;
+
         const deliveryData = {
-            albaranNum,
+            ejercicio, serie, terminal, numero,
+            albaranNum: albaranNum || `${ejercicio}/${serie}${String(terminal || 0).padStart(2, '0')}/${numero}`,
             facturaNum,
             clientCode,
             clientName,
@@ -842,7 +879,7 @@ router.post('/receipt/:entregaId/email', async (req, res) => {
         const emailResult = await sendDeliveryReceipt(email, receipt.buffer, {
             albaranNum: facturaNum || albaranNum,
             clientName,
-            total: total.toFixed(2),
+            total: (total || 0).toFixed(2),
             fecha
         });
 

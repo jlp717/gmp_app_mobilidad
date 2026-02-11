@@ -140,6 +140,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
     double objetivoMes = 0;
     double ventasSobreObjetivo = 0;
     double ventaActual = 0;
+    double commissionMes = 0;
 
     List? vendorMonths;
     final breakdown = (_data?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -161,20 +162,73 @@ class _CommissionsPageState extends State<CommissionsPage> {
       objetivoMes = (monthData['target'] as num?)?.toDouble() ?? 0;
       ventaActual = (monthData['actual'] as num?)?.toDouble() ?? 0;
       ventasSobreObjetivo = ventaActual - objetivoMes;
+      // Get commission for THIS month from complianceCtx
+      final ctx = monthData['complianceCtx'] as Map?;
+      commissionMes = (ctx?['commission'] as num?)?.toDouble() ?? 0;
     }
 
     return {
       'objetivoMes': objetivoMes,
       'ventaActual': ventaActual,
       'ventasSobreObjetivo': ventasSobreObjetivo,
+      'commissionMes': commissionMes,
     };
   }
 
+  /// Returns a Set of months (1-12) already paid for a vendor
+  Set<int> _getPaidMonthsForVendor(String vendorCode) {
+    final paidMonths = <int>{};
+    Map? paymentsMap;
+
+    final breakdown = (_data?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (breakdown.isNotEmpty) {
+      final vendorData = breakdown.firstWhere(
+        (v) => v['vendedorCode']?.toString() == vendorCode,
+        orElse: () => <String, dynamic>{},
+      );
+      paymentsMap = vendorData['payments'] as Map?;
+    } else {
+      paymentsMap = _data?['payments'] as Map?;
+    }
+
+    if (paymentsMap != null) {
+      final monthly = (paymentsMap['monthly'] as Map?) ?? {};
+      for (final entry in monthly.entries) {
+        final monthNum = int.tryParse(entry.key.toString()) ?? 0;
+        final amount = (entry.value as num?)?.toDouble() ?? 0;
+        if (monthNum > 0 && amount > 0) {
+          paidMonths.add(monthNum);
+        }
+      }
+    }
+    return paidMonths;
+  }
+
   Future<void> _showPayDialog(String vendorCode, String vendorName, double currentGenerated) async {
-    final amountController = TextEditingController(text: currentGenerated.toStringAsFixed(2));
+    // Get already-paid months and per-month commissions
+    final paidMonths = _getPaidMonthsForVendor(vendorCode);
+    
+    // Find first unpaid, non-future month as default selection
+    final now = DateTime.now();
+    int selectedMonth = now.month;
+    for (int m = 1; m <= 12; m++) {
+      if (!paidMonths.contains(m) && m <= now.month) {
+        selectedMonth = m;
+        break;
+      }
+    }
+    // If all past months are paid, default to current month
+    if (paidMonths.contains(selectedMonth)) {
+      selectedMonth = now.month;
+    }
+
+    // Get commission for the initially selected month
+    final initialMonthData = _getMonthDataForVendor(vendorCode, selectedMonth);
+    double monthCommission = initialMonthData['commissionMes'] ?? 0;
+
+    final amountController = TextEditingController(text: monthCommission.toStringAsFixed(2));
     final conceptController = TextEditingController(text: 'Pago Comisiones');
     final observacionesController = TextEditingController();
-    int selectedMonth = DateTime.now().month;
 
     final adminCode = context.read<AuthProvider>().currentUser?.code ?? '';
 
@@ -183,7 +237,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           final currentAmount = double.tryParse(amountController.text) ?? 0;
-          final observacionesRequired = currentAmount < currentGenerated && currentAmount > 0;
+          final observacionesRequired = currentAmount < monthCommission && currentAmount > 0;
+          final isMonthPaid = paidMonths.contains(selectedMonth);
+          final isMonthFuture = selectedMonth > now.month;
 
           return AlertDialog(
             backgroundColor: AppTheme.surfaceColor,
@@ -193,6 +249,93 @@ class _CommissionsPageState extends State<CommissionsPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Month selector with paid/future indicators
+                  DropdownButtonFormField<int>(
+                    value: selectedMonth,
+                    dropdownColor: AppTheme.surfaceColor,
+                    items: List.generate(12, (index) {
+                      final m = index + 1;
+                      final isPaid = paidMonths.contains(m);
+                      final isFuture = m > now.month;
+                      String label = _getMonthName(m);
+                      if (isPaid) label += '  ✓ PAGADO';
+                      if (isFuture) label += '  (Futuro)';
+                      return DropdownMenuItem(
+                        value: m,
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            color: isPaid ? Colors.green : (isFuture ? Colors.grey : Colors.white),
+                            fontWeight: isPaid ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      );
+                    }),
+                    onChanged: (val) {
+                      if (val == null) return;
+                      final newMonthData = _getMonthDataForVendor(vendorCode, val);
+                      monthCommission = newMonthData['commissionMes'] ?? 0;
+                      amountController.text = monthCommission.toStringAsFixed(2);
+                      setStateDialog(() => selectedMonth = val);
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Mes Correspondiente *',
+                      labelStyle: TextStyle(color: Colors.white60),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Warning if month already paid
+                  if (isMonthPaid)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${_getMonthName(selectedMonth)} ya tiene un pago registrado. No se recomienda pagar dos veces el mismo mes.',
+                              style: const TextStyle(color: Colors.orange, fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Warning if future month
+                  if (isMonthFuture)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.lightBlue, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Este mes aún no ha terminado. La comisión puede cambiar.',
+                              style: TextStyle(color: Colors.lightBlue, fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  const SizedBox(height: 8),
                   TextField(
                     controller: amountController,
                     keyboardType: TextInputType.number,
@@ -200,25 +343,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
                     decoration: InputDecoration(
                       labelText: 'Importe (\u20ac) *',
                       labelStyle: const TextStyle(color: Colors.white60),
-                      helperText: 'Comision generada: ${currentGenerated.toStringAsFixed(2)} \u20ac',
+                      helperText: 'Comisión ${_getMonthName(selectedMonth)}: ${monthCommission.toStringAsFixed(2)} \u20ac',
                       helperStyle: const TextStyle(color: AppTheme.neonGreen, fontSize: 11),
                       enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.5))),
                     ),
                     onChanged: (val) => setStateDialog(() {}),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    value: selectedMonth,
-                    dropdownColor: AppTheme.surfaceColor,
-                    items: List.generate(12, (index) => DropdownMenuItem(
-                      value: index + 1,
-                      child: Text(_getMonthName(index + 1), style: const TextStyle(color: Colors.white)),
-                    )),
-                    onChanged: (val) => setStateDialog(() => selectedMonth = val!),
-                    decoration: const InputDecoration(
-                      labelText: 'Mes Correspondiente *',
-                      labelStyle: TextStyle(color: Colors.white60),
-                    ),
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -264,7 +393,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                 child: const Text('Cancelar', style: TextStyle(color: Colors.white60)),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
+                style: ElevatedButton.styleFrom(backgroundColor: isMonthPaid ? Colors.orange : AppTheme.neonBlue),
                 onPressed: () {
                   final amount = double.tryParse(amountController.text) ?? 0;
                   if (amount <= 0) {
@@ -304,7 +433,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                     vendorName: vendorName,
                     month: capturedMonth,
                     amount: capturedAmount,
-                    generatedAmount: currentGenerated,
+                    generatedAmount: monthSnapshot['commissionMes'] ?? 0,
                     concept: capturedConcept,
                     observaciones: capturedObs,
                     adminCode: adminCode,
@@ -313,7 +442,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
                     ventasSobreObjetivo: monthSnapshot['ventasSobreObjetivo'] ?? 0,
                   );
                 },
-                child: const Text('Revisar y Confirmar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                child: Text(
+                  isMonthPaid ? 'Revisar (Mes ya pagado)' : 'Revisar y Confirmar',
+                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           );

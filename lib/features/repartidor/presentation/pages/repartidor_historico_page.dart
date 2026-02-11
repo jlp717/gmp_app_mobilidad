@@ -1,14 +1,16 @@
-/// REPARTIDOR HISTÓRICO PAGE
+/// REPARTIDOR HISTÓRICO PAGE v2.0
 /// Pestaña de histórico con búsqueda de clientes, albaranes, facturas y firmas
-/// Permite visualizar y reenviar documentos con filtros avanzados
+/// FIX: Eliminados duplicados, firma real, PDF con firma, status real
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
+import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/repartidor_data_service.dart';
 
@@ -34,6 +36,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   List<ClientSummary> _clients = [];
   List<DocumentHistory> _documents = [];
   List<MonthlyObjective> _objectives = [];
+
+  // === DELIVERY SUMMARY ===
+  Map<String, dynamic>? _deliverySummary;
 
   // === VENTAS DETALLE (jerarquía) ===
   Map<String, dynamic>? _objectivesDetail;
@@ -121,10 +126,18 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           id: d.id,
           type: d.type == 'factura' ? DocumentType.factura : DocumentType.albaran,
           number: d.number,
+          serie: d.serie,
+          ejercicio: d.ejercicio,
+          terminal: d.terminal,
+          albaranNumber: d.albaranNumber ?? d.number,
+          facturaNumber: d.facturaNumber,
           date: DateTime.tryParse(d.date) ?? DateTime.now(),
           amount: d.amount,
           status: status,
           hasSignature: d.hasSignature,
+          signaturePath: d.signaturePath,
+          deliveryDate: d.deliveryDate,
+          deliveryObs: d.deliveryObs,
           observations: d.pending > 0 ? 'Pendiente: ${CurrencyFormatter.format(d.pending)}' : null,
         );
       }).toList();
@@ -136,6 +149,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
       _objectives = objectives;
 
+      // Load delivery summary
+      _loadDeliverySummary();
+
       // Cargar desglose jerárquico
       _loadObjectivesDetail(clientId);
     } catch (e) {
@@ -146,6 +162,17 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     if (mounted) {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _loadDeliverySummary() async {
+    try {
+      final data = await RepartidorDataService.getDeliverySummary(
+        repartidorId: widget.repartidorId,
+        year: DateTime.now().year,
+        month: DateTime.now().month,
+      );
+      if (mounted) setState(() => _deliverySummary = data);
+    } catch (_) {}
   }
 
   Future<void> _loadObjectivesDetail([String? clientId]) async {
@@ -554,12 +581,16 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
+          // === DELIVERY SUMMARY KPI HEADER ===
+          if (_deliverySummary != null && _deliverySummary!['summary'] != null)
+            _buildDeliverySummaryHeader(),
+          
           // Tab bar
           Container(
-            margin: const EdgeInsets.all(16),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: AppTheme.surfaceColor,
               borderRadius: BorderRadius.circular(10),
@@ -572,8 +603,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 borderRadius: BorderRadius.circular(10),
               ),
               dividerHeight: 0,
+              labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               tabs: const [
                 Tab(text: 'Documentos'),
+                Tab(text: 'Entregas'),
                 Tab(text: 'Objetivos'),
               ],
             ),
@@ -583,6 +616,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             child: TabBarView(
               children: [
                 _buildDocumentsTabWithFilters(),
+                _buildEntregasTab(),
                 _buildObjectivesTable(),
               ],
             ),
@@ -590,6 +624,153 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildDeliverySummaryHeader() {
+    final summary = _deliverySummary!['summary'] as Map<String, dynamic>? ?? {};
+    final total = summary['totalAlbaranes'] ?? 0;
+    final entregados = summary['entregados'] ?? 0;
+    final pendientes = summary['pendientes'] ?? 0;
+    final noEntregados = summary['noEntregados'] ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.neonPurple.withOpacity(0.15), AppTheme.neonBlue.withOpacity(0.1)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.neonPurple.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildKpiItem(Icons.inventory_2, '$total', 'Total', AppTheme.neonBlue),
+          _buildKpiItem(Icons.check_circle, '$entregados', 'Entregados', AppTheme.success),
+          _buildKpiItem(Icons.schedule, '$pendientes', 'Pendientes', Colors.orange),
+          _buildKpiItem(Icons.cancel, '$noEntregados', 'No Entregados', AppTheme.error),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiItem(IconData icon, String value, String label, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(height: 4),
+        Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+      ],
+    );
+  }
+
+  /// Tab de Entregas: daily delivery breakdown
+  Widget _buildEntregasTab() {
+    final dailyList = (_deliverySummary?['daily'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+    if (dailyList.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.local_shipping_outlined, size: 48, color: Colors.grey.shade600),
+            const SizedBox(height: 12),
+            Text('No hay datos de entregas este mes', style: TextStyle(color: AppTheme.textSecondary)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: dailyList.length,
+      itemBuilder: (context, index) {
+        final day = dailyList[index];
+        final date = day['date'] ?? '';
+        final total = day['total'] ?? 0;
+        final delivered = day['delivered'] ?? 0;
+        final notDelivered = day['notDelivered'] ?? 0;
+        final partial = day['partial'] ?? 0;
+        final amount = (day['amount'] ?? 0).toDouble();
+        final pct = total > 0 ? (delivered / total * 100).toStringAsFixed(0) : '0';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 14, color: AppTheme.neonPurple),
+                  const SizedBox(width: 6),
+                  Text(
+                    _formatDayDate(date),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonPurple.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('$pct%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.neonPurple)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _buildMiniStat(Icons.inventory, '$total', 'Total', AppTheme.neonBlue),
+                  _buildMiniStat(Icons.check_circle, '$delivered', 'OK', AppTheme.success),
+                  _buildMiniStat(Icons.cancel, '$notDelivered', 'No', AppTheme.error),
+                  if (partial > 0) _buildMiniStat(Icons.timelapse, '$partial', 'Parcial', Colors.orange),
+                  const Spacer(),
+                  Text(CurrencyFormatter.format(amount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMiniStat(IconData icon, String value, String label, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 3),
+          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(width: 2),
+          Text(label, style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDayDate(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      final dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+      return '${dayNames[dt.weekday - 1]} ${dt.day}/${dt.month}';
+    } catch (_) {
+      return dateStr;
+    }
   }
 
   /// Tab de documentos con filtros modernos
@@ -1520,87 +1701,38 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   void _showSignature(DocumentHistory doc) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.edit_note, color: AppTheme.neonPurple),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Firma - ${doc.type == DocumentType.factura ? 'Factura' : 'Albarán'} #${doc.number}',
-                style: const TextStyle(fontSize: 16),
-              ),
-            ),
-          ],
-        ),
-        content: Container(
-          width: 300,
-          height: 200,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.gesture, size: 48, color: Colors.grey.shade400),
-                const SizedBox(height: 8),
-                Text(
-                  'Firma digital del cliente',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  DateFormat('dd/MM/yyyy HH:mm').format(doc.date),
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
+      barrierDismissible: true,
+      builder: (ctx) => _SignatureDialog(doc: doc),
     );
   }
 
   Future<void> _shareDocument(DocumentHistory doc) async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Descargando documento...'),
-        duration: Duration(seconds: 1),
+        content: Text('Generando PDF...'),
+        duration: Duration(seconds: 2),
         backgroundColor: AppTheme.info,
       ),
     );
 
     try {
-      // Parse ID (Format: YEAR-SERIE-NUMBER)
-      final parts = doc.id.split('-');
-      final year = parts.isNotEmpty ? int.tryParse(parts[0]) ?? doc.date.year : doc.date.year;
-      final serie = parts.length > 1 ? parts[1].trim() : 'A';
-      
       final bytes = await RepartidorDataService.downloadDocument(
-        year: year,
-        serie: serie,
-        number: doc.number,
+        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
+        serie: doc.serie,
+        number: doc.albaranNumber ?? doc.number,
+        terminal: doc.terminal,
         type: doc.type == DocumentType.factura ? 'factura' : 'albaran',
       );
 
       final tempDir = await getTemporaryDirectory();
-      final fileName = '${doc.type == DocumentType.factura ? "Factura" : "Albaran"}_${doc.number}.pdf';
+      final typeLabel = doc.type == DocumentType.factura ? 'Factura' : 'Albaran';
+      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
       await Share.shareXFiles(
         [XFile(file.path)], 
-        text: 'Documento ${doc.number} - ${DateFormat('dd/MM/yyyy').format(doc.date)}'
+        text: '$typeLabel ${doc.number} - ${DateFormat('dd/MM/yyyy').format(doc.date)}'
       );
     } catch (e) {
       if (mounted) {
@@ -1654,22 +1786,165 @@ class DocumentHistory {
   final String id;
   final DocumentType type;
   final int number;
+  final String serie;
+  final int ejercicio;
+  final int terminal;
+  final int? albaranNumber;
+  final int? facturaNumber;
   final DateTime date;
   final double amount;
   final DeliveryStatus status;
   final bool hasSignature;
+  final String? signaturePath;
+  final String? deliveryDate;
+  final String? deliveryObs;
   final String? observations;
 
   DocumentHistory({
     required this.id,
     required this.type,
     required this.number,
+    this.serie = 'A',
+    this.ejercicio = 0,
+    this.terminal = 0,
+    this.albaranNumber,
+    this.facturaNumber,
     required this.date,
     required this.amount,
     required this.status,
     required this.hasSignature,
+    this.signaturePath,
+    this.deliveryDate,
+    this.deliveryObs,
     this.observations,
   });
 }
 
+/// Dialog that fetches and displays the real signature with zoom
+class _SignatureDialog extends StatefulWidget {
+  final DocumentHistory doc;
+  const _SignatureDialog({required this.doc});
 
+  @override
+  State<_SignatureDialog> createState() => _SignatureDialogState();
+}
+
+class _SignatureDialogState extends State<_SignatureDialog> {
+  Uint8List? _signatureBytes;
+  String? _firmante;
+  String? _fecha;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSignature();
+  }
+
+  Future<void> _fetchSignature() async {
+    try {
+      final data = await RepartidorDataService.getSignature(
+        ejercicio: widget.doc.ejercicio > 0 ? widget.doc.ejercicio : widget.doc.date.year,
+        serie: widget.doc.serie,
+        terminal: widget.doc.terminal,
+        numero: widget.doc.albaranNumber ?? widget.doc.number,
+      );
+
+      if (data != null && data['base64'] != null) {
+        setState(() {
+          _signatureBytes = base64Decode(data['base64'] as String);
+          _firmante = data['firmante'] as String?;
+          _fecha = data['fecha'] as String?;
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _loading = false;
+          _error = 'No se encontró firma para este documento';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _error = 'Error al cargar firma: $e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final doc = widget.doc;
+    final typeLabel = doc.type == DocumentType.factura ? 'Factura' : 'Albarán';
+
+    return AlertDialog(
+      backgroundColor: AppTheme.surfaceColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          const Icon(Icons.draw, color: AppTheme.neonPurple),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Firma - $typeLabel #${doc.number}',
+              style: const TextStyle(fontSize: 16, color: AppTheme.textPrimary),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 320,
+        height: 280,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: AppTheme.neonPurple))
+            : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.gesture, size: 48, color: Colors.grey.shade400),
+                        const SizedBox(height: 12),
+                        Text(_error!, style: TextStyle(color: Colors.grey.shade400, fontSize: 13), textAlign: TextAlign.center),
+                      ],
+                    ),
+                  )
+                : Column(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: InteractiveViewer(
+                              minScale: 0.5,
+                              maxScale: 4.0,
+                              child: _signatureBytes != null
+                                  ? Image.memory(_signatureBytes!, fit: BoxFit.contain)
+                                  : const Center(child: Icon(Icons.gesture, size: 48)),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (_firmante != null)
+                        Text('Firmante: $_firmante', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                      if (_fecha != null)
+                        Text('Fecha: $_fecha', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.8))),
+                      const SizedBox(height: 4),
+                      Text('Pellizca para hacer zoom', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.5), fontStyle: FontStyle.italic)),
+                    ],
+                  ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cerrar'),
+        ),
+      ],
+    );
+  }
+}

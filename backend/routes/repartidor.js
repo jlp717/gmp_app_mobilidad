@@ -239,45 +239,67 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
 // =============================================================================
 // GET /history/documents/:clientId
 // Historial de documentos (albaranes/facturas) de un cliente
+// FIX: GROUP BY to eliminate duplicates, JOIN DELIVERY_STATUS for real status
 // =============================================================================
 router.get('/history/documents/:clientId', async (req, res) => {
     try {
         const { clientId } = req.params;
-        const { repartidorId } = req.query;
+        const { repartidorId, limit, offset } = req.query;
 
         logger.info(`[REPARTIDOR] Getting documents for client ${clientId}`);
 
-        // CORRECTO: Usar OPP → CPC para filtrar por repartidor
         let repartidorJoin = '';
         let repartidorFilter = '';
         if (repartidorId) {
             const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
             repartidorJoin = `
                 INNER JOIN DSEDAC.OPP OPP
-                    ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION`;
-            repartidorFilter = `AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
+                    ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                    AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
+            repartidorFilter = '';
         }
+
+        const pageLimit = parseInt(limit) || 200;
+        const pageOffset = parseInt(offset) || 0;
 
         const sql = `
             SELECT 
-                CPC.NUMEROALBARAN,
                 CPC.EJERCICIOALBARAN,
-                CPC.ANODOCUMENTO as ANO,
-                CPC.MESDOCUMENTO as MES,
-                CPC.DIADOCUMENTO as DIA,
-                CPC.IMPORTETOTAL,
-                COALESCE(CVC.IMPORTEPENDIENTE, 0) as IMPORTE_PENDIENTE,
-                CPC.CODIGOFORMAPAGO
+                CPC.SERIEALBARAN,
+                CPC.TERMINALALBARAN,
+                CPC.NUMEROALBARAN,
+                MAX(CPC.ANODOCUMENTO) as ANO,
+                MAX(CPC.MESDOCUMENTO) as MES,
+                MAX(CPC.DIADOCUMENTO) as DIA,
+                SUM(CPC.IMPORTETOTAL) as IMPORTETOTAL,
+                MAX(COALESCE(CVC.IMPORTEPENDIENTE, 0)) as IMPORTE_PENDIENTE,
+                MAX(CPC.CODIGOFORMAPAGO) as CODIGOFORMAPAGO,
+                MAX(CAC.NUMEROFACTURA) as NUMEROFACTURA,
+                MAX(CAC.SERIEFACTURA) as SERIEFACTURA,
+                MAX(CAC.EJERCICIOFACTURA) as EJERCICIOFACTURA,
+                MAX(DS.STATUS) as DELIVERY_STATUS,
+                MAX(DS.FIRMA_PATH) as FIRMA_PATH,
+                MAX(DS.UPDATED_AT) as DELIVERY_DATE,
+                MAX(DS.REPARTIDOR_ID) as DELIVERY_REPARTIDOR,
+                MAX(DS.OBSERVACIONES) as DELIVERY_OBS
             FROM DSEDAC.CPC CPC
             ${repartidorJoin}
+            LEFT JOIN DSEDAC.CAC CAC
+                ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
+                AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CVC CVC 
                 ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
             WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'
-              ${repartidorFilter}
-            ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
+            GROUP BY CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
+            ORDER BY MAX(CPC.ANODOCUMENTO) DESC, MAX(CPC.MESDOCUMENTO) DESC, MAX(CPC.DIADOCUMENTO) DESC
+            OFFSET ${pageOffset} ROWS FETCH NEXT ${pageLimit} ROWS ONLY
         `;
 
         const rows = await query(sql, false);
@@ -285,26 +307,53 @@ router.get('/history/documents/:clientId', async (req, res) => {
         const documents = rows.map(row => {
             const importe = parseFloat(row.IMPORTETOTAL) || 0;
             const pendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
+            const dsStatus = (row.DELIVERY_STATUS || '').trim().toUpperCase();
+            const hasFirmaPath = !!row.FIRMA_PATH;
+            const numFactura = row.NUMEROFACTURA || 0;
+            const isFactura = numFactura > 0;
 
-            let status = 'delivered';
-            if (pendiente >= importe) status = 'notDelivered';
-            else if (pendiente > 0) status = 'partial';
+            // Status priority: DELIVERY_STATUS table > payment-based fallback
+            let status = 'notDelivered';
+            if (dsStatus === 'ENTREGADO') {
+                status = 'delivered';
+            } else if (dsStatus === 'PARCIAL') {
+                status = 'partial';
+            } else if (dsStatus === 'NO_ENTREGADO') {
+                status = 'notDelivered';
+            } else {
+                // Fallback: payment-based
+                if (pendiente === 0 && importe > 0) status = 'delivered';
+                else if (pendiente > 0 && pendiente < importe) status = 'partial';
+                else status = 'notDelivered';
+            }
+
+            const serie = (row.SERIEALBARAN || 'A').trim();
 
             return {
-                id: `ALB-${row.EJERCICIOALBARAN}-${row.NUMEROALBARAN}`,
-                type: 'albaran',
-                number: row.NUMEROALBARAN,
+                id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
+                type: isFactura ? 'factura' : 'albaran',
+                number: isFactura ? numFactura : row.NUMEROALBARAN,
+                albaranNumber: row.NUMEROALBARAN,
+                facturaNumber: numFactura || null,
+                serie: serie,
+                ejercicio: row.EJERCICIOALBARAN,
+                terminal: row.TERMINALALBARAN,
                 date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
                 amount: importe,
                 pending: pendiente,
                 status,
-                hasSignature: status === 'delivered' // Assume delivered = has signature
+                hasSignature: hasFirmaPath || status === 'delivered',
+                signaturePath: row.FIRMA_PATH || null,
+                deliveryDate: row.DELIVERY_DATE || null,
+                deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
+                deliveryObs: row.DELIVERY_OBS || null
             };
         });
 
         res.json({
             success: true,
             clientId,
+            total: documents.length,
             documents
         });
 
@@ -645,6 +694,283 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
     } catch (error) {
         logger.error(`[REPARTIDOR] Error in objectives-detail: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// GET /history/signature
+// Retrieve real signature (base64) for a given albaran
+// =============================================================================
+router.get('/history/signature', async (req, res) => {
+    try {
+        const { ejercicio, serie, terminal, numero } = req.query;
+        if (!ejercicio || !numero) {
+            return res.json({ success: true, hasSignature: false });
+        }
+
+        const albId = `${ejercicio}-${(serie || 'A').trim()}-${terminal || '0'}-${numero}`;
+        logger.info(`[REPARTIDOR] Getting signature for albaran ${albId}`);
+
+        // 1. Check DELIVERY_STATUS for FIRMA_PATH
+        let firmaPath = null;
+        try {
+            const dsRows = await query(`
+                SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'
+            `, false);
+            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                firmaPath = dsRows[0].FIRMA_PATH;
+            }
+        } catch (e) {
+            logger.warn(`[REPARTIDOR] DELIVERY_STATUS query error: ${e.message}`);
+        }
+
+        // 2. Check REPARTIDOR_FIRMAS via REPARTIDOR_ENTREGAS
+        let firmaBase64 = null;
+        let firmante = null;
+        let fechaFirma = null;
+        try {
+            const firmaRows = await query(`
+                SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE, RF.FECHA_FIRMA
+                FROM JAVIER.REPARTIDOR_FIRMAS RF
+                INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
+                WHERE RE.NUMERO_ALBARAN = ${numero}
+                  AND RE.EJERCICIO_ALBARAN = ${ejercicio}
+                  AND RE.SERIE_ALBARAN = '${(serie || 'A').trim()}'
+                FETCH FIRST 1 ROW ONLY
+            `, false);
+            if (firmaRows.length > 0) {
+                firmaBase64 = firmaRows[0].FIRMA_BASE64;
+                firmante = firmaRows[0].FIRMANTE_NOMBRE;
+                fechaFirma = firmaRows[0].FECHA_FIRMA;
+            }
+        } catch (e) {
+            logger.warn(`[REPARTIDOR] REPARTIDOR_FIRMAS query error: ${e.message}`);
+        }
+
+        // 3. If no base64, try reading from FIRMA_PATH file
+        if (!firmaBase64 && firmaPath) {
+            try {
+                const fs = require('fs');
+                const path = require('path');
+                const uploadsDir = path.join(__dirname, '../../uploads');
+                const fullPath = path.join(uploadsDir, firmaPath);
+                if (fs.existsSync(fullPath)) {
+                    const fileBuffer = fs.readFileSync(fullPath);
+                    firmaBase64 = fileBuffer.toString('base64');
+                }
+            } catch (e) {
+                logger.warn(`[REPARTIDOR] File read error for ${firmaPath}: ${e.message}`);
+            }
+        }
+
+        const hasSignature = !!(firmaBase64 || firmaPath);
+
+        res.json({
+            success: true,
+            hasSignature,
+            signature: hasSignature ? {
+                base64: firmaBase64 || null,
+                path: firmaPath || null,
+                firmante: firmante || null,
+                fecha: fechaFirma || null
+            } : null
+        });
+
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in history/signature: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// GET /history/delivery-summary/:repartidorId
+// Summary of deliveries: totals entregados/pendientes by date range
+// =============================================================================
+router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
+    try {
+        const { repartidorId } = req.params;
+        const { year, month } = req.query;
+
+        const selectedYear = parseInt(year) || new Date().getFullYear();
+        const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
+        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+
+        logger.info(`[REPARTIDOR] Delivery summary for ${repartidorId}, ${selectedMonth}/${selectedYear}`);
+
+        const sql = `
+            SELECT 
+                OPP.DIAREPARTO as DIA,
+                COUNT(DISTINCT CPC.EJERCICIOALBARAN || '-' || CPC.SERIEALBARAN || '-' || CAST(CPC.TERMINALALBARAN AS VARCHAR(10)) || '-' || CAST(CPC.NUMEROALBARAN AS VARCHAR(10))) as TOTAL_ALBARANES,
+                SUM(CASE WHEN DS.STATUS = 'ENTREGADO' THEN 1 ELSE 0 END) as ENTREGADOS,
+                SUM(CASE WHEN DS.STATUS = 'NO_ENTREGADO' THEN 1 ELSE 0 END) as NO_ENTREGADOS,
+                SUM(CASE WHEN DS.STATUS = 'PARCIAL' THEN 1 ELSE 0 END) as PARCIALES,
+                SUM(CPC.IMPORTETOTAL) as IMPORTE_TOTAL
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
+            WHERE OPP.ANOREPARTO = ${selectedYear}
+              AND OPP.MESREPARTO = ${selectedMonth}
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
+            GROUP BY OPP.DIAREPARTO
+            ORDER BY OPP.DIAREPARTO
+        `;
+
+        const rows = await query(sql, false) || [];
+
+        let totalAlbaranes = 0, totalEntregados = 0, totalNoEntregados = 0, totalParciales = 0, totalImporte = 0;
+
+        const daily = rows.map(row => {
+            const albs = parseInt(row.TOTAL_ALBARANES) || 0;
+            const ent = parseInt(row.ENTREGADOS) || 0;
+            const noEnt = parseInt(row.NO_ENTREGADOS) || 0;
+            const parc = parseInt(row.PARCIALES) || 0;
+            const imp = parseFloat(row.IMPORTE_TOTAL) || 0;
+
+            totalAlbaranes += albs;
+            totalEntregados += ent;
+            totalNoEntregados += noEnt;
+            totalParciales += parc;
+            totalImporte += imp;
+
+            return {
+                day: row.DIA,
+                date: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
+                total: albs,
+                delivered: ent,
+                notDelivered: noEnt,
+                partial: parc,
+                pending: albs - ent - noEnt - parc,
+                amount: imp
+            };
+        });
+
+        res.json({
+            success: true,
+            period: { year: selectedYear, month: selectedMonth },
+            summary: {
+                totalAlbaranes,
+                entregados: totalEntregados,
+                noEntregados: totalNoEntregados,
+                parciales: totalParciales,
+                pendientes: totalAlbaranes - totalEntregados - totalNoEntregados - totalParciales,
+                importeTotal: parseFloat(totalImporte.toFixed(2))
+            },
+            daily
+        });
+
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in delivery-summary: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// GET /document/albaran/:year/:serie/:terminal/:number/pdf
+// Generate Albaran PDF with optional embedded signature
+// =============================================================================
+router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, res) => {
+    try {
+        const { year, serie, terminal, number } = req.params;
+
+        logger.info(`[PDF] Generating Albaran PDF: ${year}-${serie}-${terminal}-${number}`);
+
+        // 1. Fetch Header from CAC
+        const headerSql = `
+            SELECT 
+                CAC.EJERCICIOALBARAN, CAC.SERIEALBARAN, CAC.NUMEROALBARAN,
+                CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
+                CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA,
+                TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
+                TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
+                TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
+                TRIM(COALESCE(CLI.PROVINCIA, '')) as PROVINCIACLIENTEFACTURA,
+                TRIM(COALESCE(CLI.CODIGOPOSTAL, '')) as CPCLIENTEFACTURA,
+                TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA
+            FROM DSEDAC.CAC CAC
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+            WHERE CAC.NUMEROALBARAN = ${number} 
+              AND CAC.SERIEALBARAN = '${serie}' 
+              AND CAC.EJERCICIOALBARAN = ${year}
+              AND CAC.TERMINALALBARAN = ${terminal}
+            FETCH FIRST 1 ROW ONLY
+        `;
+        const headers = await query(headerSql, false);
+
+        if (!headers || headers.length === 0) {
+            return res.status(404).json({ success: false, error: 'Albarán no encontrado' });
+        }
+        const header = headers[0];
+
+        // 2. Fetch Lines from LAC
+        const linesSql = `
+            SELECT 
+                LAC.CODIGOARTICULO,
+                LAC.DESCRIPCION as DESCRIPCIONARTICULO,
+                '' as LOTEARTICULO,
+                LAC.CANTIDADUNIDADES as CANTIDADARTICULO,
+                0 as CAJASARTICULO,
+                LAC.IMPORTEVENTA as IMPORTENETOARTICULO,
+                0 as PORCENTAJEIVAARTICULO,
+                0 as PORCENTAJERECARGOARTICULO,
+                LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
+                LAC.PRECIOVENTA as PRECIOARTICULO
+            FROM DSEDAC.LAC LAC
+            WHERE LAC.EJERCICIOALBARAN = ${year}
+              AND LAC.SERIEALBARAN = '${serie}'
+              AND LAC.TERMINALALBARAN = ${terminal}
+              AND LAC.NUMEROALBARAN = ${number}
+            ORDER BY LAC.SECUENCIA
+        `;
+        const lines = await query(linesSql, false) || [];
+
+        // 3. Try to get signature
+        let signatureBase64 = null;
+        const albId = `${year}-${serie.trim()}-${terminal}-${number}`;
+        try {
+            const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
+            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                const fs = require('fs');
+                const path = require('path');
+                const fullPath = path.join(__dirname, '../../uploads', dsRows[0].FIRMA_PATH);
+                if (fs.existsSync(fullPath)) {
+                    signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                }
+            }
+        } catch (e) { /* silent */ }
+
+        // Try REPARTIDOR_FIRMAS if no file signature
+        if (!signatureBase64) {
+            try {
+                const firmaRows = await query(`
+                    SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
+                    INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
+                    WHERE RE.NUMERO_ALBARAN = ${number}
+                      AND RE.EJERCICIO_ALBARAN = ${year}
+                      AND RE.SERIE_ALBARAN = '${serie.trim()}'
+                    FETCH FIRST 1 ROW ONLY
+                `, false);
+                if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
+                    signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                }
+            } catch (e) { /* silent */ }
+        }
+
+        // 4. Generate PDF with optional signature
+        const buffer = await generateInvoicePDF({ header, lines, signatureBase64 });
+
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename=Albaran_${year}_${serie}_${number}.pdf`,
+            'Content-Length': buffer.length
+        });
+        res.send(buffer);
+
+    } catch (e) {
+        logger.error(`[PDF] Error generating albaran PDF: ${e.message}`);
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 

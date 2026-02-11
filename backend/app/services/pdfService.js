@@ -619,6 +619,55 @@ async function generateInvoicePDF(facturaData) {
                 });
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // FIRMA DEL CLIENTE (if available)
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            if (facturaData.signatureBase64) {
+                y += 20;
+
+                // Check if we need a new page
+                if (y + 100 > 700) {
+                    doc.addPage();
+                    y = drawHeader(doc, 10) + 20;
+                }
+
+                // Signature box
+                doc.rect(40, y, 250, 90)
+                    .strokeColor(COLORS.border)
+                    .lineWidth(1)
+                    .stroke();
+
+                doc.fontSize(8)
+                    .font('Helvetica-Bold')
+                    .fillColor(COLORS.secondary)
+                    .text('FIRMA DEL CLIENTE', 45, y + 5);
+
+                // Embed signature image
+                try {
+                    const sigBuffer = Buffer.from(facturaData.signatureBase64, 'base64');
+                    doc.image(sigBuffer, 55, y + 18, {
+                        width: 220,
+                        height: 60,
+                        fit: [220, 60],
+                        align: 'center',
+                        valign: 'center'
+                    });
+                } catch (sigErr) {
+                    doc.fontSize(8)
+                        .font('Helvetica')
+                        .fillColor(COLORS.mediumGray)
+                        .text('Firma digital registrada', 55, y + 40);
+                }
+
+                // Date label
+                doc.fontSize(7)
+                    .font('Helvetica')
+                    .fillColor(COLORS.mediumGray)
+                    .text('Fecha: ' + new Date().toLocaleDateString('es-ES'), 45, y + 80);
+
+                y += 95;
+            }
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // FOOTER - PIE DE PÁGINA ELEGANTE
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             const range = doc.bufferedPageRange();
