@@ -289,7 +289,12 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
                 AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
                 AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
-            LEFT JOIN DSEDAC.CVC CVC 
+            LEFT JOIN (
+                SELECT SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO, NUMERODOCUMENTO,
+                       SUM(IMPORTEPENDIENTE) as IMPORTEPENDIENTE
+                FROM DSEDAC.CVC
+                GROUP BY SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO, NUMERODOCUMENTO
+            ) CVC 
                 ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
@@ -710,6 +715,7 @@ router.get('/history/signature', async (req, res) => {
 
         const albId = `${ejercicio}-${(serie || 'A').trim()}-${terminal || '0'}-${numero}`;
         logger.info(`[REPARTIDOR] Getting signature for albaran ${albId}`);
+        let signatureSource = null; // Track where we found the signature
 
         // 1. Check DELIVERY_STATUS for FIRMA_PATH
         let firmaPath = null;
@@ -742,6 +748,8 @@ router.get('/history/signature', async (req, res) => {
                 firmaBase64 = firmaRows[0].FIRMA_BASE64;
                 firmante = firmaRows[0].FIRMANTE_NOMBRE;
                 fechaFirma = firmaRows[0].FECHA_FIRMA;
+                if (firmaBase64) signatureSource = 'REPARTIDOR_FIRMAS';
+                logger.info(`[REPARTIDOR] Found signature in REPARTIDOR_FIRMAS for ${albId}`);
             }
         } catch (e) {
             logger.warn(`[REPARTIDOR] REPARTIDOR_FIRMAS query error: ${e.message}`);
@@ -752,11 +760,23 @@ router.get('/history/signature', async (req, res) => {
             try {
                 const fs = require('fs');
                 const path = require('path');
-                const uploadsDir = path.join(__dirname, '../../uploads');
-                const fullPath = path.join(uploadsDir, firmaPath);
-                if (fs.existsSync(fullPath)) {
-                    const fileBuffer = fs.readFileSync(fullPath);
-                    firmaBase64 = fileBuffer.toString('base64');
+                // Try multiple base paths for the signature file
+                const basePaths = [
+                    path.join(__dirname, '../../uploads'),
+                    path.join(__dirname, '../../uploads/photos')
+                ];
+                for (const basePath of basePaths) {
+                    const fullPath = path.join(basePath, firmaPath);
+                    if (fs.existsSync(fullPath)) {
+                        const fileBuffer = fs.readFileSync(fullPath);
+                        firmaBase64 = fileBuffer.toString('base64');
+                        signatureSource = 'FILE:' + fullPath;
+                        logger.info(`[REPARTIDOR] Found signature file at ${fullPath}`);
+                        break;
+                    }
+                }
+                if (!firmaBase64) {
+                    logger.warn(`[REPARTIDOR] Signature file not found for path: ${firmaPath}`);
                 }
             } catch (e) {
                 logger.warn(`[REPARTIDOR] File read error for ${firmaPath}: ${e.message}`);
@@ -765,6 +785,8 @@ router.get('/history/signature', async (req, res) => {
 
         const hasSignature = !!(firmaBase64 || firmaPath);
 
+        logger.info(`[REPARTIDOR] Signature result for ${albId}: hasSignature=${hasSignature}, source=${signatureSource || 'none'}`);
+
         res.json({
             success: true,
             hasSignature,
@@ -772,7 +794,8 @@ router.get('/history/signature', async (req, res) => {
                 base64: firmaBase64 || null,
                 path: firmaPath || null,
                 firmante: firmante || null,
-                fecha: fechaFirma || null
+                fecha: fechaFirma || null,
+                source: signatureSource || null
             } : null
         });
 
@@ -926,22 +949,42 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         `;
         const lines = await query(linesSql, false) || [];
 
-        // 3. Try to get signature
+        // 3. Try to get signature - comprehensive cascade lookup
         let signatureBase64 = null;
         const albId = `${year}-${serie.trim()}-${terminal}-${number}`;
+        const fs = require('fs');
+        const pathModule = require('path');
+
+        // Step 3a: Check DELIVERY_STATUS for FIRMA_PATH
         try {
-            const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
-            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
-                const fs = require('fs');
-                const path = require('path');
-                const fullPath = path.join(__dirname, '../../uploads', dsRows[0].FIRMA_PATH);
-                if (fs.existsSync(fullPath)) {
-                    signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+            const dsRows = await query(`SELECT FIRMA_PATH, FIRMA_BASE64 FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
+            if (dsRows.length > 0) {
+                // Try file path first
+                if (dsRows[0].FIRMA_PATH) {
+                    const basePaths = [
+                        pathModule.join(__dirname, '../../uploads'),
+                        pathModule.join(__dirname, '../../uploads/photos')
+                    ];
+                    for (const basePath of basePaths) {
+                        const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
+                        if (fs.existsSync(fullPath)) {
+                            signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                            logger.info(`[PDF] Found signature file at ${fullPath}`);
+                            break;
+                        }
+                    }
+                }
+                // Try base64 column directly
+                if (!signatureBase64 && dsRows[0].FIRMA_BASE64) {
+                    signatureBase64 = dsRows[0].FIRMA_BASE64;
+                    logger.info(`[PDF] Using signature base64 from DELIVERY_STATUS`);
                 }
             }
-        } catch (e) { /* silent */ }
+        } catch (e) {
+            logger.warn(`[PDF] DELIVERY_STATUS signature lookup error: ${e.message}`);
+        }
 
-        // Try REPARTIDOR_FIRMAS if no file signature
+        // Step 3b: Try REPARTIDOR_FIRMAS if no file signature
         if (!signatureBase64) {
             try {
                 const firmaRows = await query(`
@@ -954,9 +997,14 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 `, false);
                 if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
                     signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                    logger.info(`[PDF] Using signature from REPARTIDOR_FIRMAS`);
                 }
-            } catch (e) { /* silent */ }
+            } catch (e) {
+                logger.warn(`[PDF] REPARTIDOR_FIRMAS lookup error: ${e.message}`);
+            }
         }
+
+        logger.info(`[PDF] Signature for ${albId}: ${signatureBase64 ? 'FOUND' : 'NOT FOUND'}`);
 
         // 4. Generate PDF with optional signature
         const buffer = await generateInvoicePDF({ header, lines, signatureBase64 });

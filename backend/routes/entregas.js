@@ -796,12 +796,53 @@ router.post('/receipt/:entregaId', async (req, res) => {
                     fullSignaturePath = signaturePath;
                     logger.info(`[RECEIPT] Using absolute signature path: ${signaturePath}`);
                 } else {
-                    fullSignaturePath = null;
-                    logger.warn(`[RECEIPT] Signature not found at either path`);
+                    // Try under uploads/photos
+                    const altPath = path.join(photosDir, '..', signaturePath);
+                    if (fs.existsSync(altPath)) {
+                        fullSignaturePath = altPath;
+                        logger.info(`[RECEIPT] Using alt signature path: ${altPath}`);
+                    } else {
+                        fullSignaturePath = null;
+                        logger.warn(`[RECEIPT] Signature not found at either path`);
+                    }
                 }
             }
         } else {
             logger.info(`[RECEIPT] No signature path provided for ${entregaId}`);
+        }
+
+        // Fallback: try to get signature base64 from DB if no file found
+        if (!fullSignaturePath && ejercicio && numero) {
+            try {
+                const albId = `${ejercicio}-${(serie || '').trim()}-${terminal || 0}-${numero}`;
+                // Try DELIVERY_STATUS
+                const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
+                if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                    const fpTest = path.join(photosDir, dsRows[0].FIRMA_PATH);
+                    if (fs.existsSync(fpTest)) {
+                        fullSignaturePath = fpTest;
+                        logger.info(`[RECEIPT] Found signature via DELIVERY_STATUS: ${fpTest}`);
+                    }
+                }
+                // Try REPARTIDOR_FIRMAS for base64 
+                if (!fullSignaturePath) {
+                    const firmaRows = await query(`
+                        SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE FROM JAVIER.REPARTIDOR_FIRMAS RF
+                        INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
+                        WHERE RE.NUMERO_ALBARAN = ${numero}
+                          AND RE.EJERCICIO_ALBARAN = ${ejercicio}
+                          AND RE.SERIE_ALBARAN = '${(serie || '').trim()}'
+                        FETCH FIRST 1 ROW ONLY
+                    `, false);
+                    if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
+                        deliveryData.signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                        deliveryData.firmante = firmaRows[0].FIRMANTE_NOMBRE || null;
+                        logger.info(`[RECEIPT] Using base64 signature from REPARTIDOR_FIRMAS`);
+                    }
+                }
+            } catch (e) {
+                logger.warn(`[RECEIPT] DB signature fallback error: ${e.message}`);
+            }
         }
 
         const result = await saveReceipt(deliveryData, fullSignaturePath);

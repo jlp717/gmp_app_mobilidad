@@ -110,36 +110,105 @@ router.get('/rutero/week', async (req, res) => {
     try {
         const { vendedorCodes, role } = req.query;
         const now = getCurrentDate();
+        const todayName = DAY_NAMES[now.getDay()];
+        const currentRole = role || 'comercial';
 
-        logger.info(`[RUTERO WEEK] vendedorCodes: "${vendedorCodes}", role: "${role}"`);
+        logger.info(`[RUTERO WEEK] vendedorCodes: "${vendedorCodes}", role: "${currentRole}"`);
 
         // Try to use cache first (instant response)
-        const cachedCounts = getWeekCountsFromCache(vendedorCodes, role || 'comercial');
+        const cachedCounts = getWeekCountsFromCache(vendedorCodes, currentRole);
 
         if (cachedCounts) {
             // Calculate total unique clients from cache
-            const totalClients = getTotalClientsFromCache(vendedorCodes, role || 'comercial');
-            const todayName = DAY_NAMES[now.getDay()];
+            const totalClients = getTotalClientsFromCache(vendedorCodes, currentRole);
 
-            logger.info(`[RUTERO WEEK] From cache: ${JSON.stringify(cachedCounts)}, total: ${totalClients}`);
+            // Calculate delivery progress for today
+            let weekProgress = {};
+            try {
+                const todayClients = cachedCounts[todayName] || 0;
+                if (todayClients > 0) {
+                    // Query DELIVERY_STATUS to count how many are delivered today
+                    const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',') : null;
+                    let deliveredToday = 0;
+                    if (cleanCodes) {
+                        const deliverySql = `
+                            SELECT COUNT(DISTINCT DS.ID) as DELIVERED
+                            FROM JAVIER.DELIVERY_STATUS DS
+                            WHERE DS.STATUS = 'ENTREGADO'
+                              AND DS.REPARTIDOR_ID IN (${cleanCodes})
+                              AND DATE(DS.UPDATED_AT) = CURRENT DATE
+                        `;
+                        try {
+                            const dRows = await query(deliverySql, false);
+                            deliveredToday = parseInt(dRows[0]?.DELIVERED) || 0;
+                        } catch (e) {
+                            logger.warn(`[RUTERO WEEK] Delivery count query error: ${e.message}`);
+                        }
+                    }
+                    weekProgress[todayName] = {
+                        total: todayClients,
+                        delivered: deliveredToday,
+                        percentage: Math.round((deliveredToday / todayClients) * 100)
+                    };
+                }
+            } catch (progressErr) {
+                logger.warn(`[RUTERO WEEK] Progress calc error: ${progressErr.message}`);
+            }
+
+            logger.info(`[RUTERO WEEK] From cache: ${JSON.stringify(cachedCounts)}, total: ${totalClients}, progress: ${JSON.stringify(weekProgress)}`);
 
             return res.json({
                 week: cachedCounts,
                 todayName,
-                role: role || 'comercial',
-                totalUniqueClients: totalClients
+                role: currentRole,
+                totalUniqueClients: totalClients,
+                weekProgress
             });
         }
 
-        // Fallback: Cache not ready, return empty
-        logger.warn(`[RUTERO WEEK] Cache not ready, returning empty`);
-        res.json({
-            week: { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 },
-            todayName: DAY_NAMES[now.getDay()],
-            role: role || 'comercial',
-            totalUniqueClients: 0,
-            cacheStatus: 'loading'
-        });
+        // Fallback: Cache not ready, try direct DB query 
+        logger.warn(`[RUTERO WEEK] Cache not ready, querying DB for basic counts`);
+        try {
+            const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',') : "''";
+            const isDelivery = currentRole === 'repartidor';
+            const dayField = isDelivery ? 'DIAREPARTO' : 'DIAVENTA';
+
+            const fallbackSql = `
+                SELECT ${dayField} as DIA, COUNT(DISTINCT CODIGOCLIENTE) as TOTAL
+                FROM DSEDAC.CDVI
+                WHERE TRIM(CODIGOVENDEDOR) IN (${cleanCodes})
+                  AND ${dayField} BETWEEN 1 AND 7
+                GROUP BY ${dayField}
+            `;
+            const fbRows = await query(fallbackSql, false);
+            const dayIndexMap = { 1: 'lunes', 2: 'martes', 3: 'miercoles', 4: 'jueves', 5: 'viernes', 6: 'sabado', 7: 'domingo' };
+            const fallbackCounts = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 };
+            let fallbackTotal = 0;
+            fbRows.forEach(r => {
+                const dayName = dayIndexMap[r.DIA];
+                if (dayName) {
+                    fallbackCounts[dayName] = parseInt(r.TOTAL) || 0;
+                    fallbackTotal += fallbackCounts[dayName];
+                }
+            });
+
+            return res.json({
+                week: fallbackCounts,
+                todayName,
+                role: currentRole,
+                totalUniqueClients: fallbackTotal,
+                cacheStatus: 'loading'
+            });
+        } catch (fbErr) {
+            logger.error(`[RUTERO WEEK] Fallback query also failed: ${fbErr.message}`);
+            res.json({
+                week: { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 },
+                todayName,
+                role: currentRole,
+                totalUniqueClients: 0,
+                cacheStatus: 'error'
+            });
+        }
     } catch (error) {
         logger.error(`Rutero week error: ${error.message}`);
         res.status(500).json({ error: 'Error obteniendo rutero semana', details: error.message });
@@ -884,8 +953,10 @@ router.get('/rutero/day/:day', async (req, res) => {
             let growth = 0;
             if (salesPrev > 0) {
                 growth = ((salesCurrent - salesPrev) / salesPrev) * 100;
+                // Cap growth at ±999% to prevent unrealistic values
+                growth = Math.max(-999, Math.min(999, growth));
             } else if (salesCurrent > 0) {
-                growth = 100;
+                growth = 100; // New client indicator
             }
 
             const phones = [];

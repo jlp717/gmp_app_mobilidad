@@ -1,7 +1,10 @@
 /**
- * SERVICIO DE GENERACIÓN DE NOTAS DE ENTREGA
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * SERVICIO DE GENERACIÓN DE NOTAS DE ENTREGA v2.0
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * Genera PDF tipo ticket (80mm) con datos reales de DSEDAC
  * Formato: Similar al albarán físico de la empresa
+ * v2.0 - Diseño mejorado con firmas, descripciones completas
  */
 
 const PDFDocument = require('pdfkit');
@@ -86,15 +89,63 @@ async function getAlbaranHeader(ejercicio, serie, terminal, numero) {
 }
 
 /**
+ * Resolve signature - try file path, then base64
+ * @returns {Buffer|null} signature image buffer
+ */
+function resolveSignatureBuffer(signaturePath, signatureBase64) {
+    // 1. Try file path
+    if (signaturePath) {
+        // Direct file path
+        if (fs.existsSync(signaturePath)) {
+            try {
+                return fs.readFileSync(signaturePath);
+            } catch (e) {
+                logger.warn(`[RECEIPT] Cannot read signature file: ${e.message}`);
+            }
+        }
+        // Try relative paths under uploads
+        const basePaths = [
+            path.join(__dirname, '../../uploads'),
+            path.join(__dirname, '../../uploads/photos')
+        ];
+        for (const basePath of basePaths) {
+            const fullPath = path.join(basePath, signaturePath);
+            if (fs.existsSync(fullPath)) {
+                try {
+                    return fs.readFileSync(fullPath);
+                } catch (e) {
+                    logger.warn(`[RECEIPT] Cannot read signature: ${e.message}`);
+                }
+            }
+        }
+    }
+
+    // 2. Try base64
+    if (signatureBase64) {
+        try {
+            const cleanBase64 = signatureBase64.replace(/^data:image\/\w+;base64,/, '');
+            return Buffer.from(cleanBase64, 'base64');
+        } catch (e) {
+            logger.warn(`[RECEIPT] Cannot decode signature base64: ${e.message}`);
+        }
+    }
+
+    return null;
+}
+
+/**
  * Generar nota de entrega PDF - formato ticket 80mm
  * Consulta datos reales de DSEDAC
+ * v2.0 - Diseño mejorado con descripciones completas y mejor firma
  */
 async function generateDeliveryReceipt(deliveryData, signaturePath) {
     const {
         ejercicio, serie, terminal, numero,
         albaranNum, facturaNum,
         clientCode, clientName,
-        fecha, formaPago, repartidor
+        fecha, formaPago, repartidor,
+        signatureBase64: inputSigBase64,
+        firmante: inputFirmante
     } = deliveryData;
 
     // Intentar obtener líneas de la BD
@@ -153,7 +204,6 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
 
         // Recalcular grupos IVA desde header si disponible
         if (header.BI1 > 0 || header.BI2 > 0 || header.BI3 > 0) {
-            // Limpiar grupos y usar datos oficiales
             Object.keys(gruposIVA).forEach(k => delete gruposIVA[k]);
             for (let i = 1; i <= 3; i++) {
                 const bi = parseFloat(header[`BI${i}`]) || 0;
@@ -165,7 +215,6 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             }
         }
     } else {
-        // Calcular desde líneas
         Object.values(gruposIVA).forEach(g => {
             baseImponible += g.base;
             totalIVA += g.iva;
@@ -174,15 +223,19 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
 
     const importeTotal = baseImponible + totalIVA;
 
+    // Resolve signature buffer (supports file path + base64)
+    const sigBuffer = resolveSignatureBuffer(signaturePath, inputSigBase64);
+    const hasSignature = !!sigBuffer;
+
     return new Promise((resolve, reject) => {
         try {
-            // Calcular altura dinámica: base + líneas + IVA + firma
-            const lineHeight = 9;
-            const headerHeight = 110;
-            const footerHeight = signaturePath ? 120 : 60;
+            // Calcular altura dinámica con más espacio para cada elemento
+            const lineHeight = 11; // More spacing between product lines
+            const headerHeight = 120;
+            const footerHeight = hasSignature ? 150 : 70; // More space for signature
             const ivaGroups = Object.keys(gruposIVA).length;
-            const minHeight = headerHeight + (lines.length * lineHeight) + (ivaGroups * 12) + footerHeight + 80;
-            const docHeight = Math.max(350, Math.min(800, minHeight));
+            const minHeight = headerHeight + (lines.length * lineHeight) + (ivaGroups * 14) + footerHeight + 100;
+            const docHeight = Math.max(400, Math.min(900, minHeight));
 
             const doc = new PDFDocument({
                 size: [226, docHeight],
@@ -197,60 +250,71 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             const W = 210; // ancho útil
             const L = 8;   // margen izq
 
-            // === CABECERA ===
-            doc.fontSize(9).font('Helvetica-Bold')
+            // ═══════════════ CABECERA EMPRESA ═══════════════
+            doc.fontSize(10).font('Helvetica-Bold')
                 .text('GRANJA MARI PEPA S.L.', { align: 'center' });
             doc.fontSize(6).font('Helvetica')
                 .text('Pol. Ind. Saprelorca - Parcela D3', { align: 'center' })
                 .text('30817 Lorca (Murcia)', { align: 'center' })
                 .text('CIF: B04008710 · Tel: 968 47 08 80', { align: 'center' });
 
+            doc.moveDown(0.5);
+
+            // Línea separadora doble
+            doc.strokeColor('#000').lineWidth(0.8)
+                .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
+            doc.moveDown(0.1);
+            doc.strokeColor('#000').lineWidth(0.3)
+                .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
             doc.moveDown(0.4);
 
-            // Línea separadora
-            doc.strokeColor('#000').lineWidth(0.5)
-                .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
-            doc.moveDown(0.3);
-
-            // === TIPO DOCUMENTO + NÚMERO ===
+            // ═══════════════ TIPO DOCUMENTO + NÚMERO ═══════════════
             const docType = facturaNum ? 'FACTURA' : 'ALBARÁN';
             const docNum = facturaNum || albaranNum || `${ejercicio}/${serie}${String(terminal).padStart(2, '0')}/${numero}`;
 
-            doc.fontSize(8).font('Helvetica-Bold')
+            doc.fontSize(11).font('Helvetica-Bold')
                 .text(`${docType}: ${docNum}`, L, doc.y, { width: W, align: 'center' });
 
-            const fechaStr = fecha || (header ? `${header.DIADOCUMENTO}/${header.MESDOCUMENTO}/${header.ANODOCUMENTO}` : '');
+            const fechaStr = fecha || (header ? `${String(header.DIADOCUMENTO).padStart(2, '0')}/${String(header.MESDOCUMENTO).padStart(2, '0')}/${header.ANODOCUMENTO}` : '');
             doc.fontSize(7).font('Helvetica')
                 .text(`Fecha: ${fechaStr}`, { align: 'center' });
 
-            doc.moveDown(0.2);
-            doc.fontSize(6)
-                .text(`Cliente: ${clientCode || (header ? header.CLIENTE : '')}`, L)
+            doc.moveDown(0.3);
+
+            // Info cliente con mejor formato
+            doc.fontSize(6.5).font('Helvetica-Bold')
+                .text(`Cliente: ${clientCode || (header ? header.CLIENTE : '')}`, L);
+            doc.fontSize(6.5).font('Helvetica')
                 .text(clientName || '', L);
 
-            doc.moveDown(0.3);
-            doc.strokeColor('#999').lineWidth(0.3)
+            if (formaPago || (header && header.FORMA_PAGO)) {
+                doc.fontSize(5.5).font('Helvetica')
+                    .text(`Forma de pago: ${formaPago || header.FORMA_PAGO || ''}`, L);
+            }
+
+            doc.moveDown(0.4);
+            doc.strokeColor('#555').lineWidth(0.3)
                 .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
             doc.moveDown(0.3);
 
-            // === CABECERA TABLA PRODUCTOS ===
+            // ═══════════════ CABECERA TABLA PRODUCTOS ═══════════════
             const colPart = L;           // Partida
-            const colDesc = L + 18;      // Descripción
-            const colBult = L + 130;     // Bultos
-            const colImp = L + 160;      // Importe Neto
+            const colDesc = L + 18;      // Descripción  
+            const colBult = L + 140;     // Bultos (moved right for wider desc)
+            const colImp = L + 165;      // Importe Neto
 
             doc.fontSize(5.5).font('Helvetica-Bold')
                 .text('Ptda', colPart, doc.y, { width: 16 })
-                .text('Artículo / Descripción', colDesc, doc.y - 7, { width: 110 })
-                .text('Bultos', colBult, doc.y - 7, { width: 28, align: 'right' })
-                .text('Imp.Neto', colImp, doc.y - 7, { width: 42, align: 'right' });
+                .text('Artículo / Descripción', colDesc, doc.y - 7, { width: 120 })
+                .text('Bultos', colBult, doc.y - 7, { width: 24, align: 'right' })
+                .text('Imp.Neto', colImp, doc.y - 7, { width: 38, align: 'right' });
 
             doc.moveDown(0.2);
-            doc.strokeColor('#ccc').lineWidth(0.3)
+            doc.strokeColor('#999').lineWidth(0.3)
                 .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
             doc.moveDown(0.2);
 
-            // === LÍNEAS DE PRODUCTOS ===
+            // ═══════════════ LÍNEAS DE PRODUCTOS ═══════════════
             doc.font('Helvetica').fontSize(5.5);
 
             lines.forEach((line, idx) => {
@@ -260,26 +324,27 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
                 const y = doc.y;
                 const partida = line.SECUENCIA || (idx + 1);
                 const articulo = (line.ARTICULO || '').trim();
-                const desc = (line.DESCRIPCION || '').trim().substring(0, 30);
+                // Wider description - up to 45 chars instead of 30
+                const desc = (line.DESCRIPCION || '').trim().substring(0, 45);
                 const bultos = line.BULTOS || 0;
 
                 // Partida number
                 doc.text(String(partida), colPart, y, { width: 16 });
 
-                // Artículo + descripción en dos líneas
+                // Artículo + descripción 
                 if (articulo) {
-                    doc.fontSize(5).text(articulo, colDesc, y, { width: 110 });
-                    doc.fontSize(5.5).text(desc, colDesc, doc.y, { width: 110 });
+                    doc.fontSize(4.5).text(articulo, colDesc, y, { width: 120 });
+                    doc.fontSize(5.5).text(desc, colDesc, doc.y, { width: 120 });
                 } else {
-                    doc.text(desc, colDesc, y, { width: 110 });
+                    doc.text(desc, colDesc, y, { width: 120 });
                 }
 
                 // Bultos
                 const bultosDisplay = bultos > 0 ? String(bultos) : '-';
-                doc.text(bultosDisplay, colBult, y, { width: 28, align: 'right' });
+                doc.text(bultosDisplay, colBult, y, { width: 24, align: 'right' });
 
                 // Importe neto
-                doc.text(fmt(importe) + ' €', colImp, y, { width: 42, align: 'right' });
+                doc.text(fmt(importe) + ' €', colImp, y, { width: 38, align: 'right' });
 
                 // Move to next line considering possible 2-line description
                 if (doc.y < y + lineHeight) {
@@ -291,21 +356,21 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             doc.moveDown(0.3);
             doc.strokeColor('#000').lineWidth(0.5)
                 .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
-            doc.moveDown(0.3);
+            doc.moveDown(0.4);
 
-            // === TOTALES ===
+            // ═══════════════ TOTALES ═══════════════
             const totLabelX = L + 90;
-            const totValX = L + 160;
-            const totW = 42;
+            const totValX = L + 165;
+            const totW = 38;
 
             // Bultos total
             doc.fontSize(6).font('Helvetica')
-                .text('Bultos:', totLabelX, doc.y, { width: 65 })
+                .text('Bultos:', totLabelX, doc.y, { width: 70 })
                 .text(String(totalBultos || header?.NUMEROBULTOS || 0), totValX, doc.y - 7, { width: totW, align: 'right' });
             doc.moveDown(0.3);
 
             // Importe Neto (base imponible)
-            doc.text('Importe Neto:', totLabelX, doc.y, { width: 65 })
+            doc.text('Importe Neto:', totLabelX, doc.y, { width: 70 })
                 .text(fmt(baseImponible) + ' €', totValX, doc.y - 7, { width: totW, align: 'right' });
             doc.moveDown(0.3);
 
@@ -313,52 +378,68 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             const sortedIva = Object.entries(gruposIVA).sort((a, b) => Number(a[0]) - Number(b[0]));
             sortedIva.forEach(([pct, data]) => {
                 if (data.base > 0) {
-                    doc.text(`IVA ${pct}%:`, totLabelX, doc.y, { width: 65 })
+                    doc.text(`IVA ${pct}%:`, totLabelX, doc.y, { width: 70 })
                         .text(fmt(data.iva) + ' €', totValX, doc.y - 7, { width: totW, align: 'right' });
                     doc.moveDown(0.2);
                 }
             });
-            doc.moveDown(0.1);
-
-            // TOTAL
-            doc.strokeColor('#000').lineWidth(0.3)
-                .moveTo(totLabelX, doc.y).lineTo(L + W, doc.y).stroke();
             doc.moveDown(0.2);
 
-            doc.font('Helvetica-Bold').fontSize(9)
-                .text('TOTAL:', totLabelX, doc.y, { width: 60 })
-                .text(fmt(importeTotal) + ' €', totValX, doc.y - 10, { width: totW, align: 'right' });
+            // TOTAL - línea separadora + total destacado
+            doc.strokeColor('#000').lineWidth(0.5)
+                .moveTo(totLabelX, doc.y).lineTo(L + W, doc.y).stroke();
+            doc.moveDown(0.3);
 
-            doc.moveDown(0.5);
+            doc.font('Helvetica-Bold').fontSize(10)
+                .text('TOTAL:', totLabelX, doc.y, { width: 65 })
+                .text(fmt(importeTotal) + ' €', totValX, doc.y - 11, { width: totW, align: 'right' });
 
-            // === FORMA DE PAGO ===
-            if (formaPago) {
-                doc.font('Helvetica').fontSize(5.5)
-                    .text(`Forma de pago: ${formaPago}`, { align: 'center' });
-                doc.moveDown(0.3);
-            }
+            doc.moveDown(0.6);
 
-            // === FIRMA ===
-            if (signaturePath && fs.existsSync(signaturePath)) {
-                doc.strokeColor('#ccc').lineWidth(0.3)
+            // ═══════════════ FIRMA DEL CLIENTE ═══════════════
+            if (hasSignature) {
+                doc.strokeColor('#999').lineWidth(0.3)
                     .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
+                doc.moveDown(0.3);
+
+                doc.fontSize(6).font('Helvetica-Bold')
+                    .text('Firma del cliente:', L, doc.y);
                 doc.moveDown(0.2);
-                doc.fontSize(5.5).text('Firma del cliente:', { align: 'center' });
-                doc.moveDown(0.1);
+
                 try {
-                    doc.image(signaturePath, 40, doc.y, { width: 140, height: 50 });
-                    doc.y += 52;
+                    // Larger signature area for better visibility
+                    doc.image(sigBuffer, 30, doc.y, {
+                        width: 166,
+                        height: 70,
+                        fit: [166, 70],
+                        align: 'center',
+                        valign: 'center'
+                    });
+                    doc.y += 72;
                 } catch (imgErr) {
                     logger.warn(`[RECEIPT] Could not embed signature image: ${imgErr.message}`);
-                    doc.text('[Firma no disponible]', { align: 'center' });
+                    doc.fontSize(6).font('Helvetica')
+                        .text('[Firma registrada digitalmente]', { align: 'center' });
+                    doc.moveDown(0.5);
                 }
-                doc.moveDown(0.3);
+
+                // Firmante name and date
+                if (inputFirmante) {
+                    doc.fontSize(5.5).font('Helvetica')
+                        .text(`Firmante: ${inputFirmante}`, { align: 'center' });
+                }
+
+                const now = new Date();
+                doc.fontSize(5).font('Helvetica')
+                    .text(`Fecha firma: ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, { align: 'center' });
+
+                doc.moveDown(0.4);
             }
 
-            // === PIE ===
-            doc.strokeColor('#ccc').lineWidth(0.3)
+            // ═══════════════ PIE DE DOCUMENTO ═══════════════
+            doc.strokeColor('#999').lineWidth(0.3)
                 .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
-            doc.moveDown(0.2);
+            doc.moveDown(0.3);
 
             doc.fontSize(4.5).font('Helvetica')
                 .text('La posesión de este documento NO implica el pago de la misma', { align: 'center' })
@@ -366,7 +447,7 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
 
             if (repartidor) {
                 doc.moveDown(0.2)
-                    .fontSize(5)
+                    .fontSize(5.5).font('Helvetica')
                     .text(`Entregado por: ${repartidor}`, { align: 'center' });
             }
 
