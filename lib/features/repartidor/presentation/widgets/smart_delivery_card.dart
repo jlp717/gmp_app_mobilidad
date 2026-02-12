@@ -170,8 +170,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               const SizedBox(width: 6),
               Text(
                 _isFactura
-                    ? 'F-${widget.albaran.numeroFactura}'
-                    : 'A-${widget.albaran.numeroAlbaran}',
+                    ? '${widget.albaran.serieFactura.isNotEmpty ? widget.albaran.serieFactura : "F"}-${widget.albaran.numeroFactura}'
+                    : '${widget.albaran.serie.isNotEmpty ? widget.albaran.serie : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
                 style: TextStyle(
                   color: _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,

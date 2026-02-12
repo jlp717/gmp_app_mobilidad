@@ -55,6 +55,7 @@ dependencies:
   # Repartidor Features - Signature, PDF, Sharing
   signature: ^5.4.1            # Digital signature capture
   share_plus: ^7.2.1           # Email/WhatsApp sharing
+  open_filex: ^4.3.2           # Open files natively
   pdf: ^3.10.7                 # PDF document generation
   printing: ^5.11.1            # PDF preview/print support
   package_info_plus: ^9.0.0

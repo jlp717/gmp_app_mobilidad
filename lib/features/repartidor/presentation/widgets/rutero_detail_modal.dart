@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 import 'dart:typed_data';
@@ -399,10 +400,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final file = File('${tempDir.path}/Nota_Entrega_$docLabel.pdf');
       await file.writeAsBytes(base64Decode(pdfData));
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Nota de entrega - $docLabel',
-      );
+      await OpenFilex.open(file.path);
     } catch (e) {
       debugPrint('[RECEIPT] Error downloading PDF: $e');
       if (mounted) {
@@ -460,8 +458,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     const SizedBox(width: 8),
                     Text(
                       _isFactura
-                          ? 'FACTURA ${widget.albaran.numeroFactura}'
-                          : 'ALBARÁN ${widget.albaran.numeroAlbaran}',
+                          ? 'FACTURA ${widget.albaran.serieFactura.isNotEmpty ? "${widget.albaran.serieFactura}-" : ""}${widget.albaran.numeroFactura}'
+                          : 'ALBARÁN ${widget.albaran.serie.isNotEmpty ? "${widget.albaran.serie}" : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
                       style: TextStyle(
                         color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
                         fontWeight: FontWeight.bold,

@@ -170,26 +170,42 @@ router.get('/rutero/week', async (req, res) => {
         logger.warn(`[RUTERO WEEK] Cache not ready, querying DB for basic counts`);
         try {
             const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',') : "''";
-            const isDelivery = currentRole === 'repartidor';
-            const dayField = isDelivery ? 'DIAREPARTO' : 'DIAVENTA';
-
+            // CDVI uses SN columns for days: DIAVISITALUNESSN, DIAVISITAMARTESSN, etc.
             const fallbackSql = `
-                SELECT ${dayField} as DIA, COUNT(DISTINCT CODIGOCLIENTE) as TOTAL
+                SELECT 
+                    SUM(CASE WHEN DIAVISITALUNESSN = 'S' THEN 1 ELSE 0 END) as LUNES,
+                    SUM(CASE WHEN DIAVISITAMARTESSN = 'S' THEN 1 ELSE 0 END) as MARTES,
+                    SUM(CASE WHEN DIAVISITAMIERCOLESSN = 'S' THEN 1 ELSE 0 END) as MIERCOLES,
+                    SUM(CASE WHEN DIAVISITAJUEVESSN = 'S' THEN 1 ELSE 0 END) as JUEVES,
+                    SUM(CASE WHEN DIAVISITAVIERNESSN = 'S' THEN 1 ELSE 0 END) as VIERNES,
+                    SUM(CASE WHEN DIAVISITASABADOSN = 'S' THEN 1 ELSE 0 END) as SABADO,
+                    SUM(CASE WHEN DIAVISITADOMINGOSN = 'S' THEN 1 ELSE 0 END) as DOMINGO
                 FROM DSEDAC.CDVI
                 WHERE TRIM(CODIGOVENDEDOR) IN (${cleanCodes})
-                  AND ${dayField} BETWEEN 1 AND 7
-                GROUP BY ${dayField}
             `;
+
             const fbRows = await query(fallbackSql, false);
-            const dayIndexMap = { 1: 'lunes', 2: 'martes', 3: 'miercoles', 4: 'jueves', 5: 'viernes', 6: 'sabado', 7: 'domingo' };
             const fallbackCounts = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 };
             let fallbackTotal = 0;
-            fbRows.forEach(r => {
-                const dayName = dayIndexMap[r.DIA];
-                if (dayName) {
-                    fallbackCounts[dayName] = parseInt(r.TOTAL) || 0;
-                    fallbackTotal += fallbackCounts[dayName];
-                }
+
+            if (fbRows.length > 0) {
+                const r = fbRows[0];
+                fallbackCounts.lunes = parseInt(r.LUNES) || 0;
+                fallbackCounts.martes = parseInt(r.MARTES) || 0;
+                fallbackCounts.miercoles = parseInt(r.MIERCOLES) || 0;
+                fallbackCounts.jueves = parseInt(r.JUEVES) || 0;
+                fallbackCounts.viernes = parseInt(r.VIERNES) || 0;
+                fallbackCounts.sabado = parseInt(r.SABADO) || 0;
+                fallbackCounts.domingo = parseInt(r.DOMINGO) || 0;
+                fallbackTotal = Object.values(fallbackCounts).reduce((a, b) => a + b, 0);
+            }
+
+            return res.json({
+                week: fallbackCounts,
+                todayName,
+                role: currentRole,
+                totalUniqueClients: fallbackTotal,
+                cacheStatus: 'loading'
             });
 
             return res.json({

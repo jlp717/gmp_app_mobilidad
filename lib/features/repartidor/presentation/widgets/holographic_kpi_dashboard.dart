@@ -164,14 +164,14 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 50,
-              height: 50,
+              width: 70,
+              height: 70,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
                   // Background ring
                   CustomPaint(
-                    size: const Size(50, 50),
+                    size: const Size(70, 70),
                     painter: _HoloRingPainter(
                       progress: progress * _progressController.value,
                       scannerAngle: _scannerAnimation.value,
