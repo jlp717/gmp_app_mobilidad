@@ -132,6 +132,41 @@ async function getVendorName(vendorCode) {
     }
 }
 
+/**
+ * Get B-Sales (Ventas en B) from JAVIER.VENTAS_B
+ * These are secondary channel sales stored separately.
+ * Shared across commissions, objectives, and dashboard.
+ * @param {string} vendorCode - Single vendor code (or 'ALL')
+ * @param {number} year - Year to query
+ * @returns {Object} Monthly map { [month]: amount }
+ */
+async function getBSales(vendorCode, year) {
+    if (!vendorCode || vendorCode === 'ALL') return {};
+
+    const rawCode = vendorCode.trim();
+    const unpaddedCode = rawCode.replace(/^0+/, '');
+
+    try {
+        const safeRaw = rawCode.replace(/[^a-zA-Z0-9]/g, '');
+        const safeUnpadded = unpaddedCode.replace(/[^a-zA-Z0-9]/g, '');
+        const rows = await query(`
+            SELECT MES, IMPORTE
+            FROM JAVIER.VENTAS_B
+            WHERE (CODIGOVENDEDOR = '${safeRaw}' OR CODIGOVENDEDOR = '${safeUnpadded}')
+              AND EJERCICIO = ${parseInt(year)}
+        `, false, false);
+
+        const monthlyMap = {};
+        rows.forEach(r => {
+            monthlyMap[r.MES] = (monthlyMap[r.MES] || 0) + (parseFloat(r.IMPORTE) || 0);
+        });
+        return monthlyMap;
+    } catch (e) {
+        // Table might not exist - return empty
+        return {};
+    }
+}
+
 module.exports = {
     getCurrentDate,
     getCurrentYear,
@@ -145,6 +180,7 @@ module.exports = {
     buildVendedorFilterLACLAE,
     buildDateFilter,
     getVendorName, // Added Export
+    getBSales, // Shared B-sales lookup
 
     // Helper to calculate working days (Mon-Fri + Sat/Sun if active)
     calculateWorkingDays: (year, month, activeWeekDays = []) => {

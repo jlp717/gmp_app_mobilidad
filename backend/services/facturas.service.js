@@ -104,6 +104,11 @@ class FacturasService {
         try {
             const rows = await query(sql);
 
+            // FIX: Aggregate CAC records by invoice key (SERIE-NUMERO-EJERCICIO).
+            // A single invoice can span multiple albaranes (delivery notes),
+            // each stored as a separate CAC row. We must SUM their totals.
+            // Example: Invoice F-750 for client 4300040696 has 5 albaranes
+            // totaling 581.34€, but previously only showed 218.65€ (first albarán).
             const invoiceMap = new Map();
             for (const row of rows) {
                 const key = `${row.SERIE}-${row.NUMERO}-${row.EJERCICIO}`;
@@ -120,6 +125,12 @@ class FacturasService {
                         base: parseFloat(row.BASE) || 0,
                         iva: parseFloat(row.IVA) || 0
                     });
+                } else {
+                    // Same invoice, different albarán → accumulate amounts
+                    const existing = invoiceMap.get(key);
+                    existing.total += parseFloat(row.TOTAL) || 0;
+                    existing.base += parseFloat(row.BASE) || 0;
+                    existing.iva += parseFloat(row.IVA) || 0;
                 }
             }
 
@@ -218,25 +229,38 @@ class FacturasService {
     }
 
     async getFacturaDetail(serie, numero, ejercicio) {
+        // FIX: Aggregate across all albaranes for same invoice.
+        // A single invoice can span multiple albaranes (e.g., F-750 has 5 albaranes = 581.34€).
+        // Previously used FETCH FIRST 1 ROWS ONLY which only got the first albarán (218.65€).
         const headerSql = `
-      SELECT 
-        CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
-        CAC.DIAFACTURA, CAC.MESFACTURA, CAC.ANOFACTURA,
-        TRIM(CAC.CODIGOCLIENTEFACTURA) as CODIGOCLIENTE,
-        TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
-        TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
-        TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
-        TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA,
-        CAC.IMPORTETOTAL as TOTALFACTURA,
-        CAC.IMPORTEBASEIMPONIBLE1, CAC.PORCENTAJEIVA1, CAC.IMPORTEIVA1,
-        CAC.IMPORTEBASEIMPONIBLE2, CAC.PORCENTAJEIVA2, CAC.IMPORTEIVA2,
-        CAC.IMPORTEBASEIMPONIBLE3, CAC.PORCENTAJEIVA3, CAC.IMPORTEIVA3
+      SELECT
+        MIN(CAC.NUMEROFACTURA) as NUMEROFACTURA,
+        MIN(CAC.SERIEFACTURA) as SERIEFACTURA,
+        MIN(CAC.EJERCICIOFACTURA) as EJERCICIOFACTURA,
+        MIN(CAC.DIAFACTURA) as DIAFACTURA,
+        MIN(CAC.MESFACTURA) as MESFACTURA,
+        MIN(CAC.ANOFACTURA) as ANOFACTURA,
+        MIN(TRIM(CAC.CODIGOCLIENTEFACTURA)) as CODIGOCLIENTE,
+        MIN(TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, ''))) as NOMBRECLIENTEFACTURA,
+        MIN(TRIM(COALESCE(CLI.DIRECCION, ''))) as DIRECCIONCLIENTEFACTURA,
+        MIN(TRIM(COALESCE(CLI.POBLACION, ''))) as POBLACIONCLIENTEFACTURA,
+        MIN(TRIM(COALESCE(CLI.NIF, ''))) as CIFCLIENTEFACTURA,
+        SUM(CAC.IMPORTETOTAL) as TOTALFACTURA,
+        SUM(CAC.IMPORTEBASEIMPONIBLE1) as IMPORTEBASEIMPONIBLE1,
+        MIN(CAC.PORCENTAJEIVA1) as PORCENTAJEIVA1,
+        SUM(CAC.IMPORTEIVA1) as IMPORTEIVA1,
+        SUM(CAC.IMPORTEBASEIMPONIBLE2) as IMPORTEBASEIMPONIBLE2,
+        MIN(CAC.PORCENTAJEIVA2) as PORCENTAJEIVA2,
+        SUM(CAC.IMPORTEIVA2) as IMPORTEIVA2,
+        SUM(CAC.IMPORTEBASEIMPONIBLE3) as IMPORTEBASEIMPONIBLE3,
+        MIN(CAC.PORCENTAJEIVA3) as PORCENTAJEIVA3,
+        SUM(CAC.IMPORTEIVA3) as IMPORTEIVA3
       FROM DSEDAC.CAC CAC
       LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
       WHERE TRIM(CAC.SERIEFACTURA) = '${serie}'
         AND CAC.NUMEROFACTURA = ${numero}
         AND CAC.EJERCICIOFACTURA = ${ejercicio}
-      FETCH FIRST 1 ROWS ONLY
+      GROUP BY CAC.NUMEROFACTURA, CAC.EJERCICIOFACTURA
     `;
 
         try {

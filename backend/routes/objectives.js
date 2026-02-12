@@ -8,7 +8,8 @@ const {
     buildVendedorFilterLACLAE,
     MIN_YEAR,
     LAC_SALES_FILTER,
-    LACLAE_SALES_FILTER
+    LACLAE_SALES_FILTER,
+    getBSales
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const {
@@ -374,6 +375,26 @@ router.get('/evolution', async (req, res) => {
           ORDER BY YEAR, MONTH
         `);
 
+
+        // =====================================================================
+        // B-SALES: Add secondary channel sales from JAVIER.VENTAS_B
+        // Ensures consistency with commissions endpoint
+        // =====================================================================
+        if (vendedorCodes && vendedorCodes !== 'ALL') {
+            const firstCode = vendedorCodes.split(',')[0].trim();
+            for (const yr of uniqueYears) {
+                const bSalesMap = await getBSales(firstCode, yr);
+                for (const [month, amount] of Object.entries(bSalesMap)) {
+                    const m = parseInt(month);
+                    const existingRow = rows.find(r => r.YEAR == yr && r.MONTH == m);
+                    if (existingRow) {
+                        existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + amount;
+                    } else if (amount > 0) {
+                        rows.push({ YEAR: yr, MONTH: m, SALES: amount, COST: 0, CLIENTS: 0 });
+                    }
+                }
+            }
+        }
 
         // Organize by year
         const yearlyData = {};

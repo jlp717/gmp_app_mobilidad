@@ -11,7 +11,8 @@ const {
     formatCurrency,
     MIN_YEAR,
     LAC_SALES_FILTER,
-    LACLAE_SALES_FILTER
+    LACLAE_SALES_FILTER,
+    getBSales
 } = require('../utils/common');
 
 // =============================================================================
@@ -80,8 +81,19 @@ router.get('/metrics', async (req, res) => {
         const curr = currentData[0] || {};
         const last = lastData[0] || {};
 
-        const currentSales = parseFloat(curr.SALES) || 0;
-        const lastSales = parseFloat(last.SALES) || 0;
+        let currentSales = parseFloat(curr.SALES) || 0;
+        let lastSales = parseFloat(last.SALES) || 0;
+
+        // Add B-sales for consistency with commissions/objectives
+        if (vendedorCodes && vendedorCodes !== 'ALL') {
+            const firstCode = vendedorCodes.split(',')[0]?.trim();
+            if (firstCode) {
+                const bSalesCurr = await getBSales(firstCode, currentYear);
+                const bSalesLast = await getBSales(firstCode, currentYear - 1);
+                currentSales += (bSalesCurr[currentMonth] || 0);
+                lastSales += (bSalesLast[currentMonth] || 0);
+            }
+        }
 
         // Calculate variations
         const calcVar = (curr, prev) => prev && prev !== 0 ? ((curr - prev) / prev) * 100 : 0;
@@ -158,22 +170,22 @@ router.get('/matrix-data', async (req, res) => {
         if (years && years.trim().length > 0) {
             const yearList = years.split(',').map(y => parseInt(y.trim())).filter(y => !isNaN(y));
             if (yearList.length > 0) {
-                yearFilter = `AND L.ANODOCUMENTO IN (${yearList.join(',')})`;
+                yearFilter = `AND L.LCAADC IN (${yearList.join(',')})`;
             } else {
-                yearFilter = `AND L.ANODOCUMENTO = ${selectedYear}`;
+                yearFilter = `AND L.LCAADC = ${selectedYear}`;
             }
         } else {
-            yearFilter = `AND L.ANODOCUMENTO IN (${selectedYear}, ${prevYear})`;
+            yearFilter = `AND L.LCAADC IN (${selectedYear}, ${prevYear})`;
         }
 
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         const clientFilter = clientCodes && clientCodes !== 'ALL'
-            ? `AND L.CODIGOCLIENTEALBARAN IN (${clientCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
+            ? `AND TRIM(L.LCCDCL) IN (${clientCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
             : '';
 
         const productFilter = productCodes && productCodes !== 'ALL'
-            ? `AND L.CODIGOARTICULO IN (${productCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
+            ? `AND TRIM(L.CODIGOARTICULO) IN (${productCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
             : '';
 
         let familyProductFilter = '';
@@ -189,17 +201,17 @@ router.get('/matrix-data', async (req, res) => {
         }
 
         const hierarchy = groupBy.split(',').map(g => g.trim().toLowerCase());
-        const selectClauses = ['L.ANODOCUMENTO as YEAR', 'L.MESDOCUMENTO as MONTH'];
-        const groupClauses = ['L.ANODOCUMENTO', 'L.MESDOCUMENTO'];
+        const selectClauses = ['L.LCAADC as YEAR', 'L.LCMMDC as MONTH'];
+        const groupClauses = ['L.LCAADC', 'L.LCMMDC'];
 
         hierarchy.forEach((level, index) => {
             const levelIdx = index + 1;
             if (level === 'vendor') {
-                selectClauses.push(`TRIM(L.CODIGOVENDEDOR) as ID_${levelIdx}`);
-                groupClauses.push('L.CODIGOVENDEDOR');
+                selectClauses.push(`TRIM(L.LCCDVD) as ID_${levelIdx}`);
+                groupClauses.push('L.LCCDVD');
             } else if (level === 'client') {
-                selectClauses.push(`TRIM(L.CODIGOCLIENTEALBARAN) as ID_${levelIdx}`);
-                groupClauses.push('L.CODIGOCLIENTEALBARAN');
+                selectClauses.push(`TRIM(L.LCCDCL) as ID_${levelIdx}`);
+                groupClauses.push('L.LCCDCL');
             } else if (level === 'product') {
                 selectClauses.push(`TRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
                 groupClauses.push('L.CODIGOARTICULO');
@@ -209,21 +221,24 @@ router.get('/matrix-data', async (req, res) => {
             }
         });
 
-        selectClauses.push('SUM(L.IMPORTEVENTA) as SALES');
-        selectClauses.push('SUM(L.IMPORTEVENTA - L.IMPORTECOSTO) as MARGIN');
+        // FIX: Use LCIMVT (= IMPORTEVENTA, same physical column) with LACLAE_SALES_FILTER
+        // for consistency with dashboard/metrics, objectives, and commissions endpoints.
+        // Previously used LAC_SALES_FILTER which has different EXISTS conditions.
+        selectClauses.push('SUM(L.LCIMVT) as SALES');
+        selectClauses.push('SUM(L.LCIMVT - L.LCIMCT) as MARGIN');
 
         const aggregateSQL = `
             SELECT ${selectClauses.join(', ')}
             FROM DSEDAC.LAC L
               WHERE 1=1
-              AND ${LAC_SALES_FILTER}
+              AND ${LACLAE_SALES_FILTER}
               ${yearFilter}
               ${vendedorFilter}
               ${clientFilter}
               ${productFilter}
               ${familyProductFilter}
             GROUP BY ${groupClauses.join(', ')}
-            ORDER BY SUM(L.IMPORTEVENTA) DESC
+            ORDER BY SUM(L.LCIMVT) DESC
             FETCH FIRST 50000 ROWS ONLY
         `;
 

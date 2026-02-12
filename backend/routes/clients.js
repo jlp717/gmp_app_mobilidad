@@ -358,15 +358,33 @@ router.get('/:code', async (req, res) => {
       FETCH FIRST 10 ROWS ONLY
   `);
 
-    // Payment status from CVC
+    // Payment status from CVC with CAC cross-validation
+    // CVC tracks payment/vencimiento records; CAC has the actual invoice totals.
+    // We query both and log discrepancies for auditing.
     const paymentStatus = await query(`
       SELECT
-        SUM(CASE WHEN SITUACION = 'C' THEN IMPORTEVENCIMIENTO ELSE 0 END) as paid,
-        SUM(CASE WHEN SITUACION = 'P' THEN IMPORTEPENDIENTE ELSE 0 END) as pending,
-        COUNT(CASE WHEN SITUACION = 'P' THEN 1 END) as pendingCount
-      FROM DSEDAC.CVC
-      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' AND ANOEMISION >= ${MIN_YEAR}
+        SUM(CASE WHEN CVC.SITUACION = 'C' THEN CVC.IMPORTEVENCIMIENTO ELSE 0 END) as paid,
+        SUM(CASE WHEN CVC.SITUACION = 'P' THEN CVC.IMPORTEPENDIENTE ELSE 0 END) as pending,
+        COUNT(CASE WHEN CVC.SITUACION = 'P' THEN 1 END) as pendingCount
+      FROM DSEDAC.CVC CVC
+      WHERE CVC.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND CVC.ANOEMISION >= ${MIN_YEAR}
 `);
+
+    // CAC cross-validation: sum invoice totals for comparison
+    const cacValidation = await query(`
+      SELECT
+        SUM(CAC.IMPORTETOTAL) as totalInvoiced
+      FROM DSEDAC.CAC CAC
+      WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${safeClientCode}'
+        AND CAC.EJERCICIOFACTURA >= ${MIN_YEAR}
+        AND CAC.NUMEROFACTURA > 0
+    `);
+
+    const pendingCVC = parseFloat(paymentStatus[0]?.PENDING) || 0;
+    const totalCAC = parseFloat(cacValidation[0]?.TOTALINVOICED) || 0;
+    if (Math.abs(pendingCVC - totalCAC) > 100) {
+        logger.warn(`[CLIENT ${safeClientCode}] CVC/CAC discrepancy: CVC pending=${pendingCVC.toFixed(2)}, CAC total=${totalCAC.toFixed(2)}, diff=${(pendingCVC - totalCAC).toFixed(2)}`);
+    }
 
     const c = clientInfo[0];
     const s = salesSummary[0] || {};

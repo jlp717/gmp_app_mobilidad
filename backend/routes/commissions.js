@@ -3,7 +3,7 @@ const router = express.Router();
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed } = require('../utils/common');
+const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
 
 
 // =============================================================================
@@ -270,36 +270,7 @@ async function getClientsMonthlySales(clientCodes, year) {
     return monthlyMap;
 }
 
-/**
- * Get B-Sales (Ventas en B)
- * These are secondary channel sales stored in JAVIER.VENTAS_B
- */
-async function getBSales(vendorCode, year) {
-    if (!vendorCode || vendorCode === 'ALL') return {};
-
-    const rawCode = vendorCode.trim();
-    const unpaddedCode = rawCode.replace(/^0+/, '');
-
-    try {
-        const safeRaw = rawCode.replace(/[^a-zA-Z0-9]/g, '');
-        const safeUnpadded = unpaddedCode.replace(/[^a-zA-Z0-9]/g, '');
-        const rows = await query(`
-            SELECT MES, IMPORTE
-            FROM JAVIER.VENTAS_B
-            WHERE (CODIGOVENDEDOR = '${safeRaw}' OR CODIGOVENDEDOR = '${safeUnpadded}')
-              AND EJERCICIO = ${parseInt(year)}
-        `, false, false);
-
-        const monthlyMap = {};
-        rows.forEach(r => {
-            monthlyMap[r.MES] = (monthlyMap[r.MES] || 0) + (parseFloat(r.IMPORTE) || 0);
-        });
-        return monthlyMap;
-    } catch (e) {
-        logger.debug(`B-sales lookup: ${e.message}`);
-        return {};
-    }
-}
+// getBSales is now imported from ../utils/common.js
 
 /**
  * Get aggregated payments for a vendor in a given year
@@ -888,14 +859,15 @@ router.get('/summary', async (req, res) => {
             let yearResult;
 
             if (safeVendorCode === 'ALL') {
-                // Use R1_T8CDVD (same source as /rutero/vendedores dropdown) for consistent vendor list
+                // FIX: Use LCCDVD (same column used by calculateVendorData for filtering)
+                // Previously used R1_T8CDVD which missed vendors like '95' that only exist in LCCDVD
                 const safeYr = parseInt(yr);
                 const vendorRows = await query(`
-                    SELECT DISTINCT TRIM(L.R1_T8CDVD) as VENDOR_CODE
+                    SELECT DISTINCT TRIM(L.LCCDVD) as VENDOR_CODE
                     FROM DSED.LACLAE L
                     WHERE L.LCAADC IN (${safeYr}, ${safeYr - 1})
-                      AND L.R1_T8CDVD IS NOT NULL
-                      AND TRIM(L.R1_T8CDVD) <> ''
+                      AND L.LCCDVD IS NOT NULL
+                      AND TRIM(L.LCCDVD) <> ''
                 `, false);
                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
