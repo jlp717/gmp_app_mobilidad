@@ -277,25 +277,12 @@ router.get('/history/documents/:clientId', async (req, res) => {
         const pageLimit = parseInt(limit) || 200;
         const pageOffset = parseInt(offset) || 0;
 
+        const CurrentYear = new Date().getFullYear();
+        const year = parseInt(req.query.year) || CurrentYear;
+        const clientCode = clientId;
+
         const sql = `
             SELECT 
-                CPC.EJERCICIOALBARAN,
-                CPC.SERIEALBARAN,
-                CPC.TERMINALALBARAN,
-                CPC.NUMEROALBARAN,
-                MAX(CPC.ANODOCUMENTO) as ANO,
-                MAX(CPC.MESDOCUMENTO) as MES,
-                MAX(CPC.DIADOCUMENTO) as DIA,
-                MAX(CPC.HORALLEGADA) as HORALLEGADA,
-                SUM(CPC.IMPORTETOTAL) as IMPORTETOTAL,
-                MAX(COALESCE(CVC.IMPORTEPENDIENTE, 0)) as IMPORTE_PENDIENTE,
-                MAX(CPC.CODIGOFORMAPAGO) as CODIGOFORMAPAGO,
-                MAX(CPC.CONFORMADOSN) as CONFORMADOSN,
-                MAX(CAC.NUMEROFACTURA) as NUMEROFACTURA,
-                MAX(CAC.SERIEFACTURA) as SERIEFACTURA,
-                MAX(CAC.EJERCICIOFACTURA) as EJERCICIOFACTURA,
-                MAX(DS.STATUS) as DELIVERY_STATUS,
-                MAX(DS.FIRMA_PATH) as FIRMA_PATH,
                 CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.NUMEROALBARAN,
                 CPC.NUMEROFACTURA, CPC.FECHAFACTURA,
                 CPC.ANODOCUMENTO as ANO, CPC.MESDOCUMENTO as MES, CPC.DIADOCUMENTO as DIA,
@@ -304,6 +291,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 CPC.CONFORMADOSN,
                 CPC.SITUACIONALBARAN,
                 CPC.HORALLEGADA,
+                CPC.HORACREACION,
                 DS.STATUS as DELIVERY_STATUS,
                 DS.UPDATED_AT as DELIVERY_UPDATED_AT,
                 DS.FIRMA_PATH,

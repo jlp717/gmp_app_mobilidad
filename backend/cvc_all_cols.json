@@ -1,0 +1,522 @@
+[
+  {
+    "COLUMN_NAME": "TIPODOCUMENTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "TipoDocumento                               CVTPDC"
+  },
+  {
+    "COLUMN_NAME": "ORIGENDOCUMENTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "OrigenDocumento                             CVORDC"
+  },
+  {
+    "COLUMN_NAME": "SUBEMPRESADOCUMENTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "SubempresaDocumento                         CVSBDC"
+  },
+  {
+    "COLUMN_NAME": "EJERCICIODOCUMENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "EjercicioDocumento                          CVYEDC"
+  },
+  {
+    "COLUMN_NAME": "SERIEDOCUMENTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "SerieDocumento                              CVSRDC"
+  },
+  {
+    "COLUMN_NAME": "TERMINALDOCUMENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TerminalDocumento                           CVTRDC"
+  },
+  {
+    "COLUMN_NAME": "NUMERODOCUMENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroDocumento                             CVNRDC"
+  },
+  {
+    "COLUMN_NAME": "XDEDOCUMENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "XDeDocumento                                CVXDDC"
+  },
+  {
+    "COLUMN_NAME": "DEXDOCUMENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DeXDocumento                                CVDXDC"
+  },
+  {
+    "COLUMN_NAME": "SITUACION",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Situacion                                   CVSTDC"
+  },
+  {
+    "COLUMN_NAME": "CLAVEAGRUPAMIENTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ClaveAgrupamiento                           CVCLAG"
+  },
+  {
+    "COLUMN_NAME": "CODIGOFORMATOIMPRESION",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoFormatoImpresion                      CVMKTR"
+  },
+  {
+    "COLUMN_NAME": "CUENTABANCOREMESA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaBancoRemesa                           CVCDBR"
+  },
+  {
+    "COLUMN_NAME": "DIAREMESABANCO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaRemesaBanco                              CVDDRM"
+  },
+  {
+    "COLUMN_NAME": "MESREMESABANCO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesRemesaBanco                              CVMMRM"
+  },
+  {
+    "COLUMN_NAME": "ANOREMESABANCO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoRemesaBanco                              CVAARM"
+  },
+  {
+    "COLUMN_NAME": "DIAREMESACLIENTE",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaRemesaCliente                            CVDDRC"
+  },
+  {
+    "COLUMN_NAME": "MESREMESACLIENTE",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesRemesaCliente                            CVMMRC"
+  },
+  {
+    "COLUMN_NAME": "ANOREMESACLIENTE",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoRemesaCliente                            CVAARC"
+  },
+  {
+    "COLUMN_NAME": "CUENTALIBRADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaLibrado                               CVCTLB"
+  },
+  {
+    "COLUMN_NAME": "CUENTAPAGO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaPago                                  CVCTPG"
+  },
+  {
+    "COLUMN_NAME": "CUENTABANCO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaBanco                                 CVCTBC"
+  },
+  {
+    "COLUMN_NAME": "CUENTABANCOEFECTOSDESCONTADOS",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaBancoEfectosDescontados               CVCTBE"
+  },
+  {
+    "COLUMN_NAME": "CUENTAEFECTOSDESCONTADOS",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaEfectosDescontados                    CVCTCE"
+  },
+  {
+    "COLUMN_NAME": "CODIGOCLIENTEALBARAN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoClienteAlbaran                        CVCDCL"
+  },
+  {
+    "COLUMN_NAME": "CODIGOCLIENTEFACTURA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoClienteFactura                        CVCDFA"
+  },
+  {
+    "COLUMN_NAME": "CODIGOCLIENTECADENA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoClienteCadena                         CVCDCD"
+  },
+  {
+    "COLUMN_NAME": "CODIGOVENDEDOR",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoVendedor                              CVCDVD"
+  },
+  {
+    "COLUMN_NAME": "CODIGOVENDEDORCOBRO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoVendedorCobro                         CVVDCA"
+  },
+  {
+    "COLUMN_NAME": "CODIGORUTA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoRuta                                  CVCDRA"
+  },
+  {
+    "COLUMN_NAME": "CODIGOFORMAPAGO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoFormaPago                             CVCDFP"
+  },
+  {
+    "COLUMN_NAME": "DIAVENCIMIENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaVencimiento                              CVDDVT"
+  },
+  {
+    "COLUMN_NAME": "MESVENCIMIENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesVencimiento                              CVMMVT"
+  },
+  {
+    "COLUMN_NAME": "ANOVENCIMIENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoVencimiento                              CVAAVT"
+  },
+  {
+    "COLUMN_NAME": "DIAEMISION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaEmision                                  CVDDEM"
+  },
+  {
+    "COLUMN_NAME": "MESEMISION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesEmision                                  CVMMEM"
+  },
+  {
+    "COLUMN_NAME": "ANOEMISION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoEmision                                  CVAAEM"
+  },
+  {
+    "COLUMN_NAME": "IMPORTEVENCIMIENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ImporteVencimiento                          CVIMVC"
+  },
+  {
+    "COLUMN_NAME": "IMPORTECANCELADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ImporteCancelado                            CVIMCA"
+  },
+  {
+    "COLUMN_NAME": "IMPORTEPENDIENTE",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ImportePendiente                            CVIMPD"
+  },
+  {
+    "COLUMN_NAME": "IBAN01",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "IBAN01                                      CVIB01"
+  },
+  {
+    "COLUMN_NAME": "IBAN02",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "IBAN02                                      CVIB02"
+  },
+  {
+    "COLUMN_NAME": "IBAN03",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "IBAN03                                      CVIB03"
+  },
+  {
+    "COLUMN_NAME": "IBAN04",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "IBAN04                                      CVIB04"
+  },
+  {
+    "COLUMN_NAME": "IBAN05",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "IBAN05                                      CVIB05"
+  },
+  {
+    "COLUMN_NAME": "IBAN06",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "IBAN06                                      CVIB06"
+  },
+  {
+    "COLUMN_NAME": "CLAUSULASBANCO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ClausulasBanco                              CVCLBC"
+  },
+  {
+    "COLUMN_NAME": "DIRECCIONBANCO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "DireccionBanco                              CVDIBC"
+  },
+  {
+    "COLUMN_NAME": "CODIGOPOSTALBANCO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoPostalBanco                           CVCPBC"
+  },
+  {
+    "COLUMN_NAME": "SECUENCIACODIGOPOSTALBANCO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "SecuenciaCodigoPostalBanco                  CVSPBC"
+  },
+  {
+    "COLUMN_NAME": "POBLACIONBANCO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "PoblacionBanco                              CVPOBC"
+  },
+  {
+    "COLUMN_NAME": "PROVINCIABANCO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ProvinciaBanco                              CVPRBC"
+  },
+  {
+    "COLUMN_NAME": "OBSERVACIONES",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Observaciones                               CVOBSE"
+  },
+  {
+    "COLUMN_NAME": "EMPRESACONTABLE",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "EmpresaContable                             CVEMCT"
+  },
+  {
+    "COLUMN_NAME": "EMPRESACONTABLE2",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "EmpresaContable2                            CVE2CT"
+  },
+  {
+    "COLUMN_NAME": "DIACOBRO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaCobro                                    CVDDCB"
+  },
+  {
+    "COLUMN_NAME": "MESCOBRO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesCobro                                    CVMMCB"
+  },
+  {
+    "COLUMN_NAME": "ANOCOBRO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoCobro                                    CVAACB"
+  },
+  {
+    "COLUMN_NAME": "NUMEROLIQUIDACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroLiquidacion                           CVNRLQ"
+  },
+  {
+    "COLUMN_NAME": "EJERCICIODELDOCUMENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "EjercicioDelDocumento                       CVEJDC"
+  },
+  {
+    "COLUMN_NAME": "DOCUMENTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Documento                                   CVDOCU"
+  },
+  {
+    "COLUMN_NAME": "LUGAREMISION",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "LugarEmision                                CVLGEM"
+  },
+  {
+    "COLUMN_NAME": "DESDESERIENROPAG",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "DesdeSerieNroPag                            CVSRNP"
+  },
+  {
+    "COLUMN_NAME": "DESDENUMERONROPAG",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DesdeNumeroNroPag                           CVNRNP"
+  },
+  {
+    "COLUMN_NAME": "DESDECTRLNUMERONROPAG",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DesdeCtrlNumeroNroPag                       CVCNNP"
+  },
+  {
+    "COLUMN_NAME": "DESDENUMERO2NROPAG",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DesdeNumero2NroPag                          CVN2NP"
+  },
+  {
+    "COLUMN_NAME": "DESDECTRLNUMERO2NROPAG",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DesdeCtrlNumero2NroPag                      CVC2NP"
+  },
+  {
+    "COLUMN_NAME": "CODIGOCONCEPTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoConcepto                              CVCDCP"
+  },
+  {
+    "COLUMN_NAME": "DESCRIPCIONCONCEPTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "DescripcionConcepto                         CVDSCP"
+  },
+  {
+    "COLUMN_NAME": "DESCRIPCIONCONCEPTO_1",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "DescripcionConcepto_1                       CVEXCP"
+  },
+  {
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "COLUMN_NAME": "SUBEMPRESADOCUMENTOASOCIADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "SubempresaDocumentoAsociado                 CVSBDA"
+  },
+  {
+    "COLUMN_NAME": "EJERCICIODOCUMENTOASOCIADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "EjercicioDocumentoAsociado                  CVYEDA"
+  },
+  {
+    "COLUMN_NAME": "SERIEDOCUMENTOASOCIADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "SerieDocumentoAsociado                      CVSRDA"
+  },
+  {
+    "COLUMN_NAME": "TERMINALDOCUMENTOASOCIADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TerminalDocumentoAsociado                   CVTRDA"
+  },
+  {
+    "COLUMN_NAME": "NUMERODOCUMENTOASOCIADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroDocumentoAsociado                     CVNRDA"
+  },
+  {
+    "COLUMN_NAME": "CODIGOMETODOPAGO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoMetodoPago                            CVCDMP"
+  },
+  {
+    "COLUMN_NAME": "REFERENCIACARTERA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ReferenciaCartera                           CVREFE"
+  },
+  {
+    "COLUMN_NAME": "REFERENCIATIPODOCUMENTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ReferenciaTipoDocumento                     CVRFTD"
+  },
+  {
+    "COLUMN_NAME": "COMISIONESSN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ComisionesSN                                CVSNCO"
+  },
+  {
+    "COLUMN_NAME": "IMPORTECOMISION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ImporteComision                             CVIMCO"
+  },
+  {
+    "COLUMN_NAME": "CODIGOIVA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoIVA                                   CVCDIV"
+  },
+  {
+    "COLUMN_NAME": "IMPORTEIVACOMISION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ImporteIvaComision                          CVIMIV"
+  },
+  {
+    "COLUMN_NAME": "IMPORTEOTROS",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ImporteOtros                                CVIMOT"
+  },
+  {
+    "COLUMN_NAME": "IMPORTEGASTOS",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ImporteGastos                               CVIMGT"
+  },
+  {
+    "COLUMN_NAME": "IMPUTARGASTOSSN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ImputarGastosSN                             CVSNGT"
+  },
+  {
+    "COLUMN_NAME": "CUENTAACREEDORA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaAcreedora                             CVCTAC"
+  },
+  {
+    "COLUMN_NAME": "CUENTAGASTOS",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaGastos                                CVCTGT"
+  },
+  {
+    "COLUMN_NAME": "CUENTAOTROS",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaOtros                                 CVCTOT"
+  },
+  {
+    "COLUMN_NAME": "CODIGOCANAL",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoCanal                                 CVCDCH"
+  },
+  {
+    "COLUMN_NAME": "ANULADOSN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "AnuladoSN                                   CVSNAN"
+  },
+  {
+    "COLUMN_NAME": "CODIGOFORMAPAGOORIGINAL",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoFormaPagoOriginal                     CVFPOR"
+  },
+  {
+    "COLUMN_NAME": "CODIGOMETODOPAGOORIGINAL",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoMetodoPagoOriginal                    CVMPOR"
+  },
+  {
+    "COLUMN_NAME": "CUENTACARGOABONO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CuentaCargoAbono                            CVCTCA"
+  },
+  {
+    "COLUMN_NAME": "SUBEMPRESAASIENTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "SubEmpresaAsiento                           CVSBCS"
+  },
+  {
+    "COLUMN_NAME": "EJERCICIOASIENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "EjercicioAsiento                            CVYECS"
+  },
+  {
+    "COLUMN_NAME": "SERIEASIENTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "SerieAsiento                                CVSRCS"
+  },
+  {
+    "COLUMN_NAME": "TERMINALASIENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TerminalAsiento                             CVTRCS"
+  },
+  {
+    "COLUMN_NAME": "NUMEROASIENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsiento                               CVNRCS"
+  },
+  {
+    "COLUMN_NAME": "SECUENCIAASIENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "SecuenciaAsiento                            CVSCCS"
+  },
+  {
+    "COLUMN_NAME": "SITUACIONORIGINAL",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "SituacionOriginal                           CVSTOR"
+  },
+  {
+    "COLUMN_NAME": "CODIGOVENDEDORPOSEEDOR",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoVendedorPoseedor                      CVVDPO"
+  },
+  {
+    "COLUMN_NAME": "ID",
+    "DATA_TYPE": "INTEGER",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "MARCAACTUALIZACION",
+    "DATA_TYPE": "VARCHAR",
+    "COLUMN_TEXT": null
+  }
+]
