@@ -315,6 +315,18 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 ${dsUpdatedCol},
                 ${dsFirmaCol},
                 ${dsObsCol},
+                COALESCE((SELECT CAC2.NUMEROFACTURA FROM DSEDAC.CAC CAC2
+                    WHERE CAC2.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND CAC2.SERIEALBARAN = CPC.SERIEALBARAN
+                      AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
+                    FETCH FIRST 1 ROW ONLY), 0) as NUMEROFACTURA,
+                COALESCE((SELECT TRIM(CAC2.SERIEFACTURA) FROM DSEDAC.CAC CAC2
+                    WHERE CAC2.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND CAC2.SERIEALBARAN = CPC.SERIEALBARAN
+                      AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
+                    FETCH FIRST 1 ROW ONLY), '') as SERIEFACTURA,
+                COALESCE((SELECT CAC2.EJERCICIOFACTURA FROM DSEDAC.CAC CAC2
+                    WHERE CAC2.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND CAC2.SERIEALBARAN = CPC.SERIEALBARAN
+                      AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
+                    FETCH FIRST 1 ROW ONLY), 0) as EJERCICIOFACTURA,
                 COALESCE((SELECT FIRMANOMBRE FROM DSEDAC.CACFIRMAS 
                     WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
                       AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
@@ -399,7 +411,9 @@ router.get('/history/documents/:clientId', async (req, res) => {
             }
 
             const hasFirmaPath = !!row.FIRMA_PATH;
-            const numFactura = row.NUMEROFACTURA || 0;
+            const numFactura = parseInt(row.NUMEROFACTURA) || 0;
+            const serieFactura = (row.SERIEFACTURA || '').trim();
+            const ejercicioFactura = parseInt(row.EJERCICIOFACTURA) || 0;
             const isFactura = numFactura > 0;
 
             // Legacy signature detection (from CACFIRMAS)
@@ -425,6 +439,8 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 number: isFactura ? numFactura : row.NUMEROALBARAN,
                 albaranNumber: row.NUMEROALBARAN,
                 facturaNumber: numFactura || null,
+                serieFactura: serieFactura || null,
+                ejercicioFactura: ejercicioFactura || null,
                 serie: serie,
                 ejercicio: row.EJERCICIOALBARAN,
                 terminal: row.TERMINALALBARAN,

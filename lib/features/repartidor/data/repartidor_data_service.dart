@@ -158,6 +158,8 @@ class HistoryDocument {
   final int number;
   final int? albaranNumber;
   final int? facturaNumber;
+  final String? serieFactura;
+  final int? ejercicioFactura;
   final String serie;
   final int ejercicio;
   final int terminal;
@@ -182,6 +184,8 @@ class HistoryDocument {
     required this.number,
     this.albaranNumber,
     this.facturaNumber,
+    this.serieFactura,
+    this.ejercicioFactura,
     this.serie = 'A',
     this.ejercicio = 0,
     this.terminal = 0,
@@ -207,6 +211,8 @@ class HistoryDocument {
       number: json['number'] ?? 0,
       albaranNumber: json['albaranNumber'],
       facturaNumber: json['facturaNumber'],
+      serieFactura: json['serieFactura'],
+      ejercicioFactura: json['ejercicioFactura'],
       serie: json['serie'] ?? 'A',
       ejercicio: json['ejercicio'] ?? 0,
       terminal: json['terminal'] ?? 0,

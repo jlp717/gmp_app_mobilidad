@@ -137,11 +137,10 @@ class _GlobalVendorSelectorState extends State<GlobalVendorSelector> {
                               ..._vendedores.map((v) {
                                 final code = v['code']?.toString() ?? '';
                                 final name = v['name']?.toString() ?? '';
-                                // REMOVED (0) count as requested by User
-                                final displayName = name.isNotEmpty ? name : 'Vendedor $code';
+                                final displayName = name.isNotEmpty ? '$code - $name' : 'Vendedor $code';
                                 return DropdownMenuItem<String>(
                                   value: code,
-                                  child: Text(displayName, style: const TextStyle(color: Colors.white)),
+                                  child: Text(displayName, style: const TextStyle(color: Colors.white, fontSize: 12)),
                                 );
                               }),
                             ],

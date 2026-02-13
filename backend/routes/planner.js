@@ -268,6 +268,9 @@ router.get('/rutero/vendedores', async (req, res) => {
         const { role } = req.query;
         let sql;
 
+        // Definitive whitelist of active commercial codes (matches comisiones)
+        const ACTIVE_COMERCIALES = ['01','02','03','05','10','13','15','16','33','35','72','73','80','81','83','92','93','95','97','98'];
+
         if (role === 'repartidor') {
             sql = `
                     SELECT TRIM(V.CODIGOVENDEDOR) as code, TRIM(D.NOMBREVENDEDOR) as name
@@ -277,12 +280,12 @@ router.get('/rutero/vendedores', async (req, res) => {
                 `;
         } else {
             // Default: Commercials (Sales Reps)
-            // JOIN VDC to filter ONLY GMP subempresa vendors (excludes ZZ, obsolete, non-GMP)
+            // Use strict whitelist of known active comerciales matching comision system
+            const inList = ACTIVE_COMERCIALES.map(c => `'${c}'`).join(',');
             sql = `
-                    SELECT TRIM(VDC.CODIGOVENDEDOR) as code, TRIM(VDD.NOMBREVENDEDOR) as name
-                    FROM DSEDAC.VDC VDC
-                    JOIN DSEDAC.VDD VDD ON VDC.CODIGOVENDEDOR = VDD.CODIGOVENDEDOR
-                    WHERE VDC.SUBEMPRESA = 'GMP'
+                    SELECT TRIM(VDD.CODIGOVENDEDOR) as code, TRIM(VDD.NOMBREVENDEDOR) as name
+                    FROM DSEDAC.VDD VDD
+                    WHERE TRIM(VDD.CODIGOVENDEDOR) IN (${inList})
                     ORDER BY VDD.NOMBREVENDEDOR
                 `;
         }
@@ -296,20 +299,12 @@ router.get('/rutero/vendedores', async (req, res) => {
             const code = (v.CODE || v.code || v.Code || '').toString().trim();
             const name = (v.NAME || v.name || v.Name || '').toString().trim();
             return { code, name: name || `Vendedor ${code}` };
-        }).filter(v => {
-            if (!v.code || v.code.length === 0) return false;
-            // Exclude ZZ-prefixed entries (obsolete/placeholder vendors)
-            if (v.name.toUpperCase().startsWith('ZZ')) return false;
-            // Exclude entries with names indicating obsolete routes
-            const upperName = v.name.toUpperCase();
-            if (upperName.includes('RUTA COMP') || upperName.includes('(ANTES ') || upperName.includes('ENCARGOS')) return false;
-            return true;
-        });
+        }).filter(v => v.code && v.code.length > 0);
 
         // Sort by code ascending as requested
         mapped.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
-        logger.info(`[VENDEDORES] Returning ${mapped.length} active ${role || 'comercial'} vendors (filtered from ${vendedores.length} raw)`);
+        logger.info(`[VENDEDORES] Returning ${mapped.length} active ${role || 'comercial'} vendors`);
 
         res.json({ vendedores: mapped });
     } catch (error) {

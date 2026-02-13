@@ -365,6 +365,10 @@ class _MainShellState extends State<MainShell> {
                                  _forceRepartidorMode = !_forceRepartidorMode;
                                  _currentIndex = 0; // Reset tab
                                });
+                               // Ensure repartidores are loaded when switching to reparto mode
+                               if (_forceRepartidorMode && _repartidoresOptions.isEmpty) {
+                                 _fetchRepartidores();
+                               }
                              },
                              borderRadius: BorderRadius.circular(12),
                              child: Container(

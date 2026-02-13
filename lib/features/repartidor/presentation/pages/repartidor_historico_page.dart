@@ -131,6 +131,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           terminal: d.terminal,
           albaranNumber: d.albaranNumber ?? d.number,
           facturaNumber: d.facturaNumber,
+          serieFactura: d.serieFactura,
+          ejercicioFactura: d.ejercicioFactura,
           date: DateTime.tryParse(d.date) ?? DateTime.now(),
           amount: d.amount,
           pending: d.pending,
@@ -722,10 +724,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text('#${doc.number}',
+                // Show proper number: for facturas show serieFactura-facturaNumber, for albaranes show serie-albaranNumber
+                Text(
+                  isFactura && doc.facturaNumber != null && doc.facturaNumber! > 0
+                    ? '${doc.serieFactura ?? doc.serie}-${doc.facturaNumber}'
+                    : '${doc.serie}-${doc.number}',
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
                 if (isFactura && doc.albaranNumber != null && doc.albaranNumber != doc.number)
-                  Text('  (Alb. ${doc.albaranNumber})',
+                  Text('  (Alb. ${doc.serie}-${doc.albaranNumber})',
                     style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.7))),
                 const Spacer(),
                 Icon(statusIcon, size: 15, color: statusColor),
@@ -1179,6 +1185,8 @@ class _DocumentItem {
   final int terminal;
   final int? albaranNumber;
   final int? facturaNumber;
+  final String? serieFactura;
+  final int? ejercicioFactura;
   final DateTime date;
   final double amount;
   final double pending;
@@ -1202,6 +1210,8 @@ class _DocumentItem {
     this.terminal = 0,
     this.albaranNumber,
     this.facturaNumber,
+    this.serieFactura,
+    this.ejercicioFactura,
     required this.date,
     required this.amount,
     this.pending = 0,
