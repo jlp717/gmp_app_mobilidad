@@ -8,7 +8,7 @@
 #   4. FACTURA -0 fix (documents should have proper factura numbers)
 # =============================================================================
 
-BASE_URL="http://localhost:3334"
+BASE_URL="http://localhost:3000"
 # Login credentials — adjust as needed
 LOGIN_USER="${1:-01}"
 LOGIN_PIN="${2:-1234}"
