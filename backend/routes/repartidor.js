@@ -302,10 +302,9 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 LS.ANO as LEGACY_ANO,
                 LS.HORA as LEGACY_HORA
             FROM DSEDAC.CPC CPC
+            ${repartidorJoin}
             LEFT JOIN JAVIER.DELIVERY_STATUS DS ON 
-                DS.YEAR = CPC.EJERCICIOALBARAN AND
-                DS.SERIES = CPC.SERIEALBARAN AND
-                DS.NUMBER = CPC.NUMEROALBARAN
+                DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
             LEFT JOIN DSEDAC.CACFIRMAS LS ON
                 LS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND
                 LS.SERIEALBARAN = CPC.SERIEALBARAN AND
@@ -313,6 +312,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 LS.NUMEROALBARAN = CPC.NUMEROALBARAN
             WHERE CPC.EJERCICIOALBARAN = ${year}
               AND CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
+              ${dateFilter}
             ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
         `;
 

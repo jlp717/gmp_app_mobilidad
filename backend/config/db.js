@@ -63,7 +63,8 @@ async function query(sql, logQuery = true, logError = true) {
                 error.message.includes('SYSDUMMY1');
 
             if (logError && attempt === MAX_RETRIES) {
-                logger.error(`❌ Query Error (Final Attempt): ${error.message} \nSQL: ${sql ? sql.substring(0, 50) : 'N/A'}`);
+                const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
+                logger.error(`❌ Query Error (Final Attempt): ${error.message} ${odbcDetails}\nSQL: ${sql ? sql.replace(/\s+/g, ' ').substring(0, 200) : 'N/A'}`);
             } else if (logError) {
                 logger.warn(`⚠️ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
             }

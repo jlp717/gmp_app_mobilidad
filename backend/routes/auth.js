@@ -272,19 +272,42 @@ router.post('/switch-role', authenticateToken, async (req, res) => {
 // GET /repartidores - List of all repartidores for Jefe dropdown
 router.get('/repartidores', authenticateToken, async (req, res) => {
     try {
-        const sql = `
-                SELECT TRIM(V.CODIGOVENDEDOR) as code, TRIM(D.NOMBREVENDEDOR) as name
+        // Split into two separate queries for resilience (UNION on different tables can fail in DB2)
+        let results = [];
+
+        // 1. Get drivers from VEH + VDD (vendedores with vehicle)
+        try {
+            const vehRows = await query(`
+                SELECT TRIM(V.CODIGOVENDEDOR) as CODE, TRIM(D.NOMBREVENDEDOR) as NAME
                 FROM DSEDAC.VEH V
                 JOIN DSEDAC.VDD D ON V.CODIGOVENDEDOR = D.CODIGOVENDEDOR
-                
-                UNION
-                
-                SELECT TRIM(CODIGOREPARTIDOR) as code, TRIM(NOMBREREPARTIDOR) as name
+            `, false);
+            if (vehRows && vehRows.length > 0) {
+                results.push(...vehRows.map(r => ({ code: (r.CODE || '').trim(), name: (r.NAME || '').trim() })));
+            }
+        } catch (e) {
+            logger.warn(`[Auth] Error querying VEH/VDD for repartidores: ${e.message}`);
+        }
+
+        // 2. Get repartidores from REP table
+        try {
+            const repRows = await query(`
+                SELECT TRIM(CODIGOREPARTIDOR) as CODE, TRIM(NOMBREREPARTIDOR) as NAME
                 FROM DSEDAC.REP
-                ORDER BY 1 ASC
-            `;
-        const result = await query(sql);
-        res.json(result);
+            `, false);
+            if (repRows && repRows.length > 0) {
+                results.push(...repRows.map(r => ({ code: (r.CODE || '').trim(), name: (r.NAME || '').trim() })));
+            }
+        } catch (e) {
+            logger.warn(`[Auth] Error querying REP for repartidores: ${e.message}`);
+        }
+
+        // 3. Deduplicate by code and sort
+        const uniqueMap = new Map();
+        results.forEach(r => { if (r.code) uniqueMap.set(r.code, r); });
+        const deduplicated = Array.from(uniqueMap.values()).sort((a, b) => a.code.localeCompare(b.code));
+
+        res.json(deduplicated);
     } catch (error) {
         logger.error(`Error fetching repartidores: ${error.message}`);
         res.status(500).json({ error: 'Error de base de datos' });
