@@ -231,9 +231,10 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
     final total = _deliverySummary['totalAlbaranes'] ?? 0;
     final entregados = _deliverySummary['entregados'] ?? 0;
     final noEntregados = _deliverySummary['noEntregados'] ?? 0;
-    final pendientes = _deliverySummary['pendientes'] ?? 0;
+    final rawPendientes = _deliverySummary['pendientes'] ?? 0;
+    final pendientes = rawPendientes < 0 ? 0 : rawPendientes;
     final importe = (_deliverySummary['importeTotal'] ?? 0).toDouble();
-    final pctEntrega = total > 0 ? (entregados / total * 100) : 0.0;
+    final pctEntrega = total > 0 ? (entregados / total * 100).clamp(0.0, 100.0) : 0.0;
 
     return Column(
       children: [
@@ -434,7 +435,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text('$day', style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+                        Text('${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
                       ],
                     ),
                   ),
@@ -489,7 +490,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             ),
             child: const Row(
               children: [
-                SizedBox(width: 40, child: Text('Día', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
+                SizedBox(width: 50, child: Text('Día', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
                 Expanded(child: Text('Total', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
                 Expanded(child: Text('Entreg.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonGreen))),
                 Expanded(child: Text('No Ent.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFE53935)))),
@@ -513,7 +514,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
               ),
               child: Row(
                 children: [
-                  SizedBox(width: 40, child: Text('$day', style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary, fontWeight: FontWeight.w600))),
+                  SizedBox(width: 50, child: Text('${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary, fontWeight: FontWeight.w600))),
                   Expanded(child: Text('$total', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
                   Expanded(child: Text('$delivered', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: AppTheme.neonGreen, fontWeight: FontWeight.bold))),
                   Expanded(child: Text('$notDel', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: notDel > 0 ? AppTheme.error : AppTheme.textSecondary))),

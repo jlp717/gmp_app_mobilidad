@@ -129,6 +129,7 @@ class HistoryClient {
   final int totalDocuments;
   final double totalAmount;
   final String? lastVisit;
+  final String? repCode;
 
   HistoryClient({
     required this.id,
@@ -137,6 +138,7 @@ class HistoryClient {
     required this.totalDocuments,
     this.totalAmount = 0,
     this.lastVisit,
+    this.repCode,
   });
 
   factory HistoryClient.fromJson(Map<String, dynamic> json) {
@@ -147,6 +149,7 @@ class HistoryClient {
       totalDocuments: json['totalDocuments'] ?? 0,
       totalAmount: (json['totalAmount'] ?? 0).toDouble(),
       lastVisit: json['lastVisit'],
+      repCode: json['repCode'],
     );
   }
 }

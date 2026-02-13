@@ -335,6 +335,10 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                           const SizedBox(width: 12),
                           _clientStat(Icons.calendar_today, client.lastVisit!, AppTheme.textSecondary),
                         ],
+                        if (client.repCode != null && client.repCode!.isNotEmpty) ...[
+                          const SizedBox(width: 12),
+                          _clientStat(Icons.local_shipping, 'Rep ${client.repCode!}', AppTheme.neonPurple),
+                        ],
                       ],
                     ),
                   ],

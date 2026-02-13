@@ -232,6 +232,7 @@ class _MainShellState extends State<MainShell> {
     // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
+      final isRealRepartidor = user?.isRepartidor == true;
       items.add(_NavItem(
         icon: Icons.dashboard_outlined,
         selectedIcon: Icons.dashboard,
@@ -250,12 +251,15 @@ class _MainShellState extends State<MainShell> {
         label: 'Rutero',
         color: AppTheme.neonBlue,
       ));
-      items.add(_NavItem(
-        icon: Icons.euro_outlined,
-        selectedIcon: Icons.euro,
-        label: 'Comisiones',
-        color: AppTheme.neonGreen,
-      ));
+      // Comisiones only for real repartidores, not Jefe in repartidor mode
+      if (isRealRepartidor) {
+        items.add(_NavItem(
+          icon: Icons.euro_outlined,
+          selectedIcon: Icons.euro,
+          label: 'Comisiones',
+          color: AppTheme.neonGreen,
+        ));
+      }
       items.add(_NavItem(
         icon: Icons.history_outlined,
         selectedIcon: Icons.history,
@@ -787,11 +791,14 @@ class _MainShellState extends State<MainShell> {
     final isRepartidor = _isRepartidorEffective; 
     
     // ===============================================
-    // REPARTIDOR: 0=Panel, 1=Clientes, 2=Rutero, 3=Comisiones, 4=Histórico, 5=Chat IA
+    // REPARTIDOR: Dynamic indices — Comisiones only for real repartidores
+    // Real rep:  0=Panel, 1=Clientes, 2=Rutero, 3=Comisiones, 4=Histórico, 5=Chat IA
+    // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
     // ===============================================
     if (isRepartidor) {
       // Determine effective repartidor ID
       String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); // Default for real repartidor
+      final isRealRepartidor = user?.isRepartidor == true;
       
       // If Jefe, override with selection
       if (isJefeVentas) {
@@ -806,30 +813,31 @@ class _MainShellState extends State<MainShell> {
           }
       }
 
+      // Map tab indices dynamically based on whether Comisiones is visible
+      Widget pageForIndex(int idx) {
+        if (idx == 0) return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
+        if (idx == 1) return RepartidorClientesPage(repartidorId: effectiveRepartidorId);
+        if (idx == 2) return ChangeNotifierProvider(
+          create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
+          child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
+        );
+        if (isRealRepartidor) {
+          // 0=Panel, 1=Clientes, 2=Rutero, 3=Comisiones, 4=Histórico, 5=Chat IA
+          if (idx == 3) return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
+          if (idx == 4) return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
+          if (idx == 5) return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
+        } else {
+          // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
+          if (idx == 3) return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
+          if (idx == 4) return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
+        }
+        return const Center(child: Text('Página no encontrada'));
+      }
+
       // Use KeyedSubtree to force complete widget tree rebuild when ID changes
       final content = KeyedSubtree(
         key: ValueKey('rutero_view_$effectiveRepartidorId'),
-        child: Builder(builder: (_) {
-          switch (_currentIndex) {
-            case 0:
-              return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
-            case 1:
-              return RepartidorClientesPage(repartidorId: effectiveRepartidorId);
-            case 2:
-              return ChangeNotifierProvider(
-                create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-                child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
-              );
-            case 3:
-              return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
-            case 4:
-              return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
-            case 5:
-              return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
-            default:
-              return const Center(child: Text('Página no encontrada'));
-          }
-        }),
+        child: Builder(builder: (_) => pageForIndex(_currentIndex)),
       );
 
       // Wrap in Column with Header only if Jefe

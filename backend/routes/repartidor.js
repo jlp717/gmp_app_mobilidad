@@ -1052,24 +1052,39 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Delivery summary for ${repartidorId}, ${selectedMonth}/${selectedYear}`);
 
+        // Subquery deduplicates by unique albaran key FIRST, then outer query aggregates by day.
+        // This prevents inflated counts when multiple CPC rows exist per albaran.
+        const dsAvail = isDeliveryStatusAvailable();
+        const dsJoinSub = dsAvail
+            ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))`
+            : '';
+
         const sql = `
-            SELECT 
-                OPP.DIAREPARTO as DIA,
-                COUNT(DISTINCT CPC.EJERCICIOALBARAN || '-' || CPC.SERIEALBARAN || '-' || CAST(CPC.TERMINALALBARAN AS VARCHAR(10)) || '-' || CAST(CPC.NUMEROALBARAN AS VARCHAR(10))) as TOTAL_ALBARANES,
-                SUM(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R') ${isDeliveryStatusAvailable() ? "OR DS.STATUS = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADOS,
-                SUM(CASE WHEN ${isDeliveryStatusAvailable() ? "DS.STATUS = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADOS,
-                SUM(CASE WHEN ${isDeliveryStatusAvailable() ? "DS.STATUS = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIALES,
-                SUM(CPC.IMPORTETOTAL) as IMPORTE_TOTAL
-            FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC 
-                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            ${isDeliveryStatusAvailable() ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))` : ''}
-            WHERE OPP.ANOREPARTO = ${selectedYear}
-              AND OPP.MESREPARTO = ${selectedMonth}
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
-            GROUP BY OPP.DIAREPARTO
-            ORDER BY OPP.DIAREPARTO
+            SELECT DIA,
+                COUNT(*) as TOTAL_ALBARANES,
+                SUM(ENTREGADO) as ENTREGADOS,
+                SUM(NO_ENTREGADO) as NO_ENTREGADOS,
+                SUM(PARCIAL) as PARCIALES,
+                SUM(IMPORTE) as IMPORTE_TOTAL
+            FROM (
+                SELECT 
+                    OPP.DIAREPARTO as DIA,
+                    CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN) as SERIE, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
+                    MAX(CPC.IMPORTETOTAL) as IMPORTE,
+                    MAX(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R') ${dsAvail ? "OR DS.STATUS = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADO,
+                    MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADO,
+                    MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIAL
+                FROM DSEDAC.OPP OPP
+                INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                ${dsJoinSub}
+                WHERE OPP.ANOREPARTO = ${selectedYear}
+                  AND OPP.MESREPARTO = ${selectedMonth}
+                  AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
+                GROUP BY OPP.DIAREPARTO, CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN), CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
+            ) ALBS
+            GROUP BY DIA
+            ORDER BY DIA
         `;
 
         const rows = await query(sql, false) || [];
@@ -1096,20 +1111,21 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
                 delivered: ent,
                 notDelivered: noEnt,
                 partial: parc,
-                pending: albs - ent - noEnt - parc,
+                pending: Math.max(0, albs - ent - noEnt - parc),
                 amount: imp
             };
         });
 
+        const pendientesRaw = totalAlbaranes - totalEntregados - totalNoEntregados - totalParciales;
         res.json({
             success: true,
             period: { year: selectedYear, month: selectedMonth },
             summary: {
                 totalAlbaranes,
-                entregados: totalEntregados,
+                entregados: Math.min(totalEntregados, totalAlbaranes),
                 noEntregados: totalNoEntregados,
                 parciales: totalParciales,
-                pendientes: totalAlbaranes - totalEntregados - totalNoEntregados - totalParciales,
+                pendientes: Math.max(0, pendientesRaw),
                 importeTotal: parseFloat(totalImporte.toFixed(2))
             },
             daily
@@ -1986,13 +2002,15 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
                 COUNT(DISTINCT CPC.NUMEROALBARAN) as TOTAL_DOCS,
                 COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
-                MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
+                MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT,
+                MAX(TRIM(OPP.CODIGOREPARTIDOR)) as REP_CODE
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             LEFT JOIN DSEDAC.CLI CLI
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+              AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
         `;
 
         if (search) {
@@ -2022,7 +2040,8 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                 address: (r.ADDRESS || '').trim(),
                 totalDocuments: r.TOTAL_DOCS || 0,
                 totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
-                lastVisit: lastVisitStr
+                lastVisit: lastVisitStr,
+                repCode: (r.REP_CODE || '').trim() || null
             };
         });
 
