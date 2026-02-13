@@ -38,8 +38,8 @@ router.get('/metrics', async (req, res) => {
             COALESCE(SUM(L.LCCTEV), 0) as boxes,
             COUNT(DISTINCT L.LCCDCL) as activeClients
           FROM DSED.LACLAE L
-          WHERE L.LCYEAB = ${currentYear} 
-            AND L.LCMMDC = ${currentMonth} 
+          WHERE L.LCAADC = ${currentYear}
+            AND L.LCMMDC = ${currentMonth}
             AND ${LACLAE_SALES_FILTER}
             ${vendedorFilter}
         `;
@@ -50,8 +50,8 @@ router.get('/metrics', async (req, res) => {
             COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) as margin,
             COALESCE(SUM(L.LCCTEV), 0) as boxes
           FROM DSED.LACLAE L
-          WHERE L.LCYEAB = ${currentYear - 1} 
-            AND L.LCMMDC = ${currentMonth} 
+          WHERE L.LCAADC = ${currentYear - 1}
+            AND L.LCMMDC = ${currentMonth}
             AND ${LACLAE_SALES_FILTER}
             ${vendedorFilter}
         `;
@@ -221,9 +221,9 @@ router.get('/matrix-data', async (req, res) => {
             }
         });
 
-        // FIX: Use LCIMVT (= IMPORTEVENTA, same physical column) with LACLAE_SALES_FILTER
-        // for consistency with dashboard/metrics, objectives, and commissions endpoints.
-        // Previously used LAC_SALES_FILTER which has different EXISTS conditions.
+        // Matrix uses DSEDAC.LAC (has CODIGOARTICULO for product grouping).
+        // DSEDAC.LAC does NOT have TPDC column, so must use LAC_SALES_FILTER (not LACLAE).
+        // LCIMVT/LCIMCT short column names work on both LAC and LACLAE tables.
         selectClauses.push('SUM(L.LCIMVT) as SALES');
         selectClauses.push('SUM(L.LCIMVT - L.LCIMCT) as MARGIN');
 
@@ -231,7 +231,7 @@ router.get('/matrix-data', async (req, res) => {
             SELECT ${selectClauses.join(', ')}
             FROM DSEDAC.LAC L
               WHERE 1=1
-              AND ${LACLAE_SALES_FILTER}
+              AND ${LAC_SALES_FILTER}
               ${yearFilter}
               ${vendedorFilter}
               ${clientFilter}
@@ -358,13 +358,13 @@ router.get('/sales-evolution', async (req, res) => {
         const selectedYears = years
             ? years.split(',').map(y => parseInt(y.trim()))
             : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
-        const yearsFilter = `AND L.LCYEAB IN (${selectedYears.join(',')})`;
+        const yearsFilter = `AND L.LCAADC IN (${selectedYears.join(',')})`;
 
         let dateFilter = '';
         if (upToToday === 'true') {
             const currentMonth = now.getMonth() + 1;
             const currentDay = now.getDate();
-            dateFilter = `AND (L.LCYEAB < ${now.getFullYear()} OR (L.LCYEAB = ${now.getFullYear()} AND L.LCMMDC < ${currentMonth}) OR (L.LCYEAB = ${now.getFullYear()} AND L.LCMMDC = ${currentMonth} AND L.LCDDDC <= ${currentDay}))`;
+            dateFilter = `AND (L.LCAADC < ${now.getFullYear()} OR (L.LCAADC = ${now.getFullYear()} AND L.LCMMDC < ${currentMonth}) OR (L.LCAADC = ${now.getFullYear()} AND L.LCMMDC = ${currentMonth} AND L.LCDDDC <= ${currentDay}))`;
         }
 
         const cacheKey = `dashboard:evolution:${years}:${granularity}:${upToToday}:${vendedorCodes}`;
@@ -372,14 +372,14 @@ router.get('/sales-evolution', async (req, res) => {
 
         if (granularity === 'week') {
             const dailyQuery = `
-        SELECT L.LCYEAB as year, L.LCMMDC as month, L.LCDDDC as day,
+        SELECT L.LCAADC as year, L.LCMMDC as month, L.LCDDDC as day,
                SUM(L.LCIMVT) as sales,
                COUNT(DISTINCT L.LCNRAB) as orders,
                COUNT(DISTINCT L.LCCDCL) as clients
         FROM DSED.LACLAE L
         WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${dateFilter} ${vendedorFilter}
-        GROUP BY L.LCYEAB, L.LCMMDC, L.LCDDDC
-        ORDER BY L.LCYEAB DESC, L.LCMMDC DESC, L.LCDDDC DESC
+        GROUP BY L.LCAADC, L.LCMMDC, L.LCDDDC
+        ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
       `;
             const dailyData = await cachedQuery(query, dailyQuery, `${cacheKey}:daily`, TTL.LONG);
 
@@ -402,14 +402,14 @@ router.get('/sales-evolution', async (req, res) => {
 
         } else {
             const monthlyQuery = `
-        SELECT L.LCYEAB as year, L.LCMMDC as month,
+        SELECT L.LCAADC as year, L.LCMMDC as month,
                SUM(L.LCIMVT) as totalSales,
                COUNT(DISTINCT L.LCNRAB) as totalOrders,
                COUNT(DISTINCT L.LCCDCL) as uniqueClients
         FROM DSED.LACLAE L
         WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${dateFilter} ${vendedorFilter}
-        GROUP BY L.LCYEAB, L.LCMMDC
-        ORDER BY L.LCYEAB DESC, L.LCMMDC DESC
+        GROUP BY L.LCAADC, L.LCMMDC
+        ORDER BY L.LCAADC DESC, L.LCMMDC DESC
       `;
             const rows = await cachedQuery(query, monthlyQuery, `${cacheKey}:monthly`, TTL.LONG);
             resultData = rows.map(r => ({

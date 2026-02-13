@@ -221,7 +221,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
         WHERE TRIM(L.LCCDVD) = '${safeCode}'
-          AND L.LCYEAB = ${safeYear}
+          AND L.LCAADC = ${safeYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
 
@@ -231,7 +231,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDVD) = '${safeCode}'
-              AND L.LCYEAB = ${safeYear - 1}
+              AND L.LCAADC = ${safeYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);
         return prevRows.map(r => r.CLIENT_CODE);
@@ -256,7 +256,7 @@ async function getClientsMonthlySales(clientCodes, year) {
             SUM(L.LCIMVT) as SALES
         FROM DSED.LACLAE L
         WHERE TRIM(L.LCCDCL) IN (${safeInClause})
-          AND L.LCYEAB = ${parseInt(year)}
+          AND L.LCAADC = ${parseInt(year)}
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
     `, false);
