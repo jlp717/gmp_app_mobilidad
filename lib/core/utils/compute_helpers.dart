@@ -3,6 +3,7 @@
 /// Move heavy JSON parsing to background isolate
 /// Prevents UI jank on large API responses
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
@@ -73,13 +74,21 @@ String _encodeJson(Map<String, dynamic> data) {
 const int _isolateThreshold = 50000; // ~50KB
 
 /// Smart JSON parse - uses isolate only for large data
-Future<Map<String, dynamic>> smartParseJson(String jsonString) async {
+/// Handles both JSON objects AND arrays (returns dynamic)
+/// IMPORTANT: Returns FutureOr<dynamic> — synchronous for small data
+/// to avoid Future-wrapping issues with Dio's SyncTransformer
+FutureOr<dynamic> smartParseJson(String jsonString) {
   if (jsonString.length < _isolateThreshold) {
-    // Small data - parse on main thread
-    return json.decode(jsonString) as Map<String, dynamic>;
+    // Small data - parse synchronously on main thread (no Future wrapping!)
+    return json.decode(jsonString);
   }
-  // Large data - use isolate
-  return compute(_parseJson, jsonString);
+  // Large data - use isolate (returns Future)
+  return compute(_parseJsonDynamic, jsonString);
+}
+
+/// Internal dynamic JSON parser for isolate (handles both Map and List)
+dynamic _parseJsonDynamic(String jsonString) {
+  return json.decode(jsonString);
 }
 
 /// Smart JSON list parse

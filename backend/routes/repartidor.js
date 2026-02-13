@@ -451,7 +451,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 amount: importe,
                 pending: pendiente,
                 status,
-                hasSignature: hasFirmaPath || hasLegacySig || status === 'delivered',
+                hasSignature: hasFirmaPath || hasLegacySig,
                 signaturePath: row.FIRMA_PATH || null,
                 deliveryDate: row.DELIVERY_DATE || null,
                 deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
@@ -832,6 +832,7 @@ router.get('/history/signature', async (req, res) => {
             const dsRows = await query(`
                 SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'
             `, false);
+            logger.info(`[REPARTIDOR] Step 1 DELIVERY_STATUS: ${dsRows.length} rows for ID='${albId}'`);
             if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
                 firmaPath = dsRows[0].FIRMA_PATH;
             }
@@ -858,7 +859,9 @@ router.get('/history/signature', async (req, res) => {
                 firmante = firmaRows[0].FIRMANTE_NOMBRE;
                 fechaFirma = firmaRows[0].FECHA_FIRMA;
                 if (firmaBase64) signatureSource = 'REPARTIDOR_FIRMAS';
-                logger.info(`[REPARTIDOR] Found signature in REPARTIDOR_FIRMAS for ${albId}`);
+                logger.info(`[REPARTIDOR] Step 2 REPARTIDOR_FIRMAS: found row, hasBase64=${!!firmaBase64}`);
+            } else {
+                logger.info(`[REPARTIDOR] Step 2 REPARTIDOR_FIRMAS: 0 rows for numero=${numero}, ejercicio=${ejercicio}, serie='${(serie || 'A').trim()}'`);
             }
         } catch (e) {
             logger.warn(`[REPARTIDOR] REPARTIDOR_FIRMAS query error: ${e.message}`);
@@ -906,6 +909,7 @@ router.get('/history/signature', async (req, res) => {
                       AND LENGTH(TRIM(FIRMABASE64)) > 10
                     FETCH FIRST 1 ROW ONLY
                 `, false);
+                logger.info(`[REPARTIDOR] Step 4 CACFIRMAS (strict): ${cacRows.length} rows for ej=${ejercicio}, serie='${(serie || 'A').trim()}', term=${terminal || 0}, num=${numero}`);
                 if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
                     let b64 = cacRows[0].FIRMABASE64;
                     b64 = b64.replace(/^data:image\/\w+;base64,/, '');
@@ -918,6 +922,28 @@ router.get('/history/signature', async (req, res) => {
                         fechaFirma = `${cacRows[0].ANO}-${String(cacRows[0].MES).padStart(2, '0')}-${String(cacRows[0].DIA).padStart(2, '0')} ${String(cacRows[0].HORA).padStart(6, '0').substring(0, 2)}:${String(cacRows[0].HORA).padStart(6, '0').substring(2, 4)}`;
                     }
                     logger.info(`[REPARTIDOR] Found legacy signature in CACFIRMAS for ${albId}`);
+                } else {
+                    // Diagnostic: check if row exists WITHOUT the FIRMABASE64 filter
+                    try {
+                        const diagRows = await query(`
+                            SELECT TRIM(FIRMANOMBRE) as FIRMANOMBRE, 
+                                   CASE WHEN FIRMABASE64 IS NULL THEN 'NULL' 
+                                        WHEN LENGTH(TRIM(FIRMABASE64)) <= 10 THEN 'TOO_SHORT' 
+                                        ELSE 'HAS_DATA' END as FIRMA_STATUS,
+                                   LENGTH(FIRMABASE64) as FIRMA_LEN
+                            FROM DSEDAC.CACFIRMAS
+                            WHERE EJERCICIOALBARAN = ${ejercicio}
+                              AND TRIM(SERIEALBARAN) = '${(serie || 'A').trim()}'
+                              AND TERMINALALBARAN = ${terminal || 0}
+                              AND NUMEROALBARAN = ${numero}
+                            FETCH FIRST 1 ROW ONLY
+                        `, false);
+                        if (diagRows.length > 0) {
+                            logger.info(`[REPARTIDOR] CACFIRMAS row EXISTS but firma=${diagRows[0].FIRMA_STATUS} (len=${diagRows[0].FIRMA_LEN}), name='${diagRows[0].FIRMANOMBRE}'`);
+                        } else {
+                            logger.info(`[REPARTIDOR] CACFIRMAS: NO row at all for this albaran`);
+                        }
+                    } catch (de) { /* diagnostic only */ }
                 }
             } catch (e) {
                 logger.warn(`[REPARTIDOR] CACFIRMAS lookup error: ${e.message}`);

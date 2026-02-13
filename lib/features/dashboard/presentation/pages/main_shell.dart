@@ -179,7 +179,12 @@ class _MainShellState extends State<MainShell> {
   Future<void> _fetchRepartidores() async {
       setState(() => _isLoadingRepartidores = true);
       try {
+        debugPrint('[MainShell] _fetchRepartidores: calling API...');
         final res = await ApiClient.getList('/auth/repartidores');
+        debugPrint('[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}');
+        if (res.isNotEmpty) {
+          debugPrint('[MainShell] First item: ${res.first} (type=${res.first.runtimeType})');
+        }
         if (!mounted) return;
         setState(() {
            // Helper to safely get value regardless of case
@@ -191,7 +196,7 @@ class _MainShellState extends State<MainShell> {
            }
 
            _repartidoresOptions = res.map((item) {
-              final m = item as Map;
+              final m = Map<String, dynamic>.from(item as Map);
               return {
                  'code': getValue(m, 'code') ?? getValue(m, 'CODIGOVENDEDOR') ?? '',
                  'name': getValue(m, 'name') ?? getValue(m, 'NOMBREVENDEDOR') ?? 'Desconocido',
@@ -202,10 +207,12 @@ class _MainShellState extends State<MainShell> {
            _repartidoresOptions.sort((a, b) => 
              (a['code']?.toString() ?? '').compareTo(b['code']?.toString() ?? ''));
            
+           debugPrint('[MainShell] _fetchRepartidores: mapped ${_repartidoresOptions.length} options');
            _isLoadingRepartidores = false;
         });
-      } catch (e) {
-        debugPrint('Error fetching repartidores: $e');
+      } catch (e, stack) {
+        debugPrint('[MainShell] ERROR fetching repartidores: $e');
+        debugPrint('[MainShell] Stack: $stack');
         if (mounted) setState(() => _isLoadingRepartidores = false);
       }
   }
