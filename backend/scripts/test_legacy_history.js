@@ -8,13 +8,14 @@ async function testLegacyHistory() {
         // We need a client that has signatures in CACFIRMAS.
         // Let's first find one.
         const headerSql = `
-            SELECT FIRST 1 CODIGOCLIENTEALBARAN 
+            SELECT CODIGOCLIENTEALBARAN 
             FROM DSEDAC.CPC CPC
             JOIN DSEDAC.CACFIRMAS CF ON 
                 CF.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND
                 CF.SERIEALBARAN = CPC.SERIEALBARAN AND
                 CF.TERMINALALBARAN = CPC.TERMINALALBARAN AND
                 CF.NUMEROALBARAN = CPC.NUMEROALBARAN
+            FETCH FIRST 1 ROWS ONLY
         `;
         const headers = await query(headerSql, false);
         if (headers.length === 0) {

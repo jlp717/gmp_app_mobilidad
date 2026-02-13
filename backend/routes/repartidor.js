@@ -297,7 +297,11 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 DS.FIRMA_PATH,
                 DS.INCIDENCE_TYPE,
                 DS.OBSERVATIONS,
-                COALESCE(LS.FIRMANOMBRE, '') as LEGACY_FIRMA_NOMBRE
+                COALESCE(LS.FIRMANOMBRE, '') as LEGACY_FIRMA_NOMBRE,
+                LS.DIA as LEGACY_DIA,
+                LS.MES as LEGACY_MES,
+                LS.ANO as LEGACY_ANO,
+                LS.HORA as LEGACY_HORA
             FROM DSEDAC.CPC CPC
             LEFT JOIN JAVIER.DELIVERY_STATUS DS ON 
                 DS.YEAR = CPC.EJERCICIOALBARAN AND
@@ -392,7 +396,10 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
                 deliveryObs: row.DELIVERY_OBS || null,
                 legacySignatureName: row.LEGACY_FIRMA_NOMBRE || null,
-                hasLegacySignature: (row.LEGACY_FIRMA_NOMBRE && row.LEGACY_FIRMA_NOMBRE.length > 0)
+                hasLegacySignature: (row.LEGACY_FIRMA_NOMBRE && row.LEGACY_FIRMA_NOMBRE.length > 0),
+                legacyDate: (row.LEGACY_ANO > 0)
+                    ? `${row.LEGACY_ANO}-${String(row.LEGACY_MES).padStart(2, '0')}-${String(row.LEGACY_DIA).padStart(2, '0')} ${String(row.LEGACY_HORA).padStart(6, '0').substring(0, 2)}:${String(row.LEGACY_HORA).padStart(6, '0').substring(2, 4)}`
+                    : null
             };
         });
 
@@ -1852,5 +1859,47 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
 }
 });
 */
+
+// ===================================
+// GET /history/legacy-signature/:id
+// Returns the Base64 signature from CACFIRMAS as an image
+// ===================================
+router.get('/history/legacy-signature/:id', async (req, res) => {
+    try {
+        const { id } = req.params; // Format: YEAR-SERIES-TERMINAL-NUMBER
+        const parts = id.split('-');
+        if (parts.length < 4) return res.status(400).send('Invalid ID format');
+
+        const [year, series, terminal, number] = parts;
+
+        const sql = `
+            SELECT FIRMABASE64
+            FROM DSEDAC.CACFIRMAS
+            WHERE EJERCICIOALBARAN = ${year}
+              AND SERIEALBARAN = '${series}'
+              AND TERMINALALBARAN = ${terminal}
+              AND NUMEROALBARAN = ${number}
+        `;
+
+        const rows = await query(sql, false);
+        if (rows.length === 0 || !rows[0].FIRMABASE64) {
+            return res.status(404).send('Signature not found');
+        }
+
+        let base64Image = rows[0].FIRMABASE64;
+        base64Image = base64Image.replace(/^data:image\/\w+;base64,/, "");
+        const imgBuffer = Buffer.from(base64Image, 'base64');
+
+        res.writeHead(200, {
+            'Content-Type': 'image/png',
+            'Content-Length': imgBuffer.length
+        });
+        res.end(imgBuffer);
+
+    } catch (error) {
+        logger.error(`Error fetching legacy signature: ${error.message}`);
+        res.status(500).send('Error fetching signature');
+    }
+});
 
 module.exports = router;
