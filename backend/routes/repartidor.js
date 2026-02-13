@@ -402,6 +402,10 @@ router.get('/history/documents/:clientId', async (req, res) => {
             const numFactura = row.NUMEROFACTURA || 0;
             const isFactura = numFactura > 0;
 
+            // Legacy signature detection (from CACFIRMAS)
+            const legacyNombre = (row.LEGACY_FIRMA_NOMBRE || '').trim();
+            const hasLegacySig = legacyNombre.length > 0 || (row.LEGACY_ANO && row.LEGACY_ANO > 0);
+
             // Format Time (HORALLEGADA is HHMMS or HHMMSS)
             let timeFormatted = null;
             if (row.HORALLEGADA && row.HORALLEGADA > 0) {
@@ -431,13 +435,13 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 amount: importe,
                 pending: pendiente,
                 status,
-                hasSignature: hasFirmaPath || status === 'delivered',
+                hasSignature: hasFirmaPath || hasLegacySig || status === 'delivered',
                 signaturePath: row.FIRMA_PATH || null,
                 deliveryDate: row.DELIVERY_DATE || null,
                 deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
                 deliveryObs: row.OBSERVACIONES || null,
-                legacySignatureName: row.LEGACY_FIRMA_NOMBRE || null,
-                hasLegacySignature: (row.LEGACY_FIRMA_NOMBRE && row.LEGACY_FIRMA_NOMBRE.length > 0),
+                legacySignatureName: legacyNombre || null,
+                hasLegacySignature: hasLegacySig,
                 legacyDate: (row.LEGACY_ANO > 0)
                     ? `${row.LEGACY_ANO}-${String(row.LEGACY_MES).padStart(2, '0')}-${String(row.LEGACY_DIA).padStart(2, '0')} ${String(row.LEGACY_HORA).padStart(6, '0').substring(0, 2)}:${String(row.LEGACY_HORA).padStart(6, '0').substring(2, 4)}`
                     : null
@@ -869,6 +873,37 @@ router.get('/history/signature', async (req, res) => {
                 }
             } catch (e) {
                 logger.warn(`[REPARTIDOR] File read error for ${firmaPath}: ${e.message}`);
+            }
+        }
+
+        // 4. CACFIRMAS (legacy ERP signatures) — last resort
+        if (!firmaBase64) {
+            try {
+                const cacRows = await query(`
+                    SELECT FIRMABASE64, TRIM(FIRMANOMBRE) as FIRMANOMBRE, DIA, MES, ANO, HORA
+                    FROM DSEDAC.CACFIRMAS
+                    WHERE EJERCICIOALBARAN = ${ejercicio}
+                      AND SERIEALBARAN = '${(serie || 'A').trim()}'
+                      AND TERMINALALBARAN = ${terminal || 0}
+                      AND NUMEROALBARAN = ${numero}
+                      AND FIRMABASE64 IS NOT NULL
+                    FETCH FIRST 1 ROW ONLY
+                `, false);
+                if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
+                    let b64 = cacRows[0].FIRMABASE64;
+                    b64 = b64.replace(/^data:image\/\w+;base64,/, '');
+                    firmaBase64 = b64;
+                    signatureSource = 'CACFIRMAS';
+                    if (!firmante && cacRows[0].FIRMANOMBRE && cacRows[0].FIRMANOMBRE.trim().length > 0) {
+                        firmante = cacRows[0].FIRMANOMBRE.trim();
+                    }
+                    if (!fechaFirma && cacRows[0].ANO > 0) {
+                        fechaFirma = `${cacRows[0].ANO}-${String(cacRows[0].MES).padStart(2, '0')}-${String(cacRows[0].DIA).padStart(2, '0')} ${String(cacRows[0].HORA).padStart(6, '0').substring(0, 2)}:${String(cacRows[0].HORA).padStart(6, '0').substring(2, 4)}`;
+                    }
+                    logger.info(`[REPARTIDOR] Found legacy signature in CACFIRMAS for ${albId}`);
+                }
+            } catch (e) {
+                logger.warn(`[REPARTIDOR] CACFIRMAS lookup error: ${e.message}`);
             }
         }
 

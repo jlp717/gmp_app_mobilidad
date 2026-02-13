@@ -140,6 +140,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           deliveryDate: d.deliveryDate,
           deliveryObs: d.deliveryObs,
           time: d.time,
+          legacySignatureName: d.legacySignatureName,
+          hasLegacySignature: d.hasLegacySignature,
+          legacyDate: d.legacyDate,
         );
       }).toList();
     } catch (e) {
@@ -754,7 +757,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 ],
                 const SizedBox(width: 12),
                 if (doc.hasSignature)
-                  Icon(Icons.draw, size: 14, color: AppTheme.neonPurple.withOpacity(0.7)),
+                  Tooltip(
+                    message: doc.hasLegacySignature && doc.signaturePath == null ? 'Firma histórica (ERP)' : 'Firma digital',
+                    child: Icon(
+                      doc.hasLegacySignature && doc.signaturePath == null ? Icons.history_edu : Icons.draw,
+                      size: 14,
+                      color: AppTheme.neonPurple.withOpacity(0.7),
+                    ),
+                  ),
                 if (doc.pending > 0) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -1027,6 +1037,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         terminal: doc.terminal,
         numero: doc.albaranNumber ?? doc.number,
         docLabel: '${doc.type == _DocType.factura ? "Factura" : "Albarán"} #${doc.number}',
+        legacySignatureName: doc.legacySignatureName,
+        legacyDate: doc.legacyDate,
       ),
     );
   }
@@ -1176,6 +1188,10 @@ class _DocumentItem {
   final String? deliveryDate;
   final String? deliveryObs;
   final String? time;
+  // Legacy signature fields (from CACFIRMAS)
+  final String? legacySignatureName;
+  final bool hasLegacySignature;
+  final String? legacyDate;
 
   _DocumentItem({
     required this.id,
@@ -1195,6 +1211,9 @@ class _DocumentItem {
     this.deliveryDate,
     this.deliveryObs,
     this.time,
+    this.legacySignatureName,
+    this.hasLegacySignature = false,
+    this.legacyDate,
   });
 }
 
@@ -1208,6 +1227,8 @@ class _SignatureDialog extends StatefulWidget {
   final int terminal;
   final int numero;
   final String docLabel;
+  final String? legacySignatureName;
+  final String? legacyDate;
 
   const _SignatureDialog({
     required this.ejercicio,
@@ -1215,6 +1236,8 @@ class _SignatureDialog extends StatefulWidget {
     required this.terminal,
     required this.numero,
     required this.docLabel,
+    this.legacySignatureName,
+    this.legacyDate,
   });
 
   @override
@@ -1251,7 +1274,16 @@ class _SignatureDialogState extends State<_SignatureDialog> {
           _loading = false;
         });
       } else {
-        setState(() { _loading = false; _error = 'No se encontró firma para este documento'; });
+        // No base64 from main endpoint — show legacy info if available
+        String errorMsg = 'No se encontró firma para este documento';
+        if (widget.legacySignatureName != null && widget.legacySignatureName!.trim().isNotEmpty) {
+          errorMsg = 'Firma registrada por: ${widget.legacySignatureName!.trim()}';
+          if (widget.legacyDate != null) {
+            errorMsg += '\nFecha: ${widget.legacyDate}';
+          }
+          errorMsg += '\n\n(Imagen no disponible para firmas antiguas)';
+        }
+        setState(() { _loading = false; _error = errorMsg; });
       }
     } catch (e) {
       setState(() { _loading = false; _error = 'Error al cargar firma: $e'; });

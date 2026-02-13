@@ -319,9 +319,14 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
             logger.warn(`[Auth] Error querying OPP for repartidores: ${e.message}`);
         }
 
-        // 3. Deduplicate by code, filter empty, and sort by code ascending
+        // 3. Deduplicate by code, filter empty/invalid, and sort by code ascending
         const uniqueMap = new Map();
-        results.forEach(r => { if (r.code && r.code.length > 0) uniqueMap.set(r.code, r); });
+        results.forEach(r => {
+            if (!r.code || r.code.length === 0) return;
+            // Exclude known invalid/placeholder codes
+            if (r.code === 'UNK' || r.code.startsWith('ZZ')) return;
+            uniqueMap.set(r.code, r);
+        });
         const deduplicated = Array.from(uniqueMap.values()).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
         // Cache for next time

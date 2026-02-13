@@ -171,6 +171,10 @@ class HistoryDocument {
   final String? deliveryRepartidor;
   final String? deliveryObs;
   final String? time;
+  // Legacy signature fields (from CACFIRMAS)
+  final String? legacySignatureName;
+  final bool hasLegacySignature;
+  final String? legacyDate;
 
   HistoryDocument({
     required this.id,
@@ -191,6 +195,9 @@ class HistoryDocument {
     this.deliveryRepartidor,
     this.deliveryObs,
     this.time,
+    this.legacySignatureName,
+    this.hasLegacySignature = false,
+    this.legacyDate,
   });
 
   factory HistoryDocument.fromJson(Map<String, dynamic> json) {
@@ -213,6 +220,9 @@ class HistoryDocument {
       deliveryRepartidor: json['deliveryRepartidor'],
       deliveryObs: json['deliveryObs'],
       time: json['time'],
+      legacySignatureName: json['legacySignatureName'],
+      hasLegacySignature: json['hasLegacySignature'] ?? false,
+      legacyDate: json['legacyDate'],
     );
   }
 }

@@ -46,7 +46,14 @@ class _GlobalVendorSelectorState extends State<GlobalVendorSelector> {
           final rawList = response['vendedores'] ?? [];
           _vendedores = (rawList as List)
               .map((item) => Map<String, dynamic>.from(item as Map))
-              .where((v) => v['code'] != null && v['code'].toString().isNotEmpty)
+              .where((v) {
+                final code = v['code']?.toString() ?? '';
+                final name = v['name']?.toString() ?? '';
+                if (code.isEmpty) return false;
+                // Filter out ZZ-prefixed obsolete entries
+                if (name.toUpperCase().startsWith('ZZ')) return false;
+                return true;
+              })
               .toList();
           // Sort by code ascending (numeric-aware)
           _vendedores.sort((a, b) {
