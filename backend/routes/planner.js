@@ -255,7 +255,6 @@ router.get('/rutero/vendedores', async (req, res) => {
             sql = `
                     SELECT TRIM(CODIGOVENDEDOR) as code, NOMBREVENDEDOR as name
                     FROM DSEDAC.VDD 
-                    WHERE SITUACION = 'A'
                     ORDER BY NOMBREVENDEDOR
                 `;
         }

@@ -303,20 +303,30 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 DS.UPDATED_AT as DELIVERY_UPDATED_AT,
                 DS.FIRMA_PATH,
                 DS.OBSERVACIONES,
-                COALESCE(LS.FIRMANOMBRE, '') as LEGACY_FIRMA_NOMBRE,
-                LS.DIA as LEGACY_DIA,
-                LS.MES as LEGACY_MES,
-                LS.ANO as LEGACY_ANO,
-                LS.HORA as LEGACY_HORA
+                COALESCE((SELECT FIRMANOMBRE FROM DSEDAC.CACFIRMAS 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
+                    FETCH FIRST 1 ROW ONLY), '') as LEGACY_FIRMA_NOMBRE,
+                (SELECT DIA FROM DSEDAC.CACFIRMAS 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
+                    FETCH FIRST 1 ROW ONLY) as LEGACY_DIA,
+                (SELECT MES FROM DSEDAC.CACFIRMAS 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
+                    FETCH FIRST 1 ROW ONLY) as LEGACY_MES,
+                (SELECT ANO FROM DSEDAC.CACFIRMAS 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
+                    FETCH FIRST 1 ROW ONLY) as LEGACY_ANO,
+                (SELECT HORA FROM DSEDAC.CACFIRMAS 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
+                    FETCH FIRST 1 ROW ONLY) as LEGACY_HORA
             FROM DSEDAC.CPC CPC
             ${repartidorJoin}
             LEFT JOIN JAVIER.DELIVERY_STATUS DS ON 
                 DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
-            LEFT JOIN DSEDAC.CACFIRMAS LS ON
-                LS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND
-                LS.SERIEALBARAN = CPC.SERIEALBARAN AND
-                LS.TERMINALALBARAN = CPC.TERMINALALBARAN AND
-                LS.NUMEROALBARAN = CPC.NUMEROALBARAN
             WHERE CPC.EJERCICIOALBARAN = ${year}
               AND CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
               ${dateFilter}
@@ -1011,27 +1021,19 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
 
         // Step 3a: Check DELIVERY_STATUS for FIRMA_PATH
         try {
-            const dsRows = await query(`SELECT FIRMA_PATH, FIRMA_BASE64 FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
-            if (dsRows.length > 0) {
-                // Try file path first
-                if (dsRows[0].FIRMA_PATH) {
-                    const basePaths = [
-                        pathModule.join(__dirname, '../../uploads'),
-                        pathModule.join(__dirname, '../../uploads/photos')
-                    ];
-                    for (const basePath of basePaths) {
-                        const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
-                        if (fs.existsSync(fullPath)) {
-                            signatureBase64 = fs.readFileSync(fullPath).toString('base64');
-                            logger.info(`[PDF] Found signature file at ${fullPath}`);
-                            break;
-                        }
+            const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
+            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                const basePaths = [
+                    pathModule.join(__dirname, '../../uploads'),
+                    pathModule.join(__dirname, '../../uploads/photos')
+                ];
+                for (const basePath of basePaths) {
+                    const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
+                    if (fs.existsSync(fullPath)) {
+                        signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                        logger.info(`[PDF] Found signature file at ${fullPath}`);
+                        break;
                     }
-                }
-                // Try base64 column directly
-                if (!signatureBase64 && dsRows[0].FIRMA_BASE64) {
-                    signatureBase64 = dsRows[0].FIRMA_BASE64;
-                    logger.info(`[PDF] Using signature base64 from DELIVERY_STATUS`);
                 }
             }
         } catch (e) {
@@ -1055,6 +1057,28 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 }
             } catch (e) {
                 logger.warn(`[PDF] REPARTIDOR_FIRMAS lookup error: ${e.message}`);
+            }
+        }
+
+        // Step 3c: Try CACFIRMAS (legacy ERP signatures) as last resort
+        if (!signatureBase64) {
+            try {
+                const cacRows = await query(`
+                    SELECT FIRMABASE64 FROM DSEDAC.CACFIRMAS
+                    WHERE EJERCICIOALBARAN = ${year}
+                      AND SERIEALBARAN = '${serie.trim()}'
+                      AND TERMINALALBARAN = ${terminal}
+                      AND NUMEROALBARAN = ${number}
+                    FETCH FIRST 1 ROW ONLY
+                `, false);
+                if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
+                    let b64 = cacRows[0].FIRMABASE64;
+                    b64 = b64.replace(/^data:image\/\w+;base64,/, '');
+                    signatureBase64 = b64;
+                    logger.info(`[PDF] Using legacy signature from CACFIRMAS`);
+                }
+            } catch (e) {
+                logger.warn(`[PDF] CACFIRMAS lookup error: ${e.message}`);
             }
         }
 
