@@ -2061,7 +2061,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 
 // =============================================================================
 // GET /history/clients/:repartidorId
-// Get list of clients ASSIGNED to this repartidor (CLI.CODIGOREPARTIDOR)
+// Get list of clients ASSIGNED to this repartidor (CLI.CODIGOVENDEDOR)
 // Enriched with recent delivery stats from OPP/CPC
 // =============================================================================
 router.get('/history/clients/:repartidorId', async (req, res) => {
@@ -2071,18 +2071,18 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        // STEP 1: Get assigned clients from CLI.CODIGOREPARTIDOR
+        // STEP 1: Get assigned clients from CLI.CODIGOVENDEDOR
         let clientSql = `
             SELECT
                 TRIM(CLI.CODIGOCLIENTE) as ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
-                TRIM(CLI.CODIGOREPARTIDOR) as REP_CODE,
+                TRIM(CLI.CODIGOVENDEDOR) as REP_CODE,
                 TRIM(COALESCE(VDD.NOMBREVENDEDOR, '')) as REP_NAME
             FROM DSEDAC.CLI CLI
             LEFT JOIN DSEDAC.VDD VDD
-                ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CLI.CODIGOREPARTIDOR)
-            WHERE TRIM(CLI.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+                ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CLI.CODIGOVENDEDOR)
+            WHERE TRIM(CLI.CODIGOVENDEDOR) IN (${cleanRepartidorId})
               AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
         `;
 
