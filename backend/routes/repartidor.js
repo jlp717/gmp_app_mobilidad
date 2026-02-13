@@ -2071,74 +2071,100 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        // Use CLI.CODIGOREPARTIDOR for the ASSIGNED client list
-        // Enrich with delivery stats from last 6 months via OPP/CPC
-        const now = new Date();
-        const cutoffYear = now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
-        const cutoffMonth = ((now.getMonth() - 5 + 12) % 12) || 12;
-        const cutoffDate = cutoffYear * 10000 + cutoffMonth * 100 + 1;
-
-        let sql = `
+        // STEP 1: Get assigned clients from CLI.CODIGOREPARTIDOR
+        let clientSql = `
             SELECT
                 TRIM(CLI.CODIGOCLIENTE) as ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
                 TRIM(CLI.CODIGOREPARTIDOR) as REP_CODE,
-                TRIM(COALESCE(VDD.NOMBREVENDEDOR, '')) as REP_NAME,
-                COALESCE(STATS.TOTAL_DOCS, 0) as TOTAL_DOCS,
-                COALESCE(STATS.TOTAL_AMOUNT, 0) as TOTAL_AMOUNT,
-                STATS.LAST_VISIT
+                TRIM(COALESCE(VDD.NOMBREVENDEDOR, '')) as REP_NAME
             FROM DSEDAC.CLI CLI
             LEFT JOIN DSEDAC.VDD VDD
                 ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CLI.CODIGOREPARTIDOR)
-            LEFT JOIN (
-                SELECT
-                    TRIM(CPC.CODIGOCLIENTEALBARAN) as CLI_ID,
-                    COUNT(DISTINCT TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))) as TOTAL_DOCS,
-                    COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
-                    MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
-                FROM DSEDAC.OPP OPP
-                INNER JOIN DSEDAC.CPC CPC
-                    ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
-                  AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${cutoffDate}
-                GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN)
-            ) STATS ON STATS.CLI_ID = TRIM(CLI.CODIGOCLIENTE)
             WHERE TRIM(CLI.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
               AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
         `;
 
         if (search) {
             const cleanSearch = search.toUpperCase().replace(/'/g, "''");
-            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CLI.CODIGOCLIENTE) LIKE '%${cleanSearch}%')`;
+            clientSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CLI.CODIGOCLIENTE) LIKE '%${cleanSearch}%')`;
         }
 
-        sql += ` ORDER BY STATS.LAST_VISIT DESC NULLS LAST, NAME ASC`;
+        clientSql += ` ORDER BY NAME ASC`;
 
-        logger.info(`[REPARTIDOR] History SQL with repartidorId ${repartidorId}: ${sql.replace(/\s+/g, ' ')}`);
-        const rows = await query(sql, false);
-        logger.info(`[REPARTIDOR] Found ${rows.length} historical clients for repartidor ${repartidorId}`);
+        logger.info(`[REPARTIDOR] Clients SQL for repartidorId ${repartidorId}`);
+        const clientRows = await query(clientSql, false);
+        logger.info(`[REPARTIDOR] Found ${clientRows.length} assigned clients for repartidor ${repartidorId}`);
 
-        const clients = rows.map(r => {
-            const lastVisit = r.LAST_VISIT || 0;
-            const lvYear = Math.floor(lastVisit / 10000);
-            const lvMonth = Math.floor((lastVisit % 10000) / 100);
-            const lvDay = lastVisit % 100;
-            const lastVisitStr = lastVisit > 0
+        // STEP 2: Get delivery stats for those clients (last 6 months)
+        const statsMap = {};
+        if (clientRows.length > 0) {
+            try {
+                const now = new Date();
+                const cutoffYear = now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
+                const cutoffMonth = ((now.getMonth() - 5 + 12) % 12) || 12;
+                const cutoffDate = cutoffYear * 10000 + cutoffMonth * 100 + 1;
+
+                const statsSql = `
+                    SELECT
+                        TRIM(CPC.CODIGOCLIENTEALBARAN) as CLI_ID,
+                        COUNT(*) as TOTAL_DOCS,
+                        COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
+                        MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
+                    FROM DSEDAC.OPP OPP
+                    INNER JOIN DSEDAC.CPC CPC
+                        ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                    WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+                      AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${cutoffDate}
+                    GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN)
+                `;
+                const statsRows = await query(statsSql, false);
+                statsRows.forEach(r => {
+                    statsMap[(r.CLI_ID || '').trim()] = {
+                        totalDocs: r.TOTAL_DOCS || 0,
+                        totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
+                        lastVisit: r.LAST_VISIT || 0
+                    };
+                });
+            } catch (statsErr) {
+                logger.warn(`[REPARTIDOR] Stats query failed (non-fatal): ${statsErr.message}`);
+            }
+        }
+
+        // STEP 3: Merge and sort (clients with recent visits first, then alphabetical)
+        const clients = clientRows.map(r => {
+            const id = (r.ID || '').trim();
+            const stats = statsMap[id] || { totalDocs: 0, totalAmount: 0, lastVisit: 0 };
+            const lv = stats.lastVisit;
+            const lvYear = Math.floor(lv / 10000);
+            const lvMonth = Math.floor((lv % 10000) / 100);
+            const lvDay = lv % 100;
+            const lastVisitStr = lv > 0
                 ? `${String(lvDay).padStart(2, '0')}/${String(lvMonth).padStart(2, '0')}/${lvYear}`
                 : null;
 
             return {
-                id: (r.ID || '').trim(),
-                name: (r.NAME || '').trim() || `CLIENTE ${r.ID}`,
+                id,
+                name: (r.NAME || '').trim() || `CLIENTE ${id}`,
                 address: (r.ADDRESS || '').trim(),
-                totalDocuments: r.TOTAL_DOCS || 0,
-                totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
+                totalDocuments: stats.totalDocs,
+                totalAmount: stats.totalAmount,
                 lastVisit: lastVisitStr,
+                _lastVisitNum: lv,
                 repCode: (r.REP_CODE || '').trim() || null,
                 repName: (r.REP_NAME || '').trim() || null
             };
         });
+
+        // Sort: clients with recent delivery first, then alphabetical
+        clients.sort((a, b) => {
+            if (a._lastVisitNum !== b._lastVisitNum) return b._lastVisitNum - a._lastVisitNum;
+            return a.name.localeCompare(b.name);
+        });
+
+        // Remove internal sort field
+        clients.forEach(c => delete c._lastVisitNum);
 
         res.json({ success: true, clients });
     } catch (e) {
