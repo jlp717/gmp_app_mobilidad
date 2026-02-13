@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query, getPool } = require('../config/db');
+const { getPool } = require('../config/db'); // Use getPool directly
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, deleteCachePattern } = require('../services/redis-cache');
 const {

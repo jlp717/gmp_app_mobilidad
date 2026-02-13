@@ -273,17 +273,15 @@ router.post('/switch-role', authenticateToken, async (req, res) => {
 router.get('/repartidores', authenticateToken, async (req, res) => {
     try {
         const sql = `
-              SELECT code, name FROM (
-                  SELECT TRIM(V.CODIGOVENDEDOR) as code, TRIM(D.NOMBREVENDEDOR) as name
-                  FROM DSEDAC.VEH V
-                  JOIN DSEDAC.VDD D ON V.CODIGOVENDEDOR = D.CODIGOVENDEDOR
-                  
-                  UNION
-                  
-                  SELECT TRIM(CODIGOREPARTIDOR) as code, TRIM(NOMBREREPARTIDOR) as name
-                  FROM DSEDAC.REP
-              ) AS Drivers
-              ORDER BY code
+                SELECT TRIM(V.CODIGOVENDEDOR) as code, TRIM(D.NOMBREVENDEDOR) as name
+                FROM DSEDAC.VEH V
+                JOIN DSEDAC.VDD D ON V.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+                
+                UNION
+                
+                SELECT TRIM(CODIGOREPARTIDOR) as code, TRIM(NOMBREREPARTIDOR) as name
+                FROM DSEDAC.REP
+                ORDER BY 1 ASC
             `;
         const result = await query(sql);
         res.json(result);

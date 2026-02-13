@@ -295,7 +295,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 DS.STATUS as DELIVERY_STATUS,
                 DS.UPDATED_AT as DELIVERY_UPDATED_AT,
                 DS.FIRMA_PATH,
-                DS.OBSERVACIONES as OBSERVATIONS,
+                DS.OBSERVACIONES,
                 COALESCE(LS.FIRMANOMBRE, '') as LEGACY_FIRMA_NOMBRE,
                 LS.DIA as LEGACY_DIA,
                 LS.MES as LEGACY_MES,
@@ -393,7 +393,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 signaturePath: row.FIRMA_PATH || null,
                 deliveryDate: row.DELIVERY_DATE || null,
                 deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
-                deliveryObs: row.OBSERVATIONS || null,
+                deliveryObs: row.OBSERVACIONES || null,
                 legacySignatureName: row.LEGACY_FIRMA_NOMBRE || null,
                 hasLegacySignature: (row.LEGACY_FIRMA_NOMBRE && row.LEGACY_FIRMA_NOMBRE.length > 0),
                 legacyDate: (row.LEGACY_ANO > 0)
