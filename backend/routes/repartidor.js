@@ -244,19 +244,34 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
 router.get('/history/documents/:clientId', async (req, res) => {
     try {
         const { clientId } = req.params;
-        const { repartidorId, limit, offset } = req.query;
+        const { repartidorId, limit, offset, dateFrom, dateTo } = req.query;
 
-        logger.info(`[REPARTIDOR] Getting documents for client ${clientId}`);
+        logger.info(`[REPARTIDOR] Getting documents for client ${clientId} (dateFrom=${dateFrom}, dateTo=${dateTo})`);
 
         let repartidorJoin = '';
-        let repartidorFilter = '';
         if (repartidorId) {
             const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
             repartidorJoin = `
                 INNER JOIN DSEDAC.OPP OPP
                     ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
                     AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
-            repartidorFilter = '';
+        }
+
+        // Date range filter (YYYY-MM-DD format)
+        let dateFilter = '';
+        if (dateFrom) {
+            const parts = dateFrom.split('-');
+            if (parts.length === 3) {
+                const numFrom = parseInt(parts[0]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[2]);
+                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) >= ${numFrom}`;
+            }
+        }
+        if (dateTo) {
+            const parts = dateTo.split('-');
+            if (parts.length === 3) {
+                const numTo = parseInt(parts[0]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[2]);
+                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) <= ${numTo}`;
+            }
         }
 
         const pageLimit = parseInt(limit) || 200;
@@ -271,9 +286,11 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 MAX(CPC.ANODOCUMENTO) as ANO,
                 MAX(CPC.MESDOCUMENTO) as MES,
                 MAX(CPC.DIADOCUMENTO) as DIA,
+                MAX(CPC.HORALLEGADA) as HORALLEGADA,
                 SUM(CPC.IMPORTETOTAL) as IMPORTETOTAL,
                 MAX(COALESCE(CVC.IMPORTEPENDIENTE, 0)) as IMPORTE_PENDIENTE,
                 MAX(CPC.CODIGOFORMAPAGO) as CODIGOFORMAPAGO,
+                MAX(CPC.CONFORMADOSN) as CONFORMADOSN,
                 MAX(CAC.NUMEROFACTURA) as NUMEROFACTURA,
                 MAX(CAC.SERIEFACTURA) as SERIEFACTURA,
                 MAX(CAC.EJERCICIOFACTURA) as EJERCICIOFACTURA,
@@ -302,6 +319,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
             LEFT JOIN JAVIER.DELIVERY_STATUS DS 
                 ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
             WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'
+            ${dateFilter}
             GROUP BY CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
             ORDER BY MAX(CPC.ANODOCUMENTO) DESC, MAX(CPC.MESDOCUMENTO) DESC, MAX(CPC.DIADOCUMENTO) DESC
             OFFSET ${pageOffset} ROWS FETCH NEXT ${pageLimit} ROWS ONLY
@@ -317,20 +335,54 @@ router.get('/history/documents/:clientId', async (req, res) => {
             const numFactura = row.NUMEROFACTURA || 0;
             const isFactura = numFactura > 0;
 
-            // Status priority: DELIVERY_STATUS table > payment-based fallback
-            let status = 'notDelivered';
+            // Hybrid Status Logic for History (v2 with CONFORMADOSN)
+            // Priority: 1) App Status (Real-time)
+            //           2) Payment (Paid = Delivered)
+            //           3) Legacy CONFORMADOSN == 'S' (Delivered)
+            //           4) Past Date (Backstop)
+
+            let displayStatus = 'notDelivered';
+            const legacyConfirmed = (row.CONFORMADOSN || '').trim() === 'S';
+
             if (dsStatus === 'ENTREGADO') {
-                status = 'delivered';
+                displayStatus = 'delivered';
             } else if (dsStatus === 'PARCIAL') {
-                status = 'partial';
+                displayStatus = 'partial';
             } else if (dsStatus === 'NO_ENTREGADO') {
-                status = 'notDelivered';
+                displayStatus = 'notDelivered';
             } else {
-                // Fallback: payment-based
-                if (pendiente === 0 && importe > 0) status = 'delivered';
-                else if (pendiente > 0 && pendiente < importe) status = 'partial';
-                else status = 'notDelivered';
+                // Fallback Logic
+                // 1. Check Payment (Strongest financial indicator)
+                if (pendiente === 0 && importe > 0) {
+                    displayStatus = 'delivered';
+                }
+                // 2. Check Legacy Confirmation
+                else if (legacyConfirmed) {
+                    displayStatus = 'delivered';
+                }
+                // 3. Check Date (Past Date = Delivered as safety net)
+                else {
+                    const docYear = parseInt(row.ANO) || 0;
+                    const docMonth = parseInt(row.MES) || 0;
+                    const docDay = parseInt(row.DIA) || 0;
+
+                    if (docYear > 0) {
+                        const docDateNum = docYear * 10000 + docMonth * 100 + docDay;
+                        const now = new Date();
+                        const todayNum = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+
+                        if (docDateNum < todayNum) {
+                            displayStatus = 'delivered'; // Assume delivered if in past
+                        } else {
+                            // Today + Not Confirmed + Unpaid -> Not Delivered / Partial
+                            if (pendiente > 0 && pendiente < importe) displayStatus = 'partial';
+                        }
+                    } else {
+                        if (pendiente > 0 && pendiente < importe) displayStatus = 'partial';
+                    }
+                }
             }
+            status = displayStatus;
 
             const serie = (row.SERIEALBARAN || 'A').trim();
 
@@ -344,6 +396,9 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 ejercicio: row.EJERCICIOALBARAN,
                 terminal: row.TERMINALALBARAN,
                 date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
+                time: (row.HORALLEGADA && row.HORALLEGADA > 0)
+                    ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
+                    : null,
                 amount: importe,
                 pending: pendiente,
                 status,
@@ -1388,21 +1443,32 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Getting weekly stats ${startDateStr} to ${endDateStr} for ${cleanRepartidorId}`);
 
-        // Query to get daily aggregates with JAVIER status
+        // Today's numeric date for past-date logic
+        const now = new Date();
+        const todayNum = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+
+        // Query to get daily aggregates
+        // ENTREGADOS: app-confirmed (DELIVERY_STATUS) + past dates assumed delivered
         const sql = `
-            SELECT 
+            SELECT
                 OPP.DIAREPARTO as DIA,
                 OPP.MESREPARTO as MES,
                 OPP.ANOREPARTO as ANO,
                 COUNT(DISTINCT CPC.NUMEROALBARAN) as TOTAL_ALBARANES,
-                SUM(CASE WHEN DS.STATUS = 'ENTREGADO' THEN 1 ELSE 0 END) as ENTREGADOS
+                COUNT(DISTINCT CASE
+                    WHEN DS.STATUS = 'ENTREGADO' THEN CPC.NUMEROALBARAN
+                    WHEN (DS.STATUS IS NULL OR TRIM(DS.STATUS) = '')
+                         AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) < ${todayNum}
+                         THEN CPC.NUMEROALBARAN
+                    ELSE NULL
+                END) as ENTREGADOS
             FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC 
+            INNER JOIN DSEDAC.CPC CPC
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS
                 ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
-            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) 
-                BETWEEN ${weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday} 
+            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
+                BETWEEN ${weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday}
                     AND ${weekDays[6].syear * 10000 + weekDays[6].smonth * 100 + weekDays[6].sday}
               AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId.split(',').map(id => `'${id.trim()}'`).join(',')})
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO
@@ -1616,18 +1682,19 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        // SENIOR: No date restriction - fetch ALL clients ever delivered
+        // Fetch ALL clients ever delivered with totals
         let sql = `
             SELECT
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
-                COUNT(CPC.NUMEROALBARAN) as TOTAL_DOCS,
+                COUNT(DISTINCT CPC.NUMEROALBARAN) as TOTAL_DOCS,
+                COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
                 MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
             FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC 
+            INNER JOIN DSEDAC.CPC CPC
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            LEFT JOIN DSEDAC.CLI CLI 
+            LEFT JOIN DSEDAC.CLI CLI
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
         `;
@@ -1644,12 +1711,24 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
         const rows = await query(sql, false);
         logger.info(`[REPARTIDOR] Found ${rows.length} historical clients for repartidor ${repartidorId}`);
 
-        const clients = rows.map(r => ({
-            id: (r.ID || '').trim(),
-            name: (r.NAME || '').trim() || `CLIENTE ${r.ID}`,
-            address: (r.ADDRESS || '').trim(),
-            totalDocuments: r.TOTAL_DOCS || 0
-        }));
+        const clients = rows.map(r => {
+            const lastVisit = r.LAST_VISIT || 0;
+            const lvYear = Math.floor(lastVisit / 10000);
+            const lvMonth = Math.floor((lastVisit % 10000) / 100);
+            const lvDay = lastVisit % 100;
+            const lastVisitStr = lastVisit > 0
+                ? `${String(lvDay).padStart(2, '0')}/${String(lvMonth).padStart(2, '0')}/${lvYear}`
+                : null;
+
+            return {
+                id: (r.ID || '').trim(),
+                name: (r.NAME || '').trim() || `CLIENTE ${r.ID}`,
+                address: (r.ADDRESS || '').trim(),
+                totalDocuments: r.TOTAL_DOCS || 0,
+                totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
+                lastVisit: lastVisitStr
+            };
+        });
 
         res.json({ success: true, clients });
     } catch (e) {

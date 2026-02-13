@@ -177,6 +177,7 @@ class AlbaranEntrega {
   List<String> fotos;
   String? firma;
   DateTime? horaEntrega;
+  final String? horaPrevista;
 
   AlbaranEntrega({
     required this.id,
@@ -212,6 +213,7 @@ class AlbaranEntrega {
     this.fotos = const [],
     this.firma,
     this.horaEntrega,
+    this.horaPrevista,
   });
 
 
@@ -252,7 +254,17 @@ class AlbaranEntrega {
       observaciones: json['observaciones'],
       fotos: (json['fotos'] as List<dynamic>?)?.cast<String>() ?? [],
       firma: json['firma'],
+      horaPrevista: _parseHoraPrevista(json['HORALLEGADA']),
     );
+  }
+
+  static String? _parseHoraPrevista(dynamic val) {
+    if (val == null) return null;
+    final s = val.toString().padLeft(6, '0'); 
+    if (s.length >= 4) {
+      return '${s.substring(0, 2)}:${s.substring(2, 4)}';
+    }
+    return null;
   }
 
   int get totalItems => items.length;
@@ -559,7 +571,7 @@ class EntregasProvider extends ChangeNotifier {
         'iva': 0,
         'total': albaran.importeTotal,
         'formaPago': albaran.formaPagoDesc,
-        'repartidor': _repartidorId,
+        'repartidor': albaran.codigoRepartidor,
       });
       if (response['success'] == true) {
         return response;
@@ -594,7 +606,7 @@ class EntregasProvider extends ChangeNotifier {
         'iva': 0,
         'total': albaran.importeTotal,
         'formaPago': albaran.formaPagoDesc,
-        'repartidor': _repartidorId,
+        'repartidor': albaran.codigoRepartidor,
       });
       return response['success'] == true;
     } catch (e) {

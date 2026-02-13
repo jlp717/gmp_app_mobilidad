@@ -127,12 +127,16 @@ class HistoryClient {
   final String name;
   final String address;
   final int totalDocuments;
+  final double totalAmount;
+  final String? lastVisit;
 
   HistoryClient({
     required this.id,
     required this.name,
     required this.address,
     required this.totalDocuments,
+    this.totalAmount = 0,
+    this.lastVisit,
   });
 
   factory HistoryClient.fromJson(Map<String, dynamic> json) {
@@ -141,6 +145,8 @@ class HistoryClient {
       name: json['name'] ?? json['id'] ?? '',
       address: json['address'] ?? '',
       totalDocuments: json['totalDocuments'] ?? 0,
+      totalAmount: (json['totalAmount'] ?? 0).toDouble(),
+      lastVisit: json['lastVisit'],
     );
   }
 }
@@ -164,6 +170,7 @@ class HistoryDocument {
   final String? deliveryDate;
   final String? deliveryRepartidor;
   final String? deliveryObs;
+  final String? time;
 
   HistoryDocument({
     required this.id,
@@ -183,6 +190,7 @@ class HistoryDocument {
     this.deliveryDate,
     this.deliveryRepartidor,
     this.deliveryObs,
+    this.time,
   });
 
   factory HistoryDocument.fromJson(Map<String, dynamic> json) {
@@ -204,6 +212,7 @@ class HistoryDocument {
       deliveryDate: json['deliveryDate'],
       deliveryRepartidor: json['deliveryRepartidor'],
       deliveryObs: json['deliveryObs'],
+      time: json['time'],
     );
   }
 }
@@ -336,20 +345,24 @@ class RepartidorDataService {
   static Future<List<HistoryDocument>> getClientDocuments({
     required String clientId,
     String? repartidorId,
+    String? dateFrom,
+    String? dateTo,
   }) async {
     try {
       final queryParams = <String, String>{};
       if (repartidorId != null) {
         queryParams['repartidorId'] = repartidorId;
       }
-      
-      final cacheKey = 'repartidor_docs_${clientId}_${repartidorId ?? 'all'}';
-      
+      if (dateFrom != null) queryParams['dateFrom'] = dateFrom;
+      if (dateTo != null) queryParams['dateTo'] = dateTo;
+
+      final cacheKey = 'repartidor_docs_${clientId}_${repartidorId ?? 'all'}_${dateFrom ?? ''}_${dateTo ?? ''}';
+
       final response = await ApiClient.get(
         '/repartidor/history/documents/$clientId',
         queryParameters: queryParams,
         cacheKey: cacheKey,
-        cacheTTL: const Duration(minutes: 15), // 15 minutes
+        cacheTTL: const Duration(minutes: 15),
       );
       
       final docs = (response['documents'] as List? ?? [])

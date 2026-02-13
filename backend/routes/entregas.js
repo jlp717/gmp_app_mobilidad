@@ -274,17 +274,32 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             const serieFactura = (row.SERIEFACTURA || '').trim();
             const esFactura = numeroFactura > 0;
 
-            // --- DELIVERY STATUS LOGIC ---
-            // Priority: 1) DELIVERY_STATUS table (app confirmed)
-            //           2) Past date → all delivered
-            //           3) CPC.DIALLEGADA > 0 → arrived at client
-            //           4) Default: PENDIENTE
+            // --- DELIVERY STATUS LOGIC (HYBRID SENIOR STATUS v2) ---
+            // Priority: 1) DELIVERY_STATUS (App confirmation - Real Time)
+            //           2) Legacy CONFORMADOSN == 'S' (Paper confirmation processed)
+            //           3) Today + DIALLEGADA (Legacy "On Route" - Loaded but not confirmed)
+            //           4) Default (Pending)
+
             let status = (row.DS_STATUS || '').trim();
+            const legacyConfirmed = (row.CONFORMADOSN || '').trim() === 'S';
+
             if (!status || status === '') {
-                if (isPastDate) {
-                    status = 'ENTREGADO'; // Past date = assumed delivered
+                if (legacyConfirmed) {
+                    status = 'ENTREGADO'; // Legacy Confirmed
+                } else if (isPastDate) {
+                    // Fallback for past dates if CONFORMADOSN is missing but date implies done?
+                    // Verify if we should trust Date alone for past. 
+                    // User said "Past = Delivered" usually manually. 
+                    // Let's keep PastDate as backup ONLY if > 2 days? 
+                    // Actually, if Yesterday is 'S', then usually PastDate has S. 
+                    // If PastDate has NO S, maybe it's "No Entregado"?
+                    // Safe bet: Trust 'S'. If not 'S' and Past Date -> 'ENTREGADO' (Assumption) OR 'NO_ENTREGADO'?
+                    // The user said "antes salia 100%". 
+                    // Let's stick to "Past Date = Delivered" as a safety net for now, 
+                    // but 'S' allows intra-day update!
+                    status = 'ENTREGADO';
                 } else if (row.DIALLEGADA > 0) {
-                    status = 'ENTREGADO'; // Arrival recorded by PDA/GPS
+                    status = 'EN_RUTA';   // Today + Planned + Not Confirmed = On Route
                 } else {
                     status = 'PENDIENTE';
                 }

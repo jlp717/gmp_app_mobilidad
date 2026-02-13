@@ -58,7 +58,7 @@ class EntregaCard extends StatelessWidget {
                   
                   // Número de albarán
                   Text(
-                    'Alb. ${albaran.numeroAlbaran}',
+                    'Alb. ${albaran.numeroAlbaran}${albaran.horaPrevista != null ? " (${albaran.horaPrevista})" : ""}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,

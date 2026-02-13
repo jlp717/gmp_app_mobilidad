@@ -2076,7 +2076,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'iva': 0,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
-          'repartidor': Provider.of<EntregasProvider>(context, listen: false).repartidorId,
+          'repartidor': widget.albaran.codigoRepartidor,
           'items': _items.map((i) => {
             'cantidad': i.cantidadPedida,
             'descripcion': i.descripcion,
@@ -2235,7 +2235,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'iva': 0,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
-          'repartidor': Provider.of<EntregasProvider>(context, listen: false).repartidorId,
+          'repartidor': widget.albaran.codigoRepartidor,
           'items': _items.map((i) => {
             'cantidad': i.cantidadPedida,
             'descripcion': i.descripcion,
