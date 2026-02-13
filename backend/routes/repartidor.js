@@ -351,8 +351,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
             ${repartidorJoin}
             ${dsJoin}
             WHERE CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
-              AND CPC.EJERCICIOALBARAN >= ${yearParam ? parseInt(yearParam) : CurrentYear - 2}
-              AND CPC.EJERCICIOALBARAN <= ${yearParam ? parseInt(yearParam) : CurrentYear}
+              ${yearParam ? `AND CPC.EJERCICIOALBARAN = ${parseInt(yearParam)}` : ''}
               ${dateFilter}
             ORDER BY CPC.EJERCICIOALBARAN DESC, CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC, CPC.NUMEROALBARAN DESC
         `;
@@ -1094,7 +1093,7 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
                     OPP.DIAREPARTO as DIA,
                     CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN) as SERIE, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                     MAX(CPC.IMPORTETOTAL) as IMPORTE,
-                    MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as ENTREGADO,
+                    MAX(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' ${dsAvail ? "OR DS.STATUS = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADO,
                     MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADO,
                     MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIAL
                 FROM DSEDAC.OPP OPP

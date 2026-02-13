@@ -630,17 +630,17 @@ async function generateInvoicePDF(facturaData) {
             }
 
             if (facturaData.signatureBase64) {
-                // For legacy CACFIRMAS signatures (white strokes on transparent bg), add dark background
-                const isLegacySignature = facturaData.signatureSource === 'CACFIRMAS';
+                // Use dark background for ALL signatures to ensure visibility
+                // (legacy CACFIRMAS have white strokes, older app captures may also have white strokes)
 
                 // Signature box (right side, like the physical paper)
                 doc.rect(300, y, 255, 100)
-                    .fillAndStroke(isLegacySignature ? '#2A2D35' : '#FFFFFF', COLORS.border)
+                    .fillAndStroke('#2A2D35', COLORS.border)
                     .lineWidth(1);
 
                 doc.fontSize(9)
                     .font('Helvetica-Bold')
-                    .fillColor(isLegacySignature ? '#FFFFFF' : COLORS.secondary)
+                    .fillColor('#FFFFFF')
                     .text('Recibí Conforme', 305, y + 5);
 
                 // Embed signature image
@@ -663,7 +663,7 @@ async function generateInvoicePDF(facturaData) {
                 // Date label under signature
                 doc.fontSize(7)
                     .font('Helvetica')
-                    .fillColor(isLegacySignature ? '#AAAAAA' : COLORS.mediumGray)
+                    .fillColor('#AAAAAA')
                     .text('Fecha: ' + new Date().toLocaleDateString('es-ES'), 305, y + 88);
             }
 
