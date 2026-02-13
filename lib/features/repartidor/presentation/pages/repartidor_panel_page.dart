@@ -83,7 +83,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: AppTheme.darkBase,
       body: Column(
         children: [
           _buildHeader(),

@@ -106,7 +106,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: AppTheme.darkBase,
       body: Column(
         children: [
           _buildHeader(),
@@ -210,7 +210,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                 )
               : null,
           filled: true,
-          fillColor: AppTheme.backgroundColor,
+          fillColor: AppTheme.darkBase,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         ),
