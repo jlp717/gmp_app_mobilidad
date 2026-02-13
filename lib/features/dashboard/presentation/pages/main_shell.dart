@@ -37,7 +37,7 @@ class _MainShellState extends State<MainShell> {
   bool _isNavExpanded = true; 
   
   // State for Jefe Repartidor View
-  String? _selectedRepartidor;
+  String? _selectedRepartidor = 'ALL';
   List<Map<String, dynamic>> _repartidoresOptions = [];
   bool _isLoadingRepartidores = false;
   
@@ -177,8 +177,10 @@ class _MainShellState extends State<MainShell> {
   }
 
   Future<void> _fetchRepartidores() async {
+      setState(() => _isLoadingRepartidores = true);
       try {
         final res = await ApiClient.getList('/auth/repartidores');
+        if (!mounted) return;
         setState(() {
            // Helper to safely get value regardless of case
            String? getValue(Map m, String key) {
@@ -194,10 +196,17 @@ class _MainShellState extends State<MainShell> {
                  'code': getValue(m, 'code') ?? getValue(m, 'CODIGOVENDEDOR') ?? '',
                  'name': getValue(m, 'name') ?? getValue(m, 'NOMBREVENDEDOR') ?? 'Desconocido',
               };
-           }).toList();
+           }).where((item) => item['code'] != null && item['code'].toString().isNotEmpty).toList();
+           
+           // Sort by code ascending
+           _repartidoresOptions.sort((a, b) => 
+             (a['code']?.toString() ?? '').compareTo(b['code']?.toString() ?? ''));
+           
+           _isLoadingRepartidores = false;
         });
       } catch (e) {
         debugPrint('Error fetching repartidores: $e');
+        if (mounted) setState(() => _isLoadingRepartidores = false);
       }
   }
 
@@ -714,9 +723,11 @@ class _MainShellState extends State<MainShell> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
                 ),
-                child: DropdownButtonHideUnderline(
+                child: _isLoadingRepartidores
+                  ? const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonPurple)))
+                  : DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _selectedRepartidor, 
+                    value: _selectedRepartidor,
                     hint: const Text('Seleccionar Repartidor', style: TextStyle(color: Colors.white54)),
                     isExpanded: true,
                     dropdownColor: AppTheme.surfaceColor,

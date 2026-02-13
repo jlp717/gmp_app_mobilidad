@@ -270,8 +270,19 @@ router.post('/switch-role', authenticateToken, async (req, res) => {
 });
 
 // GET /repartidores - List of all repartidores for Jefe dropdown
+// OPTIMIZED: Added in-memory cache (5 min TTL) to avoid 1.4s+ response times
+let _repartidoresCache = null;
+let _repartidoresCacheTime = 0;
+const REPARTIDORES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 router.get('/repartidores', authenticateToken, async (req, res) => {
     try {
+        // Check in-memory cache first
+        const now = Date.now();
+        if (_repartidoresCache && (now - _repartidoresCacheTime) < REPARTIDORES_CACHE_TTL) {
+            return res.json(_repartidoresCache);
+        }
+
         // Split into two separate queries for resilience (UNION on different tables can fail in DB2)
         let results = [];
 
@@ -283,14 +294,15 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
                 JOIN DSEDAC.VDD D ON V.CODIGOVENDEDOR = D.CODIGOVENDEDOR
             `, false);
             if (vehRows && vehRows.length > 0) {
-                results.push(...vehRows.map(r => ({ code: (r.CODE || '').trim(), name: (r.NAME || '').trim() })));
+                results.push(...vehRows.map(r => ({ code: (r.CODE || r.code || '').toString().trim(), name: (r.NAME || r.name || '').toString().trim() })));
             }
         } catch (e) {
             logger.warn(`[Auth] Error querying VEH/VDD for repartidores: ${e.message}`);
         }
 
-        // 2. Get repartidores from OPP table (REP table does not exist)
+        // 2. Get repartidores from OPP table — limit to current year for performance
         try {
+            const currentYear = new Date().getFullYear();
             const repRows = await query(`
                 SELECT DISTINCT TRIM(OPP.CODIGOREPARTIDOR) as CODE, 
                        COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR)) as NAME
@@ -298,18 +310,24 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
                 LEFT JOIN DSEDAC.VDD D ON D.CODIGOVENDEDOR = OPP.CODIGOREPARTIDOR
                 WHERE OPP.CODIGOREPARTIDOR IS NOT NULL 
                   AND TRIM(OPP.CODIGOREPARTIDOR) <> ''
+                  AND OPP.ANOREPARTO >= ${currentYear - 1}
             `, false);
             if (repRows && repRows.length > 0) {
-                results.push(...repRows.map(r => ({ code: (r.CODE || '').trim(), name: (r.NAME || '').trim() })));
+                results.push(...repRows.map(r => ({ code: (r.CODE || r.code || '').toString().trim(), name: (r.NAME || r.name || '').toString().trim() })));
             }
         } catch (e) {
-            logger.warn(`[Auth] Error querying REP for repartidores: ${e.message}`);
+            logger.warn(`[Auth] Error querying OPP for repartidores: ${e.message}`);
         }
 
-        // 3. Deduplicate by code and sort
+        // 3. Deduplicate by code, filter empty, and sort by code ascending
         const uniqueMap = new Map();
-        results.forEach(r => { if (r.code) uniqueMap.set(r.code, r); });
-        const deduplicated = Array.from(uniqueMap.values()).sort((a, b) => a.code.localeCompare(b.code));
+        results.forEach(r => { if (r.code && r.code.length > 0) uniqueMap.set(r.code, r); });
+        const deduplicated = Array.from(uniqueMap.values()).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+
+        // Cache for next time
+        _repartidoresCache = deduplicated;
+        _repartidoresCacheTime = now;
+        logger.info(`[Auth] Repartidores list cached: ${deduplicated.length} entries`);
 
         res.json(deduplicated);
     } catch (error) {

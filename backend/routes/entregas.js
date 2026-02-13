@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
+const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 
 // Ensure directories exist
 const photosDir = path.join(__dirname, '../../uploads/photos');
@@ -174,6 +175,19 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         const requestNum = ano * 10000 + mes * 100 + dia;
         const isPastDate = requestNum < todayNum;
 
+        // Conditionally include DELIVERY_STATUS join (table may not exist)
+        const dsAvailable = isDeliveryStatusAvailable();
+        const dsJoin = dsAvailable ? `
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS
+              ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(COALESCE(CPC.SERIEALBARAN, '')) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))` : '';
+        const dsColumns = dsAvailable
+            ? `DS.STATUS as DS_STATUS,
+              DS.OBSERVACIONES as DS_OBS,
+              DS.FIRMA_PATH as DS_FIRMA`
+            : `CAST(NULL AS VARCHAR(20)) as DS_STATUS,
+              CAST(NULL AS VARCHAR(512)) as DS_OBS,
+              CAST(NULL AS VARCHAR(255)) as DS_FIRMA`;
+
         const sql = `
             SELECT
               CAC.SUBEMPRESAALBARAN,
@@ -196,9 +210,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               TRIM(OPP.CODIGOREPARTIDOR) as CODIGO_REPARTIDOR,
               CPC.DIALLEGADA, CPC.HORALLEGADA,
               TRIM(CPC.CONFORMADOSN) as CONFORMADO,
-              DS.STATUS as DS_STATUS,
-              DS.OBSERVACIONES as DS_OBS,
-              DS.FIRMA_PATH as DS_FIRMA
+              ${dsColumns}
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC
               ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
@@ -208,8 +220,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
               AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            LEFT JOIN JAVIER.DELIVERY_STATUS DS
-              ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(COALESCE(CPC.SERIEALBARAN, '')) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
+            ${dsJoin}
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids})
               AND OPP.DIAREPARTO = ${dia}
               AND OPP.MESREPARTO = ${mes}

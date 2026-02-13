@@ -15,6 +15,7 @@ const { globalLimiter } = require('./middleware/security');
 const { loadMetadataCache } = require('./services/metadataCache');
 const { preloadCache } = require('./services/cache-preloader');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
+const { setDeliveryStatusAvailable } = require('./utils/delivery-status-check');
 
 // ==================== OPTIMIZATION IMPORTS ====================
 const { initCache, getCacheStats } = require('./services/redis-cache');
@@ -121,12 +122,15 @@ app.use('/api/facturas', facturasRoutes);
 async function startServer() {
   await initDb();
 
-  // Ensure Delivery Status Table Exists (Safe Strategy)
+  // Ensure Delivery Status Table Exists (Safe Strategy for DB2 i5/OS)
+  // NOTE: SYSIBM.SYSTABLES does not exist on i5/OS. Use direct SELECT to probe.
   try {
-    const checkSql = `SELECT COUNT(*) as CNT FROM SYSIBM.SYSTABLES WHERE TRIM(CREATOR) = 'JAVIER' AND TRIM(NAME) = 'DELIVERY_STATUS'`;
-    const result = await query(checkSql, false);
-    if (result[0].CNT === 0) {
-      logger.info('Creating JAVIER.DELIVERY_STATUS table...');
+    // Try a lightweight probe query on the table itself
+    await query(`SELECT COUNT(*) as CNT FROM JAVIER.DELIVERY_STATUS`, false, false);
+    logger.info('✅ JAVIER.DELIVERY_STATUS table verified and ready.');    setDeliveryStatusAvailable(true);  } catch (probeErr) {
+    // Table likely doesn't exist (SQL0204) — attempt to create it
+    logger.warn(`⚠️ DELIVERY_STATUS probe failed (${probeErr.message}). Attempting to create table...`);
+    try {
       await query(`
             CREATE TABLE JAVIER.DELIVERY_STATUS (
                 ID VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -138,11 +142,19 @@ async function startServer() {
                 UPDATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
                 REPARTIDOR_ID VARCHAR(20)
             )
-        `, false);
-      logger.info('JAVIER.DELIVERY_STATUS created.');
+        `, false, false);
+      logger.info('✅ JAVIER.DELIVERY_STATUS table created successfully.');
+      setDeliveryStatusAvailable(true);
+    } catch (createErr) {
+      // Table might already exist (race condition) or we lack DDL permissions
+      if (createErr.message && createErr.message.includes('SQL0601')) {
+        logger.info('✅ JAVIER.DELIVERY_STATUS already exists (confirmed via SQL0601).');
+        setDeliveryStatusAvailable(true);
+      } else {
+        logger.error(`❌ Cannot create DELIVERY_STATUS table: ${createErr.message}`);
+        logger.warn('⚠️ Delivery status tracking will use in-memory fallback. Deliveries module will still work but status changes won\'t persist across restarts.');
+      }
     }
-  } catch (e) {
-    logger.error(`Error ensuring delivery table: ${e.message}`);
   }
 
   // Initialize Redis cache (non-blocking - works without Redis too)

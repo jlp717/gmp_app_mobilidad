@@ -44,7 +44,16 @@ class _GlobalVendorSelectorState extends State<GlobalVendorSelector> {
       if (mounted) {
         setState(() {
           final rawList = response['vendedores'] ?? [];
-          _vendedores = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+          _vendedores = (rawList as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .where((v) => v['code'] != null && v['code'].toString().isNotEmpty)
+              .toList();
+          // Sort by code ascending (numeric-aware)
+          _vendedores.sort((a, b) {
+            final codeA = a['code']?.toString() ?? '';
+            final codeB = b['code']?.toString() ?? '';
+            return codeA.compareTo(codeB);
+          });
           _isLoading = false;
         });
       }

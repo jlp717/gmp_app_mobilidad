@@ -127,22 +127,47 @@ router.get('/rutero/week', async (req, res) => {
             try {
                 const todayClients = cachedCounts[todayName] || 0;
                 if (todayClients > 0) {
-                    // Query DELIVERY_STATUS to count how many are delivered today
                     const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',') : null;
                     let deliveredToday = 0;
                     if (cleanCodes) {
-                        const deliverySql = `
-                            SELECT COUNT(DISTINCT DS.ID) as DELIVERED
-                            FROM JAVIER.DELIVERY_STATUS DS
-                            WHERE DS.STATUS = 'ENTREGADO'
-                              AND DS.REPARTIDOR_ID IN (${cleanCodes})
-                              AND DATE(DS.UPDATED_AT) = CURRENT DATE
-                        `;
+                        // HYBRID approach: Count from ERP data (primary) + App status (supplement)
+                        // 1. Primary: Count from OPP/CPC where CONFORMADOSN = 'S' for today (ERP native)
+                        const now = new Date();
+                        const dia = now.getDate();
+                        const mes = now.getMonth() + 1;
+                        const ano = now.getFullYear();
                         try {
-                            const dRows = await query(deliverySql, false);
-                            deliveredToday = parseInt(dRows[0]?.DELIVERED) || 0;
-                        } catch (e) {
-                            logger.warn(`[RUTERO WEEK] Delivery count query error: ${e.message}`);
+                            const erpSql = `
+                                SELECT COUNT(DISTINCT CPC.NUMEROALBARAN) as DELIVERED
+                                FROM DSEDAC.OPP OPP
+                                INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanCodes})
+                                  AND OPP.DIAREPARTO = ${dia}
+                                  AND OPP.MESREPARTO = ${mes}
+                                  AND OPP.ANOREPARTO = ${ano}
+                                  AND (TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R'))
+                            `;
+                            const erpRows = await query(erpSql, false, false);
+                            deliveredToday = parseInt(erpRows[0]?.DELIVERED) || 0;
+                        } catch (erpErr) {
+                            logger.warn(`[RUTERO WEEK] ERP delivery count error: ${erpErr.message}`);
+                        }
+
+                        // 2. Supplement: Add app-confirmed deliveries from DELIVERY_STATUS (if table exists)
+                        try {
+                            const appSql = `
+                                SELECT COUNT(DISTINCT DS.ID) as DELIVERED
+                                FROM JAVIER.DELIVERY_STATUS DS
+                                WHERE DS.STATUS = 'ENTREGADO'
+                                  AND DS.REPARTIDOR_ID IN (${cleanCodes})
+                                  AND DATE(DS.UPDATED_AT) = CURRENT DATE
+                            `;
+                            const appRows = await query(appSql, false, false);
+                            const appDelivered = parseInt(appRows[0]?.DELIVERED) || 0;
+                            // Use the higher of the two counts (avoid double counting)
+                            deliveredToday = Math.max(deliveredToday, appDelivered);
+                        } catch (dsErr) {
+                            // DELIVERY_STATUS table may not exist — this is OK, ERP data is primary
                         }
                     }
                     weekProgress[todayName] = {
@@ -263,12 +288,17 @@ router.get('/rutero/vendedores', async (req, res) => {
         const cacheKey = `vendedores:active:${currentYear}:${role || 'comercial'}`;
         const vendedores = await cachedQuery(query, sql, cacheKey, TTL.LONG);
 
-        res.json({
-            vendedores: vendedores.map(v => ({
-                code: v.CODE?.trim(),
-                name: v.NAME?.trim() || `Vendedor ${v.CODE}`
-            }))
-        });
+        // Defensive mapping: DB2 column name case varies by driver config
+        const mapped = vendedores.map(v => {
+            const code = (v.CODE || v.code || v.Code || '').toString().trim();
+            const name = (v.NAME || v.name || v.Name || '').toString().trim();
+            return { code, name: name || `Vendedor ${code}` };
+        }).filter(v => v.code && v.code.length > 0);
+
+        // Sort by code ascending as requested
+        mapped.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+
+        res.json({ vendedores: mapped });
     } catch (error) {
         logger.error(`Error fetching vendedores: ${error.message}`);
         res.status(500).json({ error: error.message });
