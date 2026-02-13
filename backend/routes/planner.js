@@ -247,7 +247,7 @@ router.get('/rutero/vendedores', async (req, res) => {
             sql = `
                     SELECT TRIM(CODIGOREPARTIDOR) as code, NOMBREREPARTIDOR as name
                     FROM DSEDAC.REP
-                    ORDER BY code
+                    ORDER BY 1
                 `;
         } else {
             // Default: Commercials (Sales Reps)
@@ -255,7 +255,7 @@ router.get('/rutero/vendedores', async (req, res) => {
                     SELECT TRIM(CODIGOVENDEDOR) as code, NOMBREVENDEDOR as name
                     FROM DSEDAC.VDD 
                     WHERE ACTIVO = 'S'
-                    ORDER BY code
+                    ORDER BY 1
                 `;
         }
 
