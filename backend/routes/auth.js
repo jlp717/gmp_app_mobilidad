@@ -280,6 +280,7 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
         // Check in-memory cache first
         const now = Date.now();
         if (_repartidoresCache && (now - _repartidoresCacheTime) < REPARTIDORES_CACHE_TTL) {
+            logger.info(`[Auth] Returning ${_repartidoresCache.length} cached repartidores`);
             return res.json(_repartidoresCache);
         }
 
@@ -294,7 +295,10 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
                 JOIN DSEDAC.VDD D ON V.CODIGOVENDEDOR = D.CODIGOVENDEDOR
             `, false);
             if (vehRows && vehRows.length > 0) {
+                logger.info(`[Auth] VEH/VDD query returned ${vehRows.length} repartidores`);
                 results.push(...vehRows.map(r => ({ code: (r.CODE || r.code || '').toString().trim(), name: (r.NAME || r.name || '').toString().trim() })));
+            } else {
+                logger.warn(`[Auth] VEH/VDD query returned 0 repartidores`);
             }
         } catch (e) {
             logger.warn(`[Auth] Error querying VEH/VDD for repartidores: ${e.message}`);
@@ -313,7 +317,10 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
                   AND OPP.ANOREPARTO >= ${currentYear - 1}
             `, false);
             if (repRows && repRows.length > 0) {
+                logger.info(`[Auth] OPP query returned ${repRows.length} repartidores`);
                 results.push(...repRows.map(r => ({ code: (r.CODE || r.code || '').toString().trim(), name: (r.NAME || r.name || '').toString().trim() })));
+            } else {
+                logger.warn(`[Auth] OPP query returned 0 repartidores`);
             }
         } catch (e) {
             logger.warn(`[Auth] Error querying OPP for repartidores: ${e.message}`);

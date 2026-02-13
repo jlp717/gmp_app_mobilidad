@@ -850,7 +850,7 @@ router.get('/history/signature', async (req, res) => {
                 INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
                 WHERE RE.NUMERO_ALBARAN = ${numero}
                   AND RE.EJERCICIO_ALBARAN = ${ejercicio}
-                  AND RE.SERIE_ALBARAN = '${(serie || 'A').trim()}'
+                  AND TRIM(RE.SERIE_ALBARAN) = '${(serie || 'A').trim()}'
                 FETCH FIRST 1 ROW ONLY
             `, false);
             if (firmaRows.length > 0) {
@@ -899,10 +899,11 @@ router.get('/history/signature', async (req, res) => {
                     SELECT FIRMABASE64, TRIM(FIRMANOMBRE) as FIRMANOMBRE, DIA, MES, ANO, HORA
                     FROM DSEDAC.CACFIRMAS
                     WHERE EJERCICIOALBARAN = ${ejercicio}
-                      AND SERIEALBARAN = '${(serie || 'A').trim()}'
+                      AND TRIM(SERIEALBARAN) = '${(serie || 'A').trim()}'
                       AND TERMINALALBARAN = ${terminal || 0}
                       AND NUMEROALBARAN = ${numero}
                       AND FIRMABASE64 IS NOT NULL
+                      AND LENGTH(TRIM(FIRMABASE64)) > 10
                     FETCH FIRST 1 ROW ONLY
                 `, false);
                 if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
@@ -941,6 +942,57 @@ router.get('/history/signature', async (req, res) => {
 
     } catch (error) {
         logger.error(`[REPARTIDOR] Error in history/signature: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// GET /debug/signatures - Find albaranes with actual signatures in CACFIRMAS
+// Temporary diagnostic endpoint
+// =============================================================================
+router.get('/debug/signatures', async (req, res) => {
+    try {
+        // Find recent albaranes that have signatures in CACFIRMAS
+        const rows = await query(`
+            SELECT 
+                CF.EJERCICIOALBARAN, TRIM(CF.SERIEALBARAN) as SERIE, 
+                CF.TERMINALALBARAN, CF.NUMEROALBARAN,
+                TRIM(CF.FIRMANOMBRE) as FIRMANTE,
+                CF.ANO, CF.MES, CF.DIA,
+                LENGTH(CF.FIRMABASE64) as FIRMA_SIZE,
+                TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
+                TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE
+            FROM DSEDAC.CACFIRMAS CF
+            INNER JOIN DSEDAC.CPC CPC 
+                ON CPC.EJERCICIOALBARAN = CF.EJERCICIOALBARAN
+                AND CPC.SERIEALBARAN = CF.SERIEALBARAN
+                AND CPC.TERMINALALBARAN = CF.TERMINALALBARAN
+                AND CPC.NUMEROALBARAN = CF.NUMEROALBARAN
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            WHERE CF.FIRMABASE64 IS NOT NULL 
+              AND LENGTH(TRIM(CF.FIRMABASE64)) > 10
+              AND CF.EJERCICIOALBARAN >= 2025
+            ORDER BY CF.ANO DESC, CF.MES DESC, CF.DIA DESC
+            FETCH FIRST 50 ROWS ONLY
+        `, false);
+
+        const signatures = rows.map(r => ({
+            albaran: `${r.EJERCICIOALBARAN}-${r.SERIE}-${r.TERMINALALBARAN}-${r.NUMEROALBARAN}`,
+            cliente: `${r.CLIENTE} - ${r.NOMBRE_CLIENTE}`,
+            firmante: r.FIRMANTE || 'N/A',
+            fecha: r.ANO > 0 ? `${r.DIA}/${r.MES}/${r.ANO}` : 'N/A',
+            firmaSize: r.FIRMA_SIZE || 0
+        }));
+
+        logger.info(`[REPARTIDOR] Debug: Found ${signatures.length} albaranes with signatures in CACFIRMAS`);
+        res.json({ 
+            success: true, 
+            total: signatures.length, 
+            signatures,
+            note: 'These are albaranes with actual Base64 signatures in CACFIRMAS'
+        });
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Debug signatures error: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });
