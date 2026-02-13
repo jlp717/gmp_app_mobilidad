@@ -2061,8 +2061,9 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 
 // =============================================================================
 // GET /history/clients/:repartidorId
-// Get list of clients ASSIGNED to this repartidor (CLI.CODIGOVENDEDOR)
-// Enriched with recent delivery stats from OPP/CPC
+// Get clients with delivery history from OPP + client info from CLI
+// Uses ONLY columns verified to exist: OPP.CODIGOREPARTIDOR, CLI.CODIGOCLIENTE,
+// CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, CLI.DIRECCION, CLI.ANOBAJA
 // =============================================================================
 router.get('/history/clients/:repartidorId', async (req, res) => {
     try {
@@ -2071,72 +2072,62 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        // STEP 1: Get assigned clients from CLI.CODIGOVENDEDOR
-        let clientSql = `
+        // Single query: OPP/CPC for delivery data + JOIN CLI for client names
+        // Only uses columns known to exist in DB2
+        const now = new Date();
+        const cutoffYear = now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
+        const cutoffMonth = ((now.getMonth() - 5 + 12) % 12) || 12;
+        const cutoffDate = cutoffYear * 10000 + cutoffMonth * 100 + 1;
+
+        let mainSql = `
             SELECT
-                TRIM(CLI.CODIGOCLIENTE) as ID,
+                TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
-                TRIM(CLI.CODIGOVENDEDOR) as REP_CODE,
-                TRIM(COALESCE(VDD.NOMBREVENDEDOR, '')) as REP_NAME
-            FROM DSEDAC.CLI CLI
+                TRIM(OPP.CODIGOREPARTIDOR) as REP_CODE,
+                TRIM(COALESCE(VDD.NOMBREVENDEDOR, '')) as REP_NAME,
+                COUNT(*) as TOTAL_DOCS,
+                COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
+                MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
+            FROM DSEDAC.OPP OPP
+            INNER JOIN DSEDAC.CPC CPC
+                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+            LEFT JOIN DSEDAC.CLI CLI
+                ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             LEFT JOIN DSEDAC.VDD VDD
-                ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CLI.CODIGOVENDEDOR)
-            WHERE TRIM(CLI.CODIGOVENDEDOR) IN (${cleanRepartidorId})
-              AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
+                ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+              AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${cutoffDate}
+              AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL OR CLI.ANOBAJA IS NULL)
         `;
 
         if (search) {
             const cleanSearch = search.toUpperCase().replace(/'/g, "''");
-            clientSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CLI.CODIGOCLIENTE) LIKE '%${cleanSearch}%')`;
+            mainSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CPC.CODIGOCLIENTEALBARAN) LIKE '%${cleanSearch}%')`;
         }
 
-        clientSql += ` ORDER BY NAME ASC`;
+        mainSql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, '')), TRIM(OPP.CODIGOREPARTIDOR), TRIM(COALESCE(VDD.NOMBREVENDEDOR, ''))`;
+        mainSql += ` ORDER BY MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) DESC`;
 
         logger.info(`[REPARTIDOR] Clients SQL for repartidorId ${repartidorId}`);
-        const clientRows = await query(clientSql, false);
-        logger.info(`[REPARTIDOR] Found ${clientRows.length} assigned clients for repartidor ${repartidorId}`);
+        const rows = await query(mainSql, false);
+        logger.info(`[REPARTIDOR] Found ${rows.length} clients with deliveries for ${repartidorId}`);
 
-        // STEP 2: Get delivery stats for those clients (last 6 months)
-        const statsMap = {};
-        if (clientRows.length > 0) {
-            try {
-                const now = new Date();
-                const cutoffYear = now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
-                const cutoffMonth = ((now.getMonth() - 5 + 12) % 12) || 12;
-                const cutoffDate = cutoffYear * 10000 + cutoffMonth * 100 + 1;
-
-                const statsSql = `
-                    SELECT
-                        TRIM(CPC.CODIGOCLIENTEALBARAN) as CLI_ID,
-                        COUNT(*) as TOTAL_DOCS,
-                        COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
-                        MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
-                    FROM DSEDAC.OPP OPP
-                    INNER JOIN DSEDAC.CPC CPC
-                        ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                    WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
-                      AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${cutoffDate}
-                    GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN)
-                `;
-                const statsRows = await query(statsSql, false);
-                statsRows.forEach(r => {
-                    statsMap[(r.CLI_ID || '').trim()] = {
-                        totalDocs: r.TOTAL_DOCS || 0,
-                        totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
-                        lastVisit: r.LAST_VISIT || 0
-                    };
-                });
-            } catch (statsErr) {
-                logger.warn(`[REPARTIDOR] Stats query failed (non-fatal): ${statsErr.message}`);
-            }
-        }
-
-        // STEP 3: Merge and sort (clients with recent visits first, then alphabetical)
-        const clients = clientRows.map(r => {
+        // Deduplicate by client ID (a client may appear with different repartidors)
+        const seen = new Map();
+        rows.forEach(r => {
             const id = (r.ID || '').trim();
-            const stats = statsMap[id] || { totalDocs: 0, totalAmount: 0, lastVisit: 0 };
-            const lv = stats.lastVisit;
+            if (!id) return;
+            const existing = seen.get(id);
+            const lv = r.LAST_VISIT || 0;
+            if (!existing || lv > existing.LAST_VISIT) {
+                seen.set(id, r);
+            }
+        });
+
+        const clients = Array.from(seen.values()).map(r => {
+            const id = (r.ID || '').trim();
+            const lv = r.LAST_VISIT || 0;
             const lvYear = Math.floor(lv / 10000);
             const lvMonth = Math.floor((lv % 10000) / 100);
             const lvDay = lv % 100;
@@ -2148,23 +2139,13 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                 id,
                 name: (r.NAME || '').trim() || `CLIENTE ${id}`,
                 address: (r.ADDRESS || '').trim(),
-                totalDocuments: stats.totalDocs,
-                totalAmount: stats.totalAmount,
+                totalDocuments: parseInt(r.TOTAL_DOCS) || 0,
+                totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
                 lastVisit: lastVisitStr,
-                _lastVisitNum: lv,
                 repCode: (r.REP_CODE || '').trim() || null,
                 repName: (r.REP_NAME || '').trim() || null
             };
         });
-
-        // Sort: clients with recent delivery first, then alphabetical
-        clients.sort((a, b) => {
-            if (a._lastVisitNum !== b._lastVisitNum) return b._lastVisitNum - a._lastVisitNum;
-            return a.name.localeCompare(b.name);
-        });
-
-        // Remove internal sort field
-        clients.forEach(c => delete c._lastVisitNum);
 
         res.json({ success: true, clients });
     } catch (e) {

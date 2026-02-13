@@ -237,9 +237,9 @@ class _MainShellState extends State<MainShell> {
     // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
-      final isRealRepartidor = user?.isRepartidor == true;
+      final isJefe = user?.isJefeVentas == true;
       // Panel only for Jefe in repartidor mode, NOT for real repartidores
-      if (!isRealRepartidor) {
+      if (isJefe) {
         items.add(_NavItem(
           icon: Icons.dashboard_outlined,
           selectedIcon: Icons.dashboard,
@@ -260,7 +260,7 @@ class _MainShellState extends State<MainShell> {
         color: AppTheme.neonBlue,
       ));
       // Comisiones only for real repartidores, not Jefe in repartidor mode
-      if (isRealRepartidor) {
+      if (!isJefe) {
         items.add(_NavItem(
           icon: Icons.euro_outlined,
           selectedIcon: Icons.euro,
@@ -806,7 +806,7 @@ class _MainShellState extends State<MainShell> {
     if (isRepartidor) {
       // Determine effective repartidor ID
       String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); // Default for real repartidor
-      final isRealRepartidor = user?.isRepartidor == true;
+      final isJefe = user?.isJefeVentas == true;
       
       // If Jefe, override with selection
       if (isJefeVentas) {
@@ -829,7 +829,7 @@ class _MainShellState extends State<MainShell> {
 
       // Map tab indices dynamically based on role
       Widget pageForIndex(int idx) {
-        if (isRealRepartidor) {
+        if (!isJefe) {
           // Real rep: 0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA
           if (idx == 0) return RepartidorClientesPage(
             repartidorId: effectiveRepartidorId,
