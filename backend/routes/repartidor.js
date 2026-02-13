@@ -883,23 +883,36 @@ router.get('/history/signature', async (req, res) => {
             try {
                 const fs = require('fs');
                 const path = require('path');
-                // Try multiple base paths for the signature file
+                const pathsToTry = [];
+
+                // If FIRMA_PATH is an absolute path, try it directly first
+                if (path.isAbsolute(firmaPath)) {
+                    pathsToTry.push(firmaPath);
+                }
+                // Try multiple base paths for relative paths
                 const basePaths = [
                     path.join(__dirname, '../../uploads'),
                     path.join(__dirname, '../../uploads/photos')
                 ];
                 for (const basePath of basePaths) {
-                    const fullPath = path.join(basePath, firmaPath);
+                    pathsToTry.push(path.join(basePath, firmaPath));
+                }
+
+                for (const fullPath of pathsToTry) {
                     if (fs.existsSync(fullPath)) {
                         const fileBuffer = fs.readFileSync(fullPath);
-                        firmaBase64 = fileBuffer.toString('base64');
-                        signatureSource = 'FILE:' + fullPath;
-                        logger.info(`[REPARTIDOR] Found signature file at ${fullPath}`);
-                        break;
+                        if (fileBuffer.length > 50) {
+                            firmaBase64 = fileBuffer.toString('base64');
+                            signatureSource = 'FILE';
+                            logger.info(`[REPARTIDOR] Found signature file at ${fullPath} (${fileBuffer.length} bytes)`);
+                            break;
+                        } else {
+                            logger.warn(`[REPARTIDOR] Signature file too small (${fileBuffer.length}B): ${fullPath}`);
+                        }
                     }
                 }
                 if (!firmaBase64) {
-                    logger.warn(`[REPARTIDOR] Signature file not found for path: ${firmaPath}`);
+                    logger.warn(`[REPARTIDOR] Signature file not found for path: ${firmaPath} — tried: ${pathsToTry.join(', ')}`);
                 }
             } catch (e) {
                 logger.warn(`[REPARTIDOR] File read error for ${firmaPath}: ${e.message}`);
@@ -968,15 +981,18 @@ router.get('/history/signature', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Signature result for ${albId}: hasSignature=${hasSignature}, source=${signatureSource || 'none'}, hasBase64=${!!firmaBase64}, firmante='${firmante || ''}'`);
 
+        // Sanitize source — never expose server paths to client
+        const safeSource = signatureSource ? signatureSource.replace(/FILE:.*/, 'FILE').replace(/\/opt.*/, '') : null;
+
         res.json({
             success: true,
             hasSignature,
             signature: hasSignature ? {
                 base64: firmaBase64 || null,
-                path: firmaPath || null,
+                path: firmaPath ? 'stored' : null,
                 firmante: firmante || null,
                 fecha: fechaFirma || null,
-                source: signatureSource || null
+                source: safeSource || null
             } : null
         });
 
@@ -1050,7 +1066,13 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
         const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        logger.info(`[REPARTIDOR] Delivery summary for ${repartidorId}, ${selectedMonth}/${selectedYear}`);
+        // Only include days up to today if viewing current month/year
+        // This prevents future pre-loaded albaranes from inflating the % entrega
+        const now = new Date();
+        const isCurrentPeriod = selectedYear === now.getFullYear() && selectedMonth === (now.getMonth() + 1);
+        const dayFilter = isCurrentPeriod ? `AND OPP.DIAREPARTO <= ${now.getDate()}` : '';
+
+        logger.info(`[REPARTIDOR] Delivery summary for ${repartidorId}, ${selectedMonth}/${selectedYear}${isCurrentPeriod ? ` (capped to day ${now.getDate()})` : ''}`);
 
         // Subquery deduplicates by unique albaran key FIRST, then outer query aggregates by day.
         // This prevents inflated counts when multiple CPC rows exist per albaran.
@@ -1080,6 +1102,7 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
                 ${dsJoinSub}
                 WHERE OPP.ANOREPARTO = ${selectedYear}
                   AND OPP.MESREPARTO = ${selectedMonth}
+                  ${dayFilter}
                   AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
                 GROUP BY OPP.DIAREPARTO, CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN), CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
             ) ALBS

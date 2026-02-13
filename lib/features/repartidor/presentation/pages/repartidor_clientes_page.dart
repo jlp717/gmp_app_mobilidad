@@ -10,8 +10,9 @@ import 'repartidor_historico_page.dart';
 
 class RepartidorClientesPage extends StatefulWidget {
   final String repartidorId;
+  final void Function(String clientId, String clientName)? onNavigateToHistory;
 
-  const RepartidorClientesPage({super.key, required this.repartidorId});
+  const RepartidorClientesPage({super.key, required this.repartidorId, this.onNavigateToHistory});
 
   @override
   State<RepartidorClientesPage> createState() => _RepartidorClientesPageState();
@@ -364,16 +365,22 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
   }
 
   void _navigateToHistory(HistoryClient client) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RepartidorHistoricoPage(
-          repartidorId: widget.repartidorId,
-          initialClientId: client.id,
-          initialClientName: client.name,
+    if (widget.onNavigateToHistory != null) {
+      // Use callback to navigate within MainShell (keeps sidebar)
+      widget.onNavigateToHistory!(client.id, client.name);
+    } else {
+      // Fallback: push full-screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RepartidorHistoricoPage(
+            repartidorId: widget.repartidorId,
+            initialClientId: client.id,
+            initialClientName: client.name,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 }
 

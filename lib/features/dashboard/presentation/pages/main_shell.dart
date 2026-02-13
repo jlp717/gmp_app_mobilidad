@@ -7,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/providers/dashboard_provider.dart';
+import '../../../../core/widgets/coming_soon_placeholder.dart';
 import '../../../clients/presentation/pages/simple_client_list_page.dart';
 import '../../../rutero/presentation/pages/rutero_page.dart';
 import '../../../objectives/presentation/pages/objectives_page.dart';
@@ -45,6 +46,10 @@ class _MainShellState extends State<MainShell> {
   
   // Toggle state
   bool _forceRepartidorMode = false;
+
+  // Navigate from Clientes → Histórico with preselected client
+  String? _pendingClientId;
+  String? _pendingClientName;
 
   @override
   void initState() {
@@ -816,27 +821,64 @@ class _MainShellState extends State<MainShell> {
       // Map tab indices dynamically based on whether Comisiones is visible
       Widget pageForIndex(int idx) {
         if (idx == 0) return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
-        if (idx == 1) return RepartidorClientesPage(repartidorId: effectiveRepartidorId);
+        if (idx == 1) return RepartidorClientesPage(
+          repartidorId: effectiveRepartidorId,
+          onNavigateToHistory: (clientId, clientName) {
+            setState(() {
+              _pendingClientId = clientId;
+              _pendingClientName = clientName;
+              // Switch to Histórico tab index
+              _currentIndex = isRealRepartidor ? 4 : 3;
+            });
+          },
+        );
         if (idx == 2) return ChangeNotifierProvider(
           create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
           child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
         );
         if (isRealRepartidor) {
           // 0=Panel, 1=Clientes, 2=Rutero, 3=Comisiones, 4=Histórico, 5=Chat IA
-          if (idx == 3) return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
-          if (idx == 4) return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
-          if (idx == 5) return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
+          if (idx == 3) return const ComingSoonPlaceholder(
+            title: 'Comisiones de Reparto',
+            subtitle: 'Aquí podrás consultar tus comisiones\nbasadas en los cobros realizados.',
+            icon: Icons.euro,
+            accentColor: AppTheme.neonGreen,
+          );
+          if (idx == 4) {
+            final cId = _pendingClientId;
+            final cName = _pendingClientName;
+            _pendingClientId = null;
+            _pendingClientName = null;
+            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
+          }
+          if (idx == 5) return const ComingSoonPlaceholder(
+            title: 'Asistente IA de Reparto',
+            subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          );
         } else {
           // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
-          if (idx == 3) return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
-          if (idx == 4) return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
+          if (idx == 3) {
+            final cId = _pendingClientId;
+            final cName = _pendingClientName;
+            _pendingClientId = null;
+            _pendingClientName = null;
+            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
+          }
+          if (idx == 4) return const ComingSoonPlaceholder(
+            title: 'Asistente IA de Reparto',
+            subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          );
         }
         return const Center(child: Text('Página no encontrada'));
       }
 
-      // Use KeyedSubtree to force complete widget tree rebuild when ID changes
+      // Use KeyedSubtree to force complete widget tree rebuild when ID or client changes
       final content = KeyedSubtree(
-        key: ValueKey('rutero_view_$effectiveRepartidorId'),
+        key: ValueKey('rutero_view_${effectiveRepartidorId}_${_currentIndex}_${_pendingClientId ?? ""}'),
         child: Builder(builder: (_) => pageForIndex(_currentIndex)),
       );
 
@@ -878,7 +920,12 @@ class _MainShellState extends State<MainShell> {
         case 5:
           return const FacturasPage();
         case 6:
-          return ChatbotPage(vendedorCodes: vendedorCodes);
+          return const ComingSoonPlaceholder(
+            title: 'Nexus AI — Asistente Comercial',
+            subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          );
         default:
           return const Center(child: Text('Página no encontrada'));
       }
@@ -899,7 +946,12 @@ class _MainShellState extends State<MainShell> {
       case 4:
         return const FacturasPage();
       case 5:
-        return ChatbotPage(vendedorCodes: vendedorCodes);
+        return const ComingSoonPlaceholder(
+          title: 'Nexus AI — Asistente Comercial',
+          subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+          icon: Icons.smart_toy,
+          accentColor: AppTheme.neonPink,
+        );
       default:
         return const Center(child: Text('Página no encontrada'));
     }

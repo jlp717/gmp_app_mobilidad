@@ -655,9 +655,11 @@ router.post('/update', async (req, res) => {
         const lat = latitud || 0;
         const lon = longitud || 0;
 
-        // Identify who is performing the update (Inspector)
-        // usage: req.user.code (from token) is safest/best audit. Fallback to body.
-        let inspectorId = (req.user && req.user.code) ? req.user.code : repartidorId;
+        // Identify who is performing the update
+        // repartidorId from body = the actual repartidor who did the delivery
+        // req.user.code = who is logged in (could be Jefe viewing as repartidor)
+        // Always store the ACTUAL repartidor from the body, not the logged-in user
+        let inspectorId = repartidorId;
 
         // Safety truncation
         if (inspectorId && inspectorId.length > 20) {

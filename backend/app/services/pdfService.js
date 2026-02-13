@@ -618,35 +618,36 @@ async function generateInvoicePDF(facturaData) {
                 });
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // FIRMA DEL CLIENTE (if available)
+            // FIRMA DEL CLIENTE + COPIA LABEL
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+            y += 20;
+
+            // Check if we need a new page
+            if (y + 120 > 700) {
+                doc.addPage();
+                y = drawHeader(doc, 10) + 20;
+            }
+
             if (facturaData.signatureBase64) {
-                y += 20;
-
-                // Check if we need a new page
-                if (y + 100 > 700) {
-                    doc.addPage();
-                    y = drawHeader(doc, 10) + 20;
-                }
-
-                // Signature box
-                doc.rect(40, y, 250, 90)
+                // Signature box (right side, like the physical paper)
+                doc.rect(300, y, 255, 100)
                     .strokeColor(COLORS.border)
                     .lineWidth(1)
                     .stroke();
 
-                doc.fontSize(8)
+                doc.fontSize(9)
                     .font('Helvetica-Bold')
                     .fillColor(COLORS.secondary)
-                    .text('FIRMA DEL CLIENTE', 45, y + 5);
+                    .text('Recibí Conforme', 305, y + 5);
 
                 // Embed signature image
                 try {
                     const sigBuffer = Buffer.from(facturaData.signatureBase64, 'base64');
-                    doc.image(sigBuffer, 55, y + 18, {
-                        width: 220,
-                        height: 60,
-                        fit: [220, 60],
+                    doc.image(sigBuffer, 310, y + 18, {
+                        width: 235,
+                        height: 65,
+                        fit: [235, 65],
                         align: 'center',
                         valign: 'center'
                     });
@@ -654,17 +655,23 @@ async function generateInvoicePDF(facturaData) {
                     doc.fontSize(8)
                         .font('Helvetica')
                         .fillColor(COLORS.mediumGray)
-                        .text('Firma digital registrada', 55, y + 40);
+                        .text('Firma digital registrada', 310, y + 45);
                 }
 
-                // Date label
+                // Date label under signature
                 doc.fontSize(7)
                     .font('Helvetica')
                     .fillColor(COLORS.mediumGray)
-                    .text('Fecha: ' + new Date().toLocaleDateString('es-ES'), 45, y + 80);
-
-                y += 95;
+                    .text('Fecha: ' + new Date().toLocaleDateString('es-ES'), 305, y + 88);
             }
+
+            // "COPIA" watermark label (left side, like the physical paper)
+            doc.fontSize(36)
+                .font('Helvetica-Bold')
+                .fillColor('#E0E0E0')
+                .text('COPIA', 50, y + 25);
+
+            y += 110;
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // FOOTER - PIE DE PÁGINA ELEGANTE

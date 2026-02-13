@@ -53,12 +53,18 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   void initState() {
     super.initState();
     if (widget.initialClientId != null) {
-      // Navigate directly to client documents
+      // Navigate directly to client documents — set state immediately to show loading
+      _selectedClientId = widget.initialClientId;
+      _selectedClientName = widget.initialClientName ?? widget.initialClientId!;
+      _isLoading = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadClientDocuments(widget.initialClientId!, widget.initialClientName ?? widget.initialClientId!);
       });
+      // Load clients list in background (won't conflict since _loadClientDocuments manages _isLoading)
+      _loadClients();
+    } else {
+      _loadClients();
     }
-    _loadClients();
   }
 
   @override
@@ -73,7 +79,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   // ==========================================================================
 
   Future<void> _loadClients([String? search]) async {
-    setState(() => _isLoading = true);
+    // Don't set loading if already viewing documents (would flash empty state)
+    final isInDocView = _selectedClientId != null;
+    if (!isInDocView) setState(() => _isLoading = true);
     try {
       final clients = await RepartidorDataService.getHistoryClients(
         repartidorId: widget.repartidorId,
@@ -89,13 +97,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       )).toList();
     } catch (e) {
       _clients = [];
-      if (mounted) {
+      if (mounted && !isInDocView) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error al cargar clientes: $e'), backgroundColor: AppTheme.error),
         );
       }
     }
-    if (mounted) setState(() => _isLoading = false);
+    if (mounted && !isInDocView) setState(() => _isLoading = false);
   }
 
   Future<void> _loadClientDocuments(String clientId, String clientName) async {
@@ -1717,11 +1725,6 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                         Text('Firmante: $_firmante', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                       if (_fecha != null)
                         Text('Fecha: $_fecha', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.8))),
-                      if (_source != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text('Fuente: $_source', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary.withOpacity(0.5))),
-                        ),
                     ],
                   )
                 // Name-only signature (no image)
