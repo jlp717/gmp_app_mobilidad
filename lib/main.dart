@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +20,36 @@ import 'core/providers/filter_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Global error handling — catch unhandled Flutter framework errors
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('[FLUTTER_ERROR] ${details.exceptionAsString()}');
+  };
+
+  // Custom error widget for release builds (user-friendly instead of red screen)
+  if (kReleaseMode) {
+    ErrorWidget.builder = (FlutterErrorDetails details) {
+      return Material(
+        color: const Color(0xFF1E1F25),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange.shade300),
+                const SizedBox(height: 16),
+                const Text('Se ha producido un error', style: TextStyle(color: Colors.white, fontSize: 16)),
+                const SizedBox(height: 8),
+                const Text('Vuelve atrás o reinicia la app', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ],
+            ),
+          ),
+        ),
+      );
+    };
+  }
+
   // Initialize Hive cache before anything else
   await CacheService.init();
 
@@ -34,7 +66,13 @@ void main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  runApp(const GMPSalesAnalyticsApp());
+  // Catch unhandled async errors (Dart zone)
+  runZonedGuarded(
+    () => runApp(const GMPSalesAnalyticsApp()),
+    (error, stackTrace) {
+      debugPrint('[ZONE_ERROR] $error\n$stackTrace');
+    },
+  );
 }
 
 class GMPSalesAnalyticsApp extends StatefulWidget {
@@ -53,6 +91,13 @@ class _GMPSalesAnalyticsAppState extends State<GMPSalesAnalyticsApp> {
     super.initState();
     _authProvider = AuthProvider();
     _router = _createRouter(_authProvider);
+  }
+
+  @override
+  void dispose() {
+    _authProvider.dispose();
+    _router.dispose();
+    super.dispose();
   }
 
   GoRouter _createRouter(AuthProvider authProvider) {

@@ -238,12 +238,15 @@ class _MainShellState extends State<MainShell> {
     // ===============================================
     if (isRepartidor) {
       final isRealRepartidor = user?.isRepartidor == true;
-      items.add(_NavItem(
-        icon: Icons.dashboard_outlined,
-        selectedIcon: Icons.dashboard,
-        label: 'Panel',
-        color: Colors.orange,
-      ));
+      // Panel only for Jefe in repartidor mode, NOT for real repartidores
+      if (!isRealRepartidor) {
+        items.add(_NavItem(
+          icon: Icons.dashboard_outlined,
+          selectedIcon: Icons.dashboard,
+          label: 'Panel',
+          color: Colors.orange,
+        ));
+      }
       items.add(_NavItem(
         icon: Icons.people_outline,
         selectedIcon: Icons.people,
@@ -796,8 +799,8 @@ class _MainShellState extends State<MainShell> {
     final isRepartidor = _isRepartidorEffective; 
     
     // ===============================================
-    // REPARTIDOR: Dynamic indices — Comisiones only for real repartidores
-    // Real rep:  0=Panel, 1=Clientes, 2=Rutero, 3=Comisiones, 4=Histórico, 5=Chat IA
+    // REPARTIDOR: Dynamic indices
+    // Real rep:  0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA  (NO Panel)
     // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
     // ===============================================
     if (isRepartidor) {
@@ -824,40 +827,39 @@ class _MainShellState extends State<MainShell> {
           (r['code']?.toString() ?? ''): (r['name']?.toString() ?? ''),
       };
 
-      // Map tab indices dynamically based on whether Comisiones is visible
+      // Map tab indices dynamically based on role
       Widget pageForIndex(int idx) {
-        if (idx == 0) return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
-        if (idx == 1) return RepartidorClientesPage(
-          repartidorId: effectiveRepartidorId,
-          onNavigateToHistory: (clientId, clientName) {
-            setState(() {
-              _pendingClientId = clientId;
-              _pendingClientName = clientName;
-              // Switch to Histórico tab index
-              _currentIndex = isRealRepartidor ? 4 : 3;
-            });
-          },
-        );
-        if (idx == 2) return ChangeNotifierProvider(
-          create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-          child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
-        );
         if (isRealRepartidor) {
-          // 0=Panel, 1=Clientes, 2=Rutero, 3=Comisiones, 4=Histórico, 5=Chat IA
-          if (idx == 3) return const ComingSoonPlaceholder(
+          // Real rep: 0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA
+          if (idx == 0) return RepartidorClientesPage(
+            repartidorId: effectiveRepartidorId,
+            isJefeMode: false,
+            onNavigateToHistory: (clientId, clientName) {
+              setState(() {
+                _pendingClientId = clientId;
+                _pendingClientName = clientName;
+                _currentIndex = 3; // Histórico
+              });
+            },
+          );
+          if (idx == 1) return ChangeNotifierProvider(
+            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
+            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
+          );
+          if (idx == 2) return const ComingSoonPlaceholder(
             title: 'Comisiones de Reparto',
             subtitle: 'Aquí podrás consultar tus comisiones\nbasadas en los cobros realizados.',
             icon: Icons.euro,
             accentColor: AppTheme.neonGreen,
           );
-          if (idx == 4) {
+          if (idx == 3) {
             final cId = _pendingClientId;
             final cName = _pendingClientName;
             _pendingClientId = null;
             _pendingClientName = null;
             return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
           }
-          if (idx == 5) return const ComingSoonPlaceholder(
+          if (idx == 4) return const ComingSoonPlaceholder(
             title: 'Asistente IA de Reparto',
             subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
             icon: Icons.smart_toy,
@@ -865,6 +867,22 @@ class _MainShellState extends State<MainShell> {
           );
         } else {
           // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
+          if (idx == 0) return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
+          if (idx == 1) return RepartidorClientesPage(
+            repartidorId: effectiveRepartidorId,
+            isJefeMode: true,
+            onNavigateToHistory: (clientId, clientName) {
+              setState(() {
+                _pendingClientId = clientId;
+                _pendingClientName = clientName;
+                _currentIndex = 3; // Histórico
+              });
+            },
+          );
+          if (idx == 2) return ChangeNotifierProvider(
+            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
+            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
+          );
           if (idx == 3) {
             final cId = _pendingClientId;
             final cName = _pendingClientName;

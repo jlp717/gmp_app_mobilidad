@@ -40,6 +40,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   final TextEditingController _searchAlbaranController = TextEditingController();
   
   late AnimationController _listAnimController;
+  // Cache the repartidores future to avoid re-fetching on every rebuild
+  Future<List<Map<String, dynamic>>>? _repartidoresFuture;
 
   @override
   void initState() {
@@ -47,6 +49,10 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
     _listAnimController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
+    );
+    // Pre-fetch repartidores list once
+    _repartidoresFuture = ApiClient.getList('/repartidores').then(
+      (val) => val.map((e) => e as Map<String, dynamic>).toList(),
     );
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -241,9 +247,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: FutureBuilder<List<Map<String, dynamic>>>(
-        future: ApiClient.getList('/repartidores').then(
-          (val) => val.map((e) => e as Map<String, dynamic>).toList(),
-        ),
+        future: _repartidoresFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const SizedBox.shrink();
 
@@ -622,32 +626,38 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               parent: _listAnimController,
               curve: Curves.easeOutCubic,
             )),
-            child: ListView.builder(
-              padding: const EdgeInsets.only(top: 4, bottom: 100), // Reduced top padding
-              itemCount: provider.albaranes.length,
-              itemBuilder: (context, index) {
-                final albaran = provider.albaranes[index];
-                
-                return Column(
-                  children: [
-                    SmartDeliveryCard(
-                      albaran: albaran,
-                      onTap: () => _showDetailDialog(albaran),
-                      onSwipeComplete: () => _handleQuickComplete(albaran),
-                      onSwipeNote: () => _showQuickNoteDialog(albaran),
-                      repartidorNames: widget.repartidorNames,
-                    ),
-                    if (index < provider.albaranes.length - 1)
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: AppTheme.borderColor.withOpacity(0.3),
-                        indent: 12, // Tighter indent
-                        endIndent: 12,
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              color: AppTheme.neonBlue,
+              backgroundColor: AppTheme.surfaceColor,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(top: 4, bottom: 100),
+                itemCount: provider.albaranes.length,
+                itemBuilder: (context, index) {
+                  final albaran = provider.albaranes[index];
+                  
+                  return Column(
+                    children: [
+                      SmartDeliveryCard(
+                        albaran: albaran,
+                        onTap: () => _showDetailDialog(albaran),
+                        onSwipeComplete: () => _handleQuickComplete(albaran),
+                        onSwipeNote: () => _showQuickNoteDialog(albaran),
+                        repartidorNames: widget.repartidorNames,
                       ),
-                  ],
-                );
-              },
+                      if (index < provider.albaranes.length - 1)
+                        Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: AppTheme.borderColor.withOpacity(0.3),
+                          indent: 12,
+                          endIndent: 12,
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         );

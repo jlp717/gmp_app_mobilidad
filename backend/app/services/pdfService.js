@@ -49,6 +49,15 @@ const EMPRESA = {
     registro: 'Inscrita en el registro mercantil de Murcia. Libro 140, Sección 3ª, Folio 142, Hoja 5657, Inscripción 2ª. CIF: B04008710'
 };
 
+// Mapeo de código IVA a porcentaje real
+const IVA_MAP = {
+    '1': 10,   // Carnes, embutidos
+    '2': 21,   // General
+    '3': 4,    // Huevos, pan, leche
+    '4': 0,    // Exento
+    '5': 10,   // Igual que 1
+};
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // FUNCIONES AUXILIARES
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -194,8 +203,23 @@ async function generateInvoicePDF(facturaData) {
     try {
         const header = facturaData.header || {};
         const lines = facturaData.lines || [];
+        const ivaBreakdown = header.IVA_BREAKDOWN || null;
 
-        logger.info(`📄 Generando PDF factura - Diseño Profesional v2.0 para ${header.NUMEROFACTURA}`);
+        // Detect document type: albaran vs factura
+        const isAlbaran = facturaData.documentType === 'albaran' || 
+            (!facturaData.documentType && (!header.NUMEROFACTURA || parseInt(header.NUMEROFACTURA) === 0));
+        const docTypeLabel = isAlbaran ? 'ALBAR\u00c1N' : 'FACTURA';
+        const docSerie = isAlbaran 
+            ? (header.SERIEALBARAN || '').toString().trim()
+            : (header.SERIEFACTURA || header.SERIEALBARAN || '').toString().trim();
+        const docNumber = isAlbaran
+            ? (header.NUMEROALBARAN || '')
+            : (header.NUMEROFACTURA || header.NUMEROALBARAN || '');
+        const docEjercicio = isAlbaran
+            ? (header.EJERCICIOALBARAN || '')
+            : (header.EJERCICIOFACTURA || header.EJERCICIOALBARAN || '');
+
+        logger.info(`\uD83D\uDCC4 Generando PDF ${docTypeLabel} ${docSerie}-${docNumber} - Dise\u00f1o Profesional v2.0`);
 
         return new Promise((resolve, reject) => {
             const doc = new PDFDocument({
@@ -203,10 +227,10 @@ async function generateInvoicePDF(facturaData) {
                 margin: 40,
                 bufferPages: true,
                 info: {
-                    Title: `Factura ${header.SERIEFACTURA}-${header.NUMEROFACTURA}`,
+                    Title: `${docTypeLabel} ${docSerie}-${docNumber}`,
                     Author: `${EMPRESA.nombre} ${EMPRESA.slogan}`,
-                    Subject: `Factura para ${header.NOMBRECLIENTEFACTURA}`,
-                    Keywords: 'Factura, Mari Pepa, Food & Frozen, Hostelería'
+                    Subject: `${docTypeLabel} para ${header.NOMBRECLIENTEFACTURA}`,
+                    Keywords: `${docTypeLabel}, Mari Pepa, Food & Frozen, Hosteler\u00eda`
                 }
             });
 
@@ -222,7 +246,7 @@ async function generateInvoicePDF(facturaData) {
             y += 10;
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // TÍTULO DE FACTURA - BANNER DESTACADO
+            // T\u00cdTULO DE DOCUMENTO - BANNER DESTACADO
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             doc.rect(40, y, 515, 32)
                 .fillAndStroke(COLORS.secondary, COLORS.secondary);
@@ -230,11 +254,11 @@ async function generateInvoicePDF(facturaData) {
             doc.fontSize(18)
                 .font('Helvetica-Bold')
                 .fillColor(COLORS.white)
-                .text('FACTURA', 50, y + 10);
+                .text(docTypeLabel, 50, y + 10);
 
-            const numFactura = `${header.SERIEFACTURA}-${header.NUMEROFACTURA}`;
+            const numDoc = `${docSerie}-${docNumber}`;
             doc.fontSize(16)
-                .text(numFactura, 400, y + 10, { width: 145, align: 'right' });
+                .text(numDoc, 400, y + 10, { width: 145, align: 'right' });
 
             y += 38;
 
@@ -283,7 +307,7 @@ async function generateInvoicePDF(facturaData) {
             doc.fontSize(10)
                 .font('Helvetica-Bold')
                 .fillColor(COLORS.darkGray)
-                .text(header.EJERCICIOFACTURA || header.ANOFACTURA || '', 395, y + 13);
+                .text(String(docEjercicio), 395, y + 13);
 
             y += 26;
 
@@ -439,7 +463,7 @@ async function generateInvoicePDF(facturaData) {
                 const dto = line.PORCENTAJEDESCUENTOARTICULO || 0;
                 doc.text(dto > 0 ? formatNumber(dto, 2) : '-', 450, y + 3, { width: 30, align: 'center' });
 
-                const iva = line.PORCENTAJEIVAARTICULO || 0;
+                const iva = line.CODIGOIVA ? (IVA_MAP[line.CODIGOIVA.trim()] || 0) : (parseFloat(line.PORCENTAJEIVAARTICULO) || 0);
                 doc.text(formatNumber(iva, 2), 485, y + 3, { width: 25, align: 'center' });
 
                 const importe = line.IMPORTENETOARTICULO || 0;
@@ -465,54 +489,40 @@ async function generateInvoicePDF(facturaData) {
             // TABLA DE TOTALES POR TIPO DE IVA
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-            // Agrupar líneas por % IVA y % Recargo
-            const gruposIVA = {};
-
-            lines.forEach(line => {
-                const porcIVA = parseFloat(line.PORCENTAJEIVAARTICULO) || 0;
-                const porcRec = parseFloat(line.PORCENTAJERECARGOARTICULO) || 0;
-                const key = `${porcIVA.toFixed(2)}_${porcRec.toFixed(2)}`;
-
-                if (!gruposIVA[key]) {
-                    gruposIVA[key] = {
-                        porcIVA,
-                        porcRec,
-                        baseImponible: 0,
-                        iva: 0,
-                        recargo: 0
-                    };
+            // Build IVA groups from CPC header-level data (LAC has no IVA columns)
+            const grupos = [];
+            if (ivaBreakdown) {
+                // CPC stores up to 3 IVA tiers
+                for (let i = 1; i <= 3; i++) {
+                    const bi = parseFloat(ivaBreakdown[`BI${i}`]) || 0;
+                    const pct = parseFloat(ivaBreakdown[`IVA${i}_PCT`]) || 0;
+                    const imp = parseFloat(ivaBreakdown[`IVA${i}_IMP`]) || 0;
+                    if (bi !== 0 || imp !== 0) {
+                        grupos.push({
+                            porcIVA: pct,
+                            porcRec: 0,
+                            baseImponible: bi,
+                            iva: imp,
+                            recargo: 0
+                        });
+                    }
                 }
+            }
 
-                const importe = parseFloat(line.IMPORTENETOARTICULO) || 0;
-                const ivaLinea = line.IMPORTEIVAARTICULO !== undefined && line.IMPORTEIVAARTICULO !== null
-                    ? (parseFloat(line.IMPORTEIVAARTICULO) || 0)
-                    : (importe * (porcIVA / 100));
-                const recargoLinea = line.IMPORTERECARGOARTICULO !== undefined && line.IMPORTERECARGOARTICULO !== null
-                    ? (parseFloat(line.IMPORTERECARGOARTICULO) || 0)
-                    : (importe * (porcRec / 100));
-
-                gruposIVA[key].baseImponible += importe;
-                gruposIVA[key].iva += ivaLinea;
-                gruposIVA[key].recargo += recargoLinea;
-            });
-
-            const grupos = Object.values(gruposIVA);
-
-            if (
-                grupos.length === 1 &&
-                header &&
-                header.BASEFACTURA !== undefined &&
-                header.IVAFACTURA !== undefined
-            ) {
-                const baseH = parseFloat(header.BASEFACTURA) || 0;
-                const ivaH = parseFloat(header.IVAFACTURA) || 0;
-                const recH = parseFloat(header.RECARGOFACTURA) || 0;
-
-                grupos[0].baseImponible = baseH;
-                grupos[0].iva = ivaH;
-                grupos[0].recargo = recH;
-                grupos[0].porcIVA = baseH !== 0 ? (ivaH / baseH) * 100 : 0;
-                grupos[0].porcRec = baseH !== 0 ? (recH / baseH) * 100 : 0;
+            // Fallback: if no IVA breakdown from CPC, compute from lines
+            if (grupos.length === 0) {
+                const gruposIVA = {};
+                lines.forEach(line => {
+                    const porcIVA = line.CODIGOIVA ? (IVA_MAP[(line.CODIGOIVA || '').trim()] || 0) : 0;
+                    const key = `${porcIVA.toFixed(2)}`;
+                    if (!gruposIVA[key]) {
+                        gruposIVA[key] = { porcIVA, porcRec: 0, baseImponible: 0, iva: 0, recargo: 0 };
+                    }
+                    const importe = parseFloat(line.IMPORTENETOARTICULO) || 0;
+                    gruposIVA[key].baseImponible += importe;
+                    gruposIVA[key].iva += importe * (porcIVA / 100);
+                });
+                grupos.push(...Object.values(gruposIVA));
             }
 
             if (grupos.length > 0) {

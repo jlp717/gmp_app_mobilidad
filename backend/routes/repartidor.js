@@ -1169,10 +1169,10 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
 
         logger.info(`[PDF] Generating Albaran PDF: ${year}-${serie}-${terminal}-${number}`);
 
-        // 1. Fetch Header from CAC
+        // 1. Fetch Header from CAC + IVA breakdown from CPC
         const headerSql = `
             SELECT 
-                CAC.EJERCICIOALBARAN, CAC.SERIEALBARAN, CAC.NUMEROALBARAN,
+                CAC.EJERCICIOALBARAN, CAC.SERIEALBARAN, CAC.NUMEROALBARAN, CAC.TERMINALALBARAN,
                 CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
                 CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA,
                 TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
@@ -1197,6 +1197,29 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         }
         const header = headers[0];
 
+        // Fetch IVA breakdown from CPC (header-level, LAC has no IVA columns)
+        try {
+            const ivaSql = `
+                SELECT 
+                    IMPORTEBASEIMPONIBLE1 as BI1, PORCENTAJEIVA1 as IVA1_PCT, IMPORTEIVA1 as IVA1_IMP,
+                    IMPORTEBASEIMPONIBLE2 as BI2, PORCENTAJEIVA2 as IVA2_PCT, IMPORTEIVA2 as IVA2_IMP,
+                    IMPORTEBASEIMPONIBLE3 as BI3, PORCENTAJEIVA3 as IVA3_PCT, IMPORTEIVA3 as IVA3_IMP,
+                    IMPORTETOTAL
+                FROM DSEDAC.CPC
+                WHERE EJERCICIOALBARAN = ${year}
+                  AND TRIM(SERIEALBARAN) = '${(serie || '').trim()}'
+                  AND TERMINALALBARAN = ${terminal}
+                  AND NUMEROALBARAN = ${number}
+                FETCH FIRST 1 ROW ONLY
+            `;
+            const ivaRows = await query(ivaSql, false);
+            if (ivaRows.length > 0) {
+                header.IVA_BREAKDOWN = ivaRows[0];
+            }
+        } catch (e) {
+            logger.warn(`[PDF] Could not fetch IVA breakdown: ${e.message}`);
+        }
+
         // 2. Fetch Lines from LAC
         const linesSql = `
             SELECT 
@@ -1204,9 +1227,9 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 LAC.DESCRIPCION as DESCRIPCIONARTICULO,
                 '' as LOTEARTICULO,
                 LAC.CANTIDADUNIDADES as CANTIDADARTICULO,
-                0 as CAJASARTICULO,
+                LAC.CANTIDADENVASES as CAJASARTICULO,
                 LAC.IMPORTEVENTA as IMPORTENETOARTICULO,
-                0 as PORCENTAJEIVAARTICULO,
+                TRIM(LAC.CODIGOIVA) as CODIGOIVA,
                 0 as PORCENTAJERECARGOARTICULO,
                 LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
                 LAC.PRECIOVENTA as PRECIOARTICULO
@@ -1294,8 +1317,8 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
 
         logger.info(`[PDF] Signature for ${albId}: ${signatureBase64 ? 'FOUND' : 'NOT FOUND'}`);
 
-        // 4. Generate PDF with optional signature
-        const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource });
+        // 4. Generate PDF with optional signature (documentType = albaran)
+        const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource, documentType: 'albaran' });
 
         res.set({
             'Content-Type': 'application/pdf',
@@ -1905,6 +1928,29 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 
         logger.info(`[PDF] Found CAC header: albaran=${actualEjAlb}-${actualSerieAlb}-${actualTermAlb}-${actualNumAlb}, factura=${header.EJERCICIOFACTURA}-${(header.SERIEFACTURA||'').toString().trim()}-${header.NUMEROFACTURA}`);
 
+        // Fetch IVA breakdown from CPC
+        try {
+            const ivaSql = `
+                SELECT 
+                    IMPORTEBASEIMPONIBLE1 as BI1, PORCENTAJEIVA1 as IVA1_PCT, IMPORTEIVA1 as IVA1_IMP,
+                    IMPORTEBASEIMPONIBLE2 as BI2, PORCENTAJEIVA2 as IVA2_PCT, IMPORTEIVA2 as IVA2_IMP,
+                    IMPORTEBASEIMPONIBLE3 as BI3, PORCENTAJEIVA3 as IVA3_PCT, IMPORTEIVA3 as IVA3_IMP,
+                    IMPORTETOTAL
+                FROM DSEDAC.CPC
+                WHERE EJERCICIOALBARAN = ${actualEjAlb}
+                  AND TRIM(SERIEALBARAN) = '${actualSerieAlb}'
+                  AND TERMINALALBARAN = ${actualTermAlb}
+                  AND NUMEROALBARAN = ${actualNumAlb}
+                FETCH FIRST 1 ROW ONLY
+            `;
+            const ivaRows = await query(ivaSql, false);
+            if (ivaRows.length > 0) {
+                header.IVA_BREAKDOWN = ivaRows[0];
+            }
+        } catch (e) {
+            logger.warn(`[PDF] Could not fetch IVA breakdown for invoice: ${e.message}`);
+        }
+
         // 2. Fetch Lines - use albaran fields from found header for reliable join
         const linesSql = `
             SELECT 
@@ -1912,9 +1958,9 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
                 LAC.DESCRIPCION as DESCRIPCIONARTICULO,
                 '' as LOTEARTICULO,
                 LAC.CANTIDADUNIDADES as CANTIDADARTICULO,
-                0 as CAJASARTICULO,
+                LAC.CANTIDADENVASES as CAJASARTICULO,
                 LAC.IMPORTEVENTA as IMPORTENETOARTICULO,
-                0 as PORCENTAJEIVAARTICULO,
+                TRIM(LAC.CODIGOIVA) as CODIGOIVA,
                 0 as PORCENTAJERECARGOARTICULO,
                 LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
                 LAC.PRECIOVENTA as PRECIOARTICULO
@@ -1993,8 +2039,8 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 
         logger.info(`[PDF] Invoice signature for ${albId}: ${signatureBase64 ? 'FOUND' : 'NOT FOUND'}`);
 
-        // 4. Generate PDF with signature
-        const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource });
+        // 4. Generate PDF with signature (documentType = factura)
+        const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource, documentType: 'factura' });
 
         // 5. Send Response
         const factNum = header.NUMEROFACTURA || number;
@@ -2024,7 +2070,13 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        // Fetch ALL clients ever delivered with totals
+        // Rolling 12-month window for relevant clients
+        const now = new Date();
+        const cutoffYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+        const cutoffMonth = now.getMonth() === 0 ? 1 : now.getMonth(); // 1-based, same month last year
+        const cutoffDate = cutoffYear * 10000 + cutoffMonth * 100 + 1;
+
+        // Fetch clients delivered in last 12 months with totals
         let sql = `
             SELECT
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
@@ -2044,6 +2096,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                 ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
               AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
+              AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${cutoffDate}
         `;
 
         if (search) {

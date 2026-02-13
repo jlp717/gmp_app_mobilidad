@@ -10,9 +10,10 @@ import 'repartidor_historico_page.dart';
 
 class RepartidorClientesPage extends StatefulWidget {
   final String repartidorId;
+  final bool isJefeMode;
   final void Function(String clientId, String clientName)? onNavigateToHistory;
 
-  const RepartidorClientesPage({super.key, required this.repartidorId, this.onNavigateToHistory});
+  const RepartidorClientesPage({super.key, required this.repartidorId, this.isJefeMode = false, this.onNavigateToHistory});
 
   @override
   State<RepartidorClientesPage> createState() => _RepartidorClientesPageState();
@@ -336,7 +337,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                           const SizedBox(width: 12),
                           _clientStat(Icons.calendar_today, client.lastVisit!, AppTheme.textSecondary),
                         ],
-                        if (client.repCode != null && client.repCode!.isNotEmpty) ...[
+                        if (widget.isJefeMode && client.repCode != null && client.repCode!.isNotEmpty) ...[
                           const SizedBox(width: 12),
                           _clientStat(
                             Icons.local_shipping,
