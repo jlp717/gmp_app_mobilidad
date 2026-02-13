@@ -304,7 +304,8 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
             logger.warn(`[Auth] Error querying VEH/VDD for repartidores: ${e.message}`);
         }
 
-        // 2. Get repartidores from OPP table — limit to current year for performance
+        // 2. Get repartidores from OPP table — ONLY those who also have a vehicle (VEH) or are frequent deliverers
+        // This prevents comerciales from appearing as repartidores
         try {
             const currentYear = new Date().getFullYear();
             const repRows = await query(`
@@ -315,6 +316,15 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
                 WHERE OPP.CODIGOREPARTIDOR IS NOT NULL 
                   AND TRIM(OPP.CODIGOREPARTIDOR) <> ''
                   AND OPP.ANOREPARTO >= ${currentYear - 1}
+                  AND (
+                    EXISTS (SELECT 1 FROM DSEDAC.VEH V WHERE V.CODIGOVENDEDOR = OPP.CODIGOREPARTIDOR)
+                    OR TRIM(OPP.CODIGOREPARTIDOR) IN (
+                      SELECT TRIM(OPP2.CODIGOREPARTIDOR) FROM DSEDAC.OPP OPP2
+                      WHERE OPP2.ANOREPARTO >= ${currentYear}
+                      GROUP BY TRIM(OPP2.CODIGOREPARTIDOR)
+                      HAVING COUNT(*) >= 5
+                    )
+                  )
             `, false);
             if (repRows && repRows.length > 0) {
                 logger.info(`[Auth] OPP query returned ${repRows.length} repartidores`);
@@ -327,8 +337,8 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
         }
 
         // 3. Deduplicate by code, filter empty/invalid/inactive, and sort by code ascending
-        const EXCLUDED_PREFIXES = ['ZZ', 'ZD', 'ZB', 'ZE', 'Z7', 'XX', 'TT', 'TEST'];
-        const EXCLUDED_CODES = new Set(['UNK', '00', '0', '']);
+        const EXCLUDED_PREFIXES = ['ZZ', 'ZD', 'ZB', 'ZE', 'Z7', 'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZJ', 'ZK', 'ZL', 'ZM', 'ZN', 'ZO', 'ZP', 'ZQ', 'ZR', 'ZS', 'ZT', 'ZU', 'ZV', 'ZW', 'ZX', 'ZY', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z8', 'Z9', 'XX', 'TT', 'TEST'];
+        const EXCLUDED_CODES = new Set(['UNK', '00', '0', '', 'NULL', 'NONE', 'N/A']);
         const uniqueMap = new Map();
         results.forEach(r => {
             if (!r.code || r.code.length === 0) return;

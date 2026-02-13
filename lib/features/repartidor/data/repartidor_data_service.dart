@@ -457,13 +457,35 @@ class RepartidorDataService {
     required int number,
     required String type, // 'factura' o 'albaran'
     int terminal = 0,
+    // Factura-specific fields (for invoice endpoint)
+    int? facturaNumber,
+    String? serieFactura,
+    int? ejercicioFactura,
+    // Albaran fallback fields (sent as query params to invoice endpoint)
+    int? albaranNumber,
+    String? albaranSerie,
+    int? albaranTerminal,
+    int? albaranYear,
   }) async {
     try {
       final String endpoint;
       if (type == 'albaran') {
         endpoint = '/repartidor/document/albaran/$year/$serie/$terminal/$number/pdf';
       } else {
-        endpoint = '/repartidor/document/invoice/$year/$serie/$number/pdf';
+        // For facturas: use factura-specific fields if available
+        final fNum = facturaNumber ?? number;
+        final fSerie = serieFactura ?? serie;
+        final fYear = ejercicioFactura ?? year;
+        // Build query params for albaran fallback
+        final queryParams = <String, String>{};
+        if (albaranNumber != null) queryParams['albaranNumber'] = albaranNumber.toString();
+        if (albaranSerie != null) queryParams['albaranSerie'] = albaranSerie;
+        if (albaranTerminal != null) queryParams['albaranTerminal'] = albaranTerminal.toString();
+        if (albaranYear != null) queryParams['albaranYear'] = albaranYear.toString();
+        final qs = queryParams.isNotEmpty
+            ? '?${queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}'
+            : '';
+        endpoint = '/repartidor/document/invoice/$fYear/$fSerie/$fNum/pdf$qs';
       }
 
       final response = await ApiClient.getBytes(endpoint);

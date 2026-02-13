@@ -19,10 +19,14 @@ import '../../data/repartidor_data_service.dart';
 
 class RepartidorHistoricoPage extends StatefulWidget {
   final String repartidorId;
+  final String? initialClientId;
+  final String? initialClientName;
 
   const RepartidorHistoricoPage({
     super.key,
     required this.repartidorId,
+    this.initialClientId,
+    this.initialClientName,
   });
 
   @override
@@ -48,6 +52,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialClientId != null) {
+      // Navigate directly to client documents
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadClientDocuments(widget.initialClientId!, widget.initialClientName ?? widget.initialClientId!);
+      });
+    }
     _loadClients();
   }
 
@@ -603,55 +613,175 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             ],
           ),
           const SizedBox(height: 8),
-          // Row 2: Filter chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                // Date range
-                _buildChip(
+          // Row 2: Dropdown filters (redesigned from chips)
+          Row(
+            children: [
+              // Date range button
+              Expanded(
+                child: _buildFilterDropdown(
                   icon: Icons.date_range,
                   label: _dateFrom != null || _dateTo != null ? _formatDateRange() : 'Fechas',
                   isActive: _dateFrom != null || _dateTo != null,
                   color: AppTheme.neonBlue,
                   onTap: _showDateRangePicker,
                 ),
-                const SizedBox(width: 6),
-                // Doc type
-                _buildChip(
-                  icon: _filterDocType == _DocType.factura ? Icons.receipt : Icons.description,
-                  label: _filterDocType == null ? 'Tipo'
-                      : _filterDocType == _DocType.factura ? 'Facturas' : 'Albaranes',
-                  isActive: _filterDocType != null,
-                  color: AppTheme.neonPurple,
-                  onTap: _cycleDocType,
-                ),
-                const SizedBox(width: 6),
-                // Status
-                _buildChip(
-                  icon: _statusIcon(_filterStatus),
-                  label: _statusLabel(_filterStatus),
-                  isActive: _filterStatus != null,
-                  color: _statusColor(_filterStatus),
-                  onTap: _cycleStatus,
-                ),
-                if (_hasActiveFilters) ...[
-                  const SizedBox(width: 6),
-                  _buildChip(
-                    icon: Icons.close,
-                    label: 'Limpiar',
-                    isActive: false,
-                    color: AppTheme.error,
-                    onTap: () {
-                      _clearFilters();
-                      if (_selectedClientId != null) {
-                        _loadClientDocuments(_selectedClientId!, _selectedClientName ?? '');
-                      }
-                    },
+              ),
+              const SizedBox(width: 6),
+              // Doc type dropdown
+              Expanded(
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: _filterDocType != null ? AppTheme.neonPurple.withOpacity(0.1) : AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _filterDocType != null ? AppTheme.neonPurple.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+                    ),
                   ),
-                ],
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<_DocType?>(
+                      value: _filterDocType,
+                      hint: Row(
+                        children: [
+                          Icon(Icons.description, size: 14, color: AppTheme.textSecondary.withOpacity(0.6)),
+                          const SizedBox(width: 4),
+                          Text('Tipo Doc', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6))),
+                        ],
+                      ),
+                      isDense: true,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceColor,
+                      style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary),
+                      items: [
+                        DropdownMenuItem<_DocType?>(
+                          value: null,
+                          child: Row(children: [
+                            Icon(Icons.all_inclusive, size: 14, color: AppTheme.textSecondary),
+                            const SizedBox(width: 4),
+                            const Text('Todos', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DocType?>(
+                          value: _DocType.factura,
+                          child: Row(children: [
+                            const Icon(Icons.receipt, size: 14, color: AppTheme.neonPurple),
+                            const SizedBox(width: 4),
+                            const Text('Facturas', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DocType?>(
+                          value: _DocType.albaran,
+                          child: Row(children: [
+                            const Icon(Icons.description, size: 14, color: AppTheme.neonBlue),
+                            const SizedBox(width: 4),
+                            const Text('Albaranes', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                      ],
+                      onChanged: (val) => setState(() => _filterDocType = val),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Status dropdown
+              Expanded(
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: _filterStatus != null ? _statusColor(_filterStatus).withOpacity(0.1) : AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _filterStatus != null ? _statusColor(_filterStatus).withOpacity(0.5) : Colors.white.withOpacity(0.1),
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<_DeliveryStatus?>(
+                      value: _filterStatus,
+                      hint: Row(
+                        children: [
+                          Icon(Icons.local_shipping, size: 14, color: AppTheme.textSecondary.withOpacity(0.6)),
+                          const SizedBox(width: 4),
+                          Text('Estado', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6))),
+                        ],
+                      ),
+                      isDense: true,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceColor,
+                      style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary),
+                      items: [
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: null,
+                          child: Row(children: [
+                            Icon(Icons.all_inclusive, size: 14, color: AppTheme.textSecondary),
+                            const SizedBox(width: 4),
+                            const Text('Todos', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: _DeliveryStatus.delivered,
+                          child: Row(children: [
+                            const Icon(Icons.check_circle, size: 14, color: Color(0xFF4CAF50)),
+                            const SizedBox(width: 4),
+                            const Text('Entregado', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: _DeliveryStatus.enRuta,
+                          child: Row(children: [
+                            Icon(Icons.local_shipping, size: 14, color: AppTheme.neonBlue),
+                            const SizedBox(width: 4),
+                            const Text('En Ruta', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: _DeliveryStatus.partial,
+                          child: Row(children: [
+                            const Icon(Icons.pie_chart, size: 14, color: Colors.orange),
+                            const SizedBox(width: 4),
+                            const Text('Parcial', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: _DeliveryStatus.notDelivered,
+                          child: Row(children: [
+                            Icon(Icons.cancel, size: 14, color: AppTheme.error),
+                            const SizedBox(width: 4),
+                            const Text('Pendiente', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                      ],
+                      onChanged: (val) => setState(() => _filterStatus = val),
+                    ),
+                  ),
+                ),
+              ),
+              // Clear button
+              if (_hasActiveFilters) ...[
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () {
+                    _clearFilters();
+                    if (_selectedClientId != null) {
+                      _loadClientDocuments(_selectedClientId!, _selectedClientName ?? '');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    height: 38,
+                    width: 38,
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+                    ),
+                    child: Icon(Icons.filter_alt_off, size: 16, color: AppTheme.error),
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
         ],
       ),
@@ -700,6 +830,49 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Widget _buildStatDivider() {
     return Container(width: 1, height: 24, color: Colors.white.withOpacity(0.08));
+  }
+
+  Widget _buildFilterDropdown({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: isActive ? color.withOpacity(0.1) : AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive ? color.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: isActive ? color : AppTheme.textSecondary),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isActive ? color : AppTheme.textSecondary,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.arrow_drop_down, size: 16, color: isActive ? color : AppTheme.textSecondary),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildChip({
@@ -1091,12 +1264,20 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
 
     try {
+      final isFactura = doc.type == _DocType.factura;
       final bytes = await RepartidorDataService.downloadDocument(
         year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
         serie: doc.serie,
-        number: doc.albaranNumber ?? doc.number,
+        number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
         terminal: doc.terminal,
-        type: doc.type == _DocType.factura ? 'factura' : 'albaran',
+        type: isFactura ? 'factura' : 'albaran',
+        facturaNumber: doc.facturaNumber,
+        serieFactura: doc.serieFactura,
+        ejercicioFactura: doc.ejercicioFactura,
+        albaranNumber: doc.albaranNumber ?? doc.number,
+        albaranSerie: doc.serie,
+        albaranTerminal: doc.terminal,
+        albaranYear: doc.ejercicio,
       );
 
       final tempDir = await getTemporaryDirectory();
@@ -1127,12 +1308,20 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
 
     try {
+      final isFactura = doc.type == _DocType.factura;
       final bytes = await RepartidorDataService.downloadDocument(
         year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
         serie: doc.serie,
-        number: doc.albaranNumber ?? doc.number,
+        number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
         terminal: doc.terminal,
-        type: doc.type == _DocType.factura ? 'factura' : 'albaran',
+        type: isFactura ? 'factura' : 'albaran',
+        facturaNumber: doc.facturaNumber,
+        serieFactura: doc.serieFactura,
+        ejercicioFactura: doc.ejercicioFactura,
+        albaranNumber: doc.albaranNumber ?? doc.number,
+        albaranSerie: doc.serie,
+        albaranTerminal: doc.terminal,
+        albaranYear: doc.ejercicio,
       );
 
       final tempDir = await getTemporaryDirectory();

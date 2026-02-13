@@ -19,6 +19,8 @@ import '../../../entregas/providers/entregas_provider.dart';
 import '../../../repartidor/presentation/pages/repartidor_rutero_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_comisiones_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
+import '../../../repartidor/presentation/pages/repartidor_panel_page.dart';
+import '../../../repartidor/presentation/pages/repartidor_clientes_page.dart';
 import '../../../facturas/presentation/pages/facturas_page.dart';
 import 'dashboard_content.dart';
 
@@ -230,6 +232,18 @@ class _MainShellState extends State<MainShell> {
     // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
+      items.add(_NavItem(
+        icon: Icons.dashboard_outlined,
+        selectedIcon: Icons.dashboard,
+        label: 'Panel',
+        color: Colors.orange,
+      ));
+      items.add(_NavItem(
+        icon: Icons.people_outline,
+        selectedIcon: Icons.people,
+        label: 'Clientes',
+        color: AppTheme.neonGreen,
+      ));
       items.add(_NavItem(
         icon: Icons.route_outlined,
         selectedIcon: Icons.route,
@@ -773,7 +787,7 @@ class _MainShellState extends State<MainShell> {
     final isRepartidor = _isRepartidorEffective; 
     
     // ===============================================
-    // REPARTIDOR: 0=Rutero, 1=Comisiones, 2=Histórico, 3=Chat IA
+    // REPARTIDOR: 0=Panel, 1=Clientes, 2=Rutero, 3=Comisiones, 4=Histórico, 5=Chat IA
     // ===============================================
     if (isRepartidor) {
       // Determine effective repartidor ID
@@ -798,15 +812,19 @@ class _MainShellState extends State<MainShell> {
         child: Builder(builder: (_) {
           switch (_currentIndex) {
             case 0:
+              return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
+            case 1:
+              return RepartidorClientesPage(repartidorId: effectiveRepartidorId);
+            case 2:
               return ChangeNotifierProvider(
                 create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
                 child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
               );
-            case 1:
-              return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
-            case 2:
-              return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
             case 3:
+              return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
+            case 4:
+              return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
+            case 5:
               return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
             default:
               return const Center(child: Text('Página no encontrada'));

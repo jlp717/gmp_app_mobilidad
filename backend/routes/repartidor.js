@@ -328,23 +328,23 @@ router.get('/history/documents/:clientId', async (req, res) => {
                       AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
                     FETCH FIRST 1 ROW ONLY), 0) as EJERCICIOFACTURA,
                 COALESCE((SELECT FIRMANOMBRE FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
                       AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
                     FETCH FIRST 1 ROW ONLY), '') as LEGACY_FIRMA_NOMBRE,
                 (SELECT DIA FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
                       AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
                     FETCH FIRST 1 ROW ONLY) as LEGACY_DIA,
                 (SELECT MES FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
                       AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
                     FETCH FIRST 1 ROW ONLY) as LEGACY_MES,
                 (SELECT ANO FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
                       AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
                     FETCH FIRST 1 ROW ONLY) as LEGACY_ANO,
                 (SELECT HORA FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND SERIEALBARAN = CPC.SERIEALBARAN 
+                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
                       AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
                     FETCH FIRST 1 ROW ONLY) as LEGACY_HORA
             FROM DSEDAC.CPC CPC
@@ -1147,7 +1147,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
             WHERE CAC.NUMEROALBARAN = ${number} 
-              AND CAC.SERIEALBARAN = '${serie}' 
+              AND TRIM(CAC.SERIEALBARAN) = '${(serie || '').trim()}' 
               AND CAC.EJERCICIOALBARAN = ${year}
               AND CAC.TERMINALALBARAN = ${terminal}
             FETCH FIRST 1 ROW ONLY
@@ -1174,7 +1174,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 LAC.PRECIOVENTA as PRECIOARTICULO
             FROM DSEDAC.LAC LAC
             WHERE LAC.EJERCICIOALBARAN = ${year}
-              AND LAC.SERIEALBARAN = '${serie}'
+              AND TRIM(LAC.SERIEALBARAN) = '${(serie || '').trim()}'
               AND LAC.TERMINALALBARAN = ${terminal}
               AND LAC.NUMEROALBARAN = ${number}
             ORDER BY LAC.SECUENCIA
@@ -1234,7 +1234,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 const cacRows = await query(`
                     SELECT FIRMABASE64 FROM DSEDAC.CACFIRMAS
                     WHERE EJERCICIOALBARAN = ${year}
-                      AND SERIEALBARAN = '${serie.trim()}'
+                      AND TRIM(SERIEALBARAN) = '${serie.trim()}'
                       AND TERMINALALBARAN = ${terminal}
                       AND NUMEROALBARAN = ${number}
                     FETCH FIRST 1 ROW ONLY
@@ -1789,70 +1789,173 @@ router.get('/history/:repartidorId', async (req, res) => {
 router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
     try {
         const { year, serie, number } = req.params;
+        // Optional query params for albaran-level fallback lookup
+        const { albaranNumber, albaranSerie, albaranTerminal, albaranYear } = req.query;
 
-        logger.info(`[PDF] Generating Invoice PDF: ${year}-${serie}-${number}`);
+        logger.info(`[PDF] Generating Invoice PDF: ${year}-${serie}-${number} (albaran fallback: ${albaranNumber || 'none'})`);
 
-        // 1. Fetch Header (From CAC - First matching Albaran)
-        // We use CAC because actual Invoice tables like FAC/FCL might be missing or inaccessible
-        const headerSql = `
-            SELECT 
+        // Build header SELECT columns (reused by both queries)
+        const headerCols = `
                 CAC.EJERCICIOALBARAN, CAC.SERIEALBARAN, CAC.NUMEROALBARAN,
                 CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
-                CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA, -- Fallback to Alb date
+                CAC.TERMINALALBARAN,
+                CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA,
                 TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.PROVINCIA, '')) as PROVINCIACLIENTEFACTURA,
                 TRIM(COALESCE(CLI.CODIGOPOSTAL, '')) as CPCLIENTEFACTURA,
-                TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA
+                TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA`;
+
+        // 1A. Primary: Try by NUMEROFACTURA/SERIEFACTURA/EJERCICIOFACTURA
+        let headerSql = `
+            SELECT ${headerCols}
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
             WHERE CAC.NUMEROFACTURA = ${number} 
-              AND CAC.SERIEFACTURA = '${serie}' 
+              AND TRIM(CAC.SERIEFACTURA) = '${(serie || '').trim()}' 
               AND CAC.EJERCICIOFACTURA = ${year}
             FETCH FIRST 1 ROW ONLY
         `;
-        const headers = await query(headerSql, false);
+        let headers = await query(headerSql, false);
+
+        // 1B. Fallback: Try by albaran fields if factura query failed
+        if ((!headers || headers.length === 0) && albaranNumber) {
+            logger.info(`[PDF] Factura query returned 0 rows, trying albaran fallback: ${albaranYear || year}-${albaranSerie || serie}-${albaranTerminal || 0}-${albaranNumber}`);
+            headerSql = `
+                SELECT ${headerCols}
+                FROM DSEDAC.CAC CAC
+                LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+                WHERE CAC.NUMEROALBARAN = ${albaranNumber} 
+                  AND TRIM(CAC.SERIEALBARAN) = '${(albaranSerie || serie || '').trim()}'
+                  AND CAC.EJERCICIOALBARAN = ${albaranYear || year}
+                  AND CAC.TERMINALALBARAN = ${albaranTerminal || 0}
+                FETCH FIRST 1 ROW ONLY
+            `;
+            headers = await query(headerSql, false);
+        }
+
+        // 1C. Last resort: Try factura number as albaran number (Flutter may pass albaran number)
+        if (!headers || headers.length === 0) {
+            logger.info(`[PDF] Both queries failed, trying albaran-as-number fallback: ${year}-${serie}-${number}`);
+            headerSql = `
+                SELECT ${headerCols}
+                FROM DSEDAC.CAC CAC
+                LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+                WHERE CAC.NUMEROALBARAN = ${number}
+                  AND TRIM(CAC.SERIEALBARAN) = '${(serie || '').trim()}'
+                  AND CAC.EJERCICIOALBARAN = ${year}
+                FETCH FIRST 1 ROW ONLY
+            `;
+            headers = await query(headerSql, false);
+        }
 
         if (!headers || headers.length === 0) {
+            logger.warn(`[PDF] Invoice not found for any query combination: ${year}-${serie}-${number}`);
             return res.status(404).json({ success: false, error: 'Factura no encontrada (CAC)' });
         }
         const header = headers[0];
+        const actualEjAlb = header.EJERCICIOALBARAN;
+        const actualSerieAlb = (header.SERIEALBARAN || '').toString().trim();
+        const actualTermAlb = header.TERMINALALBARAN || 0;
+        const actualNumAlb = header.NUMEROALBARAN;
 
-        // 2. Fetch Lines (From LAC - Aggregated from all Albaranes in this Invoice)
+        logger.info(`[PDF] Found CAC header: albaran=${actualEjAlb}-${actualSerieAlb}-${actualTermAlb}-${actualNumAlb}, factura=${header.EJERCICIOFACTURA}-${(header.SERIEFACTURA||'').toString().trim()}-${header.NUMEROFACTURA}`);
+
+        // 2. Fetch Lines - use albaran fields from found header for reliable join
         const linesSql = `
             SELECT 
                 LAC.CODIGOARTICULO,
                 LAC.DESCRIPCION as DESCRIPCIONARTICULO,
-                '' as LOTEARTICULO, -- Column missing in LAC
+                '' as LOTEARTICULO,
                 LAC.CANTIDADUNIDADES as CANTIDADARTICULO,
-                0 as CAJASARTICULO, -- Column missing in LAC
+                0 as CAJASARTICULO,
                 LAC.IMPORTEVENTA as IMPORTENETOARTICULO,
-                0 as PORCENTAJEIVAARTICULO, -- Column missing in LAC
-                0 as PORCENTAJERECARGOARTICULO, -- Column missing in LAC
+                0 as PORCENTAJEIVAARTICULO,
+                0 as PORCENTAJERECARGOARTICULO,
                 LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
                 LAC.PRECIOVENTA as PRECIOARTICULO
             FROM DSEDAC.LAC LAC
-            INNER JOIN DSEDAC.CAC CAC 
-                 ON LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN 
-                 AND LAC.SERIEALBARAN = CAC.SERIEALBARAN 
-                 AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN 
-                 AND LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
-            WHERE CAC.NUMEROFACTURA = ${number} 
-              AND CAC.SERIEFACTURA = '${serie}' 
-              AND CAC.EJERCICIOFACTURA = ${year}
-            ORDER BY CAC.ANODOCUMENTO, CAC.MESDOCUMENTO, CAC.DIADOCUMENTO, CAC.NUMEROALBARAN, LAC.SECUENCIA
+            WHERE LAC.EJERCICIOALBARAN = ${actualEjAlb}
+              AND TRIM(LAC.SERIEALBARAN) = '${actualSerieAlb}'
+              AND LAC.TERMINALALBARAN = ${actualTermAlb}
+              AND LAC.NUMEROALBARAN = ${actualNumAlb}
+            ORDER BY LAC.SECUENCIA
         `;
         const lines = await query(linesSql, false) || [];
 
-        // 3. Generate PDF
-        const buffer = await generateInvoicePDF({ header, lines });
+        // 3. Try to get signature - comprehensive cascade (same as albaran PDF)
+        let signatureBase64 = null;
+        const albId = `${actualEjAlb}-${actualSerieAlb}-${actualTermAlb}-${actualNumAlb}`;
 
-        // 4. Send Response
+        // Step 3a: DELIVERY_STATUS
+        try {
+            const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
+            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                const fs = require('fs');
+                const pathModule = require('path');
+                const basePaths = [
+                    pathModule.join(__dirname, '../../uploads'),
+                    pathModule.join(__dirname, '../../uploads/photos')
+                ];
+                for (const basePath of basePaths) {
+                    const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
+                    if (fs.existsSync(fullPath)) {
+                        signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                        break;
+                    }
+                }
+            }
+        } catch (e) { logger.warn(`[PDF] Invoice sig DELIVERY_STATUS error: ${e.message}`); }
+
+        // Step 3b: REPARTIDOR_FIRMAS
+        if (!signatureBase64) {
+            try {
+                const firmaRows = await query(`
+                    SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
+                    INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
+                    WHERE RE.NUMERO_ALBARAN = ${actualNumAlb}
+                      AND RE.EJERCICIO_ALBARAN = ${actualEjAlb}
+                      AND TRIM(RE.SERIE_ALBARAN) = '${actualSerieAlb}'
+                    FETCH FIRST 1 ROW ONLY
+                `, false);
+                if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
+                    signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                }
+            } catch (e) { logger.warn(`[PDF] Invoice sig REPARTIDOR_FIRMAS error: ${e.message}`); }
+        }
+
+        // Step 3c: CACFIRMAS legacy
+        if (!signatureBase64) {
+            try {
+                const cacRows = await query(`
+                    SELECT FIRMABASE64 FROM DSEDAC.CACFIRMAS
+                    WHERE EJERCICIOALBARAN = ${actualEjAlb}
+                      AND TRIM(SERIEALBARAN) = '${actualSerieAlb}'
+                      AND TERMINALALBARAN = ${actualTermAlb}
+                      AND NUMEROALBARAN = ${actualNumAlb}
+                    FETCH FIRST 1 ROW ONLY
+                `, false);
+                if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
+                    let b64 = cacRows[0].FIRMABASE64.toString();
+                    b64 = b64.replace(/^data:image\/\w+;base64,/, '');
+                    signatureBase64 = b64;
+                }
+            } catch (e) { logger.warn(`[PDF] Invoice sig CACFIRMAS error: ${e.message}`); }
+        }
+
+        logger.info(`[PDF] Invoice signature for ${albId}: ${signatureBase64 ? 'FOUND' : 'NOT FOUND'}`);
+
+        // 4. Generate PDF with signature
+        const buffer = await generateInvoicePDF({ header, lines, signatureBase64 });
+
+        // 5. Send Response
+        const factNum = header.NUMEROFACTURA || number;
+        const factSerie = (header.SERIEFACTURA || serie || '').toString().trim();
         res.set({
             'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename=Factura_${year}_${serie}_${number}.pdf`,
+            'Content-Disposition': `attachment; filename=Factura_${year}_${factSerie}_${factNum}.pdf`,
             'Content-Length': buffer.length
         });
         res.send(buffer);
@@ -1946,7 +2049,7 @@ router.get('/history/legacy-signature/:id', async (req, res) => {
             SELECT FIRMABASE64
             FROM DSEDAC.CACFIRMAS
             WHERE EJERCICIOALBARAN = ${year}
-              AND SERIEALBARAN = '${series}'
+              AND TRIM(SERIEALBARAN) = '${(series || '').trim()}'
               AND TERMINALALBARAN = ${terminal}
               AND NUMEROALBARAN = ${number}
         `;
