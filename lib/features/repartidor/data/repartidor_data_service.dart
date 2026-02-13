@@ -332,7 +332,7 @@ class RepartidorDataService {
       );
       
       final clients = (response['clients'] as List? ?? [])
-          .map((c) => HistoryClient.fromJson(c))
+          .map((c) => HistoryClient.fromJson(Map<String, dynamic>.from(c)))
           .toList();
           
       return clients;
@@ -366,7 +366,7 @@ class RepartidorDataService {
       );
       
       final docs = (response['documents'] as List? ?? [])
-          .map((d) => HistoryDocument.fromJson(d))
+          .map((d) => HistoryDocument.fromJson(Map<String, dynamic>.from(d)))
           .toList();
           
       return docs;

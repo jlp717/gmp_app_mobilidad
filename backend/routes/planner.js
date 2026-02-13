@@ -239,24 +239,28 @@ router.get('/rutero/vendedores', async (req, res) => {
         const currentYear = new Date().getFullYear();
         const prevYear = currentYear - 1;
 
-        const sql = `
-            WITH ActiveVendors AS (
-                SELECT DISTINCT TRIM(R1_T8CDVD) as CODE
-                FROM DSED.LACLAE
-                WHERE LCAADC IN (${currentYear}, ${prevYear}) 
-                  AND R1_T8CDVD IS NOT NULL 
-                  AND TRIM(R1_T8CDVD) <> ''
-            )
-            SELECT
-                AV.CODE as code,
-                D.NOMBREVENDEDOR as name
-            FROM ActiveVendors AV
-            LEFT JOIN DSEDAC.VDD D ON AV.CODE = TRIM(D.CODIGOVENDEDOR)
-            ORDER BY AV.CODE
-        `;
+        // Determine which table to query based on Role
+        const { role } = req.query;
+        let sql;
+
+        if (role === 'repartidor') {
+            sql = `
+                    SELECT TRIM(CODIGOREPARTIDOR) as code, NOMBREREPARTIDOR as name
+                    FROM DSEDAC.REP
+                    ORDER BY code
+                `;
+        } else {
+            // Default: Commercials (Sales Reps)
+            sql = `
+                    SELECT TRIM(CODIGOVENDEDOR) as code, NOMBREVENDEDOR as name
+                    FROM DSEDAC.VDD 
+                    WHERE ACTIVO = 'S'
+                    ORDER BY code
+                `;
+        }
 
         // Cache 1 hour
-        const cacheKey = `vendedores:active:${currentYear}`;
+        const cacheKey = `vendedores:active:${currentYear}:${role || 'comercial'}`;
         const vendedores = await cachedQuery(query, sql, cacheKey, TTL.LONG);
 
         res.json({

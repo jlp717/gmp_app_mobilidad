@@ -115,6 +115,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           case 'partial':
             status = _DeliveryStatus.partial;
             break;
+          case 'en_ruta':
+            status = _DeliveryStatus.enRuta;
+            break;
           default:
             status = _DeliveryStatus.notDelivered;
         }
@@ -665,6 +668,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         statusIcon = Icons.cancel;
         statusLabel = 'No Entregado';
         break;
+      case _DeliveryStatus.enRuta:
+        statusColor = AppTheme.neonBlue;
+        statusIcon = Icons.local_shipping;
+        statusLabel = 'En Ruta';
+        break;
     }
 
     final isFactura = doc.type == _DocType.factura;
@@ -740,7 +748,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                        color: AppTheme.textSecondary.withOpacity(0.1),
                        borderRadius: BorderRadius.circular(4),
                      ),
-                     child: Text(doc.time!, 
+                     child: Text('Prev: ${doc.time!}', 
                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
                    ),
                 ],
@@ -1099,6 +1107,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       case _DeliveryStatus.delivered: return Icons.check_circle;
       case _DeliveryStatus.partial: return Icons.pie_chart;
       case _DeliveryStatus.notDelivered: return Icons.cancel;
+      case _DeliveryStatus.enRuta: return Icons.local_shipping;
       default: return Icons.filter_alt;
     }
   }
@@ -1108,6 +1117,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       case _DeliveryStatus.delivered: return 'Entregado';
       case _DeliveryStatus.partial: return 'Parcial';
       case _DeliveryStatus.notDelivered: return 'No Entreg.';
+      case _DeliveryStatus.enRuta: return 'En Ruta';
       default: return 'Estado';
     }
   }
@@ -1117,6 +1127,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       case _DeliveryStatus.delivered: return AppTheme.success;
       case _DeliveryStatus.partial: return Colors.orange;
       case _DeliveryStatus.notDelivered: return AppTheme.error;
+      case _DeliveryStatus.enRuta: return AppTheme.neonBlue;
       default: return AppTheme.neonGreen;
     }
   }
@@ -1145,7 +1156,7 @@ class _ClientItem {
 }
 
 enum _DocType { albaran, factura }
-enum _DeliveryStatus { delivered, partial, notDelivered }
+enum _DeliveryStatus { delivered, partial, notDelivered, enRuta }
 
 class _DocumentItem {
   final String id;

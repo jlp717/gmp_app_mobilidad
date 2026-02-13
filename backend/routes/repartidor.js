@@ -296,131 +296,128 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 MAX(CAC.EJERCICIOFACTURA) as EJERCICIOFACTURA,
                 MAX(DS.STATUS) as DELIVERY_STATUS,
                 MAX(DS.FIRMA_PATH) as FIRMA_PATH,
-                MAX(DS.UPDATED_AT) as DELIVERY_DATE,
-                MAX(DS.REPARTIDOR_ID) as DELIVERY_REPARTIDOR,
-                MAX(DS.OBSERVACIONES) as DELIVERY_OBS
+                CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.NUMEROALBARAN,
+                CPC.NUMEROFACTURA, CPC.FECHAFACTURA,
+                CPC.ANODOCUMENTO as ANO, CPC.MESDOCUMENTO as MES, CPC.DIADOCUMENTO as DIA,
+                CPC.CODIGOCLIENTEALBARAN, CPC.CODIGOCLIENTEFACTURA,
+                CPC.IMPORTETOTAL, CPC.IMPORTEPENDIENTE as IMPORTE_PENDIENTE,
+                CPC.CONFORMADOSN,
+                CPC.SITUACIONALBARAN,
+                CPC.HORALLEGADA,
+                DS.STATUS as DELIVERY_STATUS,
+                DS.UPDATED_AT as DELIVERY_UPDATED_AT,
+                DS.FIRMA_PATH,
+                DS.INCIDENCE_TYPE,
+                DS.OBSERVATIONS
             FROM DSEDAC.CPC CPC
-            ${repartidorJoin}
-            LEFT JOIN DSEDAC.CAC CAC
-                ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-                AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
-                AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
-                AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
-            LEFT JOIN (
-                SELECT SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO, NUMERODOCUMENTO,
-                       SUM(IMPORTEPENDIENTE) as IMPORTEPENDIENTE
-                FROM DSEDAC.CVC
-                GROUP BY SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO, NUMERODOCUMENTO
-            ) CVC 
-                ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
-                AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
-                AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
-                AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))
-            WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'
-            ${dateFilter}
-            GROUP BY CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
-            ORDER BY MAX(CPC.ANODOCUMENTO) DESC, MAX(CPC.MESDOCUMENTO) DESC, MAX(CPC.DIADOCUMENTO) DESC
-            OFFSET ${pageOffset} ROWS FETCH NEXT ${pageLimit} ROWS ONLY
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS ON 
+                DS.YEAR = CPC.EJERCICIOALBARAN AND
+                DS.SERIES = CPC.SERIEALBARAN AND
+                DS.NUMBER = CPC.NUMEROALBARAN
+            WHERE CPC.EJERCICIOALBARAN = ${year}
+              AND CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
+            ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
         `;
 
-        const rows = await query(sql, false);
+        const rows = await query(sql);
 
         const documents = rows.map(row => {
             const importe = parseFloat(row.IMPORTETOTAL) || 0;
             const pendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
-            const dsStatus = (row.DELIVERY_STATUS || '').trim().toUpperCase();
+
+            // --- SENIOR STATUS LOGIC ---
+            // --- SENIOR STATUS LOGIC v2 (Time-Aware) ---
+            // 1. App Status (Highest Priority - Real Time)
+            let status = 'pending';
+            const appStatus = (row.DELIVERY_STATUS || '').trim().toLowerCase();
+            const legacyStatus = (row.SITUACIONALBARAN || '').trim().toUpperCase(); // F=Facturado, R=Repartido, X=Printed/Active
+            const isDispatched = (row.CONFORMADOSN || '').trim().toUpperCase() === 'S';
+
+            // Current Date for comparison
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const docDate = new Date(row.ANO, row.MES - 1, row.DIA);
+
+            if (appStatus === 'delivered') {
+                status = 'delivered';
+            } else if (appStatus === 'no_delivered' || appStatus === 'absent') {
+                status = 'no_delivered';
+            } else {
+                // 2. Legacy ERP Status
+                if (legacyStatus === 'F' || legacyStatus === 'R') {
+                    // F: Facturado, R: Realizado/Repartido -> Green
+                    status = 'delivered';
+                } else if (isDispatched) {
+                    // S: Salido de Almacén.
+                    // Logic: If it's a past date, assume Delivered (Green). If Today, assume En Ruta (Blue).
+                    if (docDate < today) {
+                        status = 'delivered';
+                    } else {
+                        status = 'en_ruta';
+                    }
+                }
+                // Default remains 'pending' (Red)
+            }
+
             const hasFirmaPath = !!row.FIRMA_PATH;
             const numFactura = row.NUMEROFACTURA || 0;
             const isFactura = numFactura > 0;
 
-            // Hybrid Status Logic for History (v2 with CONFORMADOSN)
-            // Priority: 1) App Status (Real-time)
-            //           2) Payment (Paid = Delivered)
-            //           3) Legacy CONFORMADOSN == 'S' (Delivered)
-            //           4) Past Date (Backstop)
-
-            let displayStatus = 'notDelivered';
-            const legacyConfirmed = (row.CONFORMADOSN || '').trim() === 'S';
-
-            if (dsStatus === 'ENTREGADO') {
-                displayStatus = 'delivered';
-            } else if (dsStatus === 'PARCIAL') {
-                displayStatus = 'partial';
-            } else if (dsStatus === 'NO_ENTREGADO') {
-                displayStatus = 'notDelivered';
-            } else {
-                // Fallback Logic
-                // 1. Check Payment (Strongest financial indicator)
-                if (pendiente === 0 && importe > 0) {
-                    displayStatus = 'delivered';
-                }
-                // 2. Check Legacy Confirmation
-                else if (legacyConfirmed) {
-                    displayStatus = 'delivered';
-                }
-                // 3. Check Date (Past Date = Delivered as safety net)
-                else {
-                    const docYear = parseInt(row.ANO) || 0;
-                    const docMonth = parseInt(row.MES) || 0;
-                    const docDay = parseInt(row.DIA) || 0;
-
-                    if (docYear > 0) {
-                        const docDateNum = docYear * 10000 + docMonth * 100 + docDay;
-                        const now = new Date();
-                        const todayNum = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-
-                        if (docDateNum < todayNum) {
-                            displayStatus = 'delivered'; // Assume delivered if in past
-                        } else {
-                            // Today + Not Confirmed + Unpaid -> Not Delivered / Partial
-                            if (pendiente > 0 && pendiente < importe) displayStatus = 'partial';
-                        }
-                    } else {
-                        if (pendiente > 0 && pendiente < importe) displayStatus = 'partial';
-                    }
-                }
+            // Format Time (HORALLEGADA is HHMMS or HHMMSS)
+            let timeFormatted = null;
+            if (row.HORALLEGADA && row.HORALLEGADA > 0) {
+                let hStr = row.HORALLEGADA.toString().padStart(6, '0'); // Confirm 6 digits for HHMMSS
+                // 130202 -> 13:02
+                const hh = hStr.substring(0, 2);
+                const mm = hStr.substring(2, 4);
+                timeFormatted = `${hh}:${mm}`;
             }
-            status = displayStatus;
+            if (pendiente > 0 && pendiente < importe) displayStatus = 'partial';
+        }
+                    } else {
+        if (pendiente > 0 && pendiente < importe) displayStatus = 'partial';
+    }
+}
+            }
+    status = displayStatus;
 
-            const serie = (row.SERIEALBARAN || 'A').trim();
+const serie = (row.SERIEALBARAN || 'A').trim();
 
-            return {
-                id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
-                type: isFactura ? 'factura' : 'albaran',
-                number: isFactura ? numFactura : row.NUMEROALBARAN,
-                albaranNumber: row.NUMEROALBARAN,
-                facturaNumber: numFactura || null,
-                serie: serie,
-                ejercicio: row.EJERCICIOALBARAN,
-                terminal: row.TERMINALALBARAN,
-                date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
-                time: (row.HORALLEGADA && row.HORALLEGADA > 0)
-                    ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
-                    : null,
-                amount: importe,
-                pending: pendiente,
-                status,
-                hasSignature: hasFirmaPath || status === 'delivered',
-                signaturePath: row.FIRMA_PATH || null,
-                deliveryDate: row.DELIVERY_DATE || null,
-                deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
-                deliveryObs: row.DELIVERY_OBS || null
-            };
+return {
+    id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
+    type: isFactura ? 'factura' : 'albaran',
+    number: isFactura ? numFactura : row.NUMEROALBARAN,
+    albaranNumber: row.NUMEROALBARAN,
+    facturaNumber: numFactura || null,
+    serie: serie,
+    ejercicio: row.EJERCICIOALBARAN,
+    terminal: row.TERMINALALBARAN,
+    date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
+    time: (row.HORALLEGADA && row.HORALLEGADA > 0)
+        ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
+        : null,
+    amount: importe,
+    pending: pendiente,
+    status,
+    hasSignature: hasFirmaPath || status === 'delivered',
+    signaturePath: row.FIRMA_PATH || null,
+    deliveryDate: row.DELIVERY_DATE || null,
+    deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
+    deliveryObs: row.DELIVERY_OBS || null
+};
         });
 
-        res.json({
-            success: true,
-            clientId,
-            total: documents.length,
-            documents
-        });
+res.json({
+    success: true,
+    clientId,
+    total: documents.length,
+    documents
+});
 
     } catch (error) {
-        logger.error(`[REPARTIDOR] Error in history/documents: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
-    }
+    logger.error(`[REPARTIDOR] Error in history/documents: ${error.message}`);
+    res.status(500).json({ success: false, error: error.message });
+}
 });
 
 // =============================================================================
