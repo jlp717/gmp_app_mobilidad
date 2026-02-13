@@ -1,0 +1,1342 @@
+=== DEEP SIGNATURE EXPLORATION ===
+
+--- FOUND 220 POTENTIAL COLUMNS ---
+[
+  {
+    "TABLE_NAME": "ABV",
+    "COLUMN_NAME": "DIACONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaConfirmado                               KSDDCO"
+  },
+  {
+    "TABLE_NAME": "ABV",
+    "COLUMN_NAME": "MESCONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesConfirmado                               KSMMCO"
+  },
+  {
+    "TABLE_NAME": "ABV",
+    "COLUMN_NAME": "ANOCONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoConfirmado                               KSAACO"
+  },
+  {
+    "TABLE_NAME": "ABV",
+    "COLUMN_NAME": "HORACONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraConfirmado                              KSHRCO"
+  },
+  {
+    "TABLE_NAME": "ABVL1",
+    "COLUMN_NAME": "DIACONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaConfirmado                               KSDDCO"
+  },
+  {
+    "TABLE_NAME": "ABVL1",
+    "COLUMN_NAME": "MESCONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesConfirmado                               KSMMCO"
+  },
+  {
+    "TABLE_NAME": "ABVL1",
+    "COLUMN_NAME": "ANOCONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoConfirmado                               KSAACO"
+  },
+  {
+    "TABLE_NAME": "ABVL1",
+    "COLUMN_NAME": "HORACONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraConfirmado                              KSHRCO"
+  },
+  {
+    "TABLE_NAME": "AMC",
+    "COLUMN_NAME": "DIAASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaAsignacion                               AMDDAS"
+  },
+  {
+    "TABLE_NAME": "AMC",
+    "COLUMN_NAME": "MESASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesAsignacion                               AMMMAS"
+  },
+  {
+    "TABLE_NAME": "AMC",
+    "COLUMN_NAME": "ANOASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoAsignacion                               AMAAAS"
+  },
+  {
+    "TABLE_NAME": "AMC",
+    "COLUMN_NAME": "HORAASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraAsignacion                              AMHRAS"
+  },
+  {
+    "TABLE_NAME": "AMCL1",
+    "COLUMN_NAME": "DIAASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaAsignacion                               AMDDAS"
+  },
+  {
+    "TABLE_NAME": "AMCL1",
+    "COLUMN_NAME": "MESASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesAsignacion                               AMMMAS"
+  },
+  {
+    "TABLE_NAME": "AMCL1",
+    "COLUMN_NAME": "ANOASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoAsignacion                               AMAAAS"
+  },
+  {
+    "TABLE_NAME": "AMCL1",
+    "COLUMN_NAME": "HORAASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraAsignacion                              AMHRAS"
+  },
+  {
+    "TABLE_NAME": "AMCL2",
+    "COLUMN_NAME": "DIAASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaAsignacion                               AMDDAS"
+  },
+  {
+    "TABLE_NAME": "AMCL2",
+    "COLUMN_NAME": "MESASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesAsignacion                               AMMMAS"
+  },
+  {
+    "TABLE_NAME": "AMCL2",
+    "COLUMN_NAME": "ANOASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoAsignacion                               AMAAAS"
+  },
+  {
+    "TABLE_NAME": "AMCL2",
+    "COLUMN_NAME": "HORAASIGNACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraAsignacion                              AMHRAS"
+  },
+  {
+    "TABLE_NAME": "ARTW",
+    "COLUMN_NAME": "FOTO1",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto1                                       AWFOT1"
+  },
+  {
+    "TABLE_NAME": "ARTWL1",
+    "COLUMN_NAME": "FOTO1",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto1                                       AWFOT1"
+  },
+  {
+    "TABLE_NAME": "CACC",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    O7DDFI"
+  },
+  {
+    "TABLE_NAME": "CACC",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    O7MMFI"
+  },
+  {
+    "TABLE_NAME": "CACC",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    O7AAFI"
+  },
+  {
+    "TABLE_NAME": "CACC",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   O7HRFI"
+  },
+  {
+    "TABLE_NAME": "CACCL1",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    O7DDFI"
+  },
+  {
+    "TABLE_NAME": "CACCL1",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    O7MMFI"
+  },
+  {
+    "TABLE_NAME": "CACCL1",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    O7AAFI"
+  },
+  {
+    "TABLE_NAME": "CACCL1",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   O7HRFI"
+  },
+  {
+    "TABLE_NAME": "CACFIRMAS",
+    "COLUMN_NAME": "FIRMANOMBRE",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": null
+  },
+  {
+    "TABLE_NAME": "CACFIRMAS",
+    "COLUMN_NAME": "FIRMADNI",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": null
+  },
+  {
+    "TABLE_NAME": "CACFIRMAS",
+    "COLUMN_NAME": "FIRMABASE64",
+    "DATA_TYPE": "CLOB",
+    "COLUMN_TEXT": null
+  },
+  {
+    "TABLE_NAME": "CACT",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    CTDDFI"
+  },
+  {
+    "TABLE_NAME": "CACT",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    CTMMFI"
+  },
+  {
+    "TABLE_NAME": "CACT",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    CTAAFI"
+  },
+  {
+    "TABLE_NAME": "CACT",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   CTHRFI"
+  },
+  {
+    "TABLE_NAME": "CACTL1",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    CTDDFI"
+  },
+  {
+    "TABLE_NAME": "CACTL1",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    CTMMFI"
+  },
+  {
+    "TABLE_NAME": "CACTL1",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    CTAAFI"
+  },
+  {
+    "TABLE_NAME": "CACTL1",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   CTHRFI"
+  },
+  {
+    "TABLE_NAME": "CAPC",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    O8DDFI"
+  },
+  {
+    "TABLE_NAME": "CAPC",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    O8MMFI"
+  },
+  {
+    "TABLE_NAME": "CAPC",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    O8AAFI"
+  },
+  {
+    "TABLE_NAME": "CAPC",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   O8HRFI"
+  },
+  {
+    "TABLE_NAME": "CAPCL1",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    O8DDFI"
+  },
+  {
+    "TABLE_NAME": "CAPCL1",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    O8MMFI"
+  },
+  {
+    "TABLE_NAME": "CAPCL1",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    O8AAFI"
+  },
+  {
+    "TABLE_NAME": "CAPCL1",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   O8HRFI"
+  },
+  {
+    "TABLE_NAME": "CBA",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                KBCTSG"
+  },
+  {
+    "TABLE_NAME": "CBA_ACI",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                KBCTSG"
+  },
+  {
+    "TABLE_NAME": "CBA_200626",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                KBCTSG"
+  },
+  {
+    "TABLE_NAME": "CBA_200629",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                KBCTSG"
+  },
+  {
+    "TABLE_NAME": "CBA_200630",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                KBCTSG"
+  },
+  {
+    "TABLE_NAME": "CBAL1",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                KBCTSG"
+  },
+  {
+    "TABLE_NAME": "CDA",
+    "COLUMN_NAME": "FIRMADOSN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "FirmadoSN                                   DNSNFI"
+  },
+  {
+    "TABLE_NAME": "CDAL1",
+    "COLUMN_NAME": "FIRMADOSN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "FirmadoSN                                   DNSNFI"
+  },
+  {
+    "TABLE_NAME": "CEH",
+    "COLUMN_NAME": "CODIGOASIGNACION",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoAsignacion                            H5CDAS"
+  },
+  {
+    "TABLE_NAME": "CEHL1",
+    "COLUMN_NAME": "CODIGOASIGNACION",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoAsignacion                            H5CDAS"
+  },
+  {
+    "TABLE_NAME": "CFI",
+    "COLUMN_NAME": "FIRMADOSN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "FirmadoSN                                   OISNFI"
+  },
+  {
+    "TABLE_NAME": "CFI",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    OIDDFI"
+  },
+  {
+    "TABLE_NAME": "CFI",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    OIMMFI"
+  },
+  {
+    "TABLE_NAME": "CFI",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    OIAAFI"
+  },
+  {
+    "TABLE_NAME": "CFI",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   OIHRFI"
+  },
+  {
+    "TABLE_NAME": "CFIL1",
+    "COLUMN_NAME": "FIRMADOSN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "FirmadoSN                                   OISNFI"
+  },
+  {
+    "TABLE_NAME": "CFIL1",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    OIDDFI"
+  },
+  {
+    "TABLE_NAME": "CFIL1",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    OIMMFI"
+  },
+  {
+    "TABLE_NAME": "CFIL1",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    OIAAFI"
+  },
+  {
+    "TABLE_NAME": "CFIL1",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   OIHRFI"
+  },
+  {
+    "TABLE_NAME": "CGV",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CGNRAG"
+  },
+  {
+    "TABLE_NAME": "CGVL1",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CGNRAG"
+  },
+  {
+    "TABLE_NAME": "COF",
+    "COLUMN_NAME": "FOTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto                                        COFOTO"
+  },
+  {
+    "TABLE_NAME": "COFL1",
+    "COLUMN_NAME": "FOTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto                                        COFOTO"
+  },
+  {
+    "TABLE_NAME": "CPCT",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    W0DDFI"
+  },
+  {
+    "TABLE_NAME": "CPCT",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    W0MMFI"
+  },
+  {
+    "TABLE_NAME": "CPCT",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    W0AAFI"
+  },
+  {
+    "TABLE_NAME": "CPCT",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   W0HRFI"
+  },
+  {
+    "TABLE_NAME": "CPCTL1",
+    "COLUMN_NAME": "DIAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaFirma                                    W0DDFI"
+  },
+  {
+    "TABLE_NAME": "CPCTL1",
+    "COLUMN_NAME": "MESFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesFirma                                    W0MMFI"
+  },
+  {
+    "TABLE_NAME": "CPCTL1",
+    "COLUMN_NAME": "ANOFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoFirma                                    W0AAFI"
+  },
+  {
+    "TABLE_NAME": "CPCTL1",
+    "COLUMN_NAME": "HORAFIRMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraFirma                                   W0HRFI"
+  },
+  {
+    "TABLE_NAME": "CPTR",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              ZKTPAS"
+  },
+  {
+    "TABLE_NAME": "CPTRL1",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              ZKTPAS"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "RECETAPREFIRMADASN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "RecetaPrefirmadaSN                          CTSNRP"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "DIARECETAPREFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaRecetaPrefirmada                         CTDDRP"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "MESRECETAPREFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesRecetaPrefirmada                         CTMMRP"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "ANORECETAPREFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoRecetaPrefirmada                         CTAARP"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "HORARECETAPREFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraRecetaPrefirmada                        CTHRRP"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "RECETAFIRMADASN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "RecetaFirmadaSN                             CTSNRF"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "DIARECETAFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaRecetaFirmada                            CTDDRF"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "MESRECETAFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesRecetaFirmada                            CTMMRF"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "ANORECETAFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoRecetaFirmada                            CTAARF"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "HORARECETAFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraRecetaFirmada                           CTHRRF"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "RECETAFIRMADADIGITALSN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "RecetaFirmadaDigitalSN                      CTSNFD"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "DIARECETAFIRMADADIGITAL",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaRecetaFirmadaDigital                     CTDDFD"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "MESRECETAFIRMADADIGITAL",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesRecetaFirmadaDigital                     CTMMFD"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "ANORECETAFIRMADADIGITAL",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoRecetaFirmadaDigital                     CTAAFD"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "HORARECETAFIRMADADIGITAL",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraRecetaFirmadaDigital                    CTHRFD"
+  },
+  {
+    "TABLE_NAME": "CRE",
+    "COLUMN_NAME": "FIRMADIGITALCERTIFICADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "FirmaDigitalCertificado                     CTFDCE"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "RECETAPREFIRMADASN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "RecetaPrefirmadaSN                          CTSNRP"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "DIARECETAPREFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaRecetaPrefirmada                         CTDDRP"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "MESRECETAPREFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesRecetaPrefirmada                         CTMMRP"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "ANORECETAPREFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoRecetaPrefirmada                         CTAARP"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "HORARECETAPREFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraRecetaPrefirmada                        CTHRRP"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "RECETAFIRMADASN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "RecetaFirmadaSN                             CTSNRF"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "DIARECETAFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaRecetaFirmada                            CTDDRF"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "MESRECETAFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesRecetaFirmada                            CTMMRF"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "ANORECETAFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoRecetaFirmada                            CTAARF"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "HORARECETAFIRMADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraRecetaFirmada                           CTHRRF"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "RECETAFIRMADADIGITALSN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "RecetaFirmadaDigitalSN                      CTSNFD"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "DIARECETAFIRMADADIGITAL",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaRecetaFirmadaDigital                     CTDDFD"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "MESRECETAFIRMADADIGITAL",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesRecetaFirmadaDigital                     CTMMFD"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "ANORECETAFIRMADADIGITAL",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoRecetaFirmadaDigital                     CTAAFD"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "HORARECETAFIRMADADIGITAL",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraRecetaFirmadaDigital                    CTHRFD"
+  },
+  {
+    "TABLE_NAME": "CREL1",
+    "COLUMN_NAME": "FIRMADIGITALCERTIFICADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "FirmaDigitalCertificado                     CTFDCE"
+  },
+  {
+    "TABLE_NAME": "CVC",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC$ALB",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC$LGV",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC$250926",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC$251001",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_ALB_1",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_ALB_2",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_ALB_3",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_BK1",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_LGV_1",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_LGV_2",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_LGV_3",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_LGV_4",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_230912",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_250916",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_250917",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_250918",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_250925",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_250926",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_250929",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_250930",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_251001",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_260116",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVC_260126",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVCL1",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              CVNRAG"
+  },
+  {
+    "TABLE_NAME": "CVN",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              KVNRAS"
+  },
+  {
+    "TABLE_NAME": "CVNL1",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              KVNRAS"
+  },
+  {
+    "TABLE_NAME": "C15",
+    "COLUMN_NAME": "DIACONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaConfirmado                               CODDCO"
+  },
+  {
+    "TABLE_NAME": "C15",
+    "COLUMN_NAME": "MESCONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesConfirmado                               COMMCO"
+  },
+  {
+    "TABLE_NAME": "C15",
+    "COLUMN_NAME": "ANOCONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoConfirmado                               COAACO"
+  },
+  {
+    "TABLE_NAME": "C15",
+    "COLUMN_NAME": "HORACONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraConfirmado                              COHRCO"
+  },
+  {
+    "TABLE_NAME": "C15L1",
+    "COLUMN_NAME": "DIACONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaConfirmado                               CODDCO"
+  },
+  {
+    "TABLE_NAME": "C15L1",
+    "COLUMN_NAME": "MESCONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesConfirmado                               COMMCO"
+  },
+  {
+    "TABLE_NAME": "C15L1",
+    "COLUMN_NAME": "ANOCONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoConfirmado                               COAACO"
+  },
+  {
+    "TABLE_NAME": "C15L1",
+    "COLUMN_NAME": "HORACONFIRMADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraConfirmado                              COHRCO"
+  },
+  {
+    "TABLE_NAME": "EPLX",
+    "COLUMN_NAME": "FOTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto                                        E0FOTO"
+  },
+  {
+    "TABLE_NAME": "EPLXL1",
+    "COLUMN_NAME": "FOTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto                                        E0FOTO"
+  },
+  {
+    "TABLE_NAME": "EPLX240617",
+    "COLUMN_NAME": "FOTO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto                                        E0FOTO"
+  },
+  {
+    "TABLE_NAME": "GAS",
+    "COLUMN_NAME": "CODIGOTECNICOASIGNADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoTecnicoAsignado                       GSCDTC"
+  },
+  {
+    "TABLE_NAME": "GASL1",
+    "COLUMN_NAME": "CODIGOTECNICOASIGNADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoTecnicoAsignado                       GSCDTC"
+  },
+  {
+    "TABLE_NAME": "HRUT",
+    "COLUMN_NAME": "CONFIRMACIONMUESTRA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ConfirmacionMuestra                         HJCFMS"
+  },
+  {
+    "TABLE_NAME": "HRUTL1",
+    "COLUMN_NAME": "CONFIRMACIONMUESTRA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ConfirmacionMuestra                         HJCFMS"
+  },
+  {
+    "TABLE_NAME": "LAC",
+    "COLUMN_NAME": "DIAENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaEntregaAsignada                          LCDDEA"
+  },
+  {
+    "TABLE_NAME": "LAC",
+    "COLUMN_NAME": "MESENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesEntregaAsignada                          LCMMEA"
+  },
+  {
+    "TABLE_NAME": "LAC",
+    "COLUMN_NAME": "ANOENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoEntregaAsignada                          LCAAEA"
+  },
+  {
+    "TABLE_NAME": "LAC_250930",
+    "COLUMN_NAME": "DIAENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaEntregaAsignada                          LCDDEA"
+  },
+  {
+    "TABLE_NAME": "LAC_250930",
+    "COLUMN_NAME": "MESENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesEntregaAsignada                          LCMMEA"
+  },
+  {
+    "TABLE_NAME": "LAC_250930",
+    "COLUMN_NAME": "ANOENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoEntregaAsignada                          LCAAEA"
+  },
+  {
+    "TABLE_NAME": "LAC_251006",
+    "COLUMN_NAME": "DIAENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaEntregaAsignada                          LCDDEA"
+  },
+  {
+    "TABLE_NAME": "LAC_251006",
+    "COLUMN_NAME": "MESENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesEntregaAsignada                          LCMMEA"
+  },
+  {
+    "TABLE_NAME": "LAC_251006",
+    "COLUMN_NAME": "ANOENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoEntregaAsignada                          LCAAEA"
+  },
+  {
+    "TABLE_NAME": "LACL1",
+    "COLUMN_NAME": "DIAENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaEntregaAsignada                          LCDDEA"
+  },
+  {
+    "TABLE_NAME": "LACL1",
+    "COLUMN_NAME": "MESENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesEntregaAsignada                          LCMMEA"
+  },
+  {
+    "TABLE_NAME": "LACL1",
+    "COLUMN_NAME": "ANOENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoEntregaAsignada                          LCAAEA"
+  },
+  {
+    "TABLE_NAME": "LACL2",
+    "COLUMN_NAME": "DIAENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaEntregaAsignada                          LCDDEA"
+  },
+  {
+    "TABLE_NAME": "LACL2",
+    "COLUMN_NAME": "MESENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesEntregaAsignada                          LCMMEA"
+  },
+  {
+    "TABLE_NAME": "LACL2",
+    "COLUMN_NAME": "ANOENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoEntregaAsignada                          LCAAEA"
+  },
+  {
+    "TABLE_NAME": "LACL3",
+    "COLUMN_NAME": "DIAENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "DiaEntregaAsignada                          LCDDEA"
+  },
+  {
+    "TABLE_NAME": "LACL3",
+    "COLUMN_NAME": "MESENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "MesEntregaAsignada                          LCMMEA"
+  },
+  {
+    "TABLE_NAME": "LACL3",
+    "COLUMN_NAME": "ANOENTREGAASIGNADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "AnoEntregaAsignada                          LCAAEA"
+  },
+  {
+    "TABLE_NAME": "LEH",
+    "COLUMN_NAME": "CODIGOASIGNACION",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoAsignacion                            H6CDAS"
+  },
+  {
+    "TABLE_NAME": "LEHL1",
+    "COLUMN_NAME": "CODIGOASIGNACION",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "CodigoAsignacion                            H6CDAS"
+  },
+  {
+    "TABLE_NAME": "LMO",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              LMTPAS"
+  },
+  {
+    "TABLE_NAME": "LMOL1",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              LMTPAS"
+  },
+  {
+    "TABLE_NAME": "LMOP",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              MITPAS"
+  },
+  {
+    "TABLE_NAME": "LMOPL1",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              MITPAS"
+  },
+  {
+    "TABLE_NAME": "LPTR",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              ZYTPAS"
+  },
+  {
+    "TABLE_NAME": "LPTRL1",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              ZYTPAS"
+  },
+  {
+    "TABLE_NAME": "LRCA",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              AYNRAG"
+  },
+  {
+    "TABLE_NAME": "LRCAL1",
+    "COLUMN_NAME": "NUMEROASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "NumeroAsignado                              AYNRAG"
+  },
+  {
+    "TABLE_NAME": "OPE",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              ZOTPAS"
+  },
+  {
+    "TABLE_NAME": "OPEL1",
+    "COLUMN_NAME": "TIEMPOASIGNADO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "TiempoAsignado                              ZOTPAS"
+  },
+  {
+    "TABLE_NAME": "RCB",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                RCCTSG"
+  },
+  {
+    "TABLE_NAME": "RCB_ACI",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                RCCTSG"
+  },
+  {
+    "TABLE_NAME": "RCB_200626",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                RCCTSG"
+  },
+  {
+    "TABLE_NAME": "RCB_200629",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                RCCTSG"
+  },
+  {
+    "TABLE_NAME": "RCB_200630",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                RCCTSG"
+  },
+  {
+    "TABLE_NAME": "RCBL1",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                RCCTSG"
+  },
+  {
+    "TABLE_NAME": "RCBL2",
+    "COLUMN_NAME": "CONTROLSIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "ControlSigno                                RCCTSG"
+  },
+  {
+    "TABLE_NAME": "RHJ",
+    "COLUMN_NAME": "TURNOASIGNADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "TurnoAsignado                               RHTRAS"
+  },
+  {
+    "TABLE_NAME": "RHJLOG",
+    "COLUMN_NAME": "TURNOASIGNADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "TurnoAsignado                               J1TRAS"
+  },
+  {
+    "TABLE_NAME": "RHJLOGL1",
+    "COLUMN_NAME": "TURNOASIGNADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "TurnoAsignado                               J1TRAS"
+  },
+  {
+    "TABLE_NAME": "RHJL1",
+    "COLUMN_NAME": "TURNOASIGNADO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "TurnoAsignado                               RHTRAS"
+  },
+  {
+    "TABLE_NAME": "SNSPRD",
+    "COLUMN_NAME": "FOTO1BAJA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto1Baja                                   S1FO1B"
+  },
+  {
+    "TABLE_NAME": "SNSPRD",
+    "COLUMN_NAME": "FOTO1ALTA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto1Alta                                   S1FO1A"
+  },
+  {
+    "TABLE_NAME": "SNSPRD",
+    "COLUMN_NAME": "FOTO2BAJA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto2Baja                                   S1FO2B"
+  },
+  {
+    "TABLE_NAME": "SNSPRD",
+    "COLUMN_NAME": "FOTO2ALTA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto2Alta                                   S1FO2A"
+  },
+  {
+    "TABLE_NAME": "SNSPRDL1",
+    "COLUMN_NAME": "FOTO1BAJA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto1Baja                                   S1FO1B"
+  },
+  {
+    "TABLE_NAME": "SNSPRDL1",
+    "COLUMN_NAME": "FOTO1ALTA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto1Alta                                   S1FO1A"
+  },
+  {
+    "TABLE_NAME": "SNSPRDL1",
+    "COLUMN_NAME": "FOTO2BAJA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto2Baja                                   S1FO2B"
+  },
+  {
+    "TABLE_NAME": "SNSPRDL1",
+    "COLUMN_NAME": "FOTO2ALTA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Foto2Alta                                   S1FO2A"
+  },
+  {
+    "TABLE_NAME": "TAB",
+    "COLUMN_NAME": "ASIGNARFACTURACOBRADASN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "AsignarFacturaCobradaSN                     TASNFC"
+  },
+  {
+    "TABLE_NAME": "TAB",
+    "COLUMN_NAME": "SIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Signo                                       TASIGN"
+  },
+  {
+    "TABLE_NAME": "TABL1",
+    "COLUMN_NAME": "ASIGNARFACTURACOBRADASN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "AsignarFacturaCobradaSN                     TASNFC"
+  },
+  {
+    "TABLE_NAME": "TABL1",
+    "COLUMN_NAME": "SIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Signo                                       TASIGN"
+  },
+  {
+    "TABLE_NAME": "TAT",
+    "COLUMN_NAME": "SIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Signo                                       A7SIGN"
+  },
+  {
+    "TABLE_NAME": "TATL1",
+    "COLUMN_NAME": "SIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Signo                                       A7SIGN"
+  },
+  {
+    "TABLE_NAME": "TFP",
+    "COLUMN_NAME": "SIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Signo                                       TFSIGN"
+  },
+  {
+    "TABLE_NAME": "TFPL1",
+    "COLUMN_NAME": "SIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Signo                                       TFSIGN"
+  },
+  {
+    "TABLE_NAME": "TPD",
+    "COLUMN_NAME": "ASIGNARFACTURACOBRADASN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "AsignarFacturaCobradaSN                     T0SNFC"
+  },
+  {
+    "TABLE_NAME": "TPD",
+    "COLUMN_NAME": "SIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Signo                                       T0SIGN"
+  },
+  {
+    "TABLE_NAME": "TPDL1",
+    "COLUMN_NAME": "ASIGNARFACTURACOBRADASN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "AsignarFacturaCobradaSN                     T0SNFC"
+  },
+  {
+    "TABLE_NAME": "TPDL1",
+    "COLUMN_NAME": "SIGNO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Signo                                       T0SIGN"
+  },
+  {
+    "TABLE_NAME": "VET",
+    "COLUMN_NAME": "FIRMA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Firma                                       VTFIRM"
+  },
+  {
+    "TABLE_NAME": "VETL1",
+    "COLUMN_NAME": "FIRMA",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": "Firma                                       VTFIRM"
+  }
+]
+
+--- FOUND 3 POTENTIAL TABLES ---
+[
+  {
+    "TABLE_NAME": "CACFIRMAS",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_NAME": "DOC",
+    "TABLE_TEXT": "Documentación compras"
+  },
+  {
+    "TABLE_NAME": "DOCL1",
+    "TABLE_TEXT": "Documentación compras: Org+Clave+Sec"
+  }
+]
+

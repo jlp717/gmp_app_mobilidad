@@ -296,12 +296,18 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 DS.UPDATED_AT as DELIVERY_UPDATED_AT,
                 DS.FIRMA_PATH,
                 DS.INCIDENCE_TYPE,
-                DS.OBSERVATIONS
+                DS.OBSERVATIONS,
+                COALESCE(LS.FIRMANOMBRE, '') as LEGACY_FIRMA_NOMBRE
             FROM DSEDAC.CPC CPC
             LEFT JOIN JAVIER.DELIVERY_STATUS DS ON 
                 DS.YEAR = CPC.EJERCICIOALBARAN AND
                 DS.SERIES = CPC.SERIEALBARAN AND
                 DS.NUMBER = CPC.NUMEROALBARAN
+            LEFT JOIN DSEDAC.CACFIRMAS LS ON
+                LS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND
+                LS.SERIEALBARAN = CPC.SERIEALBARAN AND
+                LS.TERMINALALBARAN = CPC.TERMINALALBARAN AND
+                LS.NUMEROALBARAN = CPC.NUMEROALBARAN
             WHERE CPC.EJERCICIOALBARAN = ${year}
               AND CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
             ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
@@ -384,7 +390,9 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 signaturePath: row.FIRMA_PATH || null,
                 deliveryDate: row.DELIVERY_DATE || null,
                 deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
-                deliveryObs: row.DELIVERY_OBS || null
+                deliveryObs: row.DELIVERY_OBS || null,
+                legacySignatureName: row.LEGACY_FIRMA_NOMBRE || null,
+                hasLegacySignature: (row.LEGACY_FIRMA_NOMBRE && row.LEGACY_FIRMA_NOMBRE.length > 0)
             };
         });
 
