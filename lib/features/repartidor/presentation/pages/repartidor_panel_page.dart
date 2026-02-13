@@ -55,12 +55,12 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         ).catchError((_) => null),
       ]);
 
-      final deliveryData = results[0] as Map<String, dynamic>;
+      final deliveryData = Map<String, dynamic>.from(results[0] as Map? ?? {});
       final collections = results[1];
 
       if (mounted) {
         setState(() {
-          _deliverySummary = (deliveryData['summary'] as Map<String, dynamic>?) ?? {};
+          _deliverySummary = Map<String, dynamic>.from((deliveryData['summary'] as Map?) ?? {});
           _dailyData = ((deliveryData['daily'] as List?) ?? [])
               .map((d) => Map<String, dynamic>.from(d as Map))
               .toList();

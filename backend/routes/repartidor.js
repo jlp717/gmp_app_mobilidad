@@ -46,9 +46,9 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
-        const cleanRepartidorId = repartidorId.toString().trim();
+        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        logger.info(`[REPARTIDOR] Getting collections summary for ${cleanRepartidorId} (${selectedMonth}/${selectedYear})`);
+        logger.info(`[REPARTIDOR] Getting collections summary for ${cleanIds} (${selectedMonth}/${selectedYear})`);
 
         // CORRECTO: Usar OPP → CPC → CAC para repartidores
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con documentos de CAC
@@ -75,7 +75,7 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE OPP.MESREPARTO = ${selectedMonth}
               AND OPP.ANOREPARTO = ${selectedYear}
-              AND TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
             GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), CPC.CODIGOFORMAPAGO
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
@@ -89,7 +89,7 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
             // Devolver respuesta vacía en lugar de error 500
             return res.json({
                 success: true,
-                repartidorId: cleanRepartidorId,
+                repartidorId: repartidorId,
                 period: { year: selectedYear, month: selectedMonth },
                 summary: { totalCollectable: 0, totalCollected: 0, totalCommission: 0, overallPercentage: 0, thresholdMet: false, clientCount: 0 },
                 clients: [],
@@ -1222,6 +1222,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
 
         // 3. Try to get signature - comprehensive cascade lookup
         let signatureBase64 = null;
+        let signatureSource = null;
         const albId = `${year}-${serie.trim()}-${terminal}-${number}`;
         const fs = require('fs');
         const pathModule = require('path');
@@ -1238,6 +1239,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                     const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
                     if (fs.existsSync(fullPath)) {
                         signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                        signatureSource = 'FILE';
                         logger.info(`[PDF] Found signature file at ${fullPath}`);
                         break;
                     }
@@ -1260,6 +1262,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 `, false);
                 if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
                     signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                    signatureSource = 'REPARTIDOR_FIRMAS';
                     logger.info(`[PDF] Using signature from REPARTIDOR_FIRMAS`);
                 }
             } catch (e) {
@@ -1282,6 +1285,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                     let b64 = cacRows[0].FIRMABASE64;
                     b64 = b64.replace(/^data:image\/\w+;base64,/, '');
                     signatureBase64 = b64;
+                    signatureSource = 'CACFIRMAS';
                     logger.info(`[PDF] Using legacy signature from CACFIRMAS`);
                 }
             } catch (e) {
@@ -1292,7 +1296,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         logger.info(`[PDF] Signature for ${albId}: ${signatureBase64 ? 'FOUND' : 'NOT FOUND'}`);
 
         // 4. Generate PDF with optional signature
-        const buffer = await generateInvoicePDF({ header, lines, signatureBase64 });
+        const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource });
 
         res.set({
             'Content-Type': 'application/pdf',
@@ -1926,6 +1930,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 
         // 3. Try to get signature - comprehensive cascade (same as albaran PDF)
         let signatureBase64 = null;
+        let signatureSource = null;
         const albId = `${actualEjAlb}-${actualSerieAlb}-${actualTermAlb}-${actualNumAlb}`;
 
         // Step 3a: DELIVERY_STATUS
@@ -1942,6 +1947,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
                     const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
                     if (fs.existsSync(fullPath)) {
                         signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                        signatureSource = 'FILE';
                         break;
                     }
                 }
@@ -1961,6 +1967,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
                 `, false);
                 if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
                     signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                    signatureSource = 'REPARTIDOR_FIRMAS';
                 }
             } catch (e) { logger.warn(`[PDF] Invoice sig REPARTIDOR_FIRMAS error: ${e.message}`); }
         }
@@ -1980,6 +1987,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
                     let b64 = cacRows[0].FIRMABASE64.toString();
                     b64 = b64.replace(/^data:image\/\w+;base64,/, '');
                     signatureBase64 = b64;
+                    signatureSource = 'CACFIRMAS';
                 }
             } catch (e) { logger.warn(`[PDF] Invoice sig CACFIRMAS error: ${e.message}`); }
         }
@@ -1987,7 +1995,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         logger.info(`[PDF] Invoice signature for ${albId}: ${signatureBase64 ? 'FOUND' : 'NOT FOUND'}`);
 
         // 4. Generate PDF with signature
-        const buffer = await generateInvoicePDF({ header, lines, signatureBase64 });
+        const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource });
 
         // 5. Send Response
         const factNum = header.NUMEROFACTURA || number;
@@ -2023,7 +2031,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
-                COUNT(DISTINCT CPC.NUMEROALBARAN) as TOTAL_DOCS,
+                COUNT(DISTINCT TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))) as TOTAL_DOCS,
                 COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
                 MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT,
                 MAX(TRIM(OPP.CODIGOREPARTIDOR)) as REP_CODE,

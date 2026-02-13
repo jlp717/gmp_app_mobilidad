@@ -32,7 +32,7 @@ class CollectionsSummary {
   });
 
   factory CollectionsSummary.fromJson(Map<String, dynamic> json) {
-    final summary = json['summary'] as Map<String, dynamic>;
+    final summary = Map<String, dynamic>.from((json['summary'] as Map?) ?? {});
     final clientsList = (json['clients'] as List? ?? [])
         .map((c) => ClientCollectionData.fromJson(c))
         .toList();
