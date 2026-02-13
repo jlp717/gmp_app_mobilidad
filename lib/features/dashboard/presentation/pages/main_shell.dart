@@ -818,6 +818,12 @@ class _MainShellState extends State<MainShell> {
           }
       }
 
+      // Build repartidor names map for child widgets
+      final Map<String, String> repNamesMap = {
+        for (var r in _repartidoresOptions)
+          (r['code']?.toString() ?? ''): (r['name']?.toString() ?? ''),
+      };
+
       // Map tab indices dynamically based on whether Comisiones is visible
       Widget pageForIndex(int idx) {
         if (idx == 0) return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
@@ -834,7 +840,7 @@ class _MainShellState extends State<MainShell> {
         );
         if (idx == 2) return ChangeNotifierProvider(
           create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-          child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
+          child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
         );
         if (isRealRepartidor) {
           // 0=Panel, 1=Clientes, 2=Rutero, 3=Comisiones, 4=Histórico, 5=Chat IA

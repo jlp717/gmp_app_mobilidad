@@ -1094,7 +1094,7 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
                     OPP.DIAREPARTO as DIA,
                     CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN) as SERIE, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                     MAX(CPC.IMPORTETOTAL) as IMPORTE,
-                    MAX(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R') ${dsAvail ? "OR DS.STATUS = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADO,
+                    MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as ENTREGADO,
                     MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADO,
                     MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIAL
                 FROM DSEDAC.OPP OPP
@@ -2026,12 +2026,15 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                 COUNT(DISTINCT CPC.NUMEROALBARAN) as TOTAL_DOCS,
                 COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
                 MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT,
-                MAX(TRIM(OPP.CODIGOREPARTIDOR)) as REP_CODE
+                MAX(TRIM(OPP.CODIGOREPARTIDOR)) as REP_CODE,
+                MAX(TRIM(VDD.NOMBREVENDEDOR)) as REP_NAME
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             LEFT JOIN DSEDAC.CLI CLI
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            LEFT JOIN DSEDAC.VDD VDD
+                ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
               AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
         `;
@@ -2064,7 +2067,8 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                 totalDocuments: r.TOTAL_DOCS || 0,
                 totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
                 lastVisit: lastVisitStr,
-                repCode: (r.REP_CODE || '').trim() || null
+                repCode: (r.REP_CODE || '').trim() || null,
+                repName: (r.REP_NAME || '').trim() || null
             };
         });
 

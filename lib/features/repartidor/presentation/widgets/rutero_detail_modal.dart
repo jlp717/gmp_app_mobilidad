@@ -43,8 +43,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   
   final SignatureController _signatureController = SignatureController(
     penStrokeWidth: 3,
-    penColor: Colors.white,
-    exportBackgroundColor: Colors.transparent,
+    penColor: Colors.black,
+    exportBackgroundColor: Colors.white,
   );
 
   // Product verification state
@@ -1538,7 +1538,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           Container(
             height: 160,
             decoration: BoxDecoration(
-              color: AppTheme.darkCard,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: _firmaError != null ? AppTheme.error : AppTheme.borderColor,
@@ -1549,7 +1549,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               borderRadius: BorderRadius.circular(14),
               child: Signature(
                 controller: _signatureController,
-                backgroundColor: Colors.transparent,
+                backgroundColor: Colors.white,
               ),
             ),
           ),

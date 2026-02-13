@@ -338,7 +338,13 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                         ],
                         if (client.repCode != null && client.repCode!.isNotEmpty) ...[
                           const SizedBox(width: 12),
-                          _clientStat(Icons.local_shipping, 'Rep ${client.repCode!}', AppTheme.neonPurple),
+                          _clientStat(
+                            Icons.local_shipping,
+                            client.repName != null && client.repName!.isNotEmpty
+                                ? 'Rep ${client.repCode!} — ${client.repName!}'
+                                : 'Rep ${client.repCode!}',
+                            AppTheme.neonPurple,
+                          ),
                         ],
                       ],
                     ),

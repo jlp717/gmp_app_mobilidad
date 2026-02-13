@@ -22,8 +22,9 @@ import 'repartidor_historico_page.dart';
 /// - Director "View As" with auto-reload
 class RepartidorRuteroPage extends StatefulWidget {
   final String? repartidorId;
+  final Map<String, String>? repartidorNames;
 
-  const RepartidorRuteroPage({super.key, this.repartidorId});
+  const RepartidorRuteroPage({super.key, this.repartidorId, this.repartidorNames});
 
   @override
   State<RepartidorRuteroPage> createState() => _RepartidorRuteroPageState();
@@ -634,6 +635,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
                       onTap: () => _showDetailDialog(albaran),
                       onSwipeComplete: () => _handleQuickComplete(albaran),
                       onSwipeNote: () => _showQuickNoteDialog(albaran),
+                      repartidorNames: widget.repartidorNames,
                     ),
                     if (index < provider.albaranes.length - 1)
                       Divider(

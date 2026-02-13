@@ -621,7 +621,7 @@ async function generateInvoicePDF(facturaData) {
             // FIRMA DEL CLIENTE + COPIA LABEL
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-            y += 20;
+            y += 45;
 
             // Check if we need a new page
             if (y + 120 > 700) {

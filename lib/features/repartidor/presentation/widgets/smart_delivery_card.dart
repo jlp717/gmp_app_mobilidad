@@ -16,12 +16,14 @@ class SmartDeliveryCard extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback? onSwipeComplete;
   final VoidCallback? onSwipeNote;
+  final Map<String, String>? repartidorNames;
   const SmartDeliveryCard({
     super.key,
     required this.albaran,
     required this.onTap,
     this.onSwipeComplete,
     this.onSwipeNote,
+    this.repartidorNames,
   });
 
   @override
@@ -302,7 +304,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                   border: Border.all(color: Colors.orange.withOpacity(0.5)),
                 ),
                 child: Text(
-                  'R${widget.albaran.codigoRepartidor}',
+                  widget.repartidorNames != null && widget.repartidorNames!.containsKey(widget.albaran.codigoRepartidor)
+                      ? 'R ${widget.albaran.codigoRepartidor} — ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
+                      : 'R ${widget.albaran.codigoRepartidor}',
                   style: TextStyle(
                     color: Colors.orange.shade700,
                     fontWeight: FontWeight.bold,
