@@ -372,52 +372,45 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 const mm = hStr.substring(2, 4);
                 timeFormatted = `${hh}:${mm}`;
             }
-            if (pendiente > 0 && pendiente < importe) displayStatus = 'partial';
-        }
-                    } else {
-        if (pendiente > 0 && pendiente < importe) displayStatus = 'partial';
-    }
-}
-            }
-    status = displayStatus;
+            if (pendiente > 0 && pendiente < importe) status = 'partial';
 
-const serie = (row.SERIEALBARAN || 'A').trim();
+            const serie = (row.SERIEALBARAN || 'A').trim();
 
-return {
-    id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
-    type: isFactura ? 'factura' : 'albaran',
-    number: isFactura ? numFactura : row.NUMEROALBARAN,
-    albaranNumber: row.NUMEROALBARAN,
-    facturaNumber: numFactura || null,
-    serie: serie,
-    ejercicio: row.EJERCICIOALBARAN,
-    terminal: row.TERMINALALBARAN,
-    date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
-    time: (row.HORALLEGADA && row.HORALLEGADA > 0)
-        ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
-        : null,
-    amount: importe,
-    pending: pendiente,
-    status,
-    hasSignature: hasFirmaPath || status === 'delivered',
-    signaturePath: row.FIRMA_PATH || null,
-    deliveryDate: row.DELIVERY_DATE || null,
-    deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
-    deliveryObs: row.DELIVERY_OBS || null
-};
+            return {
+                id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
+                type: isFactura ? 'factura' : 'albaran',
+                number: isFactura ? numFactura : row.NUMEROALBARAN,
+                albaranNumber: row.NUMEROALBARAN,
+                facturaNumber: numFactura || null,
+                serie: serie,
+                ejercicio: row.EJERCICIOALBARAN,
+                terminal: row.TERMINALALBARAN,
+                date: `${row.ANO}-${String(row.MES).padStart(2, '0')}-${String(row.DIA).padStart(2, '0')}`,
+                time: (row.HORALLEGADA && row.HORALLEGADA > 0)
+                    ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
+                    : null,
+                amount: importe,
+                pending: pendiente,
+                status,
+                hasSignature: hasFirmaPath || status === 'delivered',
+                signaturePath: row.FIRMA_PATH || null,
+                deliveryDate: row.DELIVERY_DATE || null,
+                deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
+                deliveryObs: row.DELIVERY_OBS || null
+            };
         });
 
-res.json({
-    success: true,
-    clientId,
-    total: documents.length,
-    documents
-});
+        res.json({
+            success: true,
+            clientId,
+            total: documents.length,
+            documents
+        });
 
     } catch (error) {
-    logger.error(`[REPARTIDOR] Error in history/documents: ${error.message}`);
-    res.status(500).json({ success: false, error: error.message });
-}
+        logger.error(`[REPARTIDOR] Error in history/documents: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // =============================================================================
