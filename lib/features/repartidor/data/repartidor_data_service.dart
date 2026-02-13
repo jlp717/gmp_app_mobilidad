@@ -363,6 +363,7 @@ class RepartidorDataService {
     String? repartidorId,
     String? dateFrom,
     String? dateTo,
+    int? year,
   }) async {
     try {
       final queryParams = <String, String>{};
@@ -371,14 +372,16 @@ class RepartidorDataService {
       }
       if (dateFrom != null) queryParams['dateFrom'] = dateFrom;
       if (dateTo != null) queryParams['dateTo'] = dateTo;
+      if (year != null) queryParams['year'] = year.toString();
 
-      final cacheKey = 'repartidor_docs_${clientId}_${repartidorId ?? 'all'}_${dateFrom ?? ''}_${dateTo ?? ''}';
+      final cacheKey = 'repartidor_docs_${clientId}_${repartidorId ?? 'all'}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}';
 
       final response = await ApiClient.get(
         '/repartidor/history/documents/$clientId',
         queryParameters: queryParams,
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 15),
+        forceRefresh: true, // Always fresh for history
       );
       
       final docs = (response['documents'] as List? ?? [])

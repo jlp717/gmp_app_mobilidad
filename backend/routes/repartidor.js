@@ -279,7 +279,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
         const pageOffset = parseInt(offset) || 0;
 
         const CurrentYear = new Date().getFullYear();
-        const year = parseInt(req.query.year) || CurrentYear;
+        const yearParam = req.query.year;
         const clientCode = clientId;
 
         // Conditionally include DELIVERY_STATUS join
@@ -350,26 +350,37 @@ router.get('/history/documents/:clientId', async (req, res) => {
             FROM DSEDAC.CPC CPC
             ${repartidorJoin}
             ${dsJoin}
-            WHERE CPC.EJERCICIOALBARAN = ${year}
-              AND CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
+            WHERE CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
+              AND CPC.EJERCICIOALBARAN >= ${yearParam ? parseInt(yearParam) : CurrentYear - 2}
+              AND CPC.EJERCICIOALBARAN <= ${yearParam ? parseInt(yearParam) : CurrentYear}
               ${dateFilter}
-            ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
+            ORDER BY CPC.EJERCICIOALBARAN DESC, CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC, CPC.NUMEROALBARAN DESC
         `;
 
         const rows = await query(sql);
 
-        // --- DEDUPLICATION: Group by unique albaran key to eliminate duplicates from JOINs ---
+        // --- DEDUPLICATION v2: Group by unique albaran key AND factura key to eliminate all duplicates ---
         const uniqueMap = new Map();
         rows.forEach(row => {
             const serie = (row.SERIEALBARAN || '').toString().trim();
-            const key = `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
+            const numFactura = parseInt(row.NUMEROFACTURA) || 0;
+            // Use factura key if this is a factura to avoid same factura appearing from different albaranes
+            const key = numFactura > 0
+                ? `FAC-${row.EJERCICIOALBARAN}-${(row.SERIEFACTURA || serie).toString().trim()}-${numFactura}`
+                : `ALB-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
             if (!uniqueMap.has(key)) {
                 uniqueMap.set(key, row);
+            } else if (numFactura > 0) {
+                // For facturas, prefer row with highest albaran number (latest)
+                const existing = uniqueMap.get(key);
+                if ((row.NUMEROALBARAN || 0) > (existing.NUMEROALBARAN || 0)) {
+                    uniqueMap.set(key, row);
+                }
             }
         });
         const uniqueRows = Array.from(uniqueMap.values());
         if (uniqueRows.length < rows.length) {
-            logger.info(`[REPARTIDOR] Deduplication: ${rows.length} raw rows -> ${uniqueRows.length} unique albaranes for client ${clientId}`);
+            logger.info(`[REPARTIDOR] Deduplication v2: ${rows.length} raw rows -> ${uniqueRows.length} unique documents for client ${clientId}`);
         }
 
         const documents = uniqueRows.map(row => {
@@ -898,61 +909,64 @@ router.get('/history/signature', async (req, res) => {
         // 4. CACFIRMAS (legacy ERP signatures) — last resort
         if (!firmaBase64) {
             try {
+                // Query ALL CACFIRMAS rows for this albaran (no FIRMABASE64 filter)
                 const cacRows = await query(`
-                    SELECT FIRMABASE64, TRIM(FIRMANOMBRE) as FIRMANOMBRE, DIA, MES, ANO, HORA
+                    SELECT FIRMABASE64, TRIM(FIRMANOMBRE) as FIRMANOMBRE, DIA, MES, ANO, HORA,
+                           LENGTH(FIRMABASE64) as FIRMA_LEN
                     FROM DSEDAC.CACFIRMAS
                     WHERE EJERCICIOALBARAN = ${ejercicio}
                       AND TRIM(SERIEALBARAN) = '${(serie || 'A').trim()}'
                       AND TERMINALALBARAN = ${terminal || 0}
                       AND NUMEROALBARAN = ${numero}
-                      AND FIRMABASE64 IS NOT NULL
-                      AND LENGTH(TRIM(FIRMABASE64)) > 10
-                    FETCH FIRST 1 ROW ONLY
+                    FETCH FIRST 5 ROWS ONLY
                 `, false);
-                logger.info(`[REPARTIDOR] Step 4 CACFIRMAS (strict): ${cacRows.length} rows for ej=${ejercicio}, serie='${(serie || 'A').trim()}', term=${terminal || 0}, num=${numero}`);
-                if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
-                    let b64 = cacRows[0].FIRMABASE64;
-                    b64 = b64.replace(/^data:image\/\w+;base64,/, '');
-                    firmaBase64 = b64;
-                    signatureSource = 'CACFIRMAS';
-                    if (!firmante && cacRows[0].FIRMANOMBRE && cacRows[0].FIRMANOMBRE.trim().length > 0) {
-                        firmante = cacRows[0].FIRMANOMBRE.trim();
-                    }
-                    if (!fechaFirma && cacRows[0].ANO > 0) {
-                        fechaFirma = `${cacRows[0].ANO}-${String(cacRows[0].MES).padStart(2, '0')}-${String(cacRows[0].DIA).padStart(2, '0')} ${String(cacRows[0].HORA).padStart(6, '0').substring(0, 2)}:${String(cacRows[0].HORA).padStart(6, '0').substring(2, 4)}`;
-                    }
-                    logger.info(`[REPARTIDOR] Found legacy signature in CACFIRMAS for ${albId}`);
-                } else {
-                    // Diagnostic: check if row exists WITHOUT the FIRMABASE64 filter
-                    try {
-                        const diagRows = await query(`
-                            SELECT TRIM(FIRMANOMBRE) as FIRMANOMBRE, 
-                                   CASE WHEN FIRMABASE64 IS NULL THEN 'NULL' 
-                                        WHEN LENGTH(TRIM(FIRMABASE64)) <= 10 THEN 'TOO_SHORT' 
-                                        ELSE 'HAS_DATA' END as FIRMA_STATUS,
-                                   LENGTH(FIRMABASE64) as FIRMA_LEN
-                            FROM DSEDAC.CACFIRMAS
-                            WHERE EJERCICIOALBARAN = ${ejercicio}
-                              AND TRIM(SERIEALBARAN) = '${(serie || 'A').trim()}'
-                              AND TERMINALALBARAN = ${terminal || 0}
-                              AND NUMEROALBARAN = ${numero}
-                            FETCH FIRST 1 ROW ONLY
-                        `, false);
-                        if (diagRows.length > 0) {
-                            logger.info(`[REPARTIDOR] CACFIRMAS row EXISTS but firma=${diagRows[0].FIRMA_STATUS} (len=${diagRows[0].FIRMA_LEN}), name='${diagRows[0].FIRMANOMBRE}'`);
-                        } else {
-                            logger.info(`[REPARTIDOR] CACFIRMAS: NO row at all for this albaran`);
+                logger.info(`[REPARTIDOR] Step 4 CACFIRMAS: ${cacRows.length} rows for ej=${ejercicio}, serie='${(serie || 'A').trim()}', term=${terminal || 0}, num=${numero}`);
+
+                // Try to find one with actual base64 data
+                for (const cacRow of cacRows) {
+                    const rawB64 = cacRow.FIRMABASE64;
+                    const b64Len = parseInt(cacRow.FIRMA_LEN) || 0;
+                    const nombre = (cacRow.FIRMANOMBRE || '').trim();
+                    logger.info(`[REPARTIDOR] CACFIRMAS row: len=${b64Len}, name='${nombre}', hasData=${!!rawB64 && b64Len > 10}`);
+
+                    if (rawB64 && b64Len > 10) {
+                        let b64 = rawB64.toString();
+                        b64 = b64.replace(/^data:image\/\w+;base64,/, '');
+                        firmaBase64 = b64;
+                        signatureSource = 'CACFIRMAS';
+                        if (!firmante && nombre.length > 0) firmante = nombre;
+                        if (!fechaFirma && cacRow.ANO > 0) {
+                            fechaFirma = `${cacRow.ANO}-${String(cacRow.MES).padStart(2, '0')}-${String(cacRow.DIA).padStart(2, '0')} ${String(cacRow.HORA).padStart(6, '0').substring(0, 2)}:${String(cacRow.HORA).padStart(6, '0').substring(2, 4)}`;
                         }
-                    } catch (de) { /* diagnostic only */ }
+                        logger.info(`[REPARTIDOR] Found legacy signature in CACFIRMAS for ${albId}`);
+                        break;
+                    }
+                }
+
+                // If no base64 but we have rows with FIRMANOMBRE, report as name-only signature
+                if (!firmaBase64 && cacRows.length > 0) {
+                    const nameRow = cacRows.find(r => (r.FIRMANOMBRE || '').trim().length > 0);
+                    if (nameRow) {
+                        firmante = (nameRow.FIRMANOMBRE || '').trim();
+                        signatureSource = 'CACFIRMAS_NAME_ONLY';
+                        if (!fechaFirma && nameRow.ANO > 0) {
+                            fechaFirma = `${nameRow.ANO}-${String(nameRow.MES).padStart(2, '0')}-${String(nameRow.DIA).padStart(2, '0')} ${String(nameRow.HORA).padStart(6, '0').substring(0, 2)}:${String(nameRow.HORA).padStart(6, '0').substring(2, 4)}`;
+                        }
+                        logger.info(`[REPARTIDOR] CACFIRMAS name-only signature: '${firmante}' for ${albId}`);
+                    } else {
+                        logger.info(`[REPARTIDOR] CACFIRMAS: rows exist but no FIRMABASE64 and no FIRMANOMBRE`);
+                    }
+                } else if (cacRows.length === 0) {
+                    logger.info(`[REPARTIDOR] CACFIRMAS: NO row at all for this albaran`);
                 }
             } catch (e) {
                 logger.warn(`[REPARTIDOR] CACFIRMAS lookup error: ${e.message}`);
             }
         }
 
-        const hasSignature = !!(firmaBase64 || firmaPath);
+        const hasSignature = !!(firmaBase64 || firmaPath || signatureSource);
 
-        logger.info(`[REPARTIDOR] Signature result for ${albId}: hasSignature=${hasSignature}, source=${signatureSource || 'none'}`);
+        logger.info(`[REPARTIDOR] Signature result for ${albId}: hasSignature=${hasSignature}, source=${signatureSource || 'none'}, hasBase64=${!!firmaBase64}, firmante='${firmante || ''}'`);
 
         res.json({
             success: true,

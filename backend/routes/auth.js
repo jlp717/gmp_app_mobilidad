@@ -326,12 +326,20 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
             logger.warn(`[Auth] Error querying OPP for repartidores: ${e.message}`);
         }
 
-        // 3. Deduplicate by code, filter empty/invalid, and sort by code ascending
+        // 3. Deduplicate by code, filter empty/invalid/inactive, and sort by code ascending
+        const EXCLUDED_PREFIXES = ['ZZ', 'ZD', 'ZB', 'ZE', 'Z7', 'XX', 'TT', 'TEST'];
+        const EXCLUDED_CODES = new Set(['UNK', '00', '0', '']);
         const uniqueMap = new Map();
         results.forEach(r => {
             if (!r.code || r.code.length === 0) return;
-            // Exclude known invalid/placeholder codes
-            if (r.code === 'UNK' || r.code.startsWith('ZZ')) return;
+            const code = r.code.trim().toUpperCase();
+            // Exclude known invalid/placeholder/inactive codes
+            if (EXCLUDED_CODES.has(code)) return;
+            if (EXCLUDED_PREFIXES.some(prefix => code.startsWith(prefix))) return;
+            // Exclude single-character codes that aren't real driver IDs
+            if (code.length === 1 && !/^[0-9]$/.test(code)) return;
+            // Exclude if name is empty or same as code (placeholder)
+            if (!r.name || r.name.trim().length === 0 || r.name.trim() === r.code.trim()) return;
             uniqueMap.set(r.code, r);
         });
         const deduplicated = Array.from(uniqueMap.values()).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
