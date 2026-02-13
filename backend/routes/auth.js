@@ -153,10 +153,14 @@ router.post('/login', loginLimiter, async (req, res) => {
         let matriculaVehiculo = null;
 
         try {
+            // Check VEH.CODIGOCONDUCTOR (personal vehicle assignment)
+            // OR high OPP delivery count this year (repartidor with pool vehicle)
+            const currentYear = new Date().getFullYear();
             const vehCheck = await query(`
                 SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA 
                 FROM DSEDAC.VEH 
-                WHERE TRIM(CODIGOVENDEDOR) = '${vendedorCode}' 
+                WHERE TRIM(CODIGOCONDUCTOR) = '${vendedorCode}' 
+                  AND TRIM(CODIGOCONDUCTOR) <> '98'
                 FETCH FIRST 1 ROWS ONLY
             `, false);
 
@@ -165,6 +169,18 @@ router.post('/login', loginLimiter, async (req, res) => {
                 matriculaVehiculo = vehCheck[0].MATRICULA;
                 codigoConductor = vendedorCode;
                 logger.info(`[${requestId}] 🚚 Detected Repartidor Role for ${vendedorCode} (Vehicle: ${matriculaVehiculo})`);
+            } else {
+                // Fallback: check if they have ≥100 deliveries this year in OPP
+                const oppCheck = await query(`
+                    SELECT COUNT(*) as CNT FROM DSEDAC.OPP
+                    WHERE TRIM(CODIGOREPARTIDOR) = '${vendedorCode}'
+                      AND ANOREPARTO = ${currentYear}
+                `, false);
+                if (oppCheck.length > 0 && (oppCheck[0].CNT || 0) >= 100) {
+                    isRepartidor = true;
+                    codigoConductor = vendedorCode;
+                    logger.info(`[${requestId}] 🚚 Detected Repartidor Role for ${vendedorCode} via OPP (${oppCheck[0].CNT} deliveries in ${currentYear})`);
+                }
             }
         } catch (vehError) {
             logger.warn(`[${requestId}] Error checking vehicle: ${vehError.message}`);
@@ -284,80 +300,78 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
             return res.json(_repartidoresCache);
         }
 
-        // Split into two separate queries for resilience (UNION on different tables can fail in DB2)
+        const currentYear = new Date().getFullYear();
         let results = [];
 
-        // 1. Get drivers from VEH + VDD (vendedores with vehicle)
+        // ─── SOURCE 1: VEH.CODIGOCONDUCTOR (personal vehicle assignment) ───
+        // This is the most reliable indicator: if someone has a personal vehicle
+        // assigned (CODIGOCONDUCTOR != 98/pool), they are a repartidor.
         try {
             const vehRows = await query(`
-                SELECT TRIM(V.CODIGOVENDEDOR) as CODE, TRIM(D.NOMBREVENDEDOR) as NAME
+                SELECT DISTINCT TRIM(V.CODIGOCONDUCTOR) as CODE, TRIM(D.NOMBREVENDEDOR) as NAME
                 FROM DSEDAC.VEH V
-                JOIN DSEDAC.VDD D ON V.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+                JOIN DSEDAC.VDD D ON TRIM(D.CODIGOVENDEDOR) = TRIM(V.CODIGOCONDUCTOR)
+                WHERE TRIM(V.CODIGOCONDUCTOR) <> '98'
+                  AND TRIM(V.CODIGOCONDUCTOR) <> ''
+                  AND V.CODIGOCONDUCTOR IS NOT NULL
             `, false);
             if (vehRows && vehRows.length > 0) {
-                logger.info(`[Auth] VEH/VDD query returned ${vehRows.length} repartidores`);
-                results.push(...vehRows.map(r => ({ code: (r.CODE || r.code || '').toString().trim(), name: (r.NAME || r.name || '').toString().trim() })));
-            } else {
-                logger.warn(`[Auth] VEH/VDD query returned 0 repartidores`);
+                logger.info(`[Auth] VEH conductors: ${vehRows.length} repartidores with personal vehicle`);
+                results.push(...vehRows.map(r => ({ code: (r.CODE || '').toString().trim(), name: (r.NAME || '').toString().trim() })));
             }
         } catch (e) {
-            logger.warn(`[Auth] Error querying VEH/VDD for repartidores: ${e.message}`);
+            logger.warn(`[Auth] Error querying VEH conductors: ${e.message}`);
         }
 
-        // 2. Get repartidores from OPP table — ONLY those who also have a vehicle (VEH) or are frequent deliverers
-        // This prevents comerciales from appearing as repartidores
+        // ─── SOURCE 2: OPP active repartidores (≥100 deliveries this year) ───
+        // Captures repartidores who use pool vehicles (no personal VEH entry)
+        // but are clearly full-time delivery personnel by volume.
+        // Excludes Jefes de Ventas (VDDX.JEFEVENTASSN = 'S').
         try {
-            const currentYear = new Date().getFullYear();
             const repRows = await query(`
-                SELECT DISTINCT TRIM(OPP.CODIGOREPARTIDOR) as CODE, 
+                SELECT TRIM(OPP.CODIGOREPARTIDOR) as CODE,
                        COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR)) as NAME
                 FROM DSEDAC.OPP OPP
-                LEFT JOIN DSEDAC.VDD D ON D.CODIGOVENDEDOR = OPP.CODIGOREPARTIDOR
-                WHERE OPP.CODIGOREPARTIDOR IS NOT NULL 
+                LEFT JOIN DSEDAC.VDD D ON TRIM(D.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
+                WHERE OPP.CODIGOREPARTIDOR IS NOT NULL
                   AND TRIM(OPP.CODIGOREPARTIDOR) <> ''
-                  AND OPP.ANOREPARTO >= ${currentYear - 1}
-                  AND (
-                    EXISTS (SELECT 1 FROM DSEDAC.VEH V WHERE V.CODIGOVENDEDOR = OPP.CODIGOREPARTIDOR)
-                    OR TRIM(OPP.CODIGOREPARTIDOR) IN (
-                      SELECT TRIM(OPP2.CODIGOREPARTIDOR) FROM DSEDAC.OPP OPP2
-                      WHERE OPP2.ANOREPARTO >= ${currentYear}
-                      GROUP BY TRIM(OPP2.CODIGOREPARTIDOR)
-                      HAVING COUNT(*) >= 5
-                    )
+                  AND OPP.ANOREPARTO = ${currentYear}
+                  AND NOT EXISTS (
+                    SELECT 1 FROM DSEDAC.VDDX X
+                    WHERE TRIM(X.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
+                      AND TRIM(X.JEFEVENTASSN) = 'S'
                   )
+                GROUP BY TRIM(OPP.CODIGOREPARTIDOR), COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR))
+                HAVING COUNT(*) >= 100
             `, false);
             if (repRows && repRows.length > 0) {
-                logger.info(`[Auth] OPP query returned ${repRows.length} repartidores`);
-                results.push(...repRows.map(r => ({ code: (r.CODE || r.code || '').toString().trim(), name: (r.NAME || r.name || '').toString().trim() })));
-            } else {
-                logger.warn(`[Auth] OPP query returned 0 repartidores`);
+                logger.info(`[Auth] OPP active repartidores (≥100 deliveries ${currentYear}): ${repRows.length}`);
+                results.push(...repRows.map(r => ({ code: (r.CODE || '').toString().trim(), name: (r.NAME || '').toString().trim() })));
             }
         } catch (e) {
-            logger.warn(`[Auth] Error querying OPP for repartidores: ${e.message}`);
+            logger.warn(`[Auth] Error querying OPP active repartidores: ${e.message}`);
         }
 
-        // 3. Deduplicate by code, filter empty/invalid/inactive, and sort by code ascending
+        // ─── DEDUPLICATE + FILTER ───
         const EXCLUDED_PREFIXES = ['ZZ', 'ZD', 'ZB', 'ZE', 'Z7', 'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZJ', 'ZK', 'ZL', 'ZM', 'ZN', 'ZO', 'ZP', 'ZQ', 'ZR', 'ZS', 'ZT', 'ZU', 'ZV', 'ZW', 'ZX', 'ZY', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z8', 'Z9', 'XX', 'TT', 'TEST'];
-        const EXCLUDED_CODES = new Set(['UNK', '00', '0', '', 'NULL', 'NONE', 'N/A']);
+        const EXCLUDED_CODES = new Set(['UNK', '00', '0', '', 'NULL', 'NONE', 'N/A', '97', '98']);
         const uniqueMap = new Map();
         results.forEach(r => {
             if (!r.code || r.code.length === 0) return;
             const code = r.code.trim().toUpperCase();
-            // Exclude known invalid/placeholder/inactive codes
             if (EXCLUDED_CODES.has(code)) return;
             if (EXCLUDED_PREFIXES.some(prefix => code.startsWith(prefix))) return;
-            // Exclude single-character codes that aren't real driver IDs
+            // Also exclude if name starts with ZZ (inactive repartidores)
+            if (r.name && r.name.trim().toUpperCase().startsWith('ZZ')) return;
             if (code.length === 1 && !/^[0-9]$/.test(code)) return;
-            // Exclude if name is empty or same as code (placeholder)
             if (!r.name || r.name.trim().length === 0 || r.name.trim() === r.code.trim()) return;
             uniqueMap.set(r.code, r);
         });
         const deduplicated = Array.from(uniqueMap.values()).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
-        // Cache for next time
         _repartidoresCache = deduplicated;
         _repartidoresCacheTime = now;
-        logger.info(`[Auth] Repartidores list cached: ${deduplicated.length} entries`);
+        logger.info(`[Auth] Repartidores list cached: ${deduplicated.length} entries (codes: ${deduplicated.map(r => r.code).join(',')})`);
 
         res.json(deduplicated);
     } catch (error) {
