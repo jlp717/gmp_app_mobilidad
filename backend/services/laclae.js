@@ -263,7 +263,7 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
             }
         });
 
-        console.log(`📊 getClientsForDay('${vendedor}', '${day}'): Found ${finalClients.size} so far`);
+        logger.debug(`📊 getClientsForDay('${vendedor}', '${day}'): Found ${finalClients.size} so far`);
 
         // 2. Add clients that exist ONLY in RuteroConfig (orphan overrides)
         // ONLY if NOT ignoring overrides
@@ -394,7 +394,7 @@ function getVendedoresFromCache() {
 // Get aggregated active VISIT days for a vendor (if they have ANY client with visit on that day)
 function getVendorActiveDaysFromCache(vendedorCode) {
     if (!laclaeCacheReady || !vendedorCode) {
-        console.log(`⚠️ getVendorActiveDaysFromCache: cache not ready or no vendedorCode`);
+        logger.warn(`getVendorActiveDaysFromCache: cache not ready or no vendedorCode`);
         return [];
     }
 
@@ -402,7 +402,7 @@ function getVendorActiveDaysFromCache(vendedorCode) {
     const vendorClients = laclaeCache[trimmedCode];
 
     if (!vendorClients) {
-        console.log(`⚠️ Vendor ${trimmedCode} not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
+        logger.warn(`Vendor ${trimmedCode} not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
         return [];
     }
 
@@ -414,7 +414,7 @@ function getVendorActiveDaysFromCache(vendedorCode) {
     });
 
     const result = Array.from(daysSet);
-    console.log(`📅 Vendor ${trimmedCode} visit days: ${result.join(', ')} (${Object.keys(vendorClients).length} clients)`);
+    logger.info(`📅 Vendor ${trimmedCode} visit days: ${result.join(', ')} (${Object.keys(vendorClients).length} clients)`);
     return result; // Returns ['lunes', 'martes'...]
 }
 

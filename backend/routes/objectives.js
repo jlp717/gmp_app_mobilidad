@@ -425,13 +425,13 @@ router.get('/evolution', async (req, res) => {
 
             if (missingMonths.length > 0) {
                 // Vendor is "new" or has incomplete history - load inherited sales
-                console.log(`📊 [OBJECTIVES] Vendor ${vendedorCodes} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
+                logger.info(`[OBJECTIVES] Vendor ${vendedorCodes} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
 
                 const firstCode = vendedorCodes.split(',')[0].trim();
                 const currentClients = await getVendorCurrentClients(firstCode, currentYear);
                 if (currentClients.length > 0) {
                     inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
-                    console.log(`📊 [OBJECTIVES] Found ${currentClients.length} clients. Loaded inherited sales for ${Object.keys(inheritedMonthlySales).length} months.`);
+                    logger.info(`[OBJECTIVES] Found ${currentClients.length} clients. Loaded inherited sales for ${Object.keys(inheritedMonthlySales).length} months.`);
                 }
             }
         }
@@ -460,12 +460,12 @@ router.get('/evolution', async (req, res) => {
                 if (fixedRows && fixedRows.length > 0) {
                     fixedMonthlyTarget = parseFloat(fixedRows[0].IMPORTE_OBJETIVO) || null;
                     if (fixedMonthlyTarget) {
-                        console.log(`📊 [OBJECTIVES] Vendor ${firstCode} has FIXED monthly target: ${fixedMonthlyTarget}€`);
+                        logger.info(`[OBJECTIVES] Vendor ${firstCode} has FIXED monthly target: ${fixedMonthlyTarget}€`);
                     }
                 }
             } catch (err) {
                 // Table might not exist - continue with percentage-based
-                console.log(`📊 [OBJECTIVES] COMMERCIAL_TARGETS: ${err.message}`);
+                logger.debug(`[OBJECTIVES] COMMERCIAL_TARGETS: ${err.message}`);
             }
         }
 

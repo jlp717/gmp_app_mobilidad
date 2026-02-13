@@ -78,7 +78,7 @@ router.get('/summary', async (req, res, next) => {
             dateFrom: req.query.dateFrom,
             dateTo: req.query.dateTo
         };
-        console.log(`[FACTURAS] /summary params: vendor=${params.vendedorCodes}, year=${params.year}, dateFrom=${params.dateFrom}, dateTo=${params.dateTo}`);
+        logger.info(`[FACTURAS] /summary params: vendor=${params.vendedorCodes}, year=${params.year}, dateFrom=${params.dateFrom}, dateTo=${params.dateTo}`);
 
         if (!params.vendedorCodes) {
             return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
