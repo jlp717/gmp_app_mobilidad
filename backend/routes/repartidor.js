@@ -2061,7 +2061,8 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 
 // =============================================================================
 // GET /history/clients/:repartidorId
-// Get list of clients delivered by this repartidor (Last 6 months)
+// Get list of clients ASSIGNED to this repartidor (CLI.CODIGOREPARTIDOR)
+// Enriched with recent delivery stats from OPP/CPC
 // =============================================================================
 router.get('/history/clients/:repartidorId', async (req, res) => {
     try {
@@ -2070,42 +2071,49 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        // Rolling 12-month window for relevant clients
+        // Use CLI.CODIGOREPARTIDOR for the ASSIGNED client list
+        // Enrich with delivery stats from last 6 months via OPP/CPC
         const now = new Date();
-        const cutoffYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-        const cutoffMonth = now.getMonth() === 0 ? 1 : now.getMonth(); // 1-based, same month last year
+        const cutoffYear = now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
+        const cutoffMonth = ((now.getMonth() - 5 + 12) % 12) || 12;
         const cutoffDate = cutoffYear * 10000 + cutoffMonth * 100 + 1;
 
-        // Fetch clients delivered in last 12 months with totals
         let sql = `
             SELECT
-                TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
+                TRIM(CLI.CODIGOCLIENTE) as ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
-                COUNT(DISTINCT TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))) as TOTAL_DOCS,
-                COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
-                MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT,
-                MAX(TRIM(OPP.CODIGOREPARTIDOR)) as REP_CODE,
-                MAX(TRIM(VDD.NOMBREVENDEDOR)) as REP_NAME
-            FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC
-                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            LEFT JOIN DSEDAC.CLI CLI
-                ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+                TRIM(CLI.CODIGOREPARTIDOR) as REP_CODE,
+                TRIM(COALESCE(VDD.NOMBREVENDEDOR, '')) as REP_NAME,
+                COALESCE(STATS.TOTAL_DOCS, 0) as TOTAL_DOCS,
+                COALESCE(STATS.TOTAL_AMOUNT, 0) as TOTAL_AMOUNT,
+                STATS.LAST_VISIT
+            FROM DSEDAC.CLI CLI
             LEFT JOIN DSEDAC.VDD VDD
-                ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+                ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CLI.CODIGOREPARTIDOR)
+            LEFT JOIN (
+                SELECT
+                    TRIM(CPC.CODIGOCLIENTEALBARAN) as CLI_ID,
+                    COUNT(DISTINCT TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))) as TOTAL_DOCS,
+                    COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
+                    MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
+                FROM DSEDAC.OPP OPP
+                INNER JOIN DSEDAC.CPC CPC
+                    ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+                  AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${cutoffDate}
+                GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN)
+            ) STATS ON STATS.CLI_ID = TRIM(CLI.CODIGOCLIENTE)
+            WHERE TRIM(CLI.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
               AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
-              AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${cutoffDate}
         `;
 
         if (search) {
             const cleanSearch = search.toUpperCase().replace(/'/g, "''");
-            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CPC.CODIGOCLIENTEALBARAN) LIKE '%${cleanSearch}%')`;
+            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CLI.CODIGOCLIENTE) LIKE '%${cleanSearch}%')`;
         }
 
-        sql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
-                 ORDER BY LAST_VISIT DESC`;
+        sql += ` ORDER BY STATS.LAST_VISIT DESC NULLS LAST, NAME ASC`;
 
         logger.info(`[REPARTIDOR] History SQL with repartidorId ${repartidorId}: ${sql.replace(/\s+/g, ' ')}`);
         const rows = await query(sql, false);
