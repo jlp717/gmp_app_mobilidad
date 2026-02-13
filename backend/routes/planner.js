@@ -232,14 +232,6 @@ router.get('/rutero/week', async (req, res) => {
                 totalUniqueClients: fallbackTotal,
                 cacheStatus: 'loading'
             });
-
-            return res.json({
-                week: fallbackCounts,
-                todayName,
-                role: currentRole,
-                totalUniqueClients: fallbackTotal,
-                cacheStatus: 'loading'
-            });
         } catch (fbErr) {
             logger.error(`[RUTERO WEEK] Fallback query also failed: ${fbErr.message}`);
             res.json({
@@ -473,11 +465,11 @@ router.post('/rutero/move_clients', async (req, res) => {
         });
 
     } catch (error) {
-        if (conn) { try { await conn.rollback(); } catch (e) { } }
+        if (conn) { try { await conn.rollback(); } catch (e) { logger.warn(`Rollback failed: ${e.message}`); } }
         logger.error(`Rutero move error: ${error.message}`);
         res.status(500).json({ error: 'Error moviendo clientes', details: error.message });
     } finally {
-        if (conn) { try { await conn.close(); } catch (e) { } }
+        if (conn) { try { await conn.close(); } catch (e) { logger.warn(`Connection close failed: ${e.message}`); } }
     }
 });
 
@@ -610,13 +602,13 @@ router.post('/rutero/config', async (req, res) => {
 
     } catch (error) {
         if (conn) {
-            try { await conn.rollback(); } catch (e) { }
+            try { await conn.rollback(); } catch (e) { logger.warn(`Rollback failed: ${e.message}`); }
         }
         logger.error(`Rutero config save error: ${error.message}`);
         res.status(500).json({ error: 'Error guardando orden', details: error.message });
     } finally {
         if (conn) {
-            try { await conn.close(); } catch (e) { }
+            try { await conn.close(); } catch (e) { logger.warn(`Connection close failed: ${e.message}`); }
         }
     }
 });

@@ -1,6 +1,7 @@
 // =============================================================================
 // DATE HELPERS & CONSTANTS
 // =============================================================================
+const logger = require('../middleware/logger');
 const getCurrentDate = () => new Date();
 const getCurrentYear = () => getCurrentDate().getFullYear();
 const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
@@ -70,7 +71,7 @@ function buildVendedorFilter(vendedorCodes, tableAlias = '') {
     // Filter out UNK from standard list
     const validCodes = codeList.filter(c => c !== 'UNK').map(c => `'${c}'`).join(',');
 
-    console.log(`[FILTER] Codes: ${vendedorCodes} | Valid: ${validCodes} | HasUnk: ${hasUnk}`);
+    logger.info(`[FILTER] Codes: ${vendedorCodes} | Valid: ${validCodes} | HasUnk: ${hasUnk}`);
 
     const conditions = [];
     if (validCodes.length > 0) {
@@ -127,7 +128,7 @@ async function getVendorName(vendorCode) {
         if (rows && rows.length > 0) return rows[0].NOMBREVENDEDOR;
         return vendorCode;
     } catch (e) {
-        console.error('Error getting vendor name:', e);
+        logger.warn(`Error getting vendor name: ${e.message}`);
         return vendorCode;
     }
 }
@@ -163,6 +164,7 @@ async function getBSales(vendorCode, year) {
         return monthlyMap;
     } catch (e) {
         // Table might not exist - return empty
+        logger.debug(`getBSales: table may not exist for ${vendorCode}/${year}: ${e.message}`);
         return {};
     }
 }

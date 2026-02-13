@@ -95,6 +95,13 @@ async function getClientsMonthlySales(clientCodes, year) {
 const SEASONAL_AGGRESSIVENESS = 0.5; // Tuning parameter for seasonality (0.0=flat, 1.0=high)
 const IPC = 1.03; // 3% inflation factor
 
+// Month number -> COFC quota column mapping
+const MONTH_QUOTA_MAP = {
+    1: 'CUOTAENERO', 2: 'CUOTAFEBRERO', 3: 'CUOTAMARZO', 4: 'CUOTAABRIL',
+    5: 'CUOTAMAYO', 6: 'CUOTAJUNIO', 7: 'CUOTAJULIO', 8: 'CUOTAAGOSTO',
+    9: 'CUOTASEPTIEMBRE', 10: 'CUOTAOCTUBRE', 11: 'CUOTANOVIEMBRE', 12: 'CUOTADICIEMBRE'
+};
+
 /**
  * Get target percentage configuration for a vendor
  * Defaults to 10% if not configured

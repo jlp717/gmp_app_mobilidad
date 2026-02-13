@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 
 // Log directory
@@ -39,13 +40,13 @@ router.post('/user-action', async (req, res) => {
             metadata,
             appVersion,
             deviceInfo,
-            ip: req.ip || req.connection?.remoteAddress || 'unknown'
+            ip: req.ip || req.socket?.remoteAddress || 'unknown'
         };
 
-        // Write to daily log file
+        // Write to daily log file (async to avoid blocking event loop)
         const dateStr = new Date().toISOString().split('T')[0];
         const logFile = path.join(LOG_DIR, `actions-${dateStr}.json`);
-        fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n');
+        await fsPromises.appendFile(logFile, JSON.stringify(logEntry) + '\n');
 
         logger.info(`📱 Action: ${userId} → ${action} @ ${screen}`);
         res.json({ success: true });
@@ -82,7 +83,7 @@ router.post('/app-install', async (req, res) => {
 
         const dateStr = new Date().toISOString().split('T')[0];
         const logFile = path.join(LOG_DIR, `installs-${dateStr}.json`);
-        fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n');
+        await fsPromises.appendFile(logFile, JSON.stringify(logEntry) + '\n');
 
         logger.info(`📲 NEW INSTALL: ${userEmail} v${appVersion} on ${deviceModel}`);
         res.json({ success: true, registered: true });

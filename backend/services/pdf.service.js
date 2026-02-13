@@ -80,7 +80,7 @@ function drawHeader(doc, yStart = 10) {
             logoLoaded = true;
             return yPos + 150;
         } catch (e) {
-            console.warn('⚠️ No se pudo cargar header.png');
+            logger.warn('⚠️ No se pudo cargar header.png');
         }
     }
 

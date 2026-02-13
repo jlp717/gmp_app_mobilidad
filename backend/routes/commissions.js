@@ -204,8 +204,21 @@ async function initCommissionTables() {
     logger.info(`✅ Commission system initialized. Excluded vendors: [${EXCLUDED_VENDORS.join(', ')}]`);
 }
 
-// Run initialization on module load
-setTimeout(initCommissionTables, 3000);
+// Run initialization on module load (with retry on failure)
+setTimeout(async () => {
+    try {
+        await initCommissionTables();
+    } catch (err) {
+        logger.warn(`Commission tables init failed, retrying in 10s: ${err.message}`);
+        setTimeout(async () => {
+            try {
+                await initCommissionTables();
+            } catch (retryErr) {
+                logger.error(`Commission tables init retry failed: ${retryErr.message}`);
+            }
+        }, 10000);
+    }
+}, 3000);
 
 // =============================================================================
 // HELPER FUNCTIONS

@@ -22,12 +22,13 @@ router.get('/client-report', async (req, res) => {
         const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
 
         // Get complete client data for PDF report
-        const [clientInfo] = await query(`
+        const clientRows = await query(`
       SELECT CODIGOCLIENTE as code, NOMBRECLIENTE as name, NIF as nif,
              DIRECCION as address, POBLACION as city, PROVINCIA as province,
              CODIGOPOSTAL as postalCode, TELEFONO1 as phone, CODIGORUTA as route
       FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${safeCode}'
     `);
+        const clientInfo = clientRows && clientRows.length > 0 ? clientRows[0] : null;
 
         // Yearly summary
         const yearlySummary = await query(`
