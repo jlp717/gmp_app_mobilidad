@@ -289,11 +289,15 @@ router.get('/repartidores', authenticateToken, async (req, res) => {
             logger.warn(`[Auth] Error querying VEH/VDD for repartidores: ${e.message}`);
         }
 
-        // 2. Get repartidores from REP table
+        // 2. Get repartidores from OPP table (REP table does not exist)
         try {
             const repRows = await query(`
-                SELECT TRIM(CODIGOREPARTIDOR) as CODE, TRIM(NOMBREREPARTIDOR) as NAME
-                FROM DSEDAC.REP
+                SELECT DISTINCT TRIM(OPP.CODIGOREPARTIDOR) as CODE, 
+                       COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR)) as NAME
+                FROM DSEDAC.OPP OPP
+                LEFT JOIN DSEDAC.VDD D ON D.CODIGOVENDEDOR = OPP.CODIGOREPARTIDOR
+                WHERE OPP.CODIGOREPARTIDOR IS NOT NULL 
+                  AND TRIM(OPP.CODIGOREPARTIDOR) <> ''
             `, false);
             if (repRows && repRows.length > 0) {
                 results.push(...repRows.map(r => ({ code: (r.CODE || '').trim(), name: (r.NAME || '').trim() })));

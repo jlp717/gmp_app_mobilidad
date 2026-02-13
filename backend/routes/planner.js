@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { getPool } = require('../config/db'); // Use getPool directly
+const { getPool, query } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, deleteCachePattern } = require('../services/redis-cache');
 const {
@@ -245,9 +245,10 @@ router.get('/rutero/vendedores', async (req, res) => {
 
         if (role === 'repartidor') {
             sql = `
-                    SELECT TRIM(CODIGOREPARTIDOR) as code, NOMBREREPARTIDOR as name
-                    FROM DSEDAC.REP
-                    ORDER BY NOMBREREPARTIDOR
+                    SELECT TRIM(V.CODIGOVENDEDOR) as code, TRIM(D.NOMBREVENDEDOR) as name
+                    FROM DSEDAC.VEH V
+                    JOIN DSEDAC.VDD D ON V.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+                    ORDER BY D.NOMBREVENDEDOR
                 `;
         } else {
             // Default: Commercials (Sales Reps)
