@@ -4,6 +4,7 @@ const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
+const { redisCache, TTL } = require('../services/redis-cache');
 
 
 // =============================================================================
@@ -230,10 +231,11 @@ setTimeout(async () => {
 async function getVendorCurrentClients(vendorCode, currentYear) {
     const safeCode = vendorCode.replace(/[^a-zA-Z0-9]/g, '');
     const safeYear = parseInt(currentYear);
+    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
     const rows = await query(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE TRIM(L.LCCDVD) = '${safeCode}'
+        WHERE L.LCCDVD = '${safeCode}'
           AND L.LCAADC = ${safeYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
@@ -243,7 +245,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
         const prevRows = await query(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDVD) = '${safeCode}'
+            WHERE L.LCCDVD = '${safeCode}'
               AND L.LCAADC = ${safeYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);
@@ -263,12 +265,13 @@ async function getClientsMonthlySales(clientCodes, year) {
     // Build safe IN-clause with sanitized values
     const safeInClause = clientCodes.map(c => `'${String(c).replace(/[^a-zA-Z0-9]/g, '')}'`).join(',');
 
+    // PERF: Removed TRIM(L.LCCDCL) - DB2 CHAR comparison handles trailing spaces
     const rows = await query(`
         SELECT 
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES
         FROM DSED.LACLAE L
-        WHERE TRIM(L.LCCDCL) IN (${safeInClause})
+        WHERE L.LCCDCL IN (${safeInClause})
           AND L.LCAADC = ${parseInt(year)}
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
@@ -872,15 +875,23 @@ router.get('/summary', async (req, res) => {
             let yearResult;
 
             if (safeVendorCode === 'ALL') {
+                // PERF: Check route-level cache first for ALL mode (most expensive)
+                const cacheKey = `comm:summary:ALL:${years.join(',')}`;
+                const cachedResult = await redisCache.get('route', cacheKey);
+                if (cachedResult) {
+                    logger.info(`[COMMISSIONS] ⚡ Cache HIT for ALL summary (${cacheKey})`);
+                    return res.json({ success: true, ...cachedResult });
+                }
+
                 // FIX: Use LCCDVD (same column used by calculateVendorData for filtering)
-                // Previously used R1_T8CDVD which missed vendors like '95' that only exist in LCCDVD
+                // PERF: Removed TRIM from WHERE clause - use RTRIM only in SELECT
                 const safeYr = parseInt(yr);
                 const vendorRows = await query(`
-                    SELECT DISTINCT TRIM(L.LCCDVD) as VENDOR_CODE
+                    SELECT DISTINCT RTRIM(L.LCCDVD) as VENDOR_CODE
                     FROM DSED.LACLAE L
                     WHERE L.LCAADC IN (${safeYr}, ${safeYr - 1})
                       AND L.LCCDVD IS NOT NULL
-                      AND TRIM(L.LCCDVD) <> ''
+                      AND L.LCCDVD <> ''
                 `, false);
                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
@@ -936,6 +947,11 @@ router.get('/summary', async (req, res) => {
                     quarters: aggQuarters,
                     payments: { total: totalPaid, monthly: {}, quarterly: {} }
                 };
+
+                // PERF: Cache the ALL result for 5 minutes
+                const cacheKey = `comm:summary:ALL:${years.join(',')}`;
+                await redisCache.set('route', cacheKey, yearResult, TTL.SHORT);
+                logger.info(`[COMMISSIONS] 💾 Cached ALL summary (${cacheKey})`);
 
             } else {
                 // Single Vendor

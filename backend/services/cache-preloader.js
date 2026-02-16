@@ -5,11 +5,13 @@ const { getCurrentDate } = require('../utils/common');
 const { cachedQuery } = require('./query-optimizer');
 const { query } = require('../config/db');
 
-// Define common dashboard queries to pre-warm Redis
+// Define common queries to pre-warm Redis (dashboard + heavy endpoints)
 const PRELOAD_ENDPOINTS = [
     '/api/dashboard/metrics',
     '/api/dashboard/sales-evolution',
-    '/api/dashboard/recent-sales'
+    '/api/dashboard/recent-sales',
+    '/api/commissions/summary?vendedorCode=ALL',
+    '/api/objectives/evolution?vendedorCodes=ALL',
 ];
 
 async function warmUpDashboard(port) {
@@ -55,11 +57,11 @@ async function preloadCache(port = 3000) {
         // This is blocking for Rutero, so we await it
         await loadLaclaeCache();
 
-        // 2. Background: Warm up Dashboard (Non-blocking)
-        // Give the server a second to be ready
-        // setTimeout(() => {
-        //     warmUpDashboard(port);
-        // }, 2000);
+        // 2. Background: Warm up Dashboard + heavy endpoints (Non-blocking)
+        // Give the server a few seconds to be ready
+        setTimeout(() => {
+            warmUpDashboard(port);
+        }, 5000);
 
     } catch (e) {
         logger.error(`Fatal Preload Error: ${e.message}`);

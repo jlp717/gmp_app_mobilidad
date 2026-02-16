@@ -108,10 +108,12 @@ function buildVendedorFilter(vendedorCodes, tableAlias = '') {
 
     const conditions = [];
     if (validCodes.length > 0) {
-        conditions.push(`TRIM(${prefix}CODIGOVENDEDOR) IN (${validCodes})`);
+        // PERF: Removed TRIM() - DB2 CHAR comparison handles trailing spaces automatically
+        // This allows DB2 to use indexes on CODIGOVENDEDOR
+        conditions.push(`${prefix}CODIGOVENDEDOR IN (${validCodes})`);
     }
     if (hasUnk) {
-        conditions.push(`(${prefix}CODIGOVENDEDOR IS NULL OR TRIM(${prefix}CODIGOVENDEDOR) = '')`);
+        conditions.push(`(${prefix}CODIGOVENDEDOR IS NULL OR ${prefix}CODIGOVENDEDOR = '')`);
     }
 
     if (conditions.length === 0) return 'AND 1=0'; // No valid selection
@@ -144,10 +146,12 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
 
     const conditions = [];
     if (validCodes.length > 0) {
-        conditions.push(`TRIM(${prefix}LCCDVD) IN (${validCodes})`);
+        // PERF: Removed TRIM() - DB2 CHAR comparison handles trailing spaces automatically
+        // This allows DB2 to use indexes on LCCDVD column
+        conditions.push(`${prefix}LCCDVD IN (${validCodes})`);
     }
     if (hasUnk) {
-        conditions.push(`(${prefix}LCCDVD IS NULL OR TRIM(${prefix}LCCDVD) = '')`);
+        conditions.push(`(${prefix}LCCDVD IS NULL OR ${prefix}LCCDVD = '')`);
     }
 
     if (conditions.length === 0) return 'AND 1=0';
@@ -159,12 +163,18 @@ const { query } = require('../config/db');
 
 // ... (previous helper functions)
 
+// In-memory cache for vendor names (rarely changes)
+const _vendorNameCache = new Map();
 async function getVendorName(vendorCode) {
     if (!vendorCode || vendorCode === 'ALL') return 'Global';
+    const trimmed = vendorCode.trim();
+    if (_vendorNameCache.has(trimmed)) return _vendorNameCache.get(trimmed);
     try {
-        const rows = await query(`SELECT NOMBREVENDEDOR FROM DSEDAC.VDD WHERE TRIM(CODIGOVENDEDOR) = '${vendorCode.trim()}'`, false);
-        if (rows && rows.length > 0) return rows[0].NOMBREVENDEDOR;
-        return vendorCode;
+        // PERF: Removed TRIM() - DB2 CHAR blank-padded comparison works without it
+        const rows = await query(`SELECT NOMBREVENDEDOR FROM DSEDAC.VDD WHERE CODIGOVENDEDOR = '${trimmed}'`, false);
+        const name = (rows && rows.length > 0) ? rows[0].NOMBREVENDEDOR : vendorCode;
+        _vendorNameCache.set(trimmed, name);
+        return name;
     } catch (e) {
         logger.warn(`Error getting vendor name: ${e.message}`);
         return vendorCode;
@@ -179,10 +189,18 @@ async function getVendorName(vendorCode) {
  * @param {number} year - Year to query
  * @returns {Object} Monthly map { [month]: amount }
  */
+// PERF: In-memory cache for B-Sales (small table, rarely changes)
+const _bSalesCache = new Map();
+const _bSalesCacheTTL = 10 * 60 * 1000; // 10 minutes
+
 async function getBSales(vendorCode, year) {
     if (!vendorCode || vendorCode === 'ALL') return {};
 
     const rawCode = vendorCode.trim();
+    const cacheKey = `${rawCode}:${year}`;
+    const cached = _bSalesCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < _bSalesCacheTTL) return cached.data;
+
     const unpaddedCode = rawCode.replace(/^0+/, '');
 
     try {
@@ -199,6 +217,12 @@ async function getBSales(vendorCode, year) {
         rows.forEach(r => {
             monthlyMap[r.MES] = (monthlyMap[r.MES] || 0) + (parseFloat(r.IMPORTE) || 0);
         });
+        _bSalesCache.set(cacheKey, { data: monthlyMap, ts: Date.now() });
+        // Limit cache size
+        if (_bSalesCache.size > 500) {
+            const oldest = _bSalesCache.keys().next().value;
+            _bSalesCache.delete(oldest);
+        }
         return monthlyMap;
     } catch (e) {
         // Table might not exist - return empty

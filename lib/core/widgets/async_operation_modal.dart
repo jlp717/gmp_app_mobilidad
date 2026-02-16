@@ -8,6 +8,10 @@ import '../theme/app_theme.dart';
 /// 
 /// Modal centrado y bloqueante para operaciones asíncronas.
 /// Estados: loading → success (auto-cierre) | error (reintentar/cerrar)
+/// 
+/// Incluye:
+/// - Timeout de seguridad configurable (default 45s)
+/// - Botón cancelar visible tras 5s en estado loading
 ///
 /// Uso:
 ///   final controller = AsyncOperationModal.show(context, text: 'Generando PDF...');
@@ -26,16 +30,38 @@ class AsyncOperationModalController {
   final _stateNotifier = ValueNotifier<_ModalState>(_ModalState.loading);
   final _textNotifier = ValueNotifier<String>('');
   final _errorTextNotifier = ValueNotifier<String>('');
+  final _showCancelNotifier = ValueNotifier<bool>(false);
   VoidCallback? _onRetry;
   bool _closed = false;
+  Timer? _timeoutTimer;
+  Timer? _cancelButtonTimer;
 
-  AsyncOperationModalController(this._context, String initialText) {
+  AsyncOperationModalController(this._context, String initialText, {
+    Duration timeout = const Duration(seconds: 45),
+    Duration showCancelAfter = const Duration(seconds: 5),
+  }) {
     _textNotifier.value = initialText;
+
+    // Safety timeout: auto-error if operation takes too long
+    _timeoutTimer = Timer(timeout, () {
+      if (!_closed && _stateNotifier.value == _ModalState.loading) {
+        error('La operación ha tardado demasiado. Inténtalo de nuevo.');
+      }
+    });
+
+    // Show cancel button after delay so user can escape
+    _cancelButtonTimer = Timer(showCancelAfter, () {
+      if (!_closed && _stateNotifier.value == _ModalState.loading) {
+        _showCancelNotifier.value = true;
+      }
+    });
   }
 
   /// Transition to success state → auto-closes after 1.5s
   void success([String? text]) {
     if (_closed) return;
+    _timeoutTimer?.cancel();
+    _cancelButtonTimer?.cancel();
     _textNotifier.value = text ?? '¡Completado!';
     _stateNotifier.value = _ModalState.success;
     Future.delayed(const Duration(milliseconds: 1500), () => close());
@@ -44,6 +70,8 @@ class AsyncOperationModalController {
   /// Transition to error state with retry option
   void error(String message, {VoidCallback? onRetry}) {
     if (_closed) return;
+    _timeoutTimer?.cancel();
+    _cancelButtonTimer?.cancel();
     _errorTextNotifier.value = message;
     _onRetry = onRetry;
     _stateNotifier.value = _ModalState.error;
@@ -53,6 +81,8 @@ class AsyncOperationModalController {
   void close() {
     if (_closed) return;
     _closed = true;
+    _timeoutTimer?.cancel();
+    _cancelButtonTimer?.cancel();
     if (Navigator.canPop(_context)) {
       Navigator.of(_context).pop();
     }
@@ -64,9 +94,12 @@ class AsyncOperationModalController {
   }
 
   void dispose() {
+    _timeoutTimer?.cancel();
+    _cancelButtonTimer?.cancel();
     _stateNotifier.dispose();
     _textNotifier.dispose();
     _errorTextNotifier.dispose();
+    _showCancelNotifier.dispose();
   }
 }
 
@@ -139,6 +172,26 @@ class AsyncOperationModal extends StatelessWidget {
           _buildIcon(state),
           const SizedBox(height: 20),
           _buildText(state),
+          if (state == _ModalState.loading) ...[
+            // Show cancel button after delay so user can escape stuck modals
+            ValueListenableBuilder<bool>(
+              valueListenable: controller._showCancelNotifier,
+              builder: (_, showCancel, __) {
+                if (!showCancel) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: TextButton(
+                    onPressed: () => controller.close(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.textSecondary,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    child: const Text('Cancelar'),
+                  ),
+                );
+              },
+            ),
+          ],
           if (state == _ModalState.error) ...[
             const SizedBox(height: 20),
             _buildErrorActions(context),

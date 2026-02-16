@@ -185,7 +185,7 @@ router.get('/matrix-data', async (req, res) => {
             : '';
 
         const productFilter = productCodes && productCodes !== 'ALL'
-            ? `AND TRIM(L.CODIGOARTICULO) IN (${productCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
+            ? `AND L.CODIGOARTICULO IN (${productCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
             : '';
 
         let familyProductFilter = '';
