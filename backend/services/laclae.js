@@ -26,8 +26,11 @@ async function loadRuteroConfigCache(conn) {
             if (!r.VENDEDOR || !r.CLIENTE) return;
             if (!ruteroConfigCache[r.VENDEDOR]) ruteroConfigCache[r.VENDEDOR] = {};
 
-            ruteroConfigCache[r.VENDEDOR][r.CLIENTE] = {
-                day: r.DIA?.toLowerCase(),
+            if (!ruteroConfigCache[r.VENDEDOR][r.CLIENTE]) {
+                ruteroConfigCache[r.VENDEDOR][r.CLIENTE] = {};
+            }
+            // Store by DAY
+            ruteroConfigCache[r.VENDEDOR][r.CLIENTE][r.DIA?.toLowerCase()] = {
                 order: r.ORDEN
             };
         });
@@ -73,17 +76,26 @@ async function loadLaclaeCache() {
             logger.info('   Loading Master Route Config from DSEDAC.CDVI...');
             const cdviRows = await conn.query(`
                 SELECT 
-                    TRIM(CODIGOVENDEDOR) as VENDEDOR,
-                    TRIM(CODIGOCLIENTE) as CLIENTE,
-                    DIAVISITALUNESSN as VIS_L, 
-                    DIAVISITAMARTESSN as VIS_M, 
-                    DIAVISITAMIERCOLESSN as VIS_X,
-                    DIAVISITAJUEVESSN as VIS_J, 
-                    DIAVISITAVIERNESSN as VIS_V, 
-                    DIAVISITASABADOSN as VIS_S, 
-                    DIAVISITADOMINGOSN as VIS_D
-                FROM DSEDAC.CDVI
-                WHERE MARCAACTUALIZACION <> 'B'  -- Exclude deleted (Baja) if applicable
+                    TRIM(C.CODIGOVENDEDOR) as VENDEDOR,
+                    TRIM(C.CODIGOCLIENTE) as CLIENTE,
+                    C.DIAVISITALUNESSN as VIS_L, 
+                    C.DIAVISITAMARTESSN as VIS_M, 
+                    C.DIAVISITAMIERCOLESSN as VIS_X,
+                    C.DIAVISITAJUEVESSN as VIS_J, 
+                    C.DIAVISITAVIERNESSN as VIS_V, 
+                    C.DIAVISITASABADOSN as VIS_S, 
+                    C.DIAVISITADOMINGOSN as VIS_D,
+                    C.ORDENVISITALUNES as OR_L,
+                    C.ORDENVISITAMARTES as OR_M,
+                    C.ORDENVISITAMIERCOLES as OR_X,
+                    C.ORDENVISITAJUEVES as OR_J,
+                    C.ORDENVISITAVIERNES as OR_V,
+                    C.ORDENVISITASABADO as OR_S,
+                    C.ORDENVISITADOMINGO as OR_D
+                FROM DSEDAC.CDVI C
+                JOIN DSEDAC.CLI K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE  -- Join CLI to check ANOBAJA
+                WHERE (C.MARCAACTUALIZACION <> 'B' OR C.MARCAACTUALIZACION IS NULL OR TRIM(C.MARCAACTUALIZACION) = '')
+                  AND (K.ANOBAJA = 0 OR K.ANOBAJA IS NULL) -- EXCLUDE BAJAS
             `);
 
             const dayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
@@ -96,23 +108,38 @@ async function loadLaclaeCache() {
                 if (!laclaeCache[row.VENDEDOR][row.CLIENTE]) {
                     laclaeCache[row.VENDEDOR][row.CLIENTE] = {
                         visitDays: new Set(),
-                        deliveryDays: new Set()
+                        deliveryDays: new Set(),
+                        naturalOrder: {
+                            lunes: Number(row.OR_L) || 0,
+                            martes: Number(row.OR_M) || 0,
+                            miercoles: Number(row.OR_X) || 0,
+                            jueves: Number(row.OR_J) || 0,
+                            viernes: Number(row.OR_V) || 0,
+                            sabado: Number(row.OR_S) || 0,
+                            domingo: Number(row.OR_D) || 0
+                        }
                     };
                 }
 
                 const entry = laclaeCache[row.VENDEDOR][row.CLIENTE];
 
-                // Map 'S' to days
-                if (row.VIS_D === 'S') entry.visitDays.add('domingo');
-                if (row.VIS_L === 'S') entry.visitDays.add('lunes');
-                if (row.VIS_M === 'S') entry.visitDays.add('martes');
-                if (row.VIS_X === 'S') entry.visitDays.add('miercoles');
-                if (row.VIS_J === 'S') entry.visitDays.add('jueves');
-                if (row.VIS_V === 'S') entry.visitDays.add('viernes');
-                if (row.VIS_S === 'S') entry.visitDays.add('sabado');
+                // Map 'S' to days (Handle 'S ' with trim)
+                if (String(row.VIS_D).trim() === 'S') entry.visitDays.add('domingo');
+                if (String(row.VIS_L).trim() === 'S') entry.visitDays.add('lunes');
+                if (String(row.VIS_M).trim() === 'S') entry.visitDays.add('martes');
+                if (String(row.VIS_X).trim() === 'S') entry.visitDays.add('miercoles');
+                if (String(row.VIS_J).trim() === 'S') entry.visitDays.add('jueves');
+                if (String(row.VIS_V).trim() === 'S') entry.visitDays.add('viernes');
+                if (String(row.VIS_S).trim() === 'S') entry.visitDays.add('sabado');
+
+                if (String(row.CLIENTE).includes('9046')) {
+                    logger.info(`🔍 DEBUG 9046 MATCH: '${row.CLIENTE}' Vend '${row.VENDEDOR}' Flags L:${row.VIS_L} V:${row.VIS_V} (Hex V: ${Buffer.from(String(row.VIS_V)).toString('hex')}) -> Days: ${Array.from(entry.visitDays).join(',')}`);
+                }
             });
 
             logger.info(`   ✅ Loaded ${cdviRows.length} route configs from CDVI`);
+            const v15Count = cdviRows.filter(r => r.VENDEDOR === '15').length;
+            logger.info(`   🔎 DEBUG: Vendor 15 has ${v15Count} clients in CDVI cache`);
 
 
             // 2. Load Sales/History data from DSED.LACLAE (Legacy source + Delivery Info)
@@ -122,16 +149,18 @@ async function loadLaclaeCache() {
 
             const rows = await conn.query(`
         SELECT DISTINCT
-          R1_T8CDVD as VENDEDOR,
-          LCCDCL as CLIENTE,
-          R1_T8DIVL as VIS_L, R1_T8DIVM as VIS_M, R1_T8DIVX as VIS_X,
-          R1_T8DIVJ as VIS_J, R1_T8DIVV as VIS_V, R1_T8DIVS as VIS_S, R1_T8DIVD as VIS_D,
-          R1_T8DIRL as DEL_L, R1_T8DIRM as DEL_M, R1_T8DIRX as DEL_X,
-          R1_T8DIRJ as DEL_J, R1_T8DIRV as DEL_V, R1_T8DIRS as DEL_S, R1_T8DIRD as DEL_D
-        FROM DSED.LACLAE
-        WHERE R1_T8CDVD IS NOT NULL 
-          AND LCCDCL IS NOT NULL
-          AND LCAADC >= ${startYear}
+          L.R1_T8CDVD as VENDEDOR,
+          L.LCCDCL as CLIENTE,
+          L.R1_T8DIVL as VIS_L, L.R1_T8DIVM as VIS_M, L.R1_T8DIVX as VIS_X,
+          L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S, L.R1_T8DIVD as VIS_D,
+          L.R1_T8DIRL as DEL_L, L.R1_T8DIRM as DEL_M, L.R1_T8DIRX as DEL_X,
+          L.R1_T8DIRJ as DEL_J, L.R1_T8DIRV as DEL_V, L.R1_T8DIRS as DEL_S, L.R1_T8DIRD as DEL_D
+        FROM DSED.LACLAE L
+        JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE -- Join CLI to check ANOBAJA
+        WHERE L.R1_T8CDVD IS NOT NULL 
+          AND L.LCCDCL IS NOT NULL
+          AND L.LCAADC >= ${startYear}
+          AND (C.ANOBAJA = 0 OR C.ANOBAJA IS NULL) -- EXCLUDE BAJAS
       `);
 
             const visitCols = ['VIS_D', 'VIS_L', 'VIS_M', 'VIS_X', 'VIS_J', 'VIS_V', 'VIS_S'];
@@ -187,7 +216,7 @@ async function loadLaclaeCache() {
 }
 
 // Get clients for a day from cache
-function getClientsForDay(vendedorCodes, day, role = 'comercial') {
+function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverrides = false) {
     if (!laclaeCacheReady) return null; // Use fallback
 
     const dayLower = day.toLowerCase();
@@ -204,16 +233,28 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial') {
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
             const days = isDelivery ? data.deliveryDays : data.visitDays;
 
-            // Check override
-            const override = configClients[clientCode];
-
             let shouldInclude = false;
 
-            if (override) {
-                // If overridden, ONLY appear if override day matches
-                if (override.day === dayLower) shouldInclude = true;
+            if (!ignoreOverrides) {
+                // Check override FOR THIS DAY SPECIFICALLY
+                const clientOverrides = configClients[clientCode] || {};
+                const overrideForDay = clientOverrides[dayLower];
+
+                // Check NEGATIVE override (Block)
+                const isBlocked = clientOverrides['!' + dayLower] || clientOverrides['no_' + dayLower];
+
+                if (isBlocked) {
+                    shouldInclude = false;
+                } else if (overrideForDay) {
+                    // Clearly overridden for this day -> INCLUDE
+                    shouldInclude = true;
+                } else {
+                    // No override for this specific day.
+                    // If we have Natural Visit Day AND no specific override blocking it -> INCLUDE
+                    if (days.includes(dayLower)) shouldInclude = true;
+                }
             } else {
-                // No override, use natural days
+                // Ignore overrides - PURE NATURAL ROUTE
                 if (days.includes(dayLower)) shouldInclude = true;
             }
 
@@ -222,14 +263,19 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial') {
             }
         });
 
-        // 2. Add clients that exist ONLY in RuteroConfig (orphan overrides? rare but possible)
-        // or clients that were missed above because they aren't in LACLAE cache for this vendor?
-        // Let's iterate configClients ensuring we catch anyone moved TO this day
-        Object.entries(configClients).forEach(([clientCode, cfg]) => {
-            if (cfg.day === dayLower) {
-                finalClients.add(clientCode);
-            }
-        });
+        logger.debug(`📊 getClientsForDay('${vendedor}', '${day}'): Found ${finalClients.size} so far`);
+
+        // 2. Add clients that exist ONLY in RuteroConfig (orphan overrides)
+        // ONLY if NOT ignoring overrides
+        if (!ignoreOverrides) {
+            Object.entries(configClients).forEach(([clientCode, cfg]) => {
+                const clientOverrides = configClients[clientCode] || {};
+                // Only add POSITIVE overrides
+                if (clientOverrides[dayLower] && !dayLower.startsWith('!') && !dayLower.startsWith('no_')) {
+                    finalClients.add(clientCode);
+                }
+            });
+        }
     });
 
     return Array.from(finalClients);
@@ -256,29 +302,35 @@ function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
             const days = isDelivery ? data.deliveryDays : data.visitDays;
 
             // Check if this client has an override
-            const override = configClients[clientCode];
+            // Check if this client has ANY overrides
+            const clientOverrides = configClients[clientCode] || {};
+            const overrideDays = Object.keys(clientOverrides);
 
-            if (override) {
-                // Client has override - only count on override day
-                const overrideDay = override.day;
-                if (counts.hasOwnProperty(overrideDay)) {
-                    clientsSet[overrideDay].add(clientCode);
+            // 1. Add overrides (POSITIVE only)
+            overrideDays.forEach(day => {
+                if (day.startsWith('!') || day.startsWith('no_')) return; // Skip negative overrides
+                if (counts.hasOwnProperty(day)) {
+                    clientsSet[day].add(clientCode);
                 }
-            } else {
-                // No override - use natural days from LACLAE
-                days.forEach(day => {
-                    if (counts.hasOwnProperty(day)) {
-                        clientsSet[day].add(clientCode);
-                    }
-                });
-            }
+            });
+
+            // 2. Add Natural Days (IF NOT BLOCKED)
+            days.forEach(day => {
+                const isBlocked = clientOverrides['!' + day] || clientOverrides['no_' + day];
+                if (counts.hasOwnProperty(day) && !clientOverrides[day] && !isBlocked) {
+                    clientsSet[day].add(clientCode);
+                }
+            });
         });
 
-        // Also add clients that exist ONLY in RuteroConfig (orphan overrides)
-        Object.entries(configClients).forEach(([clientCode, cfg]) => {
-            if (counts.hasOwnProperty(cfg.day)) {
-                clientsSet[cfg.day].add(clientCode);
-            }
+        // Also add clients that exist ONLY in RuteroConfig (orphans)
+        Object.entries(configClients).forEach(([clientCode, overrides]) => {
+            Object.keys(overrides).forEach(day => {
+                if (day.startsWith('!') || day.startsWith('no_')) return;
+                if (counts.hasOwnProperty(day)) {
+                    clientsSet[day].add(clientCode);
+                }
+            });
         });
     });
 
@@ -342,7 +394,7 @@ function getVendedoresFromCache() {
 // Get aggregated active VISIT days for a vendor (if they have ANY client with visit on that day)
 function getVendorActiveDaysFromCache(vendedorCode) {
     if (!laclaeCacheReady || !vendedorCode) {
-        console.log(`⚠️ getVendorActiveDaysFromCache: cache not ready or no vendedorCode`);
+        logger.warn(`getVendorActiveDaysFromCache: cache not ready or no vendedorCode`);
         return [];
     }
 
@@ -350,7 +402,7 @@ function getVendorActiveDaysFromCache(vendedorCode) {
     const vendorClients = laclaeCache[trimmedCode];
 
     if (!vendorClients) {
-        console.log(`⚠️ Vendor ${trimmedCode} not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
+        logger.warn(`Vendor ${trimmedCode} not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
         return [];
     }
 
@@ -362,7 +414,7 @@ function getVendorActiveDaysFromCache(vendedorCode) {
     });
 
     const result = Array.from(daysSet);
-    console.log(`📅 Vendor ${trimmedCode} visit days: ${result.join(', ')} (${Object.keys(vendorClients).length} clients)`);
+    logger.info(`📅 Vendor ${trimmedCode} visit days: ${result.join(', ')} (${Object.keys(vendorClients).length} clients)`);
     return result; // Returns ['lunes', 'martes'...]
 }
 
@@ -401,9 +453,16 @@ function getClientCurrentDay(vendedor, clientCode) {
     const clientStr = String(clientCode).trim();
 
     // 1. Buscar override en RUTERO_CONFIG
+    // 1. Buscar overrides en RUTERO_CONFIG
     const configClients = ruteroConfigCache[vendedorStr] || {};
-    if (configClients[clientStr]) {
-        return configClients[clientStr].day || null;
+    const clientOverrides = configClients[clientStr];
+
+    if (clientOverrides) {
+        // Return the first override day found (not perfect but acceptable for simple current-day logic)
+        // Or if today matches execution day?
+        // This function is ambiguous in multi-day. Let's return the first key.
+        const days = Object.keys(clientOverrides);
+        if (days.length > 0) return days[0];
     }
 
     // 2. Buscar días naturales en LACLAE
@@ -464,6 +523,24 @@ function getClientDays(vendorCode, clientCode) {
     return null;
 }
 
+/**
+ * Get natural order for a client on a specific day
+ */
+function getNaturalOrder(vendorCode, clientCode, day) {
+    if (!laclaeCacheReady || !vendorCode || !clientCode || !day) return 9999;
+
+    const vendorData = laclaeCache[vendorCode.trim()];
+    if (!vendorData) return 9999;
+
+    const clientData = vendorData[clientCode.trim()];
+    if (!clientData || !clientData.naturalOrder) return 9999;
+
+    const order = clientData.naturalOrder[day.toLowerCase()];
+    // If order is 0, return 9999 (so it falls back to Code/Name sort logic)
+    // Actually, planner will handle fallback logic. Let's return the raw value.
+    return order || 0;
+}
+
 module.exports = {
     loadLaclaeCache,
     getClientsForDay,
@@ -476,5 +553,8 @@ module.exports = {
     getCachedVendorCodes,
     reloadRuteroConfig,
     getClientCurrentDay,
-    getClientDays
+    reloadRuteroConfig,
+    getClientCurrentDay,
+    getClientDays,
+    getNaturalOrder
 };

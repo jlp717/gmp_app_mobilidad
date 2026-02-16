@@ -5,6 +5,7 @@ import '../api/api_config.dart';
 import '../models/user_model.dart';
 import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../services/cache_prewarmer.dart';
 
 /// Authentication provider with role detection
 class AuthProvider with ChangeNotifier {
@@ -12,6 +13,8 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _initialized = false;
+  bool _isMandatoryUpdate = false;
+  String _playStoreUrl = 'https://play.google.com/store/apps/details?id=com.jlp.gmp_mobilidad';
   bool _updateAvailable = false;
   String _updateMessage = '';
   List<String> _vendedorCodes = [];
@@ -22,9 +25,44 @@ class AuthProvider with ChangeNotifier {
   bool get isAuthenticated => _currentUser != null;
   bool get isInitialized => _initialized;
   bool get updateAvailable => _updateAvailable;
+  bool get isMandatoryUpdate => _isMandatoryUpdate;
   String get updateMessage => _updateMessage;
+  String get playStoreUrl => _playStoreUrl;
   bool get isDirector => _currentUser?.isDirector ?? false;
+  List<String> get vendorCodes => _vendedorCodes;
+  // Alias for compatibility
   List<String> get vendedorCodes => _vendedorCodes;
+
+  /// Check for updates and enforce mandatory update if needed
+  Future<void> checkForUpdates() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = int.parse(packageInfo.buildNumber);
+      
+      // SENIOR APPROACH: Fetch minimum required version from server
+      // For now, we mock the check. In a real scenario, this comes from /health or /config
+      final response = await ApiClient.get('/health/version-check');
+      
+      if (response != null && response['success'] == true) {
+        final minRequiredVersion = int.tryParse(response['minVersion']?.toString() ?? '0') ?? 0;
+        final latestVersion = int.tryParse(response['latestVersion']?.toString() ?? '0') ?? 0;
+        
+        if (currentVersion < minRequiredVersion) {
+          _updateAvailable = true;
+          _isMandatoryUpdate = true;
+          _updateMessage = response['message'] ?? 'Es necesaria una nueva versión para continuar.';
+          notifyListeners();
+        } else if (currentVersion < latestVersion) {
+          _updateAvailable = true;
+          _isMandatoryUpdate = false;
+          _updateMessage = response['message'] ?? 'Hay una nueva versión disponible.';
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('[AuthProvider] Error checking updates: $e');
+    }
+  }
 
   AuthProvider() {
     // Bind global 401 unauthorized event to logout
@@ -32,6 +70,9 @@ class AuthProvider with ChangeNotifier {
       debugPrint('[AuthProvider] 401 Detected - Logging out...');
       logout();
     };
+    
+    // Initial update check
+    checkForUpdates();
   }
 
   /// Login with username and password
@@ -42,9 +83,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[AuthProvider] Calling ApiClient.post...');
-      debugPrint('[AuthProvider] Endpoint: ${ApiConfig.login}');
-      debugPrint('[AuthProvider] BaseUrl: ${ApiConfig.baseUrl}');
+      if (kDebugMode) debugPrint('[AuthProvider] Calling API login...');
       
       final response = await ApiClient.post(
         ApiConfig.login,
@@ -71,13 +110,18 @@ class AuthProvider with ChangeNotifier {
 
         _isLoading = false;
         notifyListeners();
-        debugPrint('[AuthProvider] Login SUCCESS');
+        if (kDebugMode) debugPrint('[AuthProvider] Login SUCCESS');
+        
+        // OPTIMIZATION: Pre-warm cache for instant data access
+        // Run in background without awaiting to not block UI
+        CachePreWarmer.preWarmCache(this);
+        
         return true;
       } else {
         throw Exception('Respuesta inválida del servidor');
       }
     } catch (e) {
-      debugPrint('[AuthProvider] Login ERROR: $e');
+      if (kDebugMode) debugPrint('[AuthProvider] Login ERROR: $e');
       _error = e.toString().replaceAll('Exception: ', '');
       _isLoading = false;
       notifyListeners();
@@ -99,6 +143,10 @@ class AuthProvider with ChangeNotifier {
         if (codes != null) _vendedorCodes = codes;
         
         notifyListeners();
+        
+        // OPTIMIZATION: Pre-warm cache on auto-login too
+        CachePreWarmer.preWarmCache(this);
+        
         return true;
       }
       return false;
@@ -107,13 +155,15 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// Logout
+  /// Logout — clears only auth-related data (not all preferences)
   Future<void> logout() async {
     _currentUser = null;
     _vendedorCodes = [];
     ApiClient.clearAuthToken();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    await prefs.remove('user_token');
+    await prefs.remove('user_data');
+    await prefs.remove('vendedor_codes');
     notifyListeners();
   }
 

@@ -18,7 +18,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.maripepa.gmp_mobilidad"
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    // ndkVersion = flutter.ndkVersion // Commented out to let Gradle decide
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -49,15 +49,10 @@ android {
         multiDexEnabled = true
     }
 
-    packagingOptions {
-        doNotStrip("*/armeabi-v7a/*.so")
-        doNotStrip("*/arm64-v8a/*.so")
-        doNotStrip("*/x86/*.so")
-        doNotStrip("*/x86_64/*.so")
-    }
+
 
     buildTypes {
-        release {
+        getByName("release") {
             // Disabled due to NDK strip issue on Windows - AAB is still valid
             isMinifyEnabled = false
             isShrinkResources = false
@@ -66,16 +61,6 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
-            ndk {
-                debugSymbolLevel = "SYMBOL_TABLE"
-            }
-        }
-    }
-
-    // Prevent stripping of native debug symbols (fixes NDK error)
-    packaging {
-        jniLibs {
-            keepDebugSymbols += listOf("**/*.so")
         }
     }
 }
@@ -87,3 +72,7 @@ flutter {
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
 }
+
+
+
+

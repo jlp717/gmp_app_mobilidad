@@ -1,8 +1,9 @@
 /// REPARTIDOR COMMISSION SERVICE
 /// Servicio de cálculo de comisiones para repartidores
-/// Umbral 30% antes de aplicar los 4 tramos de comisión
+/// OPTIMIZED: Full caching support
 
 import '../../../../core/api/api_client.dart';
+import '../../../../core/cache/cache_service.dart';
 
 /// Tramos de comisión (idénticos a comerciales, pero solo aplican post-30%)
 /// Tier 1: 100-103% = 1.0%
@@ -160,9 +161,13 @@ class RepartidorCommissionService {
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
 
+      final cacheKey = 'repartidor_comm_summary_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
+
       final response = await ApiClient.get(
         '/repartidor/collections/summary/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.shortTTL, // 5 minutes
       );
       
       return response;
@@ -183,9 +188,13 @@ class RepartidorCommissionService {
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
 
+      final cacheKey = 'repartidor_comm_clients_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
+
       final response = await ApiClient.get(
         '/repartidor/collections/summary/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 10),
       );
       
       return (response['clients'] as List?)
@@ -207,9 +216,13 @@ class RepartidorCommissionService {
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
 
+      final cacheKey = 'repartidor_comm_daily_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
+
       final response = await ApiClient.get(
         '/repartidor/collections/daily/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 10),
       );
       
       return (response['daily'] as List?)

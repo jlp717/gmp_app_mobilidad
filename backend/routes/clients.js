@@ -9,20 +9,25 @@ const {
   MIN_YEAR,
   LACLAE_SALES_FILTER
 } = require('../utils/common');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const { getClientDays } = require('../services/laclae');
 
 
 // =============================================================================
-// CLIENTS LIST
+// CLIENTS LIST (OPTIMIZED v2 - 2026-02-02)
 // =============================================================================
 const getClientsHandler = async (req, res) => {
+  const startTime = Date.now();
   try {
     const { vendedorCodes, search, limit = 1000, offset = 0 } = req.query;
     const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+    const isSearchQuery = !!search;
 
+    let safeSearch = '';
     let searchFilter = '';
     if (search) {
-      const safeSearch = search.replace(/'/g, "''").trim().toUpperCase();
+      safeSearch = search.replace(/'/g, "''").trim().toUpperCase();
       searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE '%${safeSearch}%'
                       OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeSearch}%'
                       OR C.CODIGOCLIENTE LIKE '%${safeSearch}%'
@@ -30,123 +35,81 @@ const getClientsHandler = async (req, res) => {
                       OR C.NIF LIKE '%${safeSearch}%')`;
     }
 
-    // Build route filter: include clients from vendor's routes (even without sales)
-    // If vendor has ANY sales in a route, show ALL clients from that route
-    let routeFilter = '';
-    if (vendedorCodes) {
-      const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
-      routeFilter = `
-        OR C.CODIGORUTA IN (
-          SELECT DISTINCT CLI_INNER.CODIGORUTA
-          FROM DSED.LACLAE LAC_INNER
-          JOIN DSEDAC.CLI CLI_INNER ON LAC_INNER.LCCDCL = CLI_INNER.CODIGOCLIENTE
-          WHERE LAC_INNER.LCCDVD IN (${vendorList})
-            AND LAC_INNER.TPDC = 'LAC'
-            AND LAC_INNER.LCAADC >= ${MIN_YEAR}
-            AND CLI_INNER.CODIGORUTA IS NOT NULL
-            AND CLI_INNER.CODIGORUTA <> ''
-        )
-      `;
+    // OPTIMIZATION v3: Pre-compute allowed client codes from in-memory cache
+    // This eliminates expensive NOT EXISTS and subquery route filters
+    let clientCodesFilter = '';
+    if (vendedorCodes && !search) {
+      const { getClientCodesFromCache } = require('../services/laclae');
+      const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
+
+      if (cachedClientCodes && cachedClientCodes.length > 0) {
+        // Use chunked IN clauses to handle unlimited client codes
+        // DB2 IN clause has a practical limit, so we chunk into groups of 1000
+        const CHUNK_SIZE = 1000;
+        const chunks = [];
+        for (let i = 0; i < cachedClientCodes.length; i += CHUNK_SIZE) {
+          const chunk = cachedClientCodes.slice(i, i + CHUNK_SIZE).map(c => `'${c}'`).join(',');
+          chunks.push(`C.CODIGOCLIENTE IN (${chunk})`);
+        }
+        clientCodesFilter = `AND (${chunks.join(' OR ')})`;
+        logger.info(`[CLIENTS] Using cached client codes: ${cachedClientCodes.length} clients (${chunks.length} chunks) for vendor ${vendedorCodes}`);
+      }
     }
 
-    // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT
-    // Now includes clients from vendor's routes even if they have no sales yet
-    // For clients without sales, we get the predominant vendor of their route
-    // Also includes visit/delivery days from LACLAE
-    const clients = await query(`
+    // Generate Cache Key (v5 = optimized with pre-filtered client codes)
+    const cacheKey = `clients:list:v5:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${limit}:${offset}`;
+    // Use LONG TTL for browsing, MEDIUM for search results
+    const cacheTTL = isSearchQuery ? TTL.MEDIUM : TTL.LONG;
+
+    // Execute with Cache (LONG TTL for browsing, MEDIUM for search)
+    logger.info(`[CLIENTS] Starting query for vendor ${vendedorCodes || 'all'}, search: ${search || 'none'}`);
+    const queryStart = Date.now();
+
+    // SIMPLIFIED QUERY v3: Single LACLAE scan with pre-filtered client codes
+    const clients = await cachedQuery(query, `
       SELECT
         C.CODIGOCLIENTE as code,
-        MAX(COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE))) as name,
-        MAX(C.NIF) as nif,
-        MAX(C.DIRECCION) as address, MAX(C.POBLACION) as city, MAX(C.PROVINCIA) as province,
-        MAX(C.CODIGOPOSTAL) as postalCode, MAX(C.TELEFONO1) as phone, MAX(C.TELEFONO2) as phone2,
-        MAX(C.CODIGORUTA) as route, MAX(C.PERSONACONTACTO) as contactPerson,
-        COALESCE(MAX(S.TOTAL_PURCHASES), 0) as totalPurchases,
-        COALESCE(MAX(S.NUM_ORDERS), 0) as numOrders,
-        COALESCE(MAX(S.LAST_PURCHASE_DATE), 0) as lastDateInt,
-        COALESCE(MAX(S.TOTAL_MARGIN), 0) as totalMargin,
-        MAX(C.ANOBAJA) as yearInactive,
-        COALESCE(MAX(TRIM(V.NOMBREVENDEDOR)), MAX(TRIM(RV.NOMBREVENDEDOR))) as vendorName,
-        COALESCE(MAX(S.LAST_VENDOR), MAX(RV.CODIGOVENDEDOR)) as vendorCode,
-        MAX(D.VIS_L) as visL, MAX(D.VIS_M) as visM, MAX(D.VIS_X) as visX,
-        MAX(D.VIS_J) as visJ, MAX(D.VIS_V) as visV, MAX(D.VIS_S) as visS,
-        MAX(D.DEL_L) as delL, MAX(D.DEL_M) as delM, MAX(D.DEL_X) as delX,
-        MAX(D.DEL_J) as delJ, MAX(D.DEL_V) as delV, MAX(D.DEL_S) as delS
+        COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) as name,
+        C.NIF as nif,
+        C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
+        C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
+        C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
+        COALESCE(S.TOTAL_PURCHASES, 0) as totalPurchases,
+        COALESCE(S.NUM_ORDERS, 0) as numOrders,
+        COALESCE(S.LAST_PURCHASE_DATE, 0) as lastDateInt,
+        COALESCE(S.TOTAL_MARGIN, 0) as totalMargin,
+        C.ANOBAJA as yearInactive,
+        TRIM(V.NOMBREVENDEDOR) as vendorName,
+        S.LAST_VENDOR as vendorCode
       FROM DSEDAC.CLI C
-      LEFT JOIN(
-        SELECT
-            Stats.LCCDCL as CODIGOCLIENTEALBARAN,
-            LastV.LCCDVD as LAST_VENDOR,
-            Stats.TOTAL_PURCHASES,
-            Stats.TOTAL_MARGIN,
-            Stats.NUM_ORDERS,
-            Stats.LAST_PURCHASE_DATE
-        FROM (
-            SELECT LCCDCL,
-                SUM(LCIMVT) as TOTAL_PURCHASES,
-                SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
-                COUNT(DISTINCT LCAADC || '-' || LCMMDC || '-' || LCDDDC) as NUM_ORDERS,
-                MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
-            FROM DSED.LACLAE
-            WHERE LCAADC >= ${MIN_YEAR}
-              AND TPDC = 'LAC'
-              AND LCTPVT IN ('CC', 'VC')
-              AND LCCLLN IN ('AB', 'VT')
-              AND LCSRAB NOT IN ('N', 'Z')
-              ${vendedorFilter.replace(/L\./g, '')}
-            GROUP BY LCCDCL
-        ) Stats
-        LEFT JOIN (
-            SELECT LCCDCL, LCCDVD
-            FROM (
-                SELECT LCCDCL, LCCDVD,
-                    ROW_NUMBER() OVER(PARTITION BY LCCDCL ORDER BY (LCAADC * 10000 + LCMMDC * 100 + LCDDDC) DESC, LCCDVD ASC) as RN
-                FROM DSED.LACLAE
-                WHERE LCAADC >= ${MIN_YEAR}
-                  AND TPDC = 'LAC'
-                  AND LCTPVT IN ('CC', 'VC')
-                  AND LCCLLN IN ('AB', 'VT')
-                  AND LCSRAB NOT IN ('N', 'Z')
-                  ${vendedorFilter.replace(/L\./g, '')}
-            ) T WHERE RN = 1
-        ) LastV ON Stats.LCCDCL = LastV.LCCDCL
-      ) S ON C.CODIGOCLIENTE = S.CODIGOCLIENTEALBARAN
-      LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
       LEFT JOIN (
-        SELECT CODIGORUTA, CODIGOVENDEDOR, NOMBREVENDEDOR
-        FROM (
-          SELECT
-            CLI_R.CODIGORUTA,
-            LAC_R.R1_T8CDVD as CODIGOVENDEDOR,
-            VDD_R.NOMBREVENDEDOR,
-            ROW_NUMBER() OVER(PARTITION BY CLI_R.CODIGORUTA ORDER BY COUNT(*) DESC) as RN
-          FROM DSED.LACLAE LAC_R
-          JOIN DSEDAC.CLI CLI_R ON LAC_R.LCCDCL = CLI_R.CODIGOCLIENTE
-          JOIN DSEDAC.VDD VDD_R ON LAC_R.R1_T8CDVD = VDD_R.CODIGOVENDEDOR
-          WHERE LAC_R.LCAADC >= ${MIN_YEAR}
-            AND LAC_R.TPDC = 'LAC'
-            AND CLI_R.CODIGORUTA IS NOT NULL
-          GROUP BY CLI_R.CODIGORUTA, LAC_R.R1_T8CDVD, VDD_R.NOMBREVENDEDOR
-        ) WHERE RN = 1
-      ) RV ON C.CODIGORUTA = RV.CODIGORUTA AND S.LAST_VENDOR IS NULL
-      LEFT JOIN (
-        SELECT LCCDCL,
-          MAX(R1_T8DIVL) as VIS_L, MAX(R1_T8DIVM) as VIS_M, MAX(R1_T8DIVX) as VIS_X,
-          MAX(R1_T8DIVJ) as VIS_J, MAX(R1_T8DIVV) as VIS_V, MAX(R1_T8DIVS) as VIS_S,
-          MAX(R1_T8DIRL) as DEL_L, MAX(R1_T8DIRM) as DEL_M, MAX(R1_T8DIRX) as DEL_X,
-          MAX(R1_T8DIRJ) as DEL_J, MAX(R1_T8DIRV) as DEL_V, MAX(R1_T8DIRS) as DEL_S
+        SELECT 
+          LCCDCL as CLIENT_CODE,
+          SUM(LCIMVT) as TOTAL_PURCHASES,
+          SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
+          COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
+          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE,
+          MAX(LCCDVD) as LAST_VENDOR
         FROM DSED.LACLAE
-        WHERE LCAADC >= ${MIN_YEAR} AND R1_T8CDVD IS NOT NULL
+        WHERE LCAADC >= ${MIN_YEAR}
+          AND TPDC = 'LAC'
+          AND LCTPVT IN ('CC', 'VC')
+          AND LCCLLN IN ('AB', 'VT')
+          AND LCSRAB NOT IN ('N', 'Z')
+          ${vendedorFilter.replace(/L\./g, '')}
         GROUP BY LCCDCL
-      ) D ON C.CODIGOCLIENTE = D.LCCDCL
+      ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
+      LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
-        AND (S.LAST_VENDOR IS NOT NULL ${routeFilter})
+        ${clientCodesFilter || `AND S.LAST_VENDOR IS NOT NULL`}
         ${searchFilter}
-      GROUP BY C.CODIGOCLIENTE
-      ORDER BY COALESCE(MAX(S.TOTAL_PURCHASES), 0) DESC
+      ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
       OFFSET ${parseInt(offset)} ROWS
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `);
+    `, cacheKey, cacheTTL);
+
+    const queryDuration = Date.now() - queryStart;
+    logger.info(`[CLIENTS] Query completed: ${clients.length} rows in ${queryDuration}ms`);
 
 
     const formatDateFromInt = (dateInt) => {
@@ -233,6 +196,9 @@ const getClientsHandler = async (req, res) => {
       hasMore: clients.length === parseInt(limit)
     });
 
+    const totalDuration = Date.now() - startTime;
+    logger.info(`[CLIENTS] Total response time: ${totalDuration}ms for ${clients.length} clients`);
+
   } catch (error) {
     logger.error(`Clients error: ${error.message} `);
     res.status(500).json({ error: 'Error obteniendo clientes', details: error.message });
@@ -303,10 +269,11 @@ router.get('/:code', async (req, res) => {
     const { vendedorCodes } = req.query;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
+    const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
 
-    // Basic client info - using parameterized query
+    // Basic client info
     // Include all phone fields for WhatsApp feature
-    const clientInfo = await queryWithParams(`
+    const clientInfo = await query(`
       SELECT C.CODIGOCLIENTE as code, C.NOMBRECLIENTE as name, C.NIF as nif,
   C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
   C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
@@ -314,9 +281,9 @@ router.get('/:code', async (req, res) => {
   C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
   C.OBSERVACIONES1 as notes, C.ANOALTA as yearCreated
       FROM DSEDAC.CLI C
-      WHERE C.CODIGOCLIENTE = ?
+      WHERE C.CODIGOCLIENTE = '${safeClientCode}'
       FETCH FIRST 1 ROWS ONLY
-  `, [clientCode]);
+  `);
 
     if (clientInfo.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
@@ -343,8 +310,8 @@ router.get('/:code', async (req, res) => {
       logger.debug(`CLIENT_NOTES table not found: ${e.message}`);
     }
 
-    // Sales summary - parameterized query
-    const salesSummary = await queryWithParams(`
+    // Sales summary
+    const salesSummary = await query(`
       SELECT 
         SUM(IMPORTEVENTA) as totalSales,
         SUM(IMPORTEMARGENREAL) as totalMargin,
@@ -352,20 +319,20 @@ router.get('/:code', async (req, res) => {
         COUNT(*) as totalLines,
         COUNT(DISTINCT ANODOCUMENTO || '-' || MESDOCUMENTO || '-' || DIADOCUMENTO) as numOrders
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = ? 
+      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
         AND ANODOCUMENTO >= ${MIN_YEAR} 
         AND TIPOVENTA IN ('CC', 'VC')
         AND TIPOLINEA IN ('AB', 'VT') -- Assuming TIPOLINEA exists in LINDTO
         AND SERIEALBARAN NOT IN ('N', 'Z')
         ${vendedorFilter}
-    `, [clientCode]);
+    `);
 
-    // Monthly sales trend (last 12 months) - parameterized
-    const monthlyTrend = await queryWithParams(`
+    // Monthly sales trend (last 12 months)
+    const monthlyTrend = await query(`
       SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
         SUM(IMPORTEVENTA) as sales, SUM(IMPORTEMARGENREAL) as margin
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = ? 
+      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
         AND ANODOCUMENTO >= ${MIN_YEAR} 
         AND TIPOVENTA IN ('CC', 'VC')
         AND TIPOLINEA IN ('AB', 'VT')
@@ -374,10 +341,10 @@ router.get('/:code', async (req, res) => {
       GROUP BY ANODOCUMENTO, MESDOCUMENTO
       ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
       FETCH FIRST 12 ROWS ONLY
-  `, [clientCode]);
+  `);
 
-    // Top products for this client - parameterized
-    const topProducts = await queryWithParams(`
+    // Top products for this client
+    const topProducts = await query(`
       SELECT L.CODIGOARTICULO as code,
   COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION)) as name,
   SUM(L.IMPORTEVENTA) as totalSales,
@@ -385,21 +352,39 @@ router.get('/:code', async (req, res) => {
   COUNT(*) as timesOrdered
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.ART A ON TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
-      WHERE L.CODIGOCLIENTEALBARAN = ? AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
+      WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
       ORDER BY totalSales DESC
       FETCH FIRST 10 ROWS ONLY
-  `, [clientCode]);
+  `);
 
-    // Payment status from CVC - Fixed missing safeCode variable by using parameterization
-    const paymentStatus = await queryWithParams(`
+    // Payment status from CVC with CAC cross-validation
+    // CVC tracks payment/vencimiento records; CAC has the actual invoice totals.
+    // We query both and log discrepancies for auditing.
+    const paymentStatus = await query(`
       SELECT
-        SUM(CASE WHEN SITUACION = 'C' THEN IMPORTEVENCIMIENTO ELSE 0 END) as paid,
-        SUM(CASE WHEN SITUACION = 'P' THEN IMPORTEPENDIENTE ELSE 0 END) as pending,
-        COUNT(CASE WHEN SITUACION = 'P' THEN 1 END) as pendingCount
-      FROM DSEDAC.CVC
-      WHERE CODIGOCLIENTEALBARAN = ? AND ANOEMISION >= ${MIN_YEAR}
-`, [clientCode]);
+        SUM(CASE WHEN CVC.SITUACION = 'C' THEN CVC.IMPORTEVENCIMIENTO ELSE 0 END) as paid,
+        SUM(CASE WHEN CVC.SITUACION = 'P' THEN CVC.IMPORTEPENDIENTE ELSE 0 END) as pending,
+        COUNT(CASE WHEN CVC.SITUACION = 'P' THEN 1 END) as pendingCount
+      FROM DSEDAC.CVC CVC
+      WHERE CVC.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND CVC.ANOEMISION >= ${MIN_YEAR}
+`);
+
+    // CAC cross-validation: sum invoice totals for comparison
+    const cacValidation = await query(`
+      SELECT
+        SUM(CAC.IMPORTETOTAL) as totalInvoiced
+      FROM DSEDAC.CAC CAC
+      WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${safeClientCode}'
+        AND CAC.EJERCICIOFACTURA >= ${MIN_YEAR}
+        AND CAC.NUMEROFACTURA > 0
+    `);
+
+    const pendingCVC = parseFloat(paymentStatus[0]?.PENDING) || 0;
+    const totalCAC = parseFloat(cacValidation[0]?.TOTALINVOICED) || 0;
+    if (Math.abs(pendingCVC - totalCAC) > 100) {
+        logger.warn(`[CLIENT ${safeClientCode}] CVC/CAC discrepancy: CVC pending=${pendingCVC.toFixed(2)}, CAC total=${totalCAC.toFixed(2)}, diff=${(pendingCVC - totalCAC).toFixed(2)}`);
+    }
 
     const c = clientInfo[0];
     const s = salesSummary[0] || {};
@@ -571,9 +556,10 @@ router.get('/:code/sales-history', async (req, res) => {
     const { vendedorCodes, limit = 50, offset = 0 } = req.query;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
+    const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
 
-    // Parameterized query for safety
-    const sales = await queryWithParams(`
+    // Safe query for sales history
+    const sales = await query(`
       SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
   CODIGOARTICULO as productCode,
   COALESCE(DESCRIPCION, 'Sin descripción') as productName,
@@ -581,7 +567,7 @@ router.get('/:code/sales-history', async (req, res) => {
   IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
   CODIGOVENDEDOR as vendedor
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = ? AND ANODOCUMENTO >= ${MIN_YEAR} 
+      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' AND ANODOCUMENTO >= ${MIN_YEAR} 
         AND TIPOVENTA IN ('CC', 'VC')
         AND TIPOLINEA IN ('AB', 'VT')
         AND SERIEALBARAN NOT IN ('N', 'Z')
@@ -589,7 +575,7 @@ router.get('/:code/sales-history', async (req, res) => {
       ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
       OFFSET ${parseInt(offset)} ROWS
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `, [clientCode]);
+    `);
 
     res.json({
       history: sales.map(s => ({

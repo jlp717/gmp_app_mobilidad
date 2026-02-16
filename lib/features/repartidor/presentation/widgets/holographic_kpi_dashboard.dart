@@ -17,14 +17,7 @@ class HolographicKpiDashboard extends StatefulWidget {
   final double montoCobrado;
   final bool isLoading;
   
-  // Gamification data
-  final int streakDays;
-  final String currentLevel;
-  final double levelProgress;
-  
-  // AI suggestion (optional)
-  final String? aiSuggestion;
-  final VoidCallback? onAiAction;
+
 
   const HolographicKpiDashboard({
     super.key,
@@ -35,11 +28,6 @@ class HolographicKpiDashboard extends StatefulWidget {
     required this.totalMonto,
     this.montoCobrado = 0,
     this.isLoading = false,
-    this.streakDays = 0,
-    this.currentLevel = 'BRONCE',
-    this.levelProgress = 0.0,
-    this.aiSuggestion,
-    this.onAiAction,
   });
 
   @override
@@ -109,8 +97,8 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(12, 2, 12, 4), // Ultra compact margins
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Minimal padding
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -120,18 +108,11 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
             AppTheme.darkCard.withOpacity(0.8),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: AppTheme.neonBlue.withOpacity(0.2),
-          width: 1.5,
+          width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: widget.isLoading ? _buildLoadingState() : _buildContent(),
     );
@@ -139,7 +120,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
 
   Widget _buildLoadingState() {
     return const SizedBox(
-      height: 100,
+      height: 50,
       child: Center(
         child: CircularProgressIndicator(
           color: AppTheme.neonBlue,
@@ -150,53 +131,23 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
   }
 
   Widget _buildContent() {
-    return Column(
+    return Row(
       children: [
-        // Main KPI Row
-        Row(
-          children: [
-            // Circular progress for deliveries
-            Expanded(
-              flex: 3,
-              child: _buildDeliveryProgress(),
-            ),
-            
-            // Vertical divider
-            Container(
-              width: 1,
-              height: 80,
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    AppTheme.neonBlue.withOpacity(0.3),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-            
-            // Money metrics
-            Expanded(
-              flex: 5,
-              child: _buildMoneyMetrics(),
-            ),
-          ],
+        // Circular progress for deliveries
+        _buildDeliveryProgress(),
+        
+        // Vertical divider
+        Container(
+          width: 1,
+          height: 40,
+          margin: const EdgeInsets.symmetric(horizontal: 10),
+          color: AppTheme.borderColor,
         ),
         
-        const SizedBox(height: 12),
-        
-        // Gamification bar
-        _buildGamificationBar(),
-        
-        // AI Suggestion (if present)
-        if (widget.aiSuggestion != null) ...[
-          const SizedBox(height: 12),
-          _buildAiSuggestion(),
-        ],
+        // Money metrics
+        Expanded(
+          child: _buildMoneyMetrics(),
+        ),
       ],
     );
   }
@@ -209,18 +160,18 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     return AnimatedBuilder(
       animation: Listenable.merge([_scannerAnimation, _progressController]),
       builder: (context, child) {
-        return Column(
+        return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 80,
-              height: 80,
+              width: 70,
+              height: 70,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
                   // Background ring
                   CustomPaint(
-                    size: const Size(80, 80),
+                    size: const Size(70, 70),
                     painter: _HoloRingPainter(
                       progress: progress * _progressController.value,
                       scannerAngle: _scannerAnimation.value,
@@ -236,15 +187,14 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                       const Icon(
                         Icons.local_shipping_outlined,
                         color: AppTheme.neonBlue,
-                        size: 20,
+                        size: 14,
                       ),
-                      const SizedBox(height: 2),
                       Text(
                         '${widget.entregasCompletadas}/${widget.totalEntregas}',
                         style: const TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontSize: 10,
                         ),
                       ),
                     ],
@@ -252,15 +202,29 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                 ],
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              'ENTREGAS',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-              ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'ENTREGAS',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+                 Text(
+                   '${(progress * 100).toInt()}%',
+                   style: const TextStyle(
+                     color: AppTheme.neonBlue,
+                     fontWeight: FontWeight.bold,
+                     fontSize: 18,
+                   ),
+                 ),
+              ],
             ),
           ],
         );
@@ -318,6 +282,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
               ? BoxDecoration(
                   color: color.withOpacity(glowOpacity),
                   borderRadius: BorderRadius.circular(12),
+                  border: isUrgent ? Border.all(color: color.withOpacity(0.3)) : null,
                 )
               : null,
           child: Column(
@@ -361,82 +326,6 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     );
   }
 
-  Widget _buildGamificationBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.darkBase.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppTheme.borderColor,
-        ),
-      ),
-      child: Row(
-        children: [
-          // Streak badge
-          if (widget.streakDays > 0) ...[
-            _buildBadge(
-              icon: Icons.local_fire_department,
-              value: '${widget.streakDays}',
-              label: 'Racha',
-              color: Colors.orange,
-            ),
-            const SizedBox(width: 12),
-          ],
-          
-          // Level indicator
-          _buildBadge(
-            icon: _getLevelIcon(widget.currentLevel),
-            value: widget.currentLevel,
-            label: 'Nivel',
-            color: _getLevelColor(widget.currentLevel),
-          ),
-          
-          const SizedBox(width: 12),
-          
-          // Level progress
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Próximo nivel',
-                  style: TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontSize: 9,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: widget.levelProgress,
-                    backgroundColor: AppTheme.borderColor,
-                    valueColor: AlwaysStoppedAnimation(
-                      _getLevelColor(widget.currentLevel),
-                    ),
-                    minHeight: 6,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(width: 12),
-          
-          // Progress percentage
-          Text(
-            '${(widget.levelProgress * 100).toInt()}%',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildBadge({
     required IconData icon,
@@ -471,107 +360,8 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     );
   }
 
-  Widget _buildAiSuggestion() {
-    return GestureDetector(
-      onTap: widget.onAiAction,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppTheme.neonPurple.withOpacity(0.1),
-              AppTheme.neonBlue.withOpacity(0.1),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: AppTheme.neonPurple.withOpacity(0.3),
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.neonPurple.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.auto_awesome,
-                color: AppTheme.neonPurple,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'IA DICE',
-                    style: TextStyle(
-                      color: AppTheme.neonPurple,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.aiSuggestion!,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 12,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right,
-              color: AppTheme.neonPurple,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  IconData _getLevelIcon(String level) {
-    switch (level.toUpperCase()) {
-      case 'BRONCE':
-        return Icons.workspace_premium;
-      case 'PLATA':
-        return Icons.star_border;
-      case 'ORO':
-        return Icons.star;
-      case 'PLATINO':
-        return Icons.auto_awesome;
-      case 'DIAMANTE':
-        return Icons.diamond;
-      default:
-        return Icons.military_tech;
-    }
-  }
 
-  Color _getLevelColor(String level) {
-    switch (level.toUpperCase()) {
-      case 'BRONCE':
-        return const Color(0xFFCD7F32);
-      case 'PLATA':
-        return const Color(0xFFC0C0C0);
-      case 'ORO':
-        return const Color(0xFFFFD700);
-      case 'PLATINO':
-        return const Color(0xFFE5E4E2);
-      case 'DIAMANTE':
-        return const Color(0xFFB9F2FF);
-      default:
-        return AppTheme.textSecondary;
-    }
-  }
 }
 
 /// Custom painter for holographic ring progress

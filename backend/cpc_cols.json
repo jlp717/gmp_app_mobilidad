@@ -1,0 +1,17 @@
+[
+  {
+    "COLUMN_NAME": "HORADOCUMENTO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraDocumento                               KCHRDC"
+  },
+  {
+    "COLUMN_NAME": "HORACREACION",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraCreacion                                KCHRCR"
+  },
+  {
+    "COLUMN_NAME": "HORALLEGADA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "HoraLlegada                                 KCHRLL"
+  }
+]

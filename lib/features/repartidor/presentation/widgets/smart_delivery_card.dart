@@ -16,15 +16,14 @@ class SmartDeliveryCard extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback? onSwipeComplete;
   final VoidCallback? onSwipeNote;
-  final String? aiSuggestion;
-
+  final Map<String, String>? repartidorNames;
   const SmartDeliveryCard({
     super.key,
     required this.albaran,
     required this.onTap,
     this.onSwipeComplete,
     this.onSwipeNote,
-    this.aiSuggestion,
+    this.repartidorNames,
   });
 
   @override
@@ -62,30 +61,39 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
 
   Color get _borderColor {
     if (_isEntregado) return AppTheme.success;
-    if (_isUrgent) return AppTheme.obligatorio;
-    if (widget.albaran.colorEstado == 'orange') return AppTheme.opcional;
+    if (widget.albaran.colorEstado == 'purple' || _isFactura) return AppTheme.neonPurple;
+    if (widget.albaran.colorEstado == 'red' || _isUrgent) return AppTheme.obligatorio;
     return AppTheme.neonBlue;
   }
 
   BoxDecoration get _cardDecoration {
-    if (_isEntregado) return AppTheme.successCard();
-    if (_isFactura) return AppTheme.facturaCard();
-    if (_isUrgent) return AppTheme.urgentCard();
-    return AppTheme.holoCard(glowColor: _borderColor);
+    Color baseColor;
+    if (_isEntregado) {
+       baseColor = AppTheme.success;
+    } else if (widget.albaran.colorEstado == 'purple' || _isFactura) {
+       baseColor = AppTheme.neonPurple;
+    } else if (widget.albaran.colorEstado == 'red' || _isUrgent) {
+       baseColor = AppTheme.obligatorio;
+    } else {
+       return AppTheme.holoCard(glowColor: _borderColor);
+    }
+    
+    return BoxDecoration(
+      color: baseColor.withOpacity(0.08), // Light background tint
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: baseColor.withOpacity(0.6), width: 1.5),
+      boxShadow: [
+        BoxShadow(color: baseColor.withOpacity(0.1), blurRadius: 8, spreadRadius: 0),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1), // Compact vertical padding
       child: GestureDetector(
-        onHorizontalDragStart: _isEntregado ? null : (_) {
-          setState(() => _isDragging = true);
-        },
-        onHorizontalDragUpdate: _isEntregado ? null : (details) {
-          setState(() => _dragOffset += details.delta.dx);
-        },
-        onHorizontalDragEnd: _isEntregado ? null : _handleDragEnd,
+        // Swipe disabled as requested
         onTapDown: (_) => _animController.forward(),
         onTapUp: (_) => _animController.reverse(),
         onTapCancel: () => _animController.reverse(),
@@ -107,104 +115,23 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   }
 
   Widget _buildCardContent() {
-    return AnimatedContainer(
-      duration: AppTheme.animNormal,
-      transform: Matrix4.translationValues(_dragOffset, 0, 0),
-      child: Stack(
-        children: [
-          // Swipe indicators (behind card)
-          if (_isDragging) ...[
-            Positioned.fill(
-              child: Row(
-                children: [
-                  // Left reveal (complete)
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.success.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.only(left: 20),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.check_circle, color: AppTheme.success),
-                          SizedBox(width: 8),
-                          Text(
-                            'COMPLETAR',
-                            style: TextStyle(
-                              color: AppTheme.success,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Right reveal (note)
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: const [
-                          Text(
-                            'NOTA',
-                            style: TextStyle(
-                              color: AppTheme.neonBlue,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Icon(Icons.edit_note, color: AppTheme.neonBlue),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          
-          // Main card
-          Container(
-            decoration: _cardDecoration,
-            child: Material(
-              color: Colors.transparent,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header row
-                    _buildHeader(),
-                    
-                    const SizedBox(height: 10),
-                    
-                    // Client info
-                    _buildClientInfo(),
-                    
-                    // AI Suggestion (if present)
-                    if (widget.aiSuggestion != null) ...[
-                      const SizedBox(height: 10),
-                      _buildAiSuggestion(),
-                    ],
-                    
-                    const SizedBox(height: 10),
-                    
-                    // Quick actions
-                    _buildQuickActions(),
-                  ],
-                ),
-              ),
-            ),
+    return Container(
+      decoration: _cardDecoration,
+      child: Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 10),
+              _buildClientInfo(),
+              const SizedBox(height: 6),
+              _buildQuickActions(),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -245,8 +172,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               const SizedBox(width: 6),
               Text(
                 _isFactura
-                    ? 'F-${widget.albaran.numeroFactura}'
-                    : 'A-${widget.albaran.numeroAlbaran}',
+                    ? '${widget.albaran.serieFactura.isNotEmpty ? widget.albaran.serieFactura : "F"}-${widget.albaran.numeroFactura}'
+                    : '${widget.albaran.serie.isNotEmpty ? widget.albaran.serie : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
                 style: TextStyle(
                   color: _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
@@ -367,6 +294,26 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            // Repartidor badge for directors (shown when viewing multiple repartidores)
+            if (widget.albaran.codigoRepartidor.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                ),
+                child: Text(
+                  widget.repartidorNames != null && widget.repartidorNames!.containsKey(widget.albaran.codigoRepartidor)
+                      ? 'R ${widget.albaran.codigoRepartidor} — ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
+                      : 'R ${widget.albaran.codigoRepartidor}',
+                  style: TextStyle(
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
           ],
         ),
         
@@ -398,45 +345,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     );
   }
 
-  Widget _buildAiSuggestion() {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.neonPurple.withOpacity(0.08),
-            AppTheme.neonBlue.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppTheme.neonPurple.withOpacity(0.2),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.auto_awesome,
-            size: 16,
-            color: AppTheme.neonPurple,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              widget.aiSuggestion!,
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
+
+
 
   Widget _buildQuickActions() {
     return Row(
@@ -459,18 +370,6 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             onTap: widget.onTap,
           ),
         
-        const Spacer(),
-        
-        // Status text
-        if (!_isEntregado)
-          Text(
-            '◀ Desliza para completar ▶',
-            style: TextStyle(
-              color: AppTheme.textTertiary,
-              fontSize: 10,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
       ],
     );
   }

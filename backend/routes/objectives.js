@@ -8,7 +8,8 @@ const {
     buildVendedorFilterLACLAE,
     MIN_YEAR,
     LAC_SALES_FILTER,
-    LACLAE_SALES_FILTER
+    LACLAE_SALES_FILTER,
+    getBSales
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const {
@@ -92,6 +93,14 @@ async function getClientsMonthlySales(clientCodes, year) {
 
 
 const SEASONAL_AGGRESSIVENESS = 0.5; // Tuning parameter for seasonality (0.0=flat, 1.0=high)
+const IPC = 1.03; // 3% inflation factor
+
+// Month number -> COFC quota column mapping
+const MONTH_QUOTA_MAP = {
+    1: 'CUOTAENERO', 2: 'CUOTAFEBRERO', 3: 'CUOTAMARZO', 4: 'CUOTAABRIL',
+    5: 'CUOTAMAYO', 6: 'CUOTAJUNIO', 7: 'CUOTAJULIO', 8: 'CUOTAAGOSTO',
+    9: 'CUOTASEPTIEMBRE', 10: 'CUOTAOCTUBRE', 11: 'CUOTANOVIEMBRE', 12: 'CUOTADICIEMBRE'
+};
 
 /**
  * Get target percentage configuration for a vendor
@@ -370,9 +379,29 @@ router.get('/evolution', async (req, res) => {
             AND ${LACLAE_SALES_FILTER}
             ${vendedorFilter}
           GROUP BY L.LCAADC, L.LCMMDC
-          ORDER BY L.LCAADC, L.LCMMDC
+          ORDER BY YEAR, MONTH
         `);
 
+
+        // =====================================================================
+        // B-SALES: Add secondary channel sales from JAVIER.VENTAS_B
+        // Ensures consistency with commissions endpoint
+        // =====================================================================
+        if (vendedorCodes && vendedorCodes !== 'ALL') {
+            const firstCode = vendedorCodes.split(',')[0].trim();
+            for (const yr of uniqueYears) {
+                const bSalesMap = await getBSales(firstCode, yr);
+                for (const [month, amount] of Object.entries(bSalesMap)) {
+                    const m = parseInt(month);
+                    const existingRow = rows.find(r => r.YEAR == yr && r.MONTH == m);
+                    if (existingRow) {
+                        existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + amount;
+                    } else if (amount > 0) {
+                        rows.push({ YEAR: yr, MONTH: m, SALES: amount, COST: 0, CLIENTS: 0 });
+                    }
+                }
+            }
+        }
 
         // Organize by year
         const yearlyData = {};
@@ -396,13 +425,13 @@ router.get('/evolution', async (req, res) => {
 
             if (missingMonths.length > 0) {
                 // Vendor is "new" or has incomplete history - load inherited sales
-                console.log(`📊 [OBJECTIVES] Vendor ${vendedorCodes} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
+                logger.info(`[OBJECTIVES] Vendor ${vendedorCodes} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
 
                 const firstCode = vendedorCodes.split(',')[0].trim();
                 const currentClients = await getVendorCurrentClients(firstCode, currentYear);
                 if (currentClients.length > 0) {
                     inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
-                    console.log(`📊 [OBJECTIVES] Found ${currentClients.length} clients. Loaded inherited sales for ${Object.keys(inheritedMonthlySales).length} months.`);
+                    logger.info(`[OBJECTIVES] Found ${currentClients.length} clients. Loaded inherited sales for ${Object.keys(inheritedMonthlySales).length} months.`);
                 }
             }
         }
@@ -431,12 +460,12 @@ router.get('/evolution', async (req, res) => {
                 if (fixedRows && fixedRows.length > 0) {
                     fixedMonthlyTarget = parseFloat(fixedRows[0].IMPORTE_OBJETIVO) || null;
                     if (fixedMonthlyTarget) {
-                        console.log(`📊 [OBJECTIVES] Vendor ${firstCode} has FIXED monthly target: ${fixedMonthlyTarget}€`);
+                        logger.info(`[OBJECTIVES] Vendor ${firstCode} has FIXED monthly target: ${fixedMonthlyTarget}€`);
                     }
                 }
             } catch (err) {
                 // Table might not exist - continue with percentage-based
-                console.log(`📊 [OBJECTIVES] COMMERCIAL_TARGETS: ${err.message}`);
+                logger.debug(`[OBJECTIVES] COMMERCIAL_TARGETS: ${err.message}`);
             }
         }
 

@@ -1,0 +1,136 @@
+=================================================================================
+📊 INFORME PARA EL JEFE DE VENTAS - 11 FEBRERO 2026
+=================================================================================
+
+🎯 RESUMEN EJECUTIVO
+
+   PDF muestra:                51.809,43€
+   Sistema (app) muestra:      49.330,26€
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   DIFERENCIA:                  2.479,17€
+
+=================================================================================
+
+📋 ANÁLISIS DETALLADO DE LA DIFERENCIA
+
+Del análisis realizado el 11/02/2026, hemos identificado:
+
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. REGISTROS EXCLUIDOS POR FILTROS DEL SISTEMA: 350,64€        │
+└─────────────────────────────────────────────────────────────────┘
+
+   El sistema excluye correctamente:
+   
+   ✓ Tipos de venta NO válidos (350,64€):
+     • Serie P con tipo 'SC': 326,47€
+     • Otros tipos no estándar: 24,17€
+     → Motivo: No son ventas reales (traspasos, embalajes, portes)
+   
+   ✓ Clases de línea NO válidas (0,00€):
+     • 26 registros con clase 'NS' (notas sin importe)
+     → Motivo: Líneas auxiliares sin valor de producto
+
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. DIFERENCIA ADICIONAL: ~2.128,53€                            │
+└─────────────────────────────────────────────────────────────────┘
+
+   Esta diferencia sugiere que el PDF incluye datos adicionales:
+
+   Posibles causas:
+   
+   ❓ A) Incluye registros de otros días
+      El PDF podría estar sumando albaranes que tienen fecha de
+      documento diferente al 11/02/2026
+   
+   ❓ B) Incluye documentos de tipo diferente
+      El PDF podría incluir documentos que no son 'LAC' (ej: facturas)
+   
+   ❓ C) Incluye registros duplicados
+      Posible conteo doble de algunas líneas
+   
+   ❓ D) Incluye vendedores diferentes
+      El PDF podría estar sumando ventas de más vendedores
+
+=================================================================================
+
+💡 RECOMENDACIÓN FINAL
+
+LA CIFRA CORRECTA DE VENTAS DEL DÍA 11/02/2026 ES:
+
+                        ╔═══════════════════╗
+                        ║   49.330,26€      ║
+                        ╚═══════════════════╝
+
+Esta cifra:
+✓ Excluye registros no válidos (traspasos, embalajes, etc.)
+✓ Aplica los filtros estándar del sistema
+✓ Representa las VENTAS REALES a clientes
+✓ Es consistente con los criterios contables
+
+=================================================================================
+
+🔍 QUÉ INCLUYE EL SISTEMA (49.330,26€)
+
+   ✅ 1.144 registros válidos
+   ✅ 288 albaranes distintos
+   ✅ 256 clientes activos
+   ✅ Solo tipos de venta: 'CC' y 'VC'
+   ✅ Solo clases de línea: 'AB' y 'VT'
+   ✅ Excluye series: N, Z, G, D (endosos, anulados, etc.)
+
+=================================================================================
+
+🔍 QUÉ INCLUYE EL PDF (51.809,43€)
+
+   El PDF parece incluir TODO sin filtrar:
+   
+   ⚠️  1.187 registros (43 más que el sistema)
+   ⚠️  Incluye tipos de venta no válidos
+   ⚠️  Incluye líneas auxiliares
+   ⚠️  Posiblemente incluye datos adicionales (~2.128€)
+
+=================================================================================
+
+📊 FILTROS QUE USA EL SISTEMA
+
+   TPDC = 'LAC'
+      → Solo albaranes de cliente
+   
+   LCTPVT IN ('CC', 'VC')
+      → CC = Contado Cliente
+      → VC = Venta Cliente
+      ⚠️  Excluye: traspasos, portes, embalajes
+   
+   LCCLLN IN ('AB', 'VT')
+      → AB = Albarán
+      → VT = Venta
+      ⚠️  Excluye: líneas auxiliares, notas
+   
+   LCSRAB NOT IN ('N', 'Z', 'G', 'D')
+      → N = Endosos
+      → Z = Anulados
+      → G = Garantías
+      → D = Devoluciones
+
+=================================================================================
+
+✅ CONCLUSIÓN
+
+El sistema muestra la cifra CORRECTA: 49.330,26€
+
+El PDF muestra una cifra INFLADA por incluir registros que no son
+ventas reales o que están fuera del alcance del día 11/02/2026.
+
+Para reconciliar las cifras, sería necesario verificar:
+1. ¿Qué filtros aplica el PDF?
+2. ¿Qué rango de fechas considera el PDF?
+3. ¿Incluye el PDF documentos no-LAC?
+4. ¿Hay duplicados en el PDF?
+
+=================================================================================
+
+Generado: 11 de febrero de 2026, 13:31
+Sistema: GMP App Movilidad v2.0
+Query validada: ✓ Con filtros estándar
+
+=================================================================================

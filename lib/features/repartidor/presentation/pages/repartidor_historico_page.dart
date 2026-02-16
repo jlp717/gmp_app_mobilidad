@@ -1,22 +1,32 @@
-/// REPARTIDOR HISTÓRICO PAGE
-/// Pestaña de histórico con búsqueda de clientes, albaranes, facturas y firmas
-/// Permite visualizar y reenviar documentos con filtros avanzados
+/// REPARTIDOR HISTÓRICO PAGE v4.0
+/// Full redesign with advanced filters, year selector, search by number,
+/// proper deduplication, and working signatures
+///
+/// Nivel 1: Lista de clientes con búsqueda
+/// Nivel 2: Documentos del cliente con filtros avanzados
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
+import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/repartidor_data_service.dart';
 
-/// Página de histórico para repartidores
-/// Búsqueda por cliente, visualización de documentos y firmas
 class RepartidorHistoricoPage extends StatefulWidget {
   final String repartidorId;
+  final String? initialClientId;
+  final String? initialClientName;
 
   const RepartidorHistoricoPage({
     super.key,
     required this.repartidorId,
+    this.initialClientId,
+    this.initialClientName,
   });
 
   @override
@@ -25,56 +35,78 @@ class RepartidorHistoricoPage extends StatefulWidget {
 
 class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _docSearchController = TextEditingController();
   bool _isLoading = false;
   String? _selectedClientId;
   String? _selectedClientName;
-  List<ClientSummary> _clients = [];
-  List<DocumentHistory> _documents = [];
-  List<MonthlyObjective> _objectives = [];
-  
-  // === FILTROS MODERNOS ===
+  List<_ClientItem> _clients = [];
+  List<_DocumentItem> _documents = [];
+
+  // Advanced Filters
   DateTime? _dateFrom;
   DateTime? _dateTo;
-  DocumentType? _filterDocType; // null = todos
-  DeliveryStatus? _filterStatus; // null = todos
+  _DocType? _filterDocType;
+  _DeliveryStatus? _filterStatus;
+  int? _selectedYear; // null = all recent years (last 3)
 
   @override
   void initState() {
     super.initState();
-    _loadClients();
+    if (widget.initialClientId != null) {
+      // Navigate directly to client documents — set state immediately to show loading
+      _selectedClientId = widget.initialClientId;
+      _selectedClientName = widget.initialClientName ?? widget.initialClientId!;
+      _isLoading = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadClientDocuments(widget.initialClientId!, widget.initialClientName ?? widget.initialClientId!);
+      });
+      // Load clients list in background (won't conflict since _loadClientDocuments manages _isLoading)
+      _loadClients();
+    } else {
+      _loadClients();
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _docSearchController.dispose();
     super.dispose();
   }
 
+  // ==========================================================================
+  // DATA LOADING
+  // ==========================================================================
+
   Future<void> _loadClients([String? search]) async {
-    setState(() => _isLoading = true);
-    
+    // Don't set loading if already viewing documents (would flash empty state)
+    final isInDocView = _selectedClientId != null;
+    if (!isInDocView) setState(() => _isLoading = true);
     try {
       final clients = await RepartidorDataService.getHistoryClients(
         repartidorId: widget.repartidorId,
         search: search,
       );
-      
-      _clients = clients.map((c) => ClientSummary(
+      _clients = clients.map((c) => _ClientItem(
         id: c.id,
         name: c.name,
         address: c.address,
         totalDocuments: c.totalDocuments,
+        totalAmount: c.totalAmount,
+        lastVisit: c.lastVisit,
       )).toList();
     } catch (e) {
       _clients = [];
+      if (mounted && !isInDocView) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al cargar clientes: $e'), backgroundColor: AppTheme.error),
+        );
+      }
     }
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
+    if (mounted && !isInDocView) setState(() => _isLoading = false);
   }
 
-  Future<void> _loadClientHistory(String clientId, String clientName) async {
+  Future<void> _loadClientDocuments(String clientId, String clientName) async {
     setState(() {
       _isLoading = true;
       _selectedClientId = clientId;
@@ -82,77 +114,91 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     });
 
     try {
+      final dateFromStr = _dateFrom != null
+          ? '${_dateFrom!.year}-${_dateFrom!.month.toString().padLeft(2, '0')}-${_dateFrom!.day.toString().padLeft(2, '0')}'
+          : null;
+      final dateToStr = _dateTo != null
+          ? '${_dateTo!.year}-${_dateTo!.month.toString().padLeft(2, '0')}-${_dateTo!.day.toString().padLeft(2, '0')}'
+          : null;
+
       final docs = await RepartidorDataService.getClientDocuments(
         clientId: clientId,
         repartidorId: widget.repartidorId,
+        dateFrom: dateFromStr,
+        dateTo: dateToStr,
+        year: _selectedYear,
       );
-      
+
       _documents = docs.map((d) {
-        DeliveryStatus status;
+        _DeliveryStatus status;
         switch (d.status) {
           case 'delivered':
-            status = DeliveryStatus.delivered;
+            status = _DeliveryStatus.delivered;
             break;
           case 'partial':
-            status = DeliveryStatus.partial;
+            status = _DeliveryStatus.partial;
+            break;
+          case 'en_ruta':
+            status = _DeliveryStatus.enRuta;
             break;
           default:
-            status = DeliveryStatus.notDelivered;
+            status = _DeliveryStatus.notDelivered;
         }
-        
-        return DocumentHistory(
+
+        return _DocumentItem(
           id: d.id,
-          type: d.type == 'factura' ? DocumentType.factura : DocumentType.albaran,
+          type: d.type == 'factura' ? _DocType.factura : _DocType.albaran,
           number: d.number,
+          serie: d.serie,
+          ejercicio: d.ejercicio,
+          terminal: d.terminal,
+          albaranNumber: d.albaranNumber ?? d.number,
+          facturaNumber: d.facturaNumber,
+          serieFactura: d.serieFactura,
+          ejercicioFactura: d.ejercicioFactura,
           date: DateTime.tryParse(d.date) ?? DateTime.now(),
           amount: d.amount,
+          pending: d.pending,
           status: status,
           hasSignature: d.hasSignature,
-          observations: d.pending > 0 ? 'Pendiente: ${CurrencyFormatter.format(d.pending)}' : null,
+          signaturePath: d.signaturePath,
+          deliveryDate: d.deliveryDate,
+          deliveryObs: d.deliveryObs,
+          time: d.time,
+          legacySignatureName: d.legacySignatureName,
+          hasLegacySignature: d.hasLegacySignature,
+          legacyDate: d.legacyDate,
         );
       }).toList();
-
-      final objectives = await RepartidorDataService.getMonthlyObjectives(
-        repartidorId: widget.repartidorId,
-        clientId: clientId,
-      );
-      
-      _objectives = objectives.map((o) => MonthlyObjective(
-        month: o.month,
-        collectable: o.collectable,
-        collected: o.collected,
-        percentage: o.percentage,
-      )).toList();
     } catch (e) {
       _documents = [];
-      _objectives = [];
     }
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
+    if (mounted) setState(() => _isLoading = false);
   }
 
-  // === FILTRADO AVANZADO ===
-  List<DocumentHistory> get _filteredDocuments {
+  // ==========================================================================
+  // FILTERING
+  // ==========================================================================
+
+  List<_DocumentItem> get _filteredDocuments {
+    final searchQuery = _docSearchController.text.trim().toLowerCase();
     return _documents.where((doc) {
-      // Filtro por tipo de documento
       if (_filterDocType != null && doc.type != _filterDocType) return false;
-      
-      // Filtro por estado
       if (_filterStatus != null && doc.status != _filterStatus) return false;
-      
-      // Filtro por fecha desde
-      if (_dateFrom != null && doc.date.isBefore(_dateFrom!)) return false;
-      
-      // Filtro por fecha hasta
-      if (_dateTo != null && doc.date.isAfter(_dateTo!.add(const Duration(days: 1)))) return false;
-      
+      // Search by number
+      if (searchQuery.isNotEmpty) {
+        final numStr = doc.number.toString();
+        final albStr = (doc.albaranNumber ?? doc.number).toString();
+        final factStr = (doc.facturaNumber ?? 0).toString();
+        if (!numStr.contains(searchQuery) && !albStr.contains(searchQuery) && !factStr.contains(searchQuery)) {
+          return false;
+        }
+      }
       return true;
     }).toList();
   }
 
-  List<ClientSummary> get _filteredClients {
+  List<_ClientItem> get _filteredClients {
     final query = _searchController.text.toLowerCase();
     if (query.isEmpty) return _clients;
     return _clients.where((c) =>
@@ -167,11 +213,17 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       _dateTo = null;
       _filterDocType = null;
       _filterStatus = null;
+      _docSearchController.clear();
     });
   }
 
   bool get _hasActiveFilters =>
-      _dateFrom != null || _dateTo != null || _filterDocType != null || _filterStatus != null;
+      _dateFrom != null || _dateTo != null || _filterDocType != null ||
+      _filterStatus != null || _docSearchController.text.isNotEmpty;
+
+  // ==========================================================================
+  // BUILD
+  // ==========================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -182,180 +234,144 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           _buildHeader(),
           Expanded(
             child: _selectedClientId != null
-                ? _buildClientHistory()
-                : _buildClientSearch(),
+                ? _buildDocumentsView()
+                : _buildClientList(),
           ),
         ],
       ),
     );
   }
 
+  // ==========================================================================
+  // HEADER
+  // ==========================================================================
+
   Widget _buildHeader() {
-    // If we are viewing a specific client, we show a detail header
     if (_selectedClientId != null) {
-       return Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      return Container(
+        padding: const EdgeInsets.fromLTRB(8, 12, 16, 8),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           border: Border(bottom: BorderSide(color: AppTheme.neonPurple.withOpacity(0.2), width: 1)),
         ),
-        child: Row(
+        child: Column(
           children: [
-            IconButton(
-              onPressed: () => setState(() {
-                  _selectedClientId = null;
-                  _selectedClientName = null;
-                  _documents = [];
-                  _clearFilters();
-              }),
-              icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                   Text(
+            Row(
+              children: [
+                IconButton(
+                  onPressed: _goBackToClients,
+                  icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         _selectedClientName ?? 'Cliente',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                         overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
+                      ),
+                      Text(
                         'Cód: $_selectedClientId',
-                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.8)),
-                    ),
-                ],
-              ),
+                        style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.8)),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_clients.isNotEmpty) _buildClientQuickSwitch(),
+              ],
             ),
-             // Client selector dropdown (when in client view)
-            if (_clients.isNotEmpty)
-              _buildClientSelector(),
           ],
         ),
-       );
+      );
     }
-    
-    // Main Header using SmartSyncHeader
+
     return SmartSyncHeader(
       title: 'Histórico',
-      subtitle: 'Búsqueda de clientes y documentos',
-      lastSync: DateTime.now(), // Real app would track this
+      subtitle: 'Documentos repartidos por cliente',
+      lastSync: DateTime.now(),
       isLoading: _isLoading,
-      onSync: () => _loadClients(_searchController.text),
+      onSync: () => _loadClients(_searchController.text.isNotEmpty ? _searchController.text : null),
     );
   }
 
-  /// Selector moderno de cliente tipo dropdown
-  Widget _buildClientSelector() {
+  void _goBackToClients() {
+    setState(() {
+      _selectedClientId = null;
+      _selectedClientName = null;
+      _documents = [];
+      _clearFilters();
+      _selectedYear = null;
+    });
+  }
+
+  Widget _buildClientQuickSwitch() {
     return PopupMenuButton<String>(
       tooltip: 'Cambiar cliente',
       offset: const Offset(0, 48),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: AppTheme.surfaceColor,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              AppTheme.neonPurple.withOpacity(0.15),
-              AppTheme.neonBlue.withOpacity(0.15),
-            ],
+            colors: [AppTheme.neonPurple.withOpacity(0.15), AppTheme.neonBlue.withOpacity(0.15)],
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
         ),
-        child: Row(
+        child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.swap_horiz, color: AppTheme.neonPurple, size: 18),
-            const SizedBox(width: 6),
-            const Text(
-              'Cliente',
-              style: TextStyle(color: AppTheme.neonPurple, fontSize: 12, fontWeight: FontWeight.w600),
-            ),
+            Icon(Icons.swap_horiz, color: AppTheme.neonPurple, size: 16),
+            SizedBox(width: 4),
+            Text('Cambiar', style: TextStyle(color: AppTheme.neonPurple, fontSize: 11, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
-      itemBuilder: (context) => _clients.map((client) {
+      itemBuilder: (context) => _clients.take(20).map((client) {
         final isSelected = client.id == _selectedClientId;
         return PopupMenuItem<String>(
           value: client.id,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppTheme.neonPurple.withOpacity(0.2)
-                        : AppTheme.darkBase,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: Text(
-                      client.name[0],
-                      style: TextStyle(
-                        color: isSelected ? AppTheme.neonPurple : AppTheme.textSecondary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+          child: Row(
+            children: [
+              Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  color: isSelected ? AppTheme.neonPurple.withOpacity(0.2) : AppTheme.darkBase,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        client.name,
-                        style: TextStyle(
-                          color: isSelected ? AppTheme.neonPurple : AppTheme.textPrimary,
-                          fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        'Cód: ${client.id}',
-                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                      ),
-                    ],
-                  ),
+                child: Center(
+                  child: Text(client.name.isNotEmpty ? client.name[0] : '?',
+                    style: TextStyle(color: isSelected ? AppTheme.neonPurple : AppTheme.textSecondary, fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
-                if (isSelected)
-                  const Icon(Icons.check_circle, color: AppTheme.neonPurple, size: 18),
-              ],
-            ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(client.name,
+                  style: TextStyle(color: isSelected ? AppTheme.neonPurple : AppTheme.textPrimary, fontSize: 12),
+                  overflow: TextOverflow.ellipsis),
+              ),
+              if (isSelected) const Icon(Icons.check_circle, color: AppTheme.neonPurple, size: 16),
+            ],
           ),
         );
       }).toList(),
       onSelected: (clientId) {
         final client = _clients.firstWhere((c) => c.id == clientId);
-        _loadClientHistory(clientId, client.name);
+        _loadClientDocuments(clientId, client.name);
       },
     );
   }
 
-  Widget _buildGlassButton({required IconData icon, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
-        ),
-        child: Icon(icon, color: AppTheme.textPrimary, size: 22),
-      ),
-    );
-  }
+  // ==========================================================================
+  // LEVEL 1: CLIENT LIST
+  // ==========================================================================
 
-  Widget _buildClientSearch() {
+  Widget _buildClientList() {
     return Column(
       children: [
+        // Search bar
         Padding(
           padding: const EdgeInsets.all(16),
           child: TextField(
@@ -368,27 +384,38 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear, color: AppTheme.textSecondary),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {});
-                      },
+                      onPressed: () { _searchController.clear(); setState(() {}); },
                     )
                   : null,
               filled: true,
               fillColor: AppTheme.surfaceColor,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.neonPurple),
-              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonPurple)),
             ),
             style: const TextStyle(color: AppTheme.textPrimary),
           ),
         ),
-        
+
+        // Client count
+        if (!_isLoading && _clients.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const Icon(Icons.people, size: 14, color: AppTheme.textSecondary),
+                const SizedBox(width: 6),
+                Text(
+                  _searchController.text.isNotEmpty
+                      ? '${_filteredClients.length} de ${_clients.length} clientes'
+                      : '${_clients.length} clientes',
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 8),
+
+        // List
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator(color: AppTheme.neonPurple))
@@ -399,26 +426,30 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         children: [
                           Icon(Icons.search_off, size: 48, color: AppTheme.textSecondary.withOpacity(0.5)),
                           const SizedBox(height: 16),
-                          Text('No se encontraron clientes', style: TextStyle(color: AppTheme.textSecondary)),
+                          const Text('No se encontraron clientes', style: TextStyle(color: AppTheme.textSecondary)),
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _filteredClients.length,
-                      itemBuilder: (context, index) => _buildClientCard(_filteredClients[index]),
+                  : RefreshIndicator(
+                      onRefresh: () => _loadClients(_searchController.text.isNotEmpty ? _searchController.text : null),
+                      color: AppTheme.neonPurple,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _filteredClients.length,
+                        itemBuilder: (context, index) => _buildClientCard(_filteredClients[index]),
+                      ),
                     ),
         ),
       ],
     );
   }
 
-  Widget _buildClientCard(ClientSummary client) {
+  Widget _buildClientCard(_ClientItem client) {
     return GestureDetector(
-      onTap: () => _loadClientHistory(client.id, client.name),
+      onTap: () => _loadClientDocuments(client.id, client.name),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(12),
@@ -426,25 +457,22 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         ),
         child: Row(
           children: [
+            // Avatar
             Container(
-              width: 48,
-              height: 48,
+              width: 44, height: 44,
               decoration: BoxDecoration(
                 color: AppTheme.neonPurple.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Center(
                 child: Text(
-                  client.name[0],
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.neonPurple,
-                  ),
+                  client.name.isNotEmpty ? client.name[0] : '?',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.neonPurple),
                 ),
               ),
             ),
             const SizedBox(width: 12),
+            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -452,31 +480,33 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
                           color: AppTheme.neonBlue.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(
-                          client.id,
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.neonBlue),
-                        ),
+                        child: Text(client.id,
+                          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
                       ),
                       const Spacer(),
-                      Text(
-                        '${client.totalDocuments} docs',
-                        style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                      ),
+                      if (client.lastVisit != null)
+                        Text(client.lastVisit!,
+                          style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.7))),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    client.name,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
-                  ),
-                  Text(
-                    client.address,
-                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.7)),
+                  const SizedBox(height: 3),
+                  Text(client.name,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text('${client.totalDocuments} docs',
+                        style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      const SizedBox(width: 12),
+                      Text(CurrencyFormatter.format(client.totalAmount),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.neonGreen)),
+                    ],
                   ),
                 ],
               ),
@@ -488,154 +518,372 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     );
   }
 
-  Widget _buildClientHistory() {
+  // ==========================================================================
+  // LEVEL 2: CLIENT DOCUMENTS
+  // ==========================================================================
+
+  Widget _buildDocumentsView() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator(color: AppTheme.neonPurple));
     }
 
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          // Tab bar
-          Container(
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceColor,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: TabBar(
-              labelColor: AppTheme.neonPurple,
-              unselectedLabelColor: AppTheme.textSecondary,
-              indicator: BoxDecoration(
-                color: AppTheme.neonPurple.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              dividerHeight: 0,
-              tabs: const [
-                Tab(text: 'Documentos'),
-                Tab(text: 'Objetivos 30%'),
-              ],
-            ),
-          ),
-          
-          Expanded(
-            child: TabBarView(
-              children: [
-                _buildDocumentsTabWithFilters(),
-                _buildObjectivesTable(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Tab de documentos con filtros modernos
-  Widget _buildDocumentsTabWithFilters() {
     return Column(
       children: [
-        // === FILTROS FUTURISTAS ===
-        _buildModernFilters(),
-        
-        // Lista filtrada
-        Expanded(
-          child: _buildDocumentsList(),
-        ),
+        // Advanced filter bar
+        _buildAdvancedFilters(),
+        // Stats summary
+        _buildDocStats(),
+        // Document list
+        Expanded(child: _buildDocumentsList()),
       ],
     );
   }
 
-  /// Panel de filtros moderno con glassmorphism
-  Widget _buildModernFilters() {
+  Widget _buildAdvancedFilters() {
+    final currentYear = DateTime.now().year;
+    final years = List.generate(5, (i) => currentYear - i);
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Column(
         children: [
-          // Row 1: Filter chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                // Date range filter
-                _buildFilterChip(
+          // Row 1: Year selector + Document number search
+          Row(
+            children: [
+              // Year dropdown
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _selectedYear != null ? AppTheme.neonBlue.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int?>(
+                    value: _selectedYear,
+                    hint: Text('Últimos 3 años', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.7))),
+                    dropdownColor: AppTheme.surfaceColor,
+                    icon: const Icon(Icons.calendar_month, size: 16, color: AppTheme.neonBlue),
+                    style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                    isDense: true,
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('Últimos 3 años', style: TextStyle(fontSize: 12)),
+                      ),
+                      ...years.map((y) => DropdownMenuItem<int?>(
+                        value: y,
+                        child: Text('$y', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      )),
+                    ],
+                    onChanged: (val) {
+                      setState(() => _selectedYear = val);
+                      if (_selectedClientId != null) {
+                        _loadClientDocuments(_selectedClientId!, _selectedClientName ?? '');
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Number search
+              Expanded(
+                child: SizedBox(
+                  height: 38,
+                  child: TextField(
+                    controller: _docSearchController,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar nº documento...',
+                      hintStyle: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.5)),
+                      prefixIcon: const Icon(Icons.tag, size: 16, color: AppTheme.textSecondary),
+                      suffixIcon: _docSearchController.text.isNotEmpty
+                          ? GestureDetector(
+                              onTap: () { _docSearchController.clear(); setState(() {}); },
+                              child: const Icon(Icons.clear, size: 16, color: AppTheme.textSecondary))
+                          : null,
+                      filled: true,
+                      fillColor: AppTheme.surfaceColor,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppTheme.neonPurple, width: 1),
+                      ),
+                    ),
+                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Row 2: Dropdown filters (redesigned from chips)
+          Row(
+            children: [
+              // Date range button
+              Expanded(
+                child: _buildFilterDropdown(
                   icon: Icons.date_range,
-                  label: _dateFrom != null || _dateTo != null
-                      ? _formatDateRange()
-                      : 'Fechas',
+                  label: _dateFrom != null || _dateTo != null ? _formatDateRange() : 'Fechas',
                   isActive: _dateFrom != null || _dateTo != null,
                   color: AppTheme.neonBlue,
                   onTap: _showDateRangePicker,
                 ),
-                const SizedBox(width: 8),
-                
-                // Document type filter
-                _buildFilterChip(
-                  icon: _filterDocType == DocumentType.factura ? Icons.receipt : Icons.description,
-                  label: _filterDocType == null
-                      ? 'Tipo'
-                      : _filterDocType == DocumentType.factura
-                          ? 'Facturas'
-                          : 'Albaranes',
-                  isActive: _filterDocType != null,
-                  color: AppTheme.neonPurple,
-                  onTap: _showDocTypeSelector,
-                ),
-                const SizedBox(width: 8),
-                
-                // Status filter
-                _buildFilterChip(
-                  icon: _getStatusIcon(),
-                  label: _filterStatus == null
-                      ? 'Estado'
-                      : _filterStatus == DeliveryStatus.delivered
-                          ? 'Entregado'
-                          : _filterStatus == DeliveryStatus.partial
-                              ? 'Parcial'
-                              : 'No Entregado',
-                  isActive: _filterStatus != null,
-                  color: _getStatusColor(),
-                  onTap: _showStatusSelector,
-                ),
-                
-                // Clear filters button
-                if (_hasActiveFilters) ...[
-                  const SizedBox(width: 8),
-                  _buildFilterChip(
-                    icon: Icons.close,
-                    label: 'Limpiar',
-                    isActive: false,
-                    color: AppTheme.error,
-                    onTap: _clearFilters,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Results count
-          Row(
-            children: [
-              Icon(Icons.filter_list, size: 14, color: AppTheme.textSecondary),
-              const SizedBox(width: 6),
-              Text(
-                '${_filteredDocuments.length} de ${_documents.length} documentos',
-                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
               ),
+              const SizedBox(width: 6),
+              // Doc type dropdown
+              Expanded(
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: _filterDocType != null ? AppTheme.neonPurple.withOpacity(0.1) : AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _filterDocType != null ? AppTheme.neonPurple.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<_DocType?>(
+                      value: _filterDocType,
+                      hint: Row(
+                        children: [
+                          Icon(Icons.description, size: 14, color: AppTheme.textSecondary.withOpacity(0.6)),
+                          const SizedBox(width: 4),
+                          Text('Tipo Doc', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6))),
+                        ],
+                      ),
+                      isDense: true,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceColor,
+                      style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary),
+                      items: [
+                        DropdownMenuItem<_DocType?>(
+                          value: null,
+                          child: Row(children: [
+                            Icon(Icons.all_inclusive, size: 14, color: AppTheme.textSecondary),
+                            const SizedBox(width: 4),
+                            const Text('Todos', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DocType?>(
+                          value: _DocType.factura,
+                          child: Row(children: [
+                            const Icon(Icons.receipt, size: 14, color: AppTheme.neonPurple),
+                            const SizedBox(width: 4),
+                            const Text('Facturas', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DocType?>(
+                          value: _DocType.albaran,
+                          child: Row(children: [
+                            const Icon(Icons.description, size: 14, color: AppTheme.neonBlue),
+                            const SizedBox(width: 4),
+                            const Text('Albaranes', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                      ],
+                      onChanged: (val) => setState(() => _filterDocType = val),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Status dropdown
+              Expanded(
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: _filterStatus != null ? _statusColor(_filterStatus).withOpacity(0.1) : AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _filterStatus != null ? _statusColor(_filterStatus).withOpacity(0.5) : Colors.white.withOpacity(0.1),
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<_DeliveryStatus?>(
+                      value: _filterStatus,
+                      hint: Row(
+                        children: [
+                          Icon(Icons.local_shipping, size: 14, color: AppTheme.textSecondary.withOpacity(0.6)),
+                          const SizedBox(width: 4),
+                          Text('Estado', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6))),
+                        ],
+                      ),
+                      isDense: true,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceColor,
+                      style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary),
+                      items: [
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: null,
+                          child: Row(children: [
+                            Icon(Icons.all_inclusive, size: 14, color: AppTheme.textSecondary),
+                            const SizedBox(width: 4),
+                            const Text('Todos', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: _DeliveryStatus.delivered,
+                          child: Row(children: [
+                            const Icon(Icons.check_circle, size: 14, color: Color(0xFF4CAF50)),
+                            const SizedBox(width: 4),
+                            const Text('Entregado', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: _DeliveryStatus.enRuta,
+                          child: Row(children: [
+                            Icon(Icons.local_shipping, size: 14, color: AppTheme.neonBlue),
+                            const SizedBox(width: 4),
+                            const Text('En Ruta', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: _DeliveryStatus.partial,
+                          child: Row(children: [
+                            const Icon(Icons.pie_chart, size: 14, color: Colors.orange),
+                            const SizedBox(width: 4),
+                            const Text('Parcial', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                        DropdownMenuItem<_DeliveryStatus?>(
+                          value: _DeliveryStatus.notDelivered,
+                          child: Row(children: [
+                            Icon(Icons.cancel, size: 14, color: AppTheme.error),
+                            const SizedBox(width: 4),
+                            const Text('Pendiente', style: TextStyle(fontSize: 11)),
+                          ]),
+                        ),
+                      ],
+                      onChanged: (val) => setState(() => _filterStatus = val),
+                    ),
+                  ),
+                ),
+              ),
+              // Clear button
+              if (_hasActiveFilters) ...[
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () {
+                    _clearFilters();
+                    if (_selectedClientId != null) {
+                      _loadClientDocuments(_selectedClientId!, _selectedClientName ?? '');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    height: 38,
+                    width: 38,
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+                    ),
+                    child: Icon(Icons.filter_alt_off, size: 16, color: AppTheme.error),
+                  ),
+                ),
+              ],
             ],
           ),
-          
-          const SizedBox(height: 8),
         ],
       ),
     );
   }
 
-  /// Chip de filtro moderno con efecto glassmorphism
-  Widget _buildFilterChip({
+  Widget _buildDocStats() {
+    final filtered = _filteredDocuments;
+    final totalAmount = filtered.fold<double>(0, (sum, d) => sum + d.amount);
+    final delivered = filtered.where((d) => d.status == _DeliveryStatus.delivered).length;
+    final withSignature = filtered.where((d) => d.hasSignature || d.hasLegacySignature).length;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.surfaceColor, AppTheme.surfaceColor.withOpacity(0.7)],
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem('Docs', '${filtered.length}', AppTheme.neonBlue),
+          _buildStatDivider(),
+          _buildStatItem('Total', CurrencyFormatter.formatCompact(totalAmount), AppTheme.neonGreen),
+          _buildStatDivider(),
+          _buildStatItem('Entregados', '$delivered', AppTheme.success),
+          _buildStatDivider(),
+          _buildStatItem('Firmados', '$withSignature', AppTheme.neonPurple),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: TextStyle(fontSize: 9, color: AppTheme.textSecondary.withOpacity(0.7))),
+      ],
+    );
+  }
+
+  Widget _buildStatDivider() {
+    return Container(width: 1, height: 24, color: Colors.white.withOpacity(0.08));
+  }
+
+  Widget _buildFilterDropdown({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: isActive ? color.withOpacity(0.1) : AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive ? color.withOpacity(0.5) : Colors.white.withOpacity(0.1),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: isActive ? color : AppTheme.textSecondary),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isActive ? color : AppTheme.textSecondary,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.arrow_drop_down, size: 16, color: isActive ? color : AppTheme.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChip({
     required IconData icon,
     required String label,
     required bool isActive,
@@ -644,14 +892,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           gradient: isActive
-              ? LinearGradient(
-                  colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
-                )
+              ? LinearGradient(colors: [color.withOpacity(0.2), color.withOpacity(0.1)])
               : null,
           color: isActive ? null : AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(20),
@@ -659,301 +904,18 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             color: isActive ? color.withOpacity(0.5) : Colors.white.withOpacity(0.1),
             width: isActive ? 1.5 : 1,
           ),
-          boxShadow: isActive
-              ? [
-                  BoxShadow(
-                    color: color.withOpacity(0.2),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                ]
-              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isActive ? color : AppTheme.textSecondary,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
+            Icon(icon, size: 14, color: isActive ? color : AppTheme.textSecondary),
+            const SizedBox(width: 4),
+            Text(label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 color: isActive ? color : AppTheme.textSecondary,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-            if (isActive) ...[
-              const SizedBox(width: 4),
-              Icon(Icons.check, size: 14, color: color),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatDateRange() {
-    final df = DateFormat('dd/MM');
-    if (_dateFrom != null && _dateTo != null) {
-      return '${df.format(_dateFrom!)} - ${df.format(_dateTo!)}';
-    } else if (_dateFrom != null) {
-      return 'Desde ${df.format(_dateFrom!)}';
-    } else if (_dateTo != null) {
-      return 'Hasta ${df.format(_dateTo!)}';
-    }
-    return 'Fechas';
-  }
-
-  IconData _getStatusIcon() {
-    switch (_filterStatus) {
-      case DeliveryStatus.delivered:
-        return Icons.check_circle;
-      case DeliveryStatus.partial:
-        return Icons.pie_chart;
-      case DeliveryStatus.notDelivered:
-        return Icons.cancel;
-      default:
-        return Icons.filter_alt;
-    }
-  }
-
-  Color _getStatusColor() {
-    switch (_filterStatus) {
-      case DeliveryStatus.delivered:
-        return AppTheme.success;
-      case DeliveryStatus.partial:
-        return Colors.orange;
-      case DeliveryStatus.notDelivered:
-        return AppTheme.error;
-      default:
-        return AppTheme.neonGreen;
-    }
-  }
-
-  Future<void> _showDateRangePicker() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-      initialDateRange: _dateFrom != null && _dateTo != null
-          ? DateTimeRange(start: _dateFrom!, end: _dateTo!)
-          : null,
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: AppTheme.neonPurple,
-              onPrimary: Colors.white,
-              surface: AppTheme.surfaceColor,
-              onSurface: AppTheme.textPrimary,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    
-    if (picked != null) {
-      setState(() {
-        _dateFrom = picked.start;
-        _dateTo = picked.end;
-      });
-    }
-  }
-
-  void _showDocTypeSelector() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _buildModernBottomSheet(
-        title: 'Tipo de Documento',
-        options: [
-          _BottomSheetOption(
-            icon: Icons.all_inclusive,
-            label: 'Todos',
-            isSelected: _filterDocType == null,
-            color: AppTheme.neonPurple,
-            onTap: () {
-              setState(() => _filterDocType = null);
-              Navigator.pop(ctx);
-            },
-          ),
-          _BottomSheetOption(
-            icon: Icons.description,
-            label: 'Albaranes',
-            isSelected: _filterDocType == DocumentType.albaran,
-            color: AppTheme.neonBlue,
-            onTap: () {
-              setState(() => _filterDocType = DocumentType.albaran);
-              Navigator.pop(ctx);
-            },
-          ),
-          _BottomSheetOption(
-            icon: Icons.receipt,
-            label: 'Facturas',
-            isSelected: _filterDocType == DocumentType.factura,
-            color: Colors.purpleAccent,
-            onTap: () {
-              setState(() => _filterDocType = DocumentType.factura);
-              Navigator.pop(ctx);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showStatusSelector() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _buildModernBottomSheet(
-        title: 'Estado de Entrega',
-        options: [
-          _BottomSheetOption(
-            icon: Icons.all_inclusive,
-            label: 'Todos',
-            isSelected: _filterStatus == null,
-            color: AppTheme.neonGreen,
-            onTap: () {
-              setState(() => _filterStatus = null);
-              Navigator.pop(ctx);
-            },
-          ),
-          _BottomSheetOption(
-            icon: Icons.check_circle,
-            label: 'Entregado',
-            isSelected: _filterStatus == DeliveryStatus.delivered,
-            color: AppTheme.success,
-            onTap: () {
-              setState(() => _filterStatus = DeliveryStatus.delivered);
-              Navigator.pop(ctx);
-            },
-          ),
-          _BottomSheetOption(
-            icon: Icons.pie_chart,
-            label: 'Parcial',
-            isSelected: _filterStatus == DeliveryStatus.partial,
-            color: Colors.orange,
-            onTap: () {
-              setState(() => _filterStatus = DeliveryStatus.partial);
-              Navigator.pop(ctx);
-            },
-          ),
-          _BottomSheetOption(
-            icon: Icons.cancel,
-            label: 'No Entregado',
-            isSelected: _filterStatus == DeliveryStatus.notDelivered,
-            color: AppTheme.error,
-            onTap: () {
-              setState(() => _filterStatus = DeliveryStatus.notDelivered);
-              Navigator.pop(ctx);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModernBottomSheet({
-    required String title,
-    required List<_BottomSheetOption> options,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          
-          // Title
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-          ),
-          
-          // Options
-          ...options.map((opt) => _buildOptionTile(opt)),
-          
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOptionTile(_BottomSheetOption option) {
-    return GestureDetector(
-      onTap: option.onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: option.isSelected
-              ? LinearGradient(
-                  colors: [
-                    option.color.withOpacity(0.2),
-                    option.color.withOpacity(0.05),
-                  ],
-                )
-              : null,
-          color: option.isSelected ? null : AppTheme.darkBase,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: option.isSelected ? option.color.withOpacity(0.5) : Colors.transparent,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: option.color.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(option.icon, color: option.color, size: 20),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              option.label,
-              style: TextStyle(
-                fontSize: 16,
-                color: option.isSelected ? option.color : AppTheme.textPrimary,
-                fontWeight: option.isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-            const Spacer(),
-            if (option.isSelected)
-              Icon(Icons.check_circle, color: option.color, size: 22),
+              )),
           ],
         ),
       ),
@@ -962,29 +924,28 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Widget _buildDocumentsList() {
     final docs = _filteredDocuments;
-    
+
     if (docs.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _hasActiveFilters ? Icons.filter_alt_off : Icons.folder_open, 
-              size: 48, 
-              color: AppTheme.textSecondary.withOpacity(0.5),
-            ),
+              _hasActiveFilters ? Icons.filter_alt_off : Icons.folder_open,
+              size: 48, color: AppTheme.textSecondary.withOpacity(0.5)),
             const SizedBox(height: 16),
             Text(
               _hasActiveFilters
-                  ? 'No hay documentos que coincidan con los filtros'
-                  : 'Sin documentos históricos',
-              style: TextStyle(color: AppTheme.textSecondary),
-              textAlign: TextAlign.center,
-            ),
+                  ? 'No hay documentos con estos filtros'
+                  : 'Sin documentos',
+              style: const TextStyle(color: AppTheme.textSecondary)),
             if (_hasActiveFilters) ...[
               const SizedBox(height: 12),
               TextButton.icon(
-                onPressed: _clearFilters,
+                onPressed: () {
+                  _clearFilters();
+                  _loadClientDocuments(_selectedClientId!, _selectedClientName ?? '');
+                },
                 icon: const Icon(Icons.clear, size: 16),
                 label: const Text('Limpiar filtros'),
                 style: TextButton.styleFrom(foregroundColor: AppTheme.neonPurple),
@@ -995,381 +956,828 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: docs.length,
-      itemBuilder: (context, index) => _buildDocumentCard(docs[index]),
+    return RefreshIndicator(
+      onRefresh: () => _loadClientDocuments(_selectedClientId!, _selectedClientName ?? ''),
+      color: AppTheme.neonPurple,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        itemCount: docs.length,
+        itemBuilder: (context, index) => _buildDocumentCard(docs[index]),
+      ),
     );
   }
 
-  Widget _buildDocumentCard(DocumentHistory doc) {
+  Widget _buildDocumentCard(_DocumentItem doc) {
     final Color statusColor;
     final IconData statusIcon;
-    
+    final String statusLabel;
+
     switch (doc.status) {
-      case DeliveryStatus.delivered:
+      case _DeliveryStatus.delivered:
         statusColor = AppTheme.success;
         statusIcon = Icons.check_circle;
+        statusLabel = 'Entregado';
         break;
-      case DeliveryStatus.partial:
+      case _DeliveryStatus.partial:
         statusColor = Colors.orange;
         statusIcon = Icons.pie_chart;
+        statusLabel = 'Parcial';
         break;
-      case DeliveryStatus.notDelivered:
+      case _DeliveryStatus.notDelivered:
         statusColor = AppTheme.error;
         statusIcon = Icons.cancel;
+        statusLabel = 'Pendiente';
+        break;
+      case _DeliveryStatus.enRuta:
+        statusColor = AppTheme.neonBlue;
+        statusIcon = Icons.local_shipping;
+        statusLabel = 'En Ruta';
         break;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: statusColor.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: doc.type == DocumentType.factura
-                      ? Colors.purple.withOpacity(0.2)
-                      : AppTheme.neonBlue.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      doc.type == DocumentType.factura ? Icons.receipt : Icons.description,
-                      size: 14,
-                      color: doc.type == DocumentType.factura ? Colors.purpleAccent : AppTheme.neonBlue,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      doc.type == DocumentType.factura ? 'Factura' : 'Albarán',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: doc.type == DocumentType.factura ? Colors.purpleAccent : AppTheme.neonBlue,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '#${doc.number}',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-              ),
-              const Spacer(),
-              Row(
-                children: [
-                  Icon(statusIcon, size: 16, color: statusColor),
-                  const SizedBox(width: 4),
-                  Text(
-                    doc.status == DeliveryStatus.delivered
-                        ? 'Entregado'
-                        : doc.status == DeliveryStatus.partial
-                            ? 'Parcial'
-                            : 'No Entregado',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: statusColor),
-                  ),
-                ],
-              ),
-            ],
+    final isFactura = doc.type == _DocType.factura;
+    final hasAnySignature = doc.hasSignature || doc.hasLegacySignature;
+
+    return GestureDetector(
+      onTap: () => _showDocumentActions(doc),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border(
+            left: BorderSide(color: statusColor, width: 3),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(Icons.calendar_today, size: 14, color: AppTheme.textSecondary),
-              const SizedBox(width: 6),
-              Text(
-                DateFormat('dd/MM/yyyy').format(doc.date),
-                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-              ),
-              const Spacer(),
-              Text(
-                CurrencyFormatter.format(doc.amount),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.neonGreen),
-              ),
-            ],
-          ),
-          
-          if (doc.observations != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.note_alt, size: 14, color: Colors.orange.withOpacity(0.7)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      doc.observations!,
-                      style: TextStyle(fontSize: 11, color: Colors.orange.shade300, fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          
-          const SizedBox(height: 10),
-          
-          Row(
-            children: [
-              if (doc.hasSignature)
-                OutlinedButton.icon(
-                  onPressed: () => _showSignature(doc),
-                  icon: const Icon(Icons.edit_note, size: 16),
-                  label: const Text('Ver Firma'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.neonPurple,
-                    side: BorderSide(color: AppTheme.neonPurple.withOpacity(0.5)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                )
-              else
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Row 1: Type badge + number + status
+            Row(
+              children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
+                    color: isFactura ? Colors.purple.withOpacity(0.2) : AppTheme.neonBlue.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    isFactura ? 'FAC' : 'ALB',
+                    style: TextStyle(
+                      fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5,
+                      color: isFactura ? Colors.purpleAccent : AppTheme.neonBlue,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  isFactura && doc.facturaNumber != null && doc.facturaNumber! > 0
+                    ? '${doc.serieFactura ?? doc.serie}-${doc.facturaNumber}'
+                    : '${doc.serie}-${doc.number}',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                if (isFactura && doc.albaranNumber != null && doc.albaranNumber != doc.number)
+                  Text('  (Alb ${doc.albaranNumber})',
+                    style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.6))),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.edit_off, size: 14, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text('Sin firma', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      Icon(statusIcon, size: 12, color: statusColor),
+                      const SizedBox(width: 3),
+                      Text(statusLabel,
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: statusColor)),
                     ],
                   ),
                 ),
-              const Spacer(),
-              IconButton(
-                onPressed: () => _shareDocument(doc),
-                icon: const Icon(Icons.share),
-                color: AppTheme.neonBlue,
-                tooltip: 'Compartir',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildObjectivesTable() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Progreso Objetivo 30%',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Seguimiento del porcentaje cobrado por mes',
-            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceColor,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: DataTable(
-              columnSpacing: 20,
-              headingRowColor: WidgetStateProperty.all(AppTheme.darkBase),
-              columns: const [
-                DataColumn(label: Text('Mes', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
-                DataColumn(label: Text('Cobrable', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
-                DataColumn(label: Text('Cobrado', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
-                DataColumn(label: Text('% Acum.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
               ],
-              rows: _objectives.map((obj) {
-                final isThresholdMet = obj.percentage >= 30;
-                return DataRow(cells: [
-                  DataCell(Text(obj.month, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12))),
-                  DataCell(Text(CurrencyFormatter.format(obj.collectable), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12))),
-                  DataCell(Text(CurrencyFormatter.format(obj.collected), style: const TextStyle(color: AppTheme.neonBlue, fontSize: 12))),
-                  DataCell(Row(
-                    children: [
-                      Icon(
-                        isThresholdMet ? Icons.check_circle : Icons.warning,
-                        size: 14,
-                        color: isThresholdMet ? AppTheme.success : Colors.orange,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${obj.percentage.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          color: isThresholdMet ? AppTheme.success : Colors.orange,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  )),
-                ]);
-              }).toList(),
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+
+            // Row 2: Date + time + signature badge + amount
+            Row(
+              children: [
+                Icon(Icons.calendar_today, size: 12, color: AppTheme.textSecondary.withOpacity(0.6)),
+                const SizedBox(width: 4),
+                Text(DateFormat('dd/MM/yyyy').format(doc.date),
+                  style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.8))),
+                if (doc.time != null) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.access_time, size: 11, color: AppTheme.textSecondary.withOpacity(0.5)),
+                  const SizedBox(width: 2),
+                  Text(doc.time!, style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.7))),
+                ],
+                if (hasAnySignature) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonPurple.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          doc.hasLegacySignature && doc.signaturePath == null ? Icons.history_edu : Icons.draw,
+                          size: 11, color: AppTheme.neonPurple),
+                        const SizedBox(width: 2),
+                        Text(
+                          doc.legacySignatureName != null && doc.legacySignatureName!.trim().isNotEmpty
+                            ? doc.legacySignatureName!.trim()
+                            : 'Firma',
+                          style: const TextStyle(fontSize: 9, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (doc.pending > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text('Pdte ${CurrencyFormatter.format(doc.pending)}',
+                      style: TextStyle(fontSize: 9, color: Colors.orange.shade300)),
+                  ),
+                ],
+                const Spacer(),
+                Text(CurrencyFormatter.format(doc.amount),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _showSignature(DocumentHistory doc) {
-    showDialog(
+  // ==========================================================================
+  // DOCUMENT ACTIONS BOTTOM SHEET
+  // ==========================================================================
+
+  void _showDocumentActions(_DocumentItem doc) {
+    final isFactura = doc.type == _DocType.factura;
+    final typeLabel = isFactura ? 'Factura' : 'Albarán';
+    final hasAnySignature = doc.hasSignature || doc.hasLegacySignature;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: AppTheme.surfaceColor,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+            ),
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isFactura ? Colors.purple.withOpacity(0.2) : AppTheme.neonBlue.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isFactura ? Icons.receipt_long : Icons.description,
+                      color: isFactura ? Colors.purpleAccent : AppTheme.neonBlue, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('$typeLabel #${doc.number}',
+                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                        Text('${DateFormat('dd/MM/yyyy').format(doc.date)} · ${CurrencyFormatter.format(doc.amount)}',
+                          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Actions
+            _buildActionTile(
+              icon: Icons.picture_as_pdf,
+              label: 'Ver / Compartir PDF',
+              color: AppTheme.error,
+              onTap: () {
+                Navigator.pop(ctx);
+                _shareDocumentPdf(doc);
+              },
+            ),
+            _buildActionTile(
+              icon: Icons.email_outlined,
+              label: 'Enviar por Email',
+              color: AppTheme.neonBlue,
+              onTap: () {
+                Navigator.pop(ctx);
+                _emailDocument(doc);
+              },
+            ),
+            if (hasAnySignature)
+              _buildActionTile(
+                icon: Icons.draw,
+                label: 'Ver Firma',
+                subtitle: doc.legacySignatureName != null && doc.legacySignatureName!.trim().isNotEmpty
+                    ? 'Firmado por: ${doc.legacySignatureName!.trim()}'
+                    : null,
+                color: AppTheme.neonPurple,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showSignatureDialog(doc);
+                },
+              ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required String label,
+    String? subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.darkBase,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: const TextStyle(fontSize: 15, color: AppTheme.textPrimary)),
+                  if (subtitle != null)
+                    Text(subtitle, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.7))),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: AppTheme.textSecondary.withOpacity(0.5)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================================
+  // ACTIONS
+  // ==========================================================================
+
+  Future<void> _shareDocumentPdf(_DocumentItem doc) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Generando PDF...'), duration: Duration(seconds: 2), backgroundColor: AppTheme.info),
+    );
+
+    try {
+      final isFactura = doc.type == _DocType.factura;
+      final bytes = await RepartidorDataService.downloadDocument(
+        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
+        serie: doc.serie,
+        number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
+        terminal: doc.terminal,
+        type: isFactura ? 'factura' : 'albaran',
+        facturaNumber: doc.facturaNumber,
+        serieFactura: doc.serieFactura,
+        ejercicioFactura: doc.ejercicioFactura,
+        albaranNumber: doc.albaranNumber ?? doc.number,
+        albaranSerie: doc.serie,
+        albaranTerminal: doc.terminal,
+        albaranYear: doc.ejercicio,
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final typeLabel = doc.type == _DocType.factura ? 'Factura' : 'Albaran';
+      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: '$typeLabel ${doc.number} - ${DateFormat('dd/MM/yyyy').format(doc.date)}',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al compartir: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _emailDocument(_DocumentItem doc) async {
+    final email = await _showEmailInputDialog();
+    if (email == null || email.isEmpty) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Enviando a $email...'), duration: const Duration(seconds: 2), backgroundColor: AppTheme.info),
+    );
+
+    try {
+      final isFactura = doc.type == _DocType.factura;
+      final bytes = await RepartidorDataService.downloadDocument(
+        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
+        serie: doc.serie,
+        number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
+        terminal: doc.terminal,
+        type: isFactura ? 'factura' : 'albaran',
+        facturaNumber: doc.facturaNumber,
+        serieFactura: doc.serieFactura,
+        ejercicioFactura: doc.ejercicioFactura,
+        albaranNumber: doc.albaranNumber ?? doc.number,
+        albaranSerie: doc.serie,
+        albaranTerminal: doc.terminal,
+        albaranYear: doc.ejercicio,
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final typeLabel = doc.type == _DocType.factura ? 'Factura' : 'Albaran';
+      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: '$typeLabel ${doc.number} - ${DateFormat('dd/MM/yyyy').format(doc.date)}',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<String?> _showEmailInputDialog() async {
+    final controller = TextEditingController();
+    return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surfaceColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.edit_note, color: AppTheme.neonPurple),
+            const Icon(Icons.email, color: AppTheme.neonBlue, size: 22),
             const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Firma - ${doc.type == DocumentType.factura ? 'Factura' : 'Albarán'} #${doc.number}',
-                style: const TextStyle(fontSize: 16),
-              ),
-            ),
+            const Text('Enviar por Email', style: TextStyle(fontSize: 16, color: AppTheme.textPrimary)),
           ],
         ),
-        content: Container(
-          width: 300,
-          height: 200,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.gesture, size: 48, color: Colors.grey.shade400),
-                const SizedBox(height: 8),
-                Text(
-                  'Firma digital del cliente',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  DateFormat('dd/MM/yyyy HH:mm').format(doc.date),
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                ),
-              ],
-            ),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.emailAddress,
+          style: const TextStyle(color: AppTheme.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'email@ejemplo.com',
+            hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+            prefixIcon: const Icon(Icons.alternate_email, color: AppTheme.textSecondary),
+            filled: true,
+            fillColor: AppTheme.darkBase,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
           ),
         ),
         actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cerrar'),
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Enviar', style: TextStyle(color: AppTheme.neonBlue)),
           ),
         ],
       ),
     );
   }
 
-  void _shareDocument(DocumentHistory doc) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.share, color: Colors.white),
-            const SizedBox(width: 12),
-            Text('Compartiendo ${doc.type == DocumentType.factura ? 'Factura' : 'Albarán'} #${doc.number}...'),
-          ],
-        ),
-        backgroundColor: AppTheme.neonBlue,
-        behavior: SnackBarBehavior.floating,
+  void _showSignatureDialog(_DocumentItem doc) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => _SignatureDialog(
+        ejercicio: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
+        serie: doc.serie,
+        terminal: doc.terminal,
+        numero: doc.albaranNumber ?? doc.number,
+        docLabel: '${doc.type == _DocType.factura ? "Factura" : "Albarán"} #${doc.number}',
+        legacySignatureName: doc.legacySignatureName,
+        legacyDate: doc.legacyDate,
       ),
     );
   }
+
+  // ==========================================================================
+  // FILTER HELPERS
+  // ==========================================================================
+
+  String _formatDateRange() {
+    final df = DateFormat('dd/MM');
+    if (_dateFrom != null && _dateTo != null) return '${df.format(_dateFrom!)} - ${df.format(_dateTo!)}';
+    if (_dateFrom != null) return 'Desde ${df.format(_dateFrom!)}';
+    if (_dateTo != null) return 'Hasta ${df.format(_dateTo!)}';
+    return 'Fechas';
+  }
+
+  Future<void> _showDateRangePicker() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDateRange: _dateFrom != null && _dateTo != null
+          ? DateTimeRange(start: _dateFrom!, end: _dateTo!)
+          : null,
+      builder: (context, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: AppTheme.neonPurple,
+            onPrimary: Colors.white,
+            surface: AppTheme.surfaceColor,
+            onSurface: AppTheme.textPrimary,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _dateFrom = picked.start;
+        _dateTo = picked.end;
+      });
+      // Re-fetch with date range from backend
+      if (_selectedClientId != null) {
+        _loadClientDocuments(_selectedClientId!, _selectedClientName ?? '');
+      }
+    }
+  }
+
+  void _cycleDocType() {
+    setState(() {
+      if (_filterDocType == null) {
+        _filterDocType = _DocType.albaran;
+      } else if (_filterDocType == _DocType.albaran) {
+        _filterDocType = _DocType.factura;
+      } else {
+        _filterDocType = null;
+      }
+    });
+  }
+
+  void _cycleStatus() {
+    setState(() {
+      if (_filterStatus == null) {
+        _filterStatus = _DeliveryStatus.delivered;
+      } else if (_filterStatus == _DeliveryStatus.delivered) {
+        _filterStatus = _DeliveryStatus.partial;
+      } else if (_filterStatus == _DeliveryStatus.partial) {
+        _filterStatus = _DeliveryStatus.notDelivered;
+      } else if (_filterStatus == _DeliveryStatus.notDelivered) {
+        _filterStatus = _DeliveryStatus.enRuta;
+      } else {
+        _filterStatus = null;
+      }
+    });
+  }
+
+  IconData _statusIcon(_DeliveryStatus? s) {
+    switch (s) {
+      case _DeliveryStatus.delivered: return Icons.check_circle;
+      case _DeliveryStatus.partial: return Icons.pie_chart;
+      case _DeliveryStatus.notDelivered: return Icons.cancel;
+      case _DeliveryStatus.enRuta: return Icons.local_shipping;
+      default: return Icons.filter_alt;
+    }
+  }
+
+  String _statusLabel(_DeliveryStatus? s) {
+    switch (s) {
+      case _DeliveryStatus.delivered: return 'Entregado';
+      case _DeliveryStatus.partial: return 'Parcial';
+      case _DeliveryStatus.notDelivered: return 'Pendiente';
+      case _DeliveryStatus.enRuta: return 'En Ruta';
+      default: return 'Estado';
+    }
+  }
+
+  Color _statusColor(_DeliveryStatus? s) {
+    switch (s) {
+      case _DeliveryStatus.delivered: return AppTheme.success;
+      case _DeliveryStatus.partial: return Colors.orange;
+      case _DeliveryStatus.notDelivered: return AppTheme.error;
+      case _DeliveryStatus.enRuta: return AppTheme.neonBlue;
+      default: return AppTheme.neonGreen;
+    }
+  }
 }
 
-// Helper class for bottom sheet options
-class _BottomSheetOption {
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final Color color;
-  final VoidCallback onTap;
+// =============================================================================
+// MODELS (private)
+// =============================================================================
 
-  _BottomSheetOption({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.color,
-    required this.onTap,
-  });
-}
-
-// Models
-class ClientSummary {
+class _ClientItem {
   final String id;
   final String name;
   final String address;
   final int totalDocuments;
+  final double totalAmount;
+  final String? lastVisit;
 
-  ClientSummary({
+  _ClientItem({
     required this.id,
     required this.name,
     required this.address,
     required this.totalDocuments,
+    this.totalAmount = 0,
+    this.lastVisit,
   });
 }
 
-enum DocumentType { albaran, factura }
-enum DeliveryStatus { delivered, partial, notDelivered }
+enum _DocType { albaran, factura }
+enum _DeliveryStatus { delivered, partial, notDelivered, enRuta }
 
-class DocumentHistory {
+class _DocumentItem {
   final String id;
-  final DocumentType type;
+  final _DocType type;
   final int number;
+  final String serie;
+  final int ejercicio;
+  final int terminal;
+  final int? albaranNumber;
+  final int? facturaNumber;
+  final String? serieFactura;
+  final int? ejercicioFactura;
   final DateTime date;
   final double amount;
-  final DeliveryStatus status;
+  final double pending;
+  final _DeliveryStatus status;
   final bool hasSignature;
-  final String? observations;
+  final String? signaturePath;
+  final String? deliveryDate;
+  final String? deliveryObs;
+  final String? time;
+  // Legacy signature fields (from CACFIRMAS)
+  final String? legacySignatureName;
+  final bool hasLegacySignature;
+  final String? legacyDate;
 
-  DocumentHistory({
+  _DocumentItem({
     required this.id,
     required this.type,
     required this.number,
+    this.serie = 'A',
+    this.ejercicio = 0,
+    this.terminal = 0,
+    this.albaranNumber,
+    this.facturaNumber,
+    this.serieFactura,
+    this.ejercicioFactura,
     required this.date,
     required this.amount,
+    this.pending = 0,
     required this.status,
     required this.hasSignature,
-    this.observations,
+    this.signaturePath,
+    this.deliveryDate,
+    this.deliveryObs,
+    this.time,
+    this.legacySignatureName,
+    this.hasLegacySignature = false,
+    this.legacyDate,
   });
 }
 
-class MonthlyObjective {
-  final String month;
-  final double collectable;
-  final double collected;
-  final double percentage;
+// =============================================================================
+// SIGNATURE DIALOG
+// =============================================================================
 
-  MonthlyObjective({
-    required this.month,
-    required this.collectable,
-    required this.collected,
-    required this.percentage,
+class _SignatureDialog extends StatefulWidget {
+  final int ejercicio;
+  final String serie;
+  final int terminal;
+  final int numero;
+  final String docLabel;
+  final String? legacySignatureName;
+  final String? legacyDate;
+
+  const _SignatureDialog({
+    required this.ejercicio,
+    required this.serie,
+    required this.terminal,
+    required this.numero,
+    required this.docLabel,
+    this.legacySignatureName,
+    this.legacyDate,
   });
+
+  @override
+  State<_SignatureDialog> createState() => _SignatureDialogState();
+}
+
+class _SignatureDialogState extends State<_SignatureDialog> {
+  Uint8List? _signatureBytes;
+  String? _firmante;
+  String? _fecha;
+  String? _source;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSignature();
+  }
+
+  Future<void> _fetchSignature() async {
+    try {
+      final data = await RepartidorDataService.getSignature(
+        ejercicio: widget.ejercicio,
+        serie: widget.serie,
+        terminal: widget.terminal,
+        numero: widget.numero,
+      );
+
+      if (data != null) {
+        final source = data['source'] as String?;
+        _source = source;
+
+        if (data['base64'] != null) {
+          // We have actual image data
+          setState(() {
+            _signatureBytes = base64Decode(data['base64'] as String);
+            _firmante = data['firmante'] as String?;
+            _fecha = data['fecha'] as String?;
+            _loading = false;
+          });
+        } else if (source == 'CACFIRMAS_NAME_ONLY' || (data['firmante'] != null && (data['firmante'] as String).isNotEmpty)) {
+          // Name-only signature from CACFIRMAS (no image, but record exists)
+          setState(() {
+            _firmante = data['firmante'] as String?;
+            _fecha = data['fecha'] as String?;
+            _loading = false;
+            _error = null;
+          });
+        } else {
+          _handleNoSignature();
+        }
+      } else {
+        _handleNoSignature();
+      }
+    } catch (e) {
+      setState(() { _loading = false; _error = 'Error al cargar firma: $e'; });
+    }
+  }
+
+  void _handleNoSignature() {
+    String? info;
+    if (widget.legacySignatureName != null && widget.legacySignatureName!.trim().isNotEmpty) {
+      info = 'Firma registrada por: ${widget.legacySignatureName!.trim()}';
+      if (widget.legacyDate != null) {
+        info += '\nFecha: ${widget.legacyDate}';
+      }
+      info += '\n\n(Imagen no disponible en registros históricos)';
+    }
+    setState(() {
+      _loading = false;
+      _error = info ?? 'No se encontró firma para este documento';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.surfaceColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          const Icon(Icons.draw, color: AppTheme.neonPurple),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('Firma - ${widget.docLabel}',
+              style: const TextStyle(fontSize: 16, color: AppTheme.textPrimary)),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 320, height: 280,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: AppTheme.neonPurple))
+            : _signatureBytes != null
+                // Has image
+                ? Column(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            // Use dark background so both white (legacy) and black (new) signatures are visible
+                            color: const Color(0xFF2A2D35),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: InteractiveViewer(
+                              minScale: 0.5, maxScale: 4.0,
+                              child: Image.memory(_signatureBytes!, fit: BoxFit.contain),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_firmante != null && _firmante!.isNotEmpty)
+                        Text('Firmante: $_firmante', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                      if (_fecha != null)
+                        Text('Fecha: $_fecha', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.8))),
+                    ],
+                  )
+                // Name-only signature (no image)
+                : _firmante != null && _firmante!.isNotEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonPurple.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.check_circle, size: 48, color: AppTheme.neonPurple),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text('Documento firmado',
+                              style: TextStyle(color: AppTheme.neonPurple, fontSize: 16, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 8),
+                            Text('Firmante: $_firmante',
+                              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+                            if (_fecha != null) ...[
+                              const SizedBox(height: 4),
+                              Text('Fecha: $_fecha',
+                                style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.8), fontSize: 12)),
+                            ],
+                            const SizedBox(height: 12),
+                            Text(
+                              '(Imagen no disponible - solo registro de firma)',
+                              style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5), fontSize: 10),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
+                    // Error / not found
+                    : Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.gesture, size: 48, color: Colors.grey.shade400),
+                            const SizedBox(height: 12),
+                            Text(_error ?? 'No se encontró firma',
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 13), textAlign: TextAlign.center),
+                          ],
+                        ),
+                      ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar')),
+      ],
+    );
+  }
 }

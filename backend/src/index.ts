@@ -28,6 +28,7 @@ import ruteroRoutes from './routes/rutero.routes';
 import pedidosRoutes from './routes/pedidos.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import entregasRoutes from './routes/entregas.routes';
+import facturasRoutes from './routes/facturas.routes';
 
 // Cron Jobs
 import { iniciarJobsCobros } from './cron/transferencias.job';
@@ -149,6 +150,7 @@ app.use(`${API_PREFIX}/rutero`, ruteroRoutes);
 app.use(`${API_PREFIX}/pedidos`, pedidosRoutes);
 app.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
 app.use(`${API_PREFIX}/entregas`, entregasRoutes);
+app.use(`${API_PREFIX}/facturas`, facturasRoutes);
 
 
 // ============================================

@@ -393,6 +393,7 @@ module.exports = {
     setCache: (ns, key, val, ttl) => redisCache.set(ns, key, val, ttl),
     deleteCache: (ns, key) => redisCache.delete(ns, key),
     invalidateCache: (pattern) => redisCache.invalidatePattern(pattern),
+    deleteCachePattern: (pattern) => redisCache.invalidatePattern(pattern), // Alias for clarity
     getOrSetCache: (ns, key, fn, ttl) => redisCache.getOrSet(ns, key, fn, ttl),
     getCacheStats: () => redisCache.getStats(),
 };

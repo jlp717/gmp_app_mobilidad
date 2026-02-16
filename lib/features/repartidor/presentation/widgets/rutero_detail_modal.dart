@@ -3,9 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/api/api_client.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 
 /// Rutero Detail Modal - Futuristic Redesign v2
@@ -32,20 +38,37 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   final TextEditingController _observacionesController = TextEditingController();
   final TextEditingController _dniController = TextEditingController();
   final TextEditingController _nombreController = TextEditingController();
+  final FocusNode _dniFocus = FocusNode();
+  final FocusNode _nombreFocus = FocusNode();
+  
   final SignatureController _signatureController = SignatureController(
     penStrokeWidth: 3,
-    penColor: Colors.white,
-    exportBackgroundColor: Colors.transparent,
+    penColor: Colors.black,
+    exportBackgroundColor: Colors.white,
   );
 
   // Product verification state
   final Map<String, bool> _productChecked = {};
   final Map<String, int> _productQuantities = {};
+  
+  // Data state
+  List<EntregaItem> _items = [];
+  bool _isLoadingItems = true;
+  String? _itemsError;
+  
+  // Helpers
+  List<String> _suggestedNames = [];
+  List<String> _suggestedDnis = [];
 
-  // Payment state
   String _selectedPaymentMethod = 'EFECTIVO';
   bool _isPaid = false;
   bool _isSubmitting = false;
+  
+  // Inline validation errors (instead of snackbar)
+  String? _nombreError;
+  String? _dniError;
+  String? _firmaError;
+  String? _pagoError;
 
   @override
   void initState() {
@@ -61,6 +84,67 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (widget.albaran.esCTR) {
       _selectedPaymentMethod = 'EFECTIVO';
     }
+    
+    _loadItems();
+    _loadSignerSuggestions();
+  }
+
+  Future<void> _loadItems() async {
+    try {
+      final provider = Provider.of<EntregasProvider>(context, listen: false);
+      final items = await provider.getAlbaranDetalle(
+        widget.albaran.numeroAlbaran,
+        widget.albaran.ejercicio,
+        widget.albaran.serie,
+        widget.albaran.terminal,
+      );
+      
+      if (mounted) {
+        setState(() {
+          _items = items;
+          _isLoadingItems = false;
+          
+          for (var item in items) {
+             if (!_productChecked.containsKey(item.codigoArticulo)) {
+                _productChecked[item.codigoArticulo] = true;
+                _productQuantities[item.codigoArticulo] = item.cantidadPedida.toInt();
+             }
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _itemsError = e.toString();
+          _isLoadingItems = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadSignerSuggestions() async {
+    try {
+      final codigoCliente = widget.albaran.codigoCliente;
+      if (codigoCliente == null) return;
+      
+      final response = await ApiClient.get('/entregas/signers/$codigoCliente');
+      if (response['success'] == true && mounted) {
+        final signers = response['signers'] as List;
+        setState(() {
+          _suggestedDnis = signers.map((s) => s['DNI'].toString().trim()).toList();
+          _suggestedNames = signers.map((s) => s['NOMBRE'].toString().trim()).toList();
+          
+          // Pre-fill with most recent signer (User request)
+          if (signers.isNotEmpty) {
+             final last = signers.first;
+             _dniController.text = last['DNI'].toString().trim();
+             _nombreController.text = last['NOMBRE'].toString().trim();
+          }
+        });
+      }
+    } catch (e) {
+      print('Error loading signers: $e');
+    }
   }
 
   @override
@@ -70,12 +154,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _observacionesController.dispose();
     _dniController.dispose();
     _nombreController.dispose();
+    _dniFocus.dispose();
+    _nombreFocus.dispose();
     _signatureController.dispose();
     super.dispose();
   }
 
   bool get _isFactura => widget.albaran.numeroFactura > 0;
   bool get _isUrgent => widget.albaran.esCTR;
+
+  bool get _isCompleted => widget.albaran.estado == EstadoEntrega.entregado;
 
   @override
   Widget build(BuildContext context) {
@@ -88,12 +176,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         curve: Curves.easeOutCubic,
       )),
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.92,
+        height: MediaQuery.of(context).size.height * (_isCompleted ? 0.70 : 0.92),
         decoration: BoxDecoration(
           color: AppTheme.darkBase,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           border: Border.all(
-            color: AppTheme.neonBlue.withOpacity(0.2),
+            color: _isCompleted
+                ? AppTheme.success.withOpacity(0.3)
+                : AppTheme.neonBlue.withOpacity(0.2),
             width: 1,
           ),
         ),
@@ -113,24 +203,212 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             // Header
             _buildHeader(),
 
-            // Tab bar
-            _buildTabBar(),
+            if (_isCompleted)
+              // Read-only completed view
+              Expanded(child: _buildCompletedView())
+            else ...[
+              // Tab bar
+              _buildTabBar(),
 
-            // Tab content
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildProductsTab(),
-                  _buildPaymentTab(),
-                  _buildFinalizeTab(),
-                ],
+              // Tab content
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildProductsTab(),
+                    _buildPaymentTab(),
+                    _buildFinalizeTab(),
+                  ],
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  /// Vista solo-lectura para entregas ya completadas
+  Widget _buildCompletedView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          // Success banner
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.success.withOpacity(0.15),
+                  AppTheme.success.withOpacity(0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.success.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.check_circle, color: AppTheme.success, size: 32),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'ENTREGA COMPLETADA',
+                        style: TextStyle(
+                          color: AppTheme.success,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _isFactura
+                            ? 'Factura ${widget.albaran.numeroFactura}'
+                            : 'Albarán ${widget.albaran.numeroAlbaran}',
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Summary info
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.darkCard,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
+            child: Column(
+              children: [
+                _buildInfoRow(Icons.store, 'Cliente', widget.albaran.nombreCliente),
+                const Divider(color: AppTheme.borderColor, height: 20),
+                _buildInfoRow(Icons.location_on, 'Dirección', '${widget.albaran.direccion}, ${widget.albaran.poblacion}'),
+                const Divider(color: AppTheme.borderColor, height: 20),
+                _buildInfoRow(Icons.euro, 'Importe', '${widget.albaran.importeTotal.toStringAsFixed(2)} €'),
+                const Divider(color: AppTheme.borderColor, height: 20),
+                _buildInfoRow(Icons.payment, 'Forma pago', widget.albaran.formaPagoDesc),
+                if (widget.albaran.observaciones != null && widget.albaran.observaciones!.isNotEmpty) ...[
+                  const Divider(color: AppTheme.borderColor, height: 20),
+                  _buildInfoRow(Icons.notes, 'Observaciones', widget.albaran.observaciones!),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Share buttons
+          const Text(
+            'REENVIAR NOTA DE ENTREGA',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Download PDF
+          _buildShareButton(
+            icon: Icons.download,
+            label: 'Descargar PDF',
+            color: AppTheme.neonBlue,
+            onTap: _downloadReceiptPdf,
+          ),
+          const SizedBox(height: 10),
+
+          // WhatsApp
+          _buildShareButton(
+            icon: Icons.chat,
+            label: 'Enviar por WhatsApp',
+            color: const Color(0xFF25D366),
+            onTap: () async {
+              await _shareViaWhatsApp();
+            },
+          ),
+          const SizedBox(height: 10),
+
+          // Email
+          _buildShareButton(
+            icon: Icons.email,
+            label: 'Enviar por Email',
+            color: AppTheme.neonCyan,
+            onTap: () async {
+              await _shareViaEmail();
+            },
+          ),
+
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: AppTheme.textTertiary),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 80,
+          child: Text(label, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+        ),
+        Expanded(
+          child: Text(value, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+        ),
+      ],
+    );
+  }
+
+  /// Descargar el PDF y abrirlo con share sheet
+  Future<void> _downloadReceiptPdf() async {
+    try {
+      final pdfData = await _generateReceiptPdf();
+      if (pdfData == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error al generar el PDF'), backgroundColor: AppTheme.error),
+          );
+        }
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final docLabel = widget.albaran.numeroFactura > 0
+          ? 'Factura_${widget.albaran.numeroFactura}'
+          : 'Albaran_${widget.albaran.numeroAlbaran}';
+      final file = File('${tempDir.path}/Nota_Entrega_$docLabel.pdf');
+      await file.writeAsBytes(base64Decode(pdfData));
+
+      await OpenFilex.open(file.path);
+    } catch (e) {
+      debugPrint('[RECEIPT] Error downloading PDF: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
   }
 
   Widget _buildHeader() {
@@ -180,8 +458,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     const SizedBox(width: 8),
                     Text(
                       _isFactura
-                          ? 'FACTURA ${widget.albaran.numeroFactura}'
-                          : 'ALBARÁN ${widget.albaran.numeroAlbaran}',
+                          ? 'FACTURA ${widget.albaran.serieFactura.isNotEmpty ? "${widget.albaran.serieFactura}-" : ""}${widget.albaran.numeroFactura}'
+                          : 'ALBARÁN ${widget.albaran.serie.isNotEmpty ? "${widget.albaran.serie}" : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
                       style: TextStyle(
                         color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
                         fontWeight: FontWeight.bold,
@@ -215,9 +493,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      _isUrgent ? '⚠ COBRO OBLIGATORIO' : '✓ COBRO OPCIONAL',
+                      _isCompleted
+                          ? '✓ ENTREGADO'
+                          : _isUrgent ? '⚠ COBRO OBLIGATORIO' : '✓ COBRO OPCIONAL',
                       style: TextStyle(
-                        color: _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                        color: _isCompleted
+                            ? AppTheme.success
+                            : _isUrgent ? AppTheme.obligatorio : AppTheme.success,
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
                       ),
@@ -318,61 +600,38 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Widget _buildProductsTab() {
-    final provider = Provider.of<EntregasProvider>(context, listen: false);
+    if (_isLoadingItems) {
+      return _buildProductsLoading();
+    }
 
-    return FutureBuilder<List<EntregaItem>>(
-      future: provider.getAlbaranDetalle(
-        widget.albaran.numeroAlbaran,
-        widget.albaran.ejercicio,
-        widget.albaran.serie,
-        widget.albaran.terminal,
-      ),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildProductsLoading();
-        }
+    if (_itemsError != null) {
+      return _buildProductsError(_itemsError);
+    }
 
-        if (snapshot.hasError) {
-          return _buildProductsError(snapshot.error);
-        }
+    if (_items.isEmpty) {
+      return _buildProductsEmpty();
+    }
 
-        final lineas = snapshot.data ?? [];
+    return Column(
+      children: [
+        // Summary bar
+        _buildProductsSummary(_items),
 
-        if (lineas.isEmpty) {
-          return _buildProductsEmpty();
-        }
+        // Product list
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _items.length,
+            itemBuilder: (context, index) {
+              final linea = _items[index];
+              return _buildProductCard(linea);
+            },
+          ),
+        ),
 
-        // Initialize checked status
-        for (var linea in lineas) {
-          _productChecked.putIfAbsent(linea.codigoArticulo, () => true);
-          _productQuantities.putIfAbsent(
-            linea.codigoArticulo,
-            () => linea.cantidadPedida.toInt(),
-          );
-        }
-
-        return Column(
-          children: [
-            // Summary bar
-            _buildProductsSummary(lineas),
-
-            // Product list
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: lineas.length,
-                itemBuilder: (context, index) {
-                  final linea = lineas[index];
-                  return _buildProductCard(linea);
-                },
-              ),
-            ),
-
-            // Confirm all button
-            _buildConfirmAllButton(lineas),
-          ],
-        );
-      },
+        // Confirm all button
+        _buildConfirmAllButton(_items),
+      ],
     );
   }
 
@@ -946,6 +1205,31 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
           ),
 
+          if (_pagoError != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.error.withOpacity(0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _pagoError!,
+                      style: const TextStyle(color: AppTheme.error, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           const SizedBox(height: 24),
 
           // Continue button
@@ -1060,32 +1344,142 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   ],
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: _nombreController,
-                  style: const TextStyle(color: AppTheme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: 'Nombre y Apellidos *',
-                    prefixIcon: const Icon(Icons.person_outline, size: 20),
-                    filled: true,
-                    fillColor: AppTheme.darkBase,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+                const SizedBox(height: 16),
+                
+                // Name Autocomplete
+                RawAutocomplete<String>(
+                  textEditingController: _nombreController,
+                  focusNode: _nombreFocus,
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return const Iterable<String>.empty();
+                    }
+                    return _suggestedNames.where((String option) {
+                      return option.toUpperCase().contains(textEditingValue.text.toUpperCase());
+                    });
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                     return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onEditingComplete: onEditingComplete,
+                      onChanged: (_) {
+                        // Clear error when user starts typing
+                        if (_nombreError != null) {
+                          setState(() => _nombreError = null);
+                        }
+                      },
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: 'Nombre y Apellidos *',
+                        prefixIcon: const Icon(Icons.person_outline, size: 20),
+                        filled: true,
+                        fillColor: AppTheme.darkBase,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        errorText: _nombreError,
+                        errorStyle: const TextStyle(color: AppTheme.error),
+                      ),
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        color: AppTheme.darkCard,
+                        child: SizedBox(
+                          height: 200.0,
+                          width: MediaQuery.of(context).size.width - 80, // Adjust width
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(8.0),
+                            itemCount: options.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final String option = options.elementAt(index);
+                              return ListTile(
+                                tileColor: AppTheme.darkBase,
+                                title: Text(option, style: const TextStyle(color: AppTheme.textPrimary)),
+                                onTap: () {
+                                  onSelected(option);
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
+                
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _dniController,
-                  style: const TextStyle(color: AppTheme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: 'DNI / NIF *',
-                    prefixIcon: const Icon(Icons.badge_outlined, size: 20),
-                    filled: true,
-                    fillColor: AppTheme.darkBase,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+                
+                // DNI Autocomplete
+                RawAutocomplete<String>(
+                  textEditingController: _dniController,
+                  focusNode: _dniFocus,
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return const Iterable<String>.empty();
+                    }
+                    return _suggestedDnis.where((String option) {
+                      return option.toUpperCase().contains(textEditingValue.text.toUpperCase());
+                    });
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                     return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onEditingComplete: onEditingComplete,
+                      onChanged: (_) {
+                        // Clear error when user starts typing
+                        if (_dniError != null) {
+                          setState(() => _dniError = null);
+                        }
+                      },
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: 'DNI / NIF *',
+                        prefixIcon: const Icon(Icons.badge_outlined, size: 20),
+                        filled: true,
+                        fillColor: AppTheme.darkBase,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        errorText: _dniError,
+                        errorStyle: const TextStyle(color: AppTheme.error),
+                      ),
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        color: AppTheme.darkCard,
+                        child: SizedBox(
+                          height: 200.0,
+                          width: MediaQuery.of(context).size.width - 80,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(8.0),
+                            itemCount: options.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final String option = options.elementAt(index);
+                              return ListTile(
+                                tileColor: AppTheme.darkBase,
+                                title: Text(option, style: const TextStyle(color: AppTheme.textPrimary)),
+                                onTap: () {
+                                  onSelected(option);
+                                  // Try to auto-fill regular name if possible? 
+                                  // For now keeping it simple.
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -1144,18 +1538,28 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           Container(
             height: 160,
             decoration: BoxDecoration(
-              color: AppTheme.darkCard,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.borderColor),
+              border: Border.all(
+                color: _firmaError != null ? AppTheme.error : AppTheme.borderColor,
+                width: _firmaError != null ? 2 : 1,
+              ),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: Signature(
                 controller: _signatureController,
-                backgroundColor: Colors.transparent,
+                backgroundColor: Colors.white,
               ),
             ),
           ),
+          if (_firmaError != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _firmaError!,
+              style: const TextStyle(color: AppTheme.error, fontSize: 12),
+            ),
+          ],
 
           const SizedBox(height: 24),
 
@@ -1229,28 +1633,166 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return code;
   }
 
-  Future<void> _submitDelivery() async {
-    // Validation
+  /// Clear inline validation errors
+  void _clearValidationErrors() {
+    setState(() {
+      _nombreError = null;
+      _dniError = null;
+      _firmaError = null;
+      _pagoError = null;
+    });
+  }
+
+  /// Validate all fields, return true if valid
+  bool _validateFields() {
+    bool isValid = true;
+    
+    // Clear previous errors
+    _clearValidationErrors();
+    
+    // Validate nombre
     if (_nombreController.text.trim().isEmpty) {
-      _showError('El nombre del receptor es obligatorio');
-      return;
+      _nombreError = 'El nombre del receptor es obligatorio';
+      isValid = false;
     }
+    
+    // Validate DNI
     if (_dniController.text.trim().isEmpty) {
-      _showError('El DNI/NIF es obligatorio');
-      return;
+      _dniError = 'El DNI/NIF es obligatorio';
+      isValid = false;
     }
+    
+    // Validate signature
     if (_signatureController.isEmpty) {
-      _showError('La firma es obligatoria');
+      _firmaError = 'La firma es obligatoria';
+      isValid = false;
+    }
+    
+    // CTR payment validation
+    if (_isUrgent && !_isPaid) {
+      _pagoError = '⚠️ COBRO OBLIGATORIO';
+      _tabController.animateTo(1); // Switch to payment tab
+      isValid = false;
+    }
+    
+    setState(() {}); // Trigger rebuild to show errors
+    
+    if (!isValid) {
+      HapticFeedback.heavyImpact();
+    }
+    
+    return isValid;
+  }
+
+  /// Show confirmation dialog before submitting
+  Future<bool> _showConfirmationDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: AppTheme.neonBlue, size: 28),
+            const SizedBox(width: 12),
+            const Text(
+              'Confirmar Entrega',
+              style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '¿Está seguro de confirmar esta entrega?',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.darkBase,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.description, size: 16, color: AppTheme.textTertiary),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isFactura 
+                            ? 'Factura ${widget.albaran.numeroFactura}'
+                            : 'Albarán ${widget.albaran.numeroAlbaran}',
+                        style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.person, size: 16, color: AppTheme.textTertiary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${_nombreController.text} (${_dniController.text})',
+                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_isPaid) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.payment, size: 16, color: AppTheme.success),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Cobrado: $_selectedPaymentMethod',
+                          style: TextStyle(color: AppTheme.success, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCELAR', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.success,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('CONFIRMAR'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _submitDelivery() async {
+    // Inline validation
+    if (!_validateFields()) {
       return;
     }
 
-    // CTR validation
-    if (_isUrgent && !_isPaid) {
-      if (_observacionesController.text.trim().isEmpty) {
-        _showError('Cobro pendiente: Indique motivo en observaciones');
-        return;
-      }
-    }
+    // Show confirmation dialog
+    final confirmed = await _showConfirmationDialog();
+    if (!confirmed) return;
 
     setState(() => _isSubmitting = true);
 
@@ -1276,6 +1818,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         albaranId: widget.albaran.id,
         firma: base64Sig,
         observaciones: finalObs,
+        clientCode: widget.albaran.codigoCliente,
+        dni: _dniController.text.trim(),
+        nombre: _nombreController.text.trim(),
       );
 
       if (!mounted) return;
@@ -1284,6 +1829,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
       if (success) {
         HapticFeedback.heavyImpact();
+        // Sync firma path from provider (marcarEntregado uploaded and got server path)
+        final updated = provider.albaranes.firstWhere(
+          (a) => a.id == widget.albaran.id,
+          orElse: () => widget.albaran,
+        );
+        widget.albaran.firma = updated.firma;
+        widget.albaran.estado = EstadoEntrega.entregado;
+        // Show share dialog before closing
+        await _showShareReceiptDialog();
+        if (!mounted) return;
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1298,7 +1853,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
         );
       } else {
-        _showError(provider.error ?? 'Error al guardar entrega');
+        // Handle already delivered error specially
+        final errorMsg = provider.error ?? 'Error al guardar entrega';
+        if (errorMsg.contains('ya fue confirmada')) {
+          _showAlreadyDeliveredDialog();
+        } else {
+          _showError(errorMsg);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1306,6 +1867,44 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         _showError('Error: $e');
       }
     }
+  }
+
+  /// Show dialog when delivery was already confirmed
+  void _showAlreadyDeliveredDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 28),
+            const SizedBox(width: 12),
+            const Text(
+              'Entrega ya confirmada',
+              style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Esta entrega ya fue confirmada anteriormente. No se pueden registrar duplicados.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Close modal
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonBlue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('ENTENDIDO'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showError(String message) {
@@ -1322,4 +1921,338 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       ),
     );
   }
+
+  /// Show dialog to share delivery receipt via WhatsApp or Email
+  Future<void> _showShareReceiptDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.share, color: AppTheme.neonBlue),
+            const SizedBox(width: 12),
+            const Text('Compartir Nota', style: TextStyle(color: AppTheme.textPrimary)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '¿Desea enviar la nota de entrega al cliente?',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 20),
+            // Download PDF
+            _buildShareButton(
+              icon: Icons.download,
+              label: 'Descargar PDF',
+              color: AppTheme.neonCyan,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _downloadReceiptPdf();
+              },
+            ),
+            const SizedBox(height: 12),
+            // WhatsApp button
+            _buildShareButton(
+              icon: Icons.chat,
+              label: 'Enviar por WhatsApp',
+              color: const Color(0xFF25D366),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _shareViaWhatsApp();
+              },
+            ),
+            const SizedBox(height: 12),
+            // Email button
+            _buildShareButton(
+              icon: Icons.email,
+              label: 'Enviar por Email',
+              color: AppTheme.neonBlue,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _shareViaEmail();
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Omitir', style: TextStyle(color: AppTheme.textTertiary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShareButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: color.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 12),
+              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Icon(Icons.chevron_right, color: color.withOpacity(0.6)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareViaWhatsApp() async {
+    try {
+      // Prompt for phone number
+      final phone = await _showWhatsAppInputDialog();
+      if (phone == null || phone.isEmpty) return;
+
+      // Generate receipt PDF via API
+      final pdfData = await _generateReceiptPdf();
+      if (pdfData == null) return;
+
+      // Save PDF temporarily
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}.pdf');
+      await file.writeAsBytes(base64Decode(pdfData));
+
+      final message = 'Nota de entrega - Albarán ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}';
+
+      // Join phone with 34 if it doesn't have it
+      String cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+      if (cleanPhone.length == 9) cleanPhone = '34$cleanPhone';
+
+      // Share via WhatsApp
+      final whatsappUrl = 'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}';
+      if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
+        await launchUrl(Uri.parse(whatsappUrl), mode: LaunchMode.externalApplication);
+      }
+      
+      // Also share the file using native share (as backup)
+      await Share.shareXFiles([XFile(file.path)], text: message);
+    } catch (e) {
+      debugPrint('Error sharing via WhatsApp: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al compartir: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareViaEmail() async {
+    try {
+      final email = await _showEmailInputDialog();
+      if (email == null || email.isEmpty) return;
+
+      // Send via API
+      final response = await ApiClient.post(
+        '/entregas/receipt/${widget.albaran.id}/email',
+        {
+          'email': email,
+          'signaturePath': widget.albaran.firma,
+          'clientCode': widget.albaran.codigoCliente,
+          'clientName': widget.albaran.nombreCliente,
+          'albaranNum': widget.albaran.numeroAlbaran.toString(),
+          'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
+          'fecha': widget.albaran.fecha,
+          'subtotal': widget.albaran.importeTotal,
+          'iva': 0,
+          'total': widget.albaran.importeTotal,
+          'formaPago': widget.albaran.formaPagoDesc,
+          'repartidor': widget.albaran.codigoRepartidor,
+          'items': _items.map((i) => {
+            'cantidad': i.cantidadPedida,
+            'descripcion': i.descripcion,
+            'precio': i.precioUnitario,
+          }).toList(),
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response['success'] == true ? 'Email enviado a $email' : 'Error al enviar email'),
+            backgroundColor: response['success'] == true ? AppTheme.success : AppTheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error sending email: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al enviar email: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<String?> _showEmailInputDialog() async {
+    final controller = TextEditingController(text: widget.albaran.emailCliente);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.email, color: AppTheme.neonBlue, size: 24),
+            const SizedBox(width: 12),
+            const Text('Enviar por Email', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Confirmar dirección de correo:',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'correo@ejemplo.com',
+                hintStyle: TextStyle(color: AppTheme.textTertiary),
+                prefixIcon: const Icon(Icons.alternate_email, color: AppTheme.textTertiary),
+                filled: true,
+                fillColor: AppTheme.darkBase,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
+              ),
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('CANCELAR', style: TextStyle(color: AppTheme.textTertiary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonBlue,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('ENVIAR'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showWhatsAppInputDialog() async {
+    final controller = TextEditingController(text: widget.albaran.telefono);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.chat, color: Color(0xFF25D366), size: 24),
+            const SizedBox(width: 12),
+            const Text('Enviar por WhatsApp', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Confirmar número de teléfono:',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.phone,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: '600000000',
+                hintStyle: TextStyle(color: AppTheme.textTertiary),
+                prefixIcon: const Icon(Icons.phone, color: AppTheme.textTertiary),
+                filled: true,
+                fillColor: AppTheme.darkBase,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF25D366))),
+              ),
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('CANCELAR', style: TextStyle(color: AppTheme.textTertiary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF25D366),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('COMPARTIR'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _generateReceiptPdf() async {
+    try {
+      final response = await ApiClient.post(
+        '/entregas/receipt/${widget.albaran.id}',
+        {
+          'signaturePath': widget.albaran.firma,
+          'clientCode': widget.albaran.codigoCliente,
+          'clientName': widget.albaran.nombreCliente,
+          'albaranNum': widget.albaran.numeroAlbaran.toString(),
+          'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
+          'fecha': widget.albaran.fecha,
+          'subtotal': widget.albaran.importeTotal,
+          'iva': 0,
+          'total': widget.albaran.importeTotal,
+          'formaPago': widget.albaran.formaPagoDesc,
+          'repartidor': widget.albaran.codigoRepartidor,
+          'items': _items.map((i) => {
+            'cantidad': i.cantidadPedida,
+            'descripcion': i.descripcion,
+            'precio': i.precioUnitario,
+          }).toList(),
+        },
+      );
+
+      if (response['success'] == true) {
+        return response['pdfBase64'] as String?;
+      }
+      debugPrint('[RECEIPT] API error: ${response['error']}');
+      return null;
+    } catch (e) {
+      debugPrint('[RECEIPT] Error generating receipt: $e');
+      return null;
+    }
+  }
 }
+

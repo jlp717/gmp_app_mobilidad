@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'isolate_transformer.dart';
 import 'api_config.dart';
 import '../cache/cache_service.dart';
 import '../services/network_service.dart';
@@ -41,22 +42,35 @@ class ApiClient {
     return _dio!;
   }
 
-  /// Create Dio instance with interceptors
+  /// Create Dio instance with OPTIMIZED settings
+  /// - Gzip compression for faster transfers
+  /// - Connection Keep-Alive for connection reuse
+  /// - Optimized timeouts for mobile networks
   static Dio _createDio() {
     final dio = Dio(BaseOptions(
       baseUrl: ApiConfig.baseUrl,
       connectTimeout: ApiConfig.connectTimeout,
       receiveTimeout: ApiConfig.receiveTimeout,
+      sendTimeout: const Duration(seconds: 30),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate', // Enable gzip compression
+        'Connection': 'keep-alive', // Connection pooling
       },
+      // Enable response compression
+      responseType: ResponseType.json,
+      // Only accept 2xx responses as successful — 4xx/5xx trigger DioException
+      validateStatus: (status) => status != null && status >= 200 && status < 300,
     ));
+
+    // OPTIMIZATION: Parse JSON in background isolate
+    dio.transformer = IsolateTransformer();
 
     // Add retry interceptor
     dio.interceptors.add(_RetryInterceptor(dio, _maxRetries, _retryDelay));
 
-    // Add logging interceptor in debug mode
+    // Add performance logging interceptor in debug mode
     if (kDebugMode) {
       dio.interceptors.add(LogInterceptor(
         requestBody: false,
@@ -110,16 +124,13 @@ class ApiClient {
     bool forceRefresh = false,
   }) async {
     // Try cache first if cacheKey provided and not forcing refresh
-    // Try cache first if cacheKey provided and not forcing refresh
     if (cacheKey != null && !forceRefresh) {
       try {
         final cached = CacheService.get(cacheKey);
         if (cached != null && cached is Map) {
-          debugPrint('[ApiClient] Returning cached response for: $cacheKey');
           return Map<String, dynamic>.from(cached);
         }
       } catch (e) {
-        debugPrint('[ApiClient] Cache incompatible, ignoring: $e');
         // Continue to network request
       }
     }
@@ -131,9 +142,8 @@ class ApiClient {
       );
       final rawData = response.data;
       if (rawData is! Map) {
-         // If it is a List, throw descriptive error so we know to use getList
-         if (rawData is List) throw Exception('Response is a List, use getList() instead');
-         throw Exception('Expected Map response but got ${rawData.runtimeType}');
+         if (rawData is List) throw ApiException('Response is a List, use getList() instead');
+         throw ApiException('Expected Map response but got ${rawData.runtimeType}');
       }
       final data = Map<String, dynamic>.from(rawData);
 
@@ -144,12 +154,10 @@ class ApiClient {
 
       return data;
     } on DioException catch (e) {
-      // On network error, try to return cached data if available
       if (cacheKey != null && _isNetworkError(e)) {
         try {
           final cached = CacheService.get(cacheKey);
           if (cached != null && cached is Map) {
-             debugPrint('[ApiClient] Network error, returning stale cache for: $cacheKey');
              return Map<String, dynamic>.from(cached);
           }
         } catch (_) {}
@@ -167,16 +175,14 @@ class ApiClient {
     bool forceRefresh = false,
   }) async {
     // Try cache first if cacheKey provided and not forcing refresh
-    // Try cache first if cacheKey provided and not forcing refresh
     if (cacheKey != null && !forceRefresh) {
       try {
         final cached = CacheService.get(cacheKey);
         if (cached != null && cached is List) {
-           debugPrint('[ApiClient] Returning cached list for: $cacheKey');
            return cached;
         }
       } catch (e) {
-         debugPrint('[ApiClient] Cache incompatible, ignoring: $e');
+         // Continue to network
       }
     }
 
@@ -204,14 +210,29 @@ class ApiClient {
 
       return result;
     } on DioException catch (e) {
-      // On network error, try to return cached data if available
       if (cacheKey != null && _isNetworkError(e)) {
         final cached = CacheService.get<List<dynamic>>(cacheKey);
         if (cached != null) {
-          debugPrint('[ApiClient] Network error, returning stale cache list for: $cacheKey');
           return cached;
         }
       }
+      throw _handleError(e);
+    }
+  }
+
+  /// GET request returning bytes (Blob/PDF)
+  static Future<List<int>> getBytes(
+    String endpoint, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final response = await dio.get(
+        endpoint,
+        queryParameters: queryParameters,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return response.data as List<int>;
+    } on DioException catch (e) {
       throw _handleError(e);
     }
   }
@@ -222,19 +243,10 @@ class ApiClient {
     Map<String, dynamic> data,
   ) async {
     try {
-      final fullUrl = '${dio.options.baseUrl}$endpoint';
-      debugPrint('[ApiClient] POST $fullUrl');
-      
       final response = await dio.post(endpoint, data: data);
-      
-      debugPrint('[ApiClient] Response status: ${response.statusCode}');
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
-      debugPrint('[ApiClient] DioException: ${e.type} - ${e.message}');
       throw _handleError(e);
-    } catch (e) {
-      debugPrint('[ApiClient] Unexpected error: $e');
-      rethrow;
     }
   }
 
@@ -244,19 +256,10 @@ class ApiClient {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final fullUrl = '${dio.options.baseUrl}$endpoint';
-      debugPrint('[ApiClient] PUT $fullUrl');
-      
       final response = await dio.put(endpoint, data: data);
-      
-      debugPrint('[ApiClient] Response status: ${response.statusCode}');
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
-      debugPrint('[ApiClient] DioException: ${e.type} - ${e.message}');
       throw _handleError(e);
-    } catch (e) {
-      debugPrint('[ApiClient] Unexpected error: $e');
-      rethrow;
     }
   }
 
@@ -266,15 +269,15 @@ class ApiClient {
            e.type == DioExceptionType.unknown;
   }
 
-  static String _handleError(DioException e) {
+  static ApiException _handleError(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout) {
-      return 'Timeout de conexión - Verifica tu red';
+      return ApiException('Timeout de conexión - Verifica tu red', statusCode: 0);
     } else if (e.type == DioExceptionType.connectionError) {
-      return 'Error de conexión - Verifica tu red WiFi';
+      return ApiException('Error de conexión - Verifica tu red WiFi', statusCode: 0);
     } else if (e.type == DioExceptionType.receiveTimeout) {
-      return 'El servidor está tardando demasiado';
+      return ApiException('El servidor está tardando demasiado', statusCode: 0);
     } else if (e.response != null) {
-      final statusCode = e.response?.statusCode;
+      final statusCode = e.response?.statusCode ?? 0;
       final data = e.response?.data;
       
       // Extract server error message
@@ -283,31 +286,25 @@ class ApiClient {
         serverMessage = data['error'] as String? ?? data['message'] as String?;
       }
       
-      if (statusCode == 400) {
-        return serverMessage ?? 'Solicitud incorrecta';
-      } else if (statusCode == 401) {
+      if (statusCode == 401) {
         // Trigger global logout on 401, unless it's the login endpoint
         final isLoginRequest = e.requestOptions.path.contains('/auth/login');
         if (!isLoginRequest) {
           onUnauthorized?.call();
         }
-        return serverMessage ?? 'Credenciales inválidas';
+        return ApiException(serverMessage ?? 'Credenciales inválidas', statusCode: 401);
       } else if (statusCode == 403) {
-        return serverMessage ?? 'Acceso denegado';
-      } else if (statusCode == 404) {
-        return serverMessage ?? 'Recurso no encontrado';
+        return ApiException(serverMessage ?? 'Acceso denegado', statusCode: 403);
       } else if (statusCode == 429) {
-        return serverMessage ?? 'Demasiados intentos - Espera un momento';
-      } else if (statusCode == 500) {
-        return serverMessage ?? 'Error del servidor';
+        return ApiException(serverMessage ?? 'Demasiados intentos - Espera un momento', statusCode: 429);
       }
-      return serverMessage ?? 'Error: $statusCode';
+      return ApiException(serverMessage ?? 'Error: $statusCode', statusCode: statusCode);
     } else if (e.type == DioExceptionType.unknown) {
       if (e.error.toString().contains('SocketException')) {
-        return 'No se pudo conectar al servidor';
+        return ApiException('No se pudo conectar al servidor', statusCode: 0);
       }
     }
-    return 'Error de red';
+    return ApiException('Error de red', statusCode: 0);
   }
 
   /// Deduplicated GET request - prevents duplicate concurrent API calls

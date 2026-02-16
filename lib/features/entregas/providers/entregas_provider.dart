@@ -156,6 +156,8 @@ class AlbaranEntrega {
   final String direccion;
   final String poblacion;
   final String telefono;
+  final String telefono2;
+  final String emailCliente;
   final String fecha;
   final double importeTotal;
   final String formaPago;
@@ -168,12 +170,14 @@ class AlbaranEntrega {
   final String ruta;
   final String codigoVendedor;
   final String nombreVendedor;
+  final String codigoRepartidor; // Para Jefe de Ventas
   EstadoEntrega estado;
   List<EntregaItem> items;
   String? observaciones;
   List<String> fotos;
   String? firma;
   DateTime? horaEntrega;
+  final String? horaPrevista;
 
   AlbaranEntrega({
     required this.id,
@@ -188,6 +192,8 @@ class AlbaranEntrega {
     this.direccion = '',
     this.poblacion = '',
     this.telefono = '',
+    this.telefono2 = '',
+    this.emailCliente = '',
     required this.fecha,
     required this.importeTotal,
     this.formaPago = '',
@@ -200,12 +206,14 @@ class AlbaranEntrega {
     this.ruta = '',
     this.codigoVendedor = '',
     this.nombreVendedor = '',
+    this.codigoRepartidor = '',
     this.estado = EstadoEntrega.pendiente,
     this.items = const [],
     this.observaciones,
     this.fotos = const [],
     this.firma,
     this.horaEntrega,
+    this.horaPrevista,
   });
 
 
@@ -223,6 +231,8 @@ class AlbaranEntrega {
       direccion: json['direccion']?.toString() ?? '',
       poblacion: json['poblacion']?.toString() ?? '',
       telefono: json['telefono']?.toString() ?? '',
+      telefono2: json['telefono2']?.toString() ?? '',
+      emailCliente: json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
       fecha: json['fecha']?.toString() ?? '',
       importeTotal: (json['importe'] ?? json['importeTotal'] ?? 0).toDouble(),
       formaPago: json['formaPago']?.toString() ?? '',
@@ -235,6 +245,7 @@ class AlbaranEntrega {
       ruta: json['ruta']?.toString() ?? '',
       codigoVendedor: json['codigoVendedor']?.toString() ?? '',
       nombreVendedor: json['nombreVendedor']?.toString() ?? '',
+      codigoRepartidor: json['codigoRepartidor']?.toString() ?? '',
       estado: EstadoEntregaExtension.fromString(json['estado'] ?? 'PENDIENTE'),
       items: (json['items'] as List<dynamic>?)
               ?.map((e) => EntregaItem.fromJson(e))
@@ -243,7 +254,17 @@ class AlbaranEntrega {
       observaciones: json['observaciones'],
       fotos: (json['fotos'] as List<dynamic>?)?.cast<String>() ?? [],
       firma: json['firma'],
+      horaPrevista: _parseHoraPrevista(json['HORALLEGADA']),
     );
+  }
+
+  static String? _parseHoraPrevista(dynamic val) {
+    if (val == null) return null;
+    final s = val.toString().padLeft(6, '0'); 
+    if (s.length >= 4) {
+      return '${s.substring(0, 2)}:${s.substring(2, 4)}';
+    }
+    return null;
   }
 
   int get totalItems => items.length;
@@ -270,6 +291,7 @@ class EntregasProvider extends ChangeNotifier {
   AlbaranEntrega? get albaranSeleccionado => _albaranSeleccionado;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  String get repartidorId => _repartidorId;
   DateTime get fechaSeleccionada => _fechaSeleccionada;
   
   List<AlbaranEntrega> get albaranesPendientes =>
@@ -293,6 +315,8 @@ class EntregasProvider extends ChangeNotifier {
 
   // Search and sort state
   String _searchQuery = '';
+  String _searchClient = '';
+  String _searchAlbaran = '';
   String _sortBy = 'default'; // 'default', 'importe_desc', 'importe_asc'
   String _filterTipoPago = ''; // 'CONTADO', 'CREDITO', 'DOMICILIADO', etc.
   String _filterDebeCobrar = ''; // 'S' or 'N'
@@ -302,8 +326,11 @@ class EntregasProvider extends ChangeNotifier {
   double _resumenTotalBruto = 0;
   double _resumenTotalACobrar = 0;
   double _resumenTotalOpcional = 0;
+  int _resumenCompletedCount = 0;
 
   String get searchQuery => _searchQuery;
+  String get searchClient => _searchClient;
+  String get searchAlbaran => _searchAlbaran;
   String get sortBy => _sortBy;
   String get filterTipoPago => _filterTipoPago;
   String get filterDebeCobrar => _filterDebeCobrar;
@@ -311,9 +338,23 @@ class EntregasProvider extends ChangeNotifier {
   double get resumenTotalBruto => _resumenTotalBruto;
   double get resumenTotalACobrar => _resumenTotalACobrar;
   double get resumenTotalOpcional => _resumenTotalOpcional;
-
+  int get resumenCompletedCount => _resumenCompletedCount;
+  
   void setSearchQuery(String query) {
     _searchQuery = query;
+    // Clear specific filters if general is used? Or combine?
+    // User requested split, so maybe we clear general if they use specific?
+    // Keeping simple: use all provided.
+    cargarAlbaranesPendientes();
+  }
+
+  void setSearchClient(String query) {
+    _searchClient = query;
+    cargarAlbaranesPendientes();
+  }
+  
+  void setSearchAlbaran(String query) {
+    _searchAlbaran = query;
     cargarAlbaranesPendientes();
   }
 
@@ -364,11 +405,21 @@ class EntregasProvider extends ChangeNotifier {
     try {
       final formattedDate = '${_fechaSeleccionada.year}-${_fechaSeleccionada.month.toString().padLeft(2, '0')}-${_fechaSeleccionada.day.toString().padLeft(2, '0')}';
       
-      // Build URL with search, sort, and filter parameters
       String url = '/entregas/pendientes/$_repartidorId?date=$formattedDate';
+      
+      // Generic search (legacy support)
       if (_searchQuery.isNotEmpty) {
         url += '&search=${Uri.encodeComponent(_searchQuery)}';
       }
+      
+      // Separate filters
+      if (_searchClient.isNotEmpty) {
+        url += '&searchClient=${Uri.encodeComponent(_searchClient)}';
+      }
+      if (_searchAlbaran.isNotEmpty) {
+        url += '&searchAlbaran=${Uri.encodeComponent(_searchAlbaran)}';
+      }
+      
       if (_sortBy != 'default') {
         url += '&sortBy=$_sortBy';
       }
@@ -388,14 +439,14 @@ class EntregasProvider extends ChangeNotifier {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
         _albaranes = lista.map((e) => AlbaranEntrega.fromJson(e)).toList();
         
-        // Parse resumen totals with improved null safety
+        // Parse resumen totals
         final resumen = response['resumen'] as Map<String, dynamic>? ?? {};
         _resumenTotalBruto = (resumen['totalBruto'] ?? 0).toDouble();
         _resumenTotalACobrar = (resumen['totalACobrar'] ?? 0).toDouble();
         _resumenTotalOpcional = (resumen['totalOpcional'] ?? 0).toDouble();
+        _resumenCompletedCount = (resumen['completedCount'] ?? 0) as int;
         
-        print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada');
-        print('[ENTREGAS_PROVIDER] Resumen: bruto=$_resumenTotalBruto, aCobrar=$_resumenTotalACobrar, opcional=$_resumenTotalOpcional');
+        print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada, completed=$_resumenCompletedCount');
       } else {
         _error = response['error'] ?? 'Error cargando entregas';
       }
@@ -454,20 +505,114 @@ class EntregasProvider extends ChangeNotifier {
   Future<bool> marcarEntregado({
     required String albaranId,
     String? observaciones,
-    String? firma,
+    String? firma, // base64
     List<String>? fotos,
     double? latitud,
     double? longitud,
+    // Signer info
+    String? clientCode,
+    String? dni,
+    String? nombre,
   }) async {
+    String? firmaPath;
+    
+    // 1. Upload signature if exists
+    if (firma != null) {
+      try {
+        print('[ENTREGAS_PROVIDER] Uploading signature...');
+        final res = await ApiClient.post('/entregas/uploads/signature', {
+           'entregaId': albaranId,
+           'firma': firma,
+           'clientCode': clientCode,
+           'dni': dni,
+           'nombre': nombre,
+        });
+        if (res['success'] == true) {
+           firmaPath = res['path'];
+           print('[ENTREGAS_PROVIDER] Signature saved: $firmaPath');
+        }
+      } catch (e) {
+        print('[ENTREGAS_PROVIDER] Error uploading signature: $e');
+        // Continue? Or fail? Let's continue but log it.
+        // Actually if signature fails, we should probably warn, but for now continue.
+      }
+    }
+
+    // 2. Update status
     return await _actualizarEstado(
       itemId: albaranId,
       estado: EstadoEntrega.entregado,
       observaciones: observaciones,
-      firma: firma,
+      firma: firmaPath, // Send path, not base64
       fotos: fotos,
       latitud: latitud,
       longitud: longitud,
     );
+  }
+
+  /// Generar recibo de entrega PDF (retorna base64 y fileName)
+  Future<Map<String, dynamic>?> generateReceipt({
+    required AlbaranEntrega albaran,
+  }) async {
+    try {
+      final response = await ApiClient.post('/entregas/receipt/${albaran.id}', {
+        'signaturePath': albaran.firma,
+        'items': albaran.items.map((i) => {
+          'cantidad': i.cantidadPedida,
+          'descripcion': i.descripcion,
+          'precio': i.precioUnitario,
+        }).toList(),
+        'clientCode': albaran.codigoCliente,
+        'clientName': albaran.nombreCliente,
+        'albaranNum': albaran.numeroAlbaran,
+        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
+        'fecha': albaran.fecha,
+        'subtotal': albaran.importeTotal,
+        'iva': 0,
+        'total': albaran.importeTotal,
+        'formaPago': albaran.formaPagoDesc,
+        'repartidor': albaran.codigoRepartidor,
+      });
+      if (response['success'] == true) {
+        return response;
+      }
+      return null;
+    } catch (e) {
+      print('[ENTREGAS_PROVIDER] Error generating receipt: $e');
+      return null;
+    }
+  }
+
+  /// Enviar recibo por email
+  Future<bool> sendReceiptByEmail({
+    required AlbaranEntrega albaran,
+    required String email,
+  }) async {
+    try {
+      final response = await ApiClient.post('/entregas/receipt/${albaran.id}/email', {
+        'email': email,
+        'signaturePath': albaran.firma,
+        'items': albaran.items.map((i) => {
+          'cantidad': i.cantidadPedida,
+          'descripcion': i.descripcion,
+          'precio': i.precioUnitario,
+        }).toList(),
+        'clientCode': albaran.codigoCliente,
+        'clientName': albaran.nombreCliente,
+        'albaranNum': albaran.numeroAlbaran,
+        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
+        'fecha': albaran.fecha,
+        'subtotal': albaran.importeTotal,
+        'iva': 0,
+        'total': albaran.importeTotal,
+        'formaPago': albaran.formaPagoDesc,
+        'repartidor': albaran.codigoRepartidor,
+      });
+      return response['success'] == true;
+    } catch (e) {
+      print('[ENTREGAS_PROVIDER] Error sending receipt email: $e');
+      return false;
+    }
   }
 
   /// Marcar albarán como parcial
@@ -509,6 +654,7 @@ class EntregasProvider extends ChangeNotifier {
     List<String>? fotos,
     double? latitud,
     double? longitud,
+    bool forceUpdate = false,
   }) async {
     try {
       // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
@@ -523,6 +669,7 @@ class EntregasProvider extends ChangeNotifier {
           'fotos': fotos,
           'latitud': latitud,
           'longitud': longitud,
+          'forceUpdate': forceUpdate,
         },
       );
 
@@ -538,6 +685,15 @@ class EntregasProvider extends ChangeNotifier {
         }
         notifyListeners();
         return true;
+      } else if (response['alreadyDelivered'] == true) {
+        // 409 Conflict - already delivered
+        _error = 'Esta entrega ya fue confirmada anteriormente';
+        notifyListeners();
+        return false;
+      } else {
+        _error = response['error'] ?? 'Error desconocido';
+        notifyListeners();
+        return false;
       }
     } catch (e) {
       _error = 'Error actualizando: $e';

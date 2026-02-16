@@ -1,0 +1,87 @@
+[
+  {
+    "COLUMN_NAME": "SUBEMPRESAALBARAN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "EJERCICIOALBARAN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "SERIEALBARAN",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "TERMINALALBARAN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "NUMEROALBARAN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "CODIGOVENDEDOR",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "CODIGOUSUARIO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "DIA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "MES",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "ANO",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "HORA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "FIRMANOMBRE",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "FIRMADNI",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "FIRMABASE64",
+    "DATA_TYPE": "CLOB",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "TIPOREGISTRO",
+    "DATA_TYPE": "CHAR",
+    "COLUMN_TEXT": null
+  }
+]

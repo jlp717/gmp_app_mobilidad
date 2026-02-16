@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -6,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/providers/dashboard_provider.dart';
+import '../../../../core/widgets/coming_soon_placeholder.dart';
 import '../../../clients/presentation/pages/simple_client_list_page.dart';
 import '../../../rutero/presentation/pages/rutero_page.dart';
 import '../../../objectives/presentation/pages/objectives_page.dart';
@@ -18,6 +20,9 @@ import '../../../entregas/providers/entregas_provider.dart';
 import '../../../repartidor/presentation/pages/repartidor_rutero_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_comisiones_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
+import '../../../repartidor/presentation/pages/repartidor_panel_page.dart';
+import '../../../repartidor/presentation/pages/repartidor_clientes_page.dart';
+import '../../../facturas/presentation/pages/facturas_page.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -32,12 +37,19 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   DashboardProvider? _dashboardProvider;
-  bool _isNavExpanded = true; // Estado del navbar colapsable
+  bool _isNavExpanded = true; 
   
   // State for Jefe Repartidor View
-  String? _selectedRepartidor;
+  String? _selectedRepartidor = 'ALL';
   List<Map<String, dynamic>> _repartidoresOptions = [];
   bool _isLoadingRepartidores = false;
+  
+  // Toggle state
+  bool _forceRepartidorMode = false;
+
+  // Navigate from Clientes → Histórico with preselected client
+  String? _pendingClientId;
+  String? _pendingClientName;
 
   @override
   void initState() {
@@ -46,42 +58,87 @@ class _MainShellState extends State<MainShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnection();
       _checkForUpdates();
+      
+      // Init mode based on real user role
+      final auth = context.read<AuthProvider>();
+      if (auth.currentUser?.isRepartidor == true) {
+         _forceRepartidorMode = true;
+      }
     });
   }
-  
+
+  // Helper to determine effective mode
+  bool get _isRepartidorEffective {
+     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+     final user = authProvider.currentUser;
+     if (user?.isRepartidor == true) return true; // Always true for real drivers
+     return _forceRepartidorMode; // Toggleable for Jefe
+  }
+
   void _checkForUpdates() {
-     final auth = context.read<AuthProvider>();
-     if (auth.updateAvailable) {
-        showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-                title: const Text('Actualización Disponible'),
-                content: Text(auth.updateMessage.isNotEmpty ? auth.updateMessage : 'Hay una nueva versión de la app.'),
-                backgroundColor: AppTheme.darkCard,
-                titleTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-                contentTextStyle: const TextStyle(color: Colors.white70),
-                actions: [
-                    TextButton(
-                        onPressed: () {
-                             // Dismiss (optional) or force?
-                             // User asked to notify, not necessarily block.
-                             Navigator.pop(context);
-                        },
-                        child: const Text('Más tarde'),
-                    ),
-                    ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonGreen),
-                        onPressed: () {
-                             // Open Play Store
-                            launchUrl(Uri.parse('https://play.google.com/store/apps/details?id=com.maripepa.gmp_app_mobilidad'), mode: LaunchMode.externalApplication);
-                        },
-                        child: const Text('ACTUALIZAR', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                    ),
-                ],
+    final auth = context.read<AuthProvider>();
+    if (!auth.updateAvailable) return;
+
+    final bool isMandatory = auth.isMandatoryUpdate;
+
+    showDialog(
+      context: context,
+      barrierDismissible: !isMandatory,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => !isMandatory,
+        child: AlertDialog(
+          title: Text(
+            isMandatory ? 'Actualización Obligatoria' : 'Actualización Disponible',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                auth.updateMessage.isNotEmpty ? auth.updateMessage : 'Hay una nueva versión de la app con mejoras críticas.',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              if (isMandatory) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Esta actualización es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
+                  style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ],
+          ),
+          backgroundColor: AppTheme.darkCard,
+          actions: [
+            if (!isMandatory)
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('MÁS TARDE', style: TextStyle(color: Colors.white54)),
+              )
+            else
+              TextButton(
+                onPressed: () => SystemNavigator.pop(),
+                child: const Text('CERRAR APP', style: TextStyle(color: AppTheme.error)),
+              ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonBlue,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                launchUrl(
+                  Uri.parse(auth.playStoreUrl),
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('ACTUALIZAR AHORA', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-        );
-     }
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _checkConnection() async {
@@ -127,8 +184,15 @@ class _MainShellState extends State<MainShell> {
   }
 
   Future<void> _fetchRepartidores() async {
+      setState(() => _isLoadingRepartidores = true);
       try {
+        debugPrint('[MainShell] _fetchRepartidores: calling API...');
         final res = await ApiClient.getList('/auth/repartidores');
+        debugPrint('[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}');
+        if (res.isNotEmpty) {
+          debugPrint('[MainShell] First item: ${res.first} (type=${res.first.runtimeType})');
+        }
+        if (!mounted) return;
         setState(() {
            // Helper to safely get value regardless of case
            String? getValue(Map m, String key) {
@@ -139,76 +203,89 @@ class _MainShellState extends State<MainShell> {
            }
 
            _repartidoresOptions = res.map((item) {
-              final m = item as Map;
+              final m = Map<String, dynamic>.from(item as Map);
               return {
                  'code': getValue(m, 'code') ?? getValue(m, 'CODIGOVENDEDOR') ?? '',
                  'name': getValue(m, 'name') ?? getValue(m, 'NOMBREVENDEDOR') ?? 'Desconocido',
               };
-           }).toList();
+           }).where((item) => item['code'] != null && item['code'].toString().isNotEmpty).toList();
+           
+           // Sort by code ascending
+           _repartidoresOptions.sort((a, b) => 
+             (a['code']?.toString() ?? '').compareTo(b['code']?.toString() ?? ''));
+           
+           debugPrint('[MainShell] _fetchRepartidores: mapped ${_repartidoresOptions.length} options');
+           _isLoadingRepartidores = false;
         });
-      } catch (e) {
-        debugPrint('Error fetching repartidores: $e');
+      } catch (e, stack) {
+        debugPrint('[MainShell] ERROR fetching repartidores: $e');
+        debugPrint('[MainShell] Stack: $stack');
+        if (mounted) setState(() => _isLoadingRepartidores = false);
       }
   }
 
   // Get navigation destinations based on user role
-  // JEFE: Panel, Clientes, Ruta, Objetivos, Comisiones, Chat
-  // COMERCIAL: Clientes, Ruta, Objetivos, Comisiones, Chat
-  // REPARTIDOR: Rutero, Comisiones, Histórico, Chat IA (4 tabs exclusivos)
   List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
     final items = <_NavItem>[];
-    
-    // Obtener el rol del usuario
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
-    // Check ACTIVE role first
-    final isRepartidor = user?.isRepartidor ?? false;
+    
+    // Check EFFECTIVE role
+    final isRepartidor = _isRepartidorEffective;
     
     // ===============================================
-    // REPARTIDOR: 4 pestañas exclusivas
-    // 0=Rutero, 1=Comisiones, 2=Histórico, 3=Chat IA
+    // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
-      // Tab 1: Rutero (Ruta del día con cobros integrados)
+      final isJefe = user?.isJefeVentas == true;
+      // Panel only for Jefe in repartidor mode, NOT for real repartidores
+      if (isJefe) {
+        items.add(_NavItem(
+          icon: Icons.dashboard_outlined,
+          selectedIcon: Icons.dashboard,
+          label: 'Panel',
+          color: Colors.orange,
+        ));
+      }
+      items.add(_NavItem(
+        icon: Icons.people_outline,
+        selectedIcon: Icons.people,
+        label: 'Clientes',
+        color: AppTheme.neonGreen,
+      ));
       items.add(_NavItem(
         icon: Icons.route_outlined,
         selectedIcon: Icons.route,
         label: 'Rutero',
         color: AppTheme.neonBlue,
       ));
-      
-      // Tab 2: Comisiones (con umbral 30%)
-      items.add(_NavItem(
-        icon: Icons.euro_outlined,
-        selectedIcon: Icons.euro,
-        label: 'Comisiones',
-        color: AppTheme.neonGreen,
-      ));
-
-      // Tab 3: Histórico (albaranes, facturas, firmas)
+      // Comisiones only for real repartidores, not Jefe in repartidor mode
+      if (!isJefe) {
+        items.add(_NavItem(
+          icon: Icons.euro_outlined,
+          selectedIcon: Icons.euro,
+          label: 'Comisiones',
+          color: AppTheme.neonGreen,
+        ));
+      }
       items.add(_NavItem(
         icon: Icons.history_outlined,
         selectedIcon: Icons.history,
         label: 'Histórico',
         color: AppTheme.neonPurple,
       ));
-      
-      // Tab 4: Chat IA
       items.add(_NavItem(
         icon: Icons.smart_toy_outlined,
         selectedIcon: Icons.smart_toy,
         label: 'Chat IA',
         color: AppTheme.neonPink,
       ));
-      
       return items;
     }
     
     // ===============================================
-    // JEFE y COMERCIAL
+    // SALES MODE (Jefe / Comercial)
     // ===============================================
-    
-    // Panel de Control - ONLY for Jefe de Ventas
     if (isJefeVentas) {
       items.add(_NavItem(
         icon: Icons.dashboard_outlined,
@@ -217,24 +294,18 @@ class _MainShellState extends State<MainShell> {
         color: AppTheme.neonBlue,
       ));
     }
-    
-    // Clientes - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.people_outline,
       selectedIcon: Icons.people,
       label: 'Clientes',
       color: AppTheme.neonGreen,
     ));
-    
-    // Ruta - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.route_outlined,
       selectedIcon: Icons.route,
       label: 'Ruta',
       color: AppTheme.neonPurple,
     ));
-    
-    // Objetivos - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.track_changes_outlined,
       selectedIcon: Icons.track_changes,
@@ -242,26 +313,21 @@ class _MainShellState extends State<MainShell> {
       color: Colors.orange,
     ));
     
-    // Comisiones - visible based on DB flag (user.showCommissions)
-    // Formerly hardcoded for 80, 13, 3, etc.
-    final showCommissions = user?.showCommissions ?? true; // Default true if legacy
+    // Comisiones tab always visible for all sales roles (Jefe + Comercial)
+    items.add(_NavItem(
+      icon: Icons.euro_outlined,
+      selectedIcon: Icons.euro,
+      label: 'Comisiones',
+      color: AppTheme.neonGreen,
+    ));
     
-    // Also hidden if hardcoded restrictedCodes matched? NO, replacing logic entirely as requested.
-    // "No hardcoding" -> Rely purely on DB flag.
+    items.add(_NavItem(
+      icon: Icons.receipt_long_outlined,
+      selectedIcon: Icons.receipt_long,
+      label: 'Facturas',
+      color: Colors.teal,
+    ));
     
-    if (showCommissions || isJefeVentas) {
-      items.add(_NavItem(
-        icon: Icons.euro_outlined,
-        selectedIcon: Icons.euro,
-        label: 'Comisiones',
-        color: AppTheme.neonGreen,
-      ));
-    }
-    
-    // COBROS REMOVIDO DE COMERCIAL - Ahora es exclusivo de Repartidor
-    // Los comerciales ya no ven la pestaña de Cobros
-    
-    // Chat IA - visible for Jefe y Comercial
     items.add(_NavItem(
       icon: Icons.smart_toy_outlined,
       selectedIcon: Icons.smart_toy,
@@ -272,13 +338,7 @@ class _MainShellState extends State<MainShell> {
     return items;
   }
 
-  // Helper to get available repartidores (mocked or from auth)
-  // For now, if Jefe, we assume he can see all. We need a list of repartidores.
-  // We can filter `authProvider.vendedorCodes` or hardcode known drivers/fetch them.
-  // For simplicity, we'll use a hardcoded list + "TODOS" or filter known drivers.
   List<Map<String, String>> _getRepartidores(List<String> codes) {
-     // Return a list of {code, name}
-     // Ideally this comes from a provider. For now, we mock or use codes.
      return [
        {'code': 'ALL', 'name': 'Todos los Repartidores'},
        ...codes.map((c) => {'code': c, 'name': 'Repartidor $c'}),
@@ -297,11 +357,9 @@ class _MainShellState extends State<MainShell> {
       );
     }
 
-    final isJefeVentas = user.isJefeVentas; // The user capability
-    final isRepartidorMode = user.isRepartidor; // The active mode
-    
-    // Initialize selected if null
-    if (isJefeVentas && isRepartidorMode && _selectedRepartidor == null) {
+    final isJefeVentas = user.isJefeVentas; 
+    // Init default selection for Jefe in Repartidor Mode
+    if (_forceRepartidorMode && isJefeVentas && _selectedRepartidor == null) {
        _selectedRepartidor = 'ALL';
     }
 
@@ -312,31 +370,74 @@ class _MainShellState extends State<MainShell> {
       body: SafeArea(
         child: Row(
           children: [
-            // Custom Sidebar Navigation - Colapsable
+            // Custom Sidebar Navigation
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              width: _isNavExpanded ? 90 : 0, // REVERTED TO 90
+              width: _isNavExpanded ? 90 : 0, 
               child: _isNavExpanded ? Container(
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceColor,
                   border: Border(
-                    right: BorderSide(
-                      color: Colors.white.withOpacity(0.05),
-                      width: 1,
-                    ),
+                    right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
                   ),
                 ),
                 child: Column(
                   children: [
                     const SizedBox(height: 16),
-                    
-                    // User Avatar
                     _buildUserAvatar(user, isJefeVentas),
+                    const SizedBox(height: 16),
+
+                    // MODE SWITCHER FOR JEFE
+                    if (isJefeVentas)
+                         Padding(
+                           padding: const EdgeInsets.symmetric(horizontal: 12),
+                           child: InkWell(
+                             onTap: () {
+                               setState(() {
+                                 _forceRepartidorMode = !_forceRepartidorMode;
+                                 _currentIndex = 0; // Reset tab
+                               });
+                               // Ensure repartidores are loaded when switching to reparto mode
+                               if (_forceRepartidorMode && _repartidoresOptions.isEmpty) {
+                                 _fetchRepartidores();
+                               }
+                             },
+                             borderRadius: BorderRadius.circular(12),
+                             child: Container(
+                               padding: const EdgeInsets.symmetric(vertical: 8),
+                               decoration: BoxDecoration(
+                                 color: _forceRepartidorMode ? Colors.orange.withOpacity(0.2) : AppTheme.neonBlue.withOpacity(0.2),
+                                 borderRadius: BorderRadius.circular(12),
+                                 border: Border.all(
+                                   color: _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                                   width: 1
+                                 )
+                               ),
+                               child: Column(
+                                 children: [
+                                   Icon(
+                                     _forceRepartidorMode ? Icons.local_shipping : Icons.store,
+                                     color: _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                                     size: 20
+                                   ),
+                                   const SizedBox(height: 4),
+                                   Text(
+                                     _forceRepartidorMode ? 'Reparto' : 'Ventas',
+                                     style: TextStyle(
+                                       fontSize: 9,
+                                       fontWeight: FontWeight.bold,
+                                       color: _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                                     ),
+                                   )
+                                 ],
+                               ),
+                             ),
+                           ),
+                         ),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     
-                    // Navigation Items - Take available space
                     Expanded(
                       child: ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -354,13 +455,11 @@ class _MainShellState extends State<MainShell> {
                       ),
                     ),
                     
-                    // Bottom Section - Collapse button and Logout
                     const Divider(height: 1, color: Colors.white10),
                     Padding(
                       padding: const EdgeInsets.all(12),
                       child: Column(
                         children: [
-                          // Collapse button
                           _buildCollapseButton(),
                           const SizedBox(height: 8),
                           _buildLogoutButton(authProvider),
@@ -372,7 +471,7 @@ class _MainShellState extends State<MainShell> {
               ) : null,
             ),
             
-            // Expand button cuando está colapsado
+            // Expand button
             if (!_isNavExpanded)
               GestureDetector(
                 onTap: () => setState(() => _isNavExpanded = true),
@@ -380,9 +479,7 @@ class _MainShellState extends State<MainShell> {
                   width: 24,
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceColor,
-                    border: Border(
-                      right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
-                    ),
+                    border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1)),
                   ),
                   child: Center(
                     child: Container(
@@ -391,17 +488,13 @@ class _MainShellState extends State<MainShell> {
                         color: AppTheme.neonBlue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
-                        Icons.chevron_right_rounded,
-                        color: AppTheme.neonBlue,
-                        size: 16,
-                      ),
+                      child: Icon(Icons.chevron_right_rounded, color: AppTheme.neonBlue, size: 16),
                     ),
                   ),
                 ),
               ),
             
-            // Main Content Area
+            // Main Content
             Expanded(
               child: _buildCurrentPage(authProvider.vendedorCodes, isJefeVentas),
             ),
@@ -667,9 +760,11 @@ class _MainShellState extends State<MainShell> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
                 ),
-                child: DropdownButtonHideUnderline(
+                child: _isLoadingRepartidores
+                  ? const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonPurple)))
+                  : DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _selectedRepartidor, 
+                    value: _selectedRepartidor,
                     hint: const Text('Seleccionar Repartidor', style: TextStyle(color: Colors.white54)),
                     isExpanded: true,
                     dropdownColor: AppTheme.surfaceColor,
@@ -701,14 +796,17 @@ class _MainShellState extends State<MainShell> {
     // Obtener el rol del usuario
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
-    final isRepartidor = user?.isRepartidor ?? false;
+    final isRepartidor = _isRepartidorEffective; 
     
     // ===============================================
-    // REPARTIDOR: 0=Rutero, 1=Comisiones, 2=Histórico, 3=Chat IA
+    // REPARTIDOR: Dynamic indices
+    // Real rep:  0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA  (NO Panel)
+    // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
     // ===============================================
     if (isRepartidor) {
       // Determine effective repartidor ID
       String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); // Default for real repartidor
+      final isJefe = user?.isJefeVentas == true;
       
       // If Jefe, override with selection
       if (isJefeVentas) {
@@ -723,23 +821,90 @@ class _MainShellState extends State<MainShell> {
           }
       }
 
-      final content = Builder(builder: (_) {
-         switch (_currentIndex) {
-          case 0:
-            return ChangeNotifierProvider(
-              create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-              child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId),
-            );
-          case 1:
-            return RepartidorComisionesPage(repartidorId: effectiveRepartidorId);
-          case 2:
-            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId);
-          case 3:
-            return ChatbotPage(vendedorCodes: [effectiveRepartidorId]);
-          default:
-            return const Center(child: Text('Página no encontrada'));
+      // Build repartidor names map for child widgets
+      final Map<String, String> repNamesMap = {
+        for (var r in _repartidoresOptions)
+          (r['code']?.toString() ?? ''): (r['name']?.toString() ?? ''),
+      };
+
+      // Map tab indices dynamically based on role
+      Widget pageForIndex(int idx) {
+        if (!isJefe) {
+          // Real rep: 0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA
+          if (idx == 0) return RepartidorClientesPage(
+            repartidorId: effectiveRepartidorId,
+            isJefeMode: false,
+            onNavigateToHistory: (clientId, clientName) {
+              setState(() {
+                _pendingClientId = clientId;
+                _pendingClientName = clientName;
+                _currentIndex = 3; // Histórico
+              });
+            },
+          );
+          if (idx == 1) return ChangeNotifierProvider(
+            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
+            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
+          );
+          if (idx == 2) return const ComingSoonPlaceholder(
+            title: 'Comisiones de Reparto',
+            subtitle: 'Aquí podrás consultar tus comisiones\nbasadas en los cobros realizados.',
+            icon: Icons.euro,
+            accentColor: AppTheme.neonGreen,
+          );
+          if (idx == 3) {
+            final cId = _pendingClientId;
+            final cName = _pendingClientName;
+            _pendingClientId = null;
+            _pendingClientName = null;
+            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
+          }
+          if (idx == 4) return const ComingSoonPlaceholder(
+            title: 'Asistente IA de Reparto',
+            subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          );
+        } else {
+          // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
+          if (idx == 0) return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
+          if (idx == 1) return RepartidorClientesPage(
+            repartidorId: effectiveRepartidorId,
+            isJefeMode: true,
+            onNavigateToHistory: (clientId, clientName) {
+              setState(() {
+                _pendingClientId = clientId;
+                _pendingClientName = clientName;
+                _currentIndex = 3; // Histórico
+              });
+            },
+          );
+          if (idx == 2) return ChangeNotifierProvider(
+            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
+            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
+          );
+          if (idx == 3) {
+            final cId = _pendingClientId;
+            final cName = _pendingClientName;
+            _pendingClientId = null;
+            _pendingClientName = null;
+            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
+          }
+          if (idx == 4) return const ComingSoonPlaceholder(
+            title: 'Asistente IA de Reparto',
+            subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          );
         }
-      });
+        return const Center(child: Text('Página no encontrada'));
+      }
+
+      // Use KeyedSubtree to force complete widget tree rebuild when ID or client changes
+      final content = KeyedSubtree(
+        key: ValueKey('rutero_view_${effectiveRepartidorId}_${_currentIndex}_${_pendingClientId ?? ""}'),
+        child: Builder(builder: (_) => pageForIndex(_currentIndex)),
+      );
 
       // Wrap in Column with Header only if Jefe
       if (isJefeVentas) {
@@ -777,15 +942,21 @@ class _MainShellState extends State<MainShell> {
         case 4:
           return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
         case 5:
-          return ChatbotPage(vendedorCodes: vendedorCodes);
+          return const FacturasPage();
+        case 6:
+          return const ComingSoonPlaceholder(
+            title: 'Nexus AI — Asistente Comercial',
+            subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          );
         default:
           return const Center(child: Text('Página no encontrada'));
       }
     }
     
     // ===============================================
-    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Chat
-    // (Cobros removido - ahora exclusivo de Repartidor)
+    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Facturas, 5=Chat
     // ===============================================
     switch (_currentIndex) {
       case 0:
@@ -797,7 +968,14 @@ class _MainShellState extends State<MainShell> {
       case 3:
         return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
       case 4:
-        return ChatbotPage(vendedorCodes: vendedorCodes);
+        return const FacturasPage();
+      case 5:
+        return const ComingSoonPlaceholder(
+          title: 'Nexus AI — Asistente Comercial',
+          subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+          icon: Icons.smart_toy,
+          accentColor: AppTheme.neonPink,
+        );
       default:
         return const Center(child: Text('Página no encontrada'));
     }

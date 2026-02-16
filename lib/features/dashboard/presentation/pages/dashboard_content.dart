@@ -843,7 +843,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _buildKPICard('Ventas Período', CurrencyFormatter.formatWhole(totalSales), Icons.euro, AppTheme.neonBlue)),
+            Expanded(child: _buildKPICard('Ventas Período', CurrencyFormatter.format(totalSales), Icons.euro, AppTheme.neonBlue)),
             const SizedBox(width: 12),
             Expanded(child: _buildKPICard('Cartera Activa', uniqueClients.toString(), Icons.people, AppTheme.neonPurple)),
           ],
@@ -851,7 +851,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _buildKPICard('Ventas Hoy', CurrencyFormatter.formatWhole(todaySales), Icons.today, Colors.amber)),
+            Expanded(child: _buildKPICard('Ventas Hoy', CurrencyFormatter.format(todaySales), Icons.today, Colors.amber)),
             const SizedBox(width: 12),
             Expanded(child: _buildKPICard('Pedidos Hoy', totalOrders.toString(), Icons.shopping_cart, AppTheme.neonGreen)),
           ],

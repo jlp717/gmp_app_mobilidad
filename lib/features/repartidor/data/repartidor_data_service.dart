@@ -1,8 +1,9 @@
 /// REPARTIDOR DATA SERVICE
 /// Cliente de API para obtener datos de cobros, comisiones e histórico desde backend
-/// Sustituye los datos mock por llamadas reales a DB2
+/// OPTIMIZED: Full caching support with intelligent TTLs
 
 import '../../../../core/api/api_client.dart';
+import '../../../../core/cache/cache_service.dart';
 
 /// Resultado del resumen de cobros
 class CollectionsSummary {
@@ -31,7 +32,7 @@ class CollectionsSummary {
   });
 
   factory CollectionsSummary.fromJson(Map<String, dynamic> json) {
-    final summary = json['summary'] as Map<String, dynamic>;
+    final summary = Map<String, dynamic>.from((json['summary'] as Map?) ?? {});
     final clientsList = (json['clients'] as List? ?? [])
         .map((c) => ClientCollectionData.fromJson(c))
         .toList();
@@ -126,12 +127,20 @@ class HistoryClient {
   final String name;
   final String address;
   final int totalDocuments;
+  final double totalAmount;
+  final String? lastVisit;
+  final String? repCode;
+  final String? repName;
 
   HistoryClient({
     required this.id,
     required this.name,
     required this.address,
     required this.totalDocuments,
+    this.totalAmount = 0,
+    this.lastVisit,
+    this.repCode,
+    this.repName,
   });
 
   factory HistoryClient.fromJson(Map<String, dynamic> json) {
@@ -140,6 +149,10 @@ class HistoryClient {
       name: json['name'] ?? json['id'] ?? '',
       address: json['address'] ?? '',
       totalDocuments: json['totalDocuments'] ?? 0,
+      totalAmount: (json['totalAmount'] ?? 0).toDouble(),
+      lastVisit: json['lastVisit'],
+      repCode: json['repCode'],
+      repName: json['repName'],
     );
   }
 }
@@ -149,21 +162,52 @@ class HistoryDocument {
   final String id;
   final String type; // 'albaran' o 'factura'
   final int number;
+  final int? albaranNumber;
+  final int? facturaNumber;
+  final String? serieFactura;
+  final int? ejercicioFactura;
+  final String serie;
+  final int ejercicio;
+  final int terminal;
   final String date;
   final double amount;
   final double pending;
   final String status; // 'delivered', 'partial', 'notDelivered'
   final bool hasSignature;
+  final String? signaturePath;
+  final String? deliveryDate;
+  final String? deliveryRepartidor;
+  final String? deliveryObs;
+  final String? time;
+  // Legacy signature fields (from CACFIRMAS)
+  final String? legacySignatureName;
+  final bool hasLegacySignature;
+  final String? legacyDate;
 
   HistoryDocument({
     required this.id,
     required this.type,
     required this.number,
+    this.albaranNumber,
+    this.facturaNumber,
+    this.serieFactura,
+    this.ejercicioFactura,
+    this.serie = 'A',
+    this.ejercicio = 0,
+    this.terminal = 0,
     required this.date,
     required this.amount,
     required this.pending,
     required this.status,
     required this.hasSignature,
+    this.signaturePath,
+    this.deliveryDate,
+    this.deliveryRepartidor,
+    this.deliveryObs,
+    this.time,
+    this.legacySignatureName,
+    this.hasLegacySignature = false,
+    this.legacyDate,
   });
 
   factory HistoryDocument.fromJson(Map<String, dynamic> json) {
@@ -171,11 +215,26 @@ class HistoryDocument {
       id: json['id'] ?? '',
       type: json['type'] ?? 'albaran',
       number: json['number'] ?? 0,
+      albaranNumber: json['albaranNumber'],
+      facturaNumber: json['facturaNumber'],
+      serieFactura: json['serieFactura'],
+      ejercicioFactura: json['ejercicioFactura'],
+      serie: json['serie'] ?? 'A',
+      ejercicio: json['ejercicio'] ?? 0,
+      terminal: json['terminal'] ?? 0,
       date: json['date'] ?? '',
       amount: (json['amount'] ?? 0).toDouble(),
       pending: (json['pending'] ?? 0).toDouble(),
       status: json['status'] ?? 'notDelivered',
       hasSignature: json['hasSignature'] ?? false,
+      signaturePath: json['signaturePath'],
+      deliveryDate: json['deliveryDate'],
+      deliveryRepartidor: json['deliveryRepartidor'],
+      deliveryObs: json['deliveryObs'],
+      time: json['time'],
+      legacySignatureName: json['legacySignatureName'],
+      hasLegacySignature: json['hasLegacySignature'] ?? false,
+      legacyDate: json['legacyDate'],
     );
   }
 }
@@ -227,9 +286,14 @@ class RepartidorDataService {
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
       
+      // Cache key based on repartidor + period
+      final cacheKey = 'repartidor_summary_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
+      
       final response = await ApiClient.get(
         '/repartidor/collections/summary/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.shortTTL, // 5 minutes - collections change frequently
       );
       
       return CollectionsSummary.fromJson(response);
@@ -249,9 +313,13 @@ class RepartidorDataService {
       if (year != null) queryParams['year'] = year.toString();
       if (month != null) queryParams['month'] = month.toString();
       
+      final cacheKey = 'repartidor_daily_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
+      
       final response = await ApiClient.get(
         '/repartidor/collections/daily/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 10), // 10 minutes
       );
       
       final dailyList = (response['daily'] as List? ?? [])
@@ -275,13 +343,18 @@ class RepartidorDataService {
         queryParams['search'] = search;
       }
       
+      // Longer cache for client list - 30 min
+      final cacheKey = 'repartidor_clients_${repartidorId}_${search ?? 'all'}';
+      
       final response = await ApiClient.get(
         '/repartidor/history/clients/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.defaultTTL, // 30 minutes - client list stable
       );
       
       final clients = (response['clients'] as List? ?? [])
-          .map((c) => HistoryClient.fromJson(c))
+          .map((c) => HistoryClient.fromJson(Map<String, dynamic>.from(c)))
           .toList();
           
       return clients;
@@ -294,20 +367,31 @@ class RepartidorDataService {
   static Future<List<HistoryDocument>> getClientDocuments({
     required String clientId,
     String? repartidorId,
+    String? dateFrom,
+    String? dateTo,
+    int? year,
   }) async {
     try {
       final queryParams = <String, String>{};
       if (repartidorId != null) {
         queryParams['repartidorId'] = repartidorId;
       }
-      
+      if (dateFrom != null) queryParams['dateFrom'] = dateFrom;
+      if (dateTo != null) queryParams['dateTo'] = dateTo;
+      if (year != null) queryParams['year'] = year.toString();
+
+      final cacheKey = 'repartidor_docs_${clientId}_${repartidorId ?? 'all'}_${year ?? 'multi'}_${dateFrom ?? ''}_${dateTo ?? ''}';
+
       final response = await ApiClient.get(
         '/repartidor/history/documents/$clientId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 15),
+        forceRefresh: true, // Always fresh for history
       );
       
       final docs = (response['documents'] as List? ?? [])
-          .map((d) => HistoryDocument.fromJson(d))
+          .map((d) => HistoryDocument.fromJson(Map<String, dynamic>.from(d)))
           .toList();
           
       return docs;
@@ -327,9 +411,13 @@ class RepartidorDataService {
         queryParams['clientId'] = clientId;
       }
       
+      final cacheKey = 'repartidor_objectives_${repartidorId}_${clientId ?? 'all'}';
+      
       final response = await ApiClient.get(
         '/repartidor/history/objectives/$repartidorId',
         queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.defaultTTL, // 30 minutes - objectives stable
       );
       
       final objectives = (response['objectives'] as List? ?? [])
@@ -339,6 +427,130 @@ class RepartidorDataService {
       return objectives;
     } catch (e) {
       throw Exception('Error cargando objetivos: $e');
+    }
+  }
+
+  /// Obtener desglose jerárquico de ventas: Cliente → FI1 → FI2 → FI3 → FI4 → Productos
+  static Future<Map<String, dynamic>> getObjectivesDetail({
+    required String repartidorId,
+    int? year,
+    String? clientId,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (year != null) queryParams['year'] = year.toString();
+      if (clientId != null) queryParams['clientId'] = clientId;
+
+      final cacheKey = 'repartidor_objectives_detail_${repartidorId}_${year ?? 'current'}_${clientId ?? 'all'}';
+
+      final response = await ApiClient.get(
+        '/repartidor/history/objectives-detail/$repartidorId',
+        queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: CacheService.defaultTTL,
+      );
+
+      return response;
+    } catch (e) {
+      throw Exception('Error cargando desglose de ventas: $e');
+    }
+  }
+
+  /// Descargar documento PDF
+  static Future<List<int>> downloadDocument({
+    required int year,
+    required String serie,
+    required int number,
+    required String type, // 'factura' o 'albaran'
+    int terminal = 0,
+    // Factura-specific fields (for invoice endpoint)
+    int? facturaNumber,
+    String? serieFactura,
+    int? ejercicioFactura,
+    // Albaran fallback fields (sent as query params to invoice endpoint)
+    int? albaranNumber,
+    String? albaranSerie,
+    int? albaranTerminal,
+    int? albaranYear,
+  }) async {
+    try {
+      final String endpoint;
+      if (type == 'albaran') {
+        endpoint = '/repartidor/document/albaran/$year/$serie/$terminal/$number/pdf';
+      } else {
+        // For facturas: use factura-specific fields if available
+        final fNum = facturaNumber ?? number;
+        final fSerie = serieFactura ?? serie;
+        final fYear = ejercicioFactura ?? year;
+        // Build query params for albaran fallback
+        final queryParams = <String, String>{};
+        if (albaranNumber != null) queryParams['albaranNumber'] = albaranNumber.toString();
+        if (albaranSerie != null) queryParams['albaranSerie'] = albaranSerie;
+        if (albaranTerminal != null) queryParams['albaranTerminal'] = albaranTerminal.toString();
+        if (albaranYear != null) queryParams['albaranYear'] = albaranYear.toString();
+        final qs = queryParams.isNotEmpty
+            ? '?${queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}'
+            : '';
+        endpoint = '/repartidor/document/invoice/$fYear/$fSerie/$fNum/pdf$qs';
+      }
+
+      final response = await ApiClient.getBytes(endpoint);
+      return response;
+    } catch (e) {
+      throw Exception('Error descargando documento: $e');
+    }
+  }
+
+  /// Obtener firma real de un albarán
+  static Future<Map<String, dynamic>?> getSignature({
+    required int ejercicio,
+    required String serie,
+    required int terminal,
+    required int numero,
+  }) async {
+    try {
+      final response = await ApiClient.get(
+        '/repartidor/history/signature',
+        queryParameters: {
+          'ejercicio': ejercicio.toString(),
+          'serie': serie,
+          'terminal': terminal.toString(),
+          'numero': numero.toString(),
+        },
+      );
+
+      if (response['hasSignature'] == true && response['signature'] != null) {
+        return Map<String, dynamic>.from(response['signature'] as Map);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Obtener resumen de entregas
+  static Future<Map<String, dynamic>> getDeliverySummary({
+    required String repartidorId,
+    int? year,
+    int? month,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (year != null) queryParams['year'] = year.toString();
+      if (month != null) queryParams['month'] = month.toString();
+
+      final cacheKey = 'repartidor_delivery_summary_${repartidorId}_${year ?? 'current'}_${month ?? 'current'}';
+
+      final response = await ApiClient.get(
+        '/repartidor/history/delivery-summary/$repartidorId',
+        queryParameters: queryParams,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 10),
+      );
+
+      return response;
+    } catch (e) {
+      return {'summary': {}, 'daily': []};
     }
   }
 }

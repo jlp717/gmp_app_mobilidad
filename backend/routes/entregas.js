@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
+const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 
 // Ensure directories exist
 const photosDir = path.join(__dirname, '../../uploads/photos');
@@ -24,6 +25,96 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage: storage });
+const moment = require('moment'); // Ensure moment is available
+
+// --- HELPER: Get Gamification Stats (Real DB) ---
+async function getGamificationStats(repartidorId) {
+    try {
+        const currentYear = new Date().getFullYear();
+
+        // 1. Level: Count total deliveries this year
+        const levelSql = `
+            SELECT COUNT(*) as TOTAL
+            FROM DSEDAC.CPC
+            WHERE TRIM(CODIGOREPARTIDOR) = '${repartidorId}'
+              AND ANODOCUMENTO = ${currentYear}
+        `;
+        const levelResult = await query(levelSql, false);
+        const totalDeliveries = levelResult[0]?.TOTAL || 0;
+
+        let level = 'BRONCE';
+        let nextLevel = 'PLATA';
+        let progress = 0.0;
+
+        if (totalDeliveries < 100) {
+            level = 'BRONCE';
+            nextLevel = 'PLATA';
+            progress = totalDeliveries / 100;
+        } else if (totalDeliveries < 500) {
+            level = 'PLATA';
+            nextLevel = 'ORO';
+            progress = (totalDeliveries - 100) / 400;
+        } else if (totalDeliveries < 2000) {
+            level = 'ORO';
+            nextLevel = 'PLATINO';
+            progress = (totalDeliveries - 500) / 1500;
+        } else {
+            level = 'PLATINO';
+            nextLevel = 'DIAMANTE';
+            progress = 1.0;
+        }
+
+        // 2. Streak: Check last 7 days activity
+        const streakSql = `
+            SELECT DISTINCT DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
+            FROM DSEDAC.CPC
+            WHERE TRIM(CODIGOREPARTIDOR) = '${repartidorId}'
+              AND CONCAT(ANODOCUMENTO, CONCAT(RIGHT('0' || MESDOCUMENTO, 2), RIGHT('0' || DIADOCUMENTO, 2))) >= 
+                  '${moment().subtract(7, 'days').format('YYYYMMDD')}'
+        `;
+        const streakResult = await query(streakSql, false);
+        const streakDays = streakResult.length; // Approximate active days in last week
+
+        return { level, nextLevel, progress, streakDays, totalDeliveries };
+    } catch (e) {
+        logger.error(`Error calculating gamification: ${e.message}`);
+        return { level: 'BRONCE', nextLevel: 'PLATA', progress: 0, streakDays: 0, totalDeliveries: 0 };
+    }
+}
+
+// --- HELPER: Get Heuristic AI Suggestions ---
+function getSmartSuggestions(albaranes) {
+    const suggestions = [];
+
+    // 1. Cash Alert
+    const totalCash = albaranes
+        .filter(a => a.esCTR)
+        .reduce((sum, a) => sum + (a.importe || 0), 0);
+
+    if (totalCash > 1000) {
+        suggestions.push(`⚠️ Llevas ${totalCash.toFixed(0)}€ en efectivo. Considera hacer un ingreso.`);
+    } else if (totalCash > 500) {
+        suggestions.push(`ℹ️ Acumulas ${totalCash.toFixed(0)}€ en cobros.`);
+    }
+
+    // 2. Urgent Deliveries
+    const urgentCount = albaranes.filter(a => a.esCTR).length;
+    if (urgentCount > 3) {
+        suggestions.push(`🔥 Tienes ${urgentCount} clientes con cobro obligatorio prioritario.`);
+    }
+
+    // 3. Efficiency (Duplicate clients)
+    const clientCounts = {};
+    albaranes.forEach(a => {
+        clientCounts[a.nombreCliente] = (clientCounts[a.nombreCliente] || 0) + 1;
+    });
+    const multiDrop = Object.entries(clientCounts).find(([_, count]) => count > 1);
+    if (multiDrop) {
+        suggestions.push(`📦 ${multiDrop[0]} tiene ${multiDrop[1]} entregas. ¡Agrúpalas!`);
+    }
+
+    return suggestions.length > 0 ? suggestions[0] : null; // Return top suggestion
+}
 
 // ===================================
 // GET /pendientes/:repartidorId
@@ -77,8 +168,28 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         // CORRECTO: Usar OPP → CPC → CAC para repartidores
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con CAC
         // IMPORTANTE: Usar IMPORTEBRUTO (sin IVA) para cobros
+        // FIX: ID format must match exactly with frontend and update endpoint
+        // Check if requested date is in the past (all deliveries assumed completed)
+        const today = new Date();
+        const todayNum = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+        const requestNum = ano * 10000 + mes * 100 + dia;
+        const isPastDate = requestNum < todayNum;
+
+        // Conditionally include DELIVERY_STATUS join (table may not exist)
+        const dsAvailable = isDeliveryStatusAvailable();
+        const dsJoin = dsAvailable ? `
+            LEFT JOIN JAVIER.DELIVERY_STATUS DS
+              ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(COALESCE(CPC.SERIEALBARAN, '')) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))` : '';
+        const dsColumns = dsAvailable
+            ? `DS.STATUS as DS_STATUS,
+              DS.OBSERVACIONES as DS_OBS,
+              DS.FIRMA_PATH as DS_FIRMA`
+            : `CAST(NULL AS VARCHAR(20)) as DS_STATUS,
+              CAST(NULL AS VARCHAR(512)) as DS_OBS,
+              CAST(NULL AS VARCHAR(255)) as DS_FIRMA`;
+
         const sql = `
-            SELECT 
+            SELECT
               CAC.SUBEMPRESAALBARAN,
               CAC.EJERCICIOALBARAN,
               CAC.SERIEALBARAN,
@@ -91,25 +202,34 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCION,
               TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
               TRIM(COALESCE(CLI.TELEFONO1, '')) as TELEFONO,
+              TRIM(COALESCE(CLI.TELEFONO2, '')) as TELEFONO2,
               CPC.IMPORTEBRUTO,
               TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
-              TRIM(CPC.CODIGORUTA) as RUTA
+              TRIM(CPC.CODIGORUTA) as RUTA,
+              TRIM(OPP.CODIGOREPARTIDOR) as CODIGO_REPARTIDOR,
+              CPC.DIALLEGADA, CPC.HORALLEGADA,
+              TRIM(CPC.CONFORMADOSN) as CONFORMADO,
+              ${dsColumns}
             FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC 
+            INNER JOIN DSEDAC.CPC CPC
               ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            INNER JOIN DSEDAC.CAC CAC 
+            INNER JOIN DSEDAC.CAC CAC
               ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
               AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
               AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
               AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            ${dsJoin}
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids})
               AND OPP.DIAREPARTO = ${dia}
               AND OPP.MESREPARTO = ${mes}
               AND OPP.ANOREPARTO = ${ano}
             ORDER BY CAC.NUMEROALBARAN
         `;
+
+        // Table initialization removed to prevent AS400 errors.
+        // Tables JAVIER.DELIVERY_STATUS and JAVIER.CLIENT_SIGNERS are assumed to exist.
 
         let rows = [];
         try {
@@ -119,26 +239,131 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             return res.json({ success: true, albaranes: [], total: 0 });
         }
 
-        // Process rows
-        const albaranes = rows.map(row => {
-            const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
-            const paymentInfo = paymentConditions[fp] || DEFAULT_PAYMENT;
+        // --- DEDUPLICATION ---
+        //Group by Albaran ID to prevent duplicates from multiple OPP rows
+        const uniqueMap = new Map();
+        rows.forEach(row => {
+            // FIX: Ensure ID matches the one used in JOIN (Trimmed Series)
+            const serie = (row.SERIEALBARAN || '').trim();
+            const id = `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
+            if (!uniqueMap.has(id)) {
+                uniqueMap.set(id, row);
+            }
+        });
+        const uniqueRows = Array.from(uniqueMap.values());
 
+        // Process rows
+        const albaranes = uniqueRows.map(row => {
+            const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
+
+            // Try robust matching
+            let paymentInfo = paymentConditions[fp] || paymentConditions[parseInt(fp).toString()]; // Try '01' vs '1'
+            if (!paymentInfo) paymentInfo = DEFAULT_PAYMENT;
 
             // Determine if repartidor MUST collect money
-            const esCTR = paymentInfo.mustCollect;
-            // Can optionally collect (e.g., transferencia clients paying cash)
-            const puedeCobrarse = paymentInfo.canCollect || esCTR;
+            // Fallback: If DB config is default/false, check string patterns (Legacy Logic)
+            let esCTR = paymentInfo.mustCollect;
+            let puedeCobrarse = paymentInfo.canCollect;
+
+            // Debug specific rows to see why logic fails
+            if (rows.length < 5 || Math.random() < 0.05) {
+                logger.info(`[ENTREGAS_DEBUG] Albaran: ${row.NUMEROALBARAN}, FP: '${fp}', Info: ${JSON.stringify(paymentInfo)}, esCTR: ${esCTR}`);
+            }
+
+            if (!paymentInfo.mustCollect && !paymentInfo.canCollect && paymentInfo === DEFAULT_PAYMENT) {
+                if (fp === 'CTR' || fp.includes('CONTADO') || fp.includes('METALICO')) {
+                    esCTR = true;
+                    puedeCobrarse = true;
+                } else if (fp.includes('REP') || fp.includes('MENSUAL')) {
+                    // Check specific logic? Assume optional for now or none
+                }
+            }
+            // Ensure consistency
+            if (esCTR) puedeCobrarse = true;
 
             const numeroFactura = row.NUMEROFACTURA || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
             const esFactura = numeroFactura > 0;
 
+            // --- DELIVERY STATUS LOGIC (HYBRID SENIOR STATUS v2) ---
+            // Priority: 1) DELIVERY_STATUS (App confirmation - Real Time)
+            //           2) Legacy CONFORMADOSN == 'S' (Paper confirmation processed)
+            //           3) Today + DIALLEGADA (Legacy "On Route" - Loaded but not confirmed)
+            //           4) Default (Pending)
+
+            let status = (row.DS_STATUS || '').trim();
+            const legacyConfirmed = (row.CONFORMADOSN || '').trim() === 'S';
+
+            if (!status || status === '') {
+                if (legacyConfirmed) {
+                    status = 'ENTREGADO'; // Legacy Confirmed
+                } else if (isPastDate) {
+                    // Fallback for past dates if CONFORMADOSN is missing but date implies done?
+                    // Verify if we should trust Date alone for past. 
+                    // User said "Past = Delivered" usually manually. 
+                    // Let's keep PastDate as backup ONLY if > 2 days? 
+                    // Actually, if Yesterday is 'S', then usually PastDate has S. 
+                    // If PastDate has NO S, maybe it's "No Entregado"?
+                    // Safe bet: Trust 'S'. If not 'S' and Past Date -> 'ENTREGADO' (Assumption) OR 'NO_ENTREGADO'?
+                    // The user said "antes salia 100%". 
+                    // Let's stick to "Past Date = Delivered" as a safety net for now, 
+                    // but 'S' allows intra-day update!
+                    status = 'ENTREGADO';
+                } else if (row.DIALLEGADA > 0) {
+                    status = 'EN_RUTA';   // Today + Planned + Not Confirmed = On Route
+                } else {
+                    status = 'PENDIENTE';
+                }
+            }
+
+            // --- COLOR LOGIC ---
+            let colorEstado = 'green';
+            if (status === 'ENTREGADO') {
+                colorEstado = 'green';
+            } else {
+                if (esFactura) {
+                    colorEstado = 'purple';
+                } else if (esCTR || puedeCobrarse) {
+                    colorEstado = 'red';
+                } else {
+                    colorEstado = 'green';
+                }
+            }
+
+            // Robust Money Parser
+            const parseMoney = (val) => {
+                if (val === null || val === undefined) return 0;
+                if (typeof val === 'number') return val;
+
+                // Convert to string
+                const str = val.toString();
+
+                // If it looks like '1.200,50' (European): remove dots, replace comma with dot
+                if (str.includes(',') && str.includes('.')) {
+                    // Assume dot is thousand separator if it appears before comma
+                    if (str.indexOf('.') < str.indexOf(',')) {
+                        return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
+                    }
+                }
+
+                // If it has only comma '120,50', replace with dot
+                if (str.includes(',') && !str.includes('.')) {
+                    return parseFloat(str.replace(',', '.')) || 0;
+                }
+
+                // If it has only dot '120.50' or '1200', just parse
+                return parseFloat(str) || 0;
+            };
+
+            const importeParsed = parseMoney(row.IMPORTEBRUTO);
+
+            const serie = (row.SERIEALBARAN || '').trim();
+
             return {
-                id: `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
+                id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
                 subempresa: row.SUBEMPRESAALBARAN,
                 ejercicio: row.EJERCICIOALBARAN,
-                serie: row.SERIEALBARAN?.trim() || '',
+                serie: serie,
                 terminal: row.TERMINALALBARAN,
                 numero: row.NUMEROALBARAN,
                 numeroFactura: numeroFactura,
@@ -149,6 +374,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 direccion: row.DIRECCION?.trim(),
                 poblacion: row.POBLACION?.trim(),
                 telefono: row.TELEFONO?.trim(),
+                telefono2: row.TELEFONO2?.trim() || '',
                 importe: parseFloat(row.IMPORTEBRUTO) || 0,
                 formaPago: fp,
                 formaPagoDesc: paymentInfo.desc,
@@ -156,20 +382,42 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 diasPago: paymentInfo.diasPago,
                 esCTR: esCTR,
                 puedeCobrarse: puedeCobrarse,
-                colorEstado: paymentInfo.color,
+                colorEstado: colorEstado,
                 fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
                 ruta: row.RUTA?.trim(),
-                estado: 'PENDIENTE'
+                codigoRepartidor: row.CODIGO_REPARTIDOR?.trim() || '',
+                estado: status,
+                observaciones: row.DS_OBS,
+                firma: row.DS_FIRMA
             };
         });
 
-        // --- FILTERING: Search by client name or code ---
+        // --- FILTERING: Search by client name, code, albarán or factura number ---
         const searchQuery = req.query.search?.toLowerCase().trim() || '';
         let filteredAlbaranes = albaranes;
         if (searchQuery) {
             filteredAlbaranes = albaranes.filter(a =>
                 a.nombreCliente?.toLowerCase().includes(searchQuery) ||
-                a.codigoCliente?.toLowerCase().includes(searchQuery)
+                a.codigoCliente?.toLowerCase().includes(searchQuery) ||
+                String(a.numeroAlbaran).includes(searchQuery) ||
+                String(a.numeroFactura).includes(searchQuery)
+            );
+        }
+
+        // --- SPECIFIC FILTERS (Split Search) ---
+        const searchClient = req.query.searchClient?.toLowerCase().trim() || '';
+        if (searchClient) {
+            filteredAlbaranes = filteredAlbaranes.filter(a =>
+                a.nombreCliente?.toLowerCase().includes(searchClient) ||
+                a.codigoCliente?.toLowerCase().includes(searchClient)
+            );
+        }
+
+        const searchAlbaran = req.query.searchAlbaran?.trim() || '';
+        if (searchAlbaran) {
+            filteredAlbaranes = filteredAlbaranes.filter(a =>
+                String(a.numeroAlbaran).includes(searchAlbaran) ||
+                String(a.numeroFactura).includes(searchAlbaran)
             );
         }
 
@@ -206,12 +454,13 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         }
         // 'default' keeps the original ORDER BY CAC.NUMEROALBARAN from SQL
 
-        // Calculate totals for summary
-        const totalBruto = filteredAlbaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
-        const totalACobrar = filteredAlbaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
-        const totalOpcional = filteredAlbaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        // Calculate totals for summary (always from unfiltered `albaranes` for accurate KPIs)
+        const totalBruto = albaranes.reduce((sum, a) => sum + (a.importe || 0), 0);
+        const totalACobrar = albaranes.filter(a => a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        const totalOpcional = albaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
+        const completedCount = albaranes.filter(a => a.estado === 'ENTREGADO').length;
 
-        logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} → albaranes=${filteredAlbaranes.length}, totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}`);
+        logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} → albaranes=${filteredAlbaranes.length}, totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}, completed=${completedCount}`);
 
         res.json({
             success: true,
@@ -221,7 +470,8 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             resumen: {
                 totalBruto: Math.round(totalBruto * 100) / 100,
                 totalACobrar: Math.round(totalACobrar * 100) / 100,
-                totalOpcional: Math.round(totalOpcional * 100) / 100
+                totalOpcional: Math.round(totalOpcional * 100) / 100,
+                completedCount
             }
         });
     } catch (error) {
@@ -301,22 +551,19 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 
         const header = headers[0];
 
-        // 3. Get Items from LAC (Simplified for ODBC compatibility)
+        // 3. Get Items from LAC (Simplified for ODBC compatibility - NO ALIASES)
+        // 3. Get Items from LAC (Super Simplified for ODBC)
+        // Removed L alias completely to avoid "Error executing sql"
         let itemsSql = `
-            SELECT 
-                L.SECUENCIA ITEM_ID,
-                L.CODIGOARTICULO CODIGO,
-                L.DESCRIPCION DESCRIP,
-                L.CANTIDADUNIDADES QTY,
-                L.CANTIDADCAJAS CAJAS,
-                L.UNIDADMEDIDA UNIT,
-                L.IMPORTEVENTA TOTAL_LINEA
-            FROM DSEDAC.LAC L
-            WHERE L.NUMEROALBARAN = ${numero} AND L.EJERCICIOALBARAN = ${ejercicio}
+            SELECT *
+            FROM DSEDAC.LAC
+            WHERE NUMEROALBARAN = ${numero} AND EJERCICIOALBARAN = ${ejercicio}
         `;
-        if (serie) itemsSql += ` AND L.SERIEALBARAN = '${serie}'`;
-        if (terminal) itemsSql += ` AND L.TERMINALALBARAN = ${terminal}`;
-        itemsSql += ` ORDER BY L.SECUENCIA`;
+        if (serie) itemsSql += ` AND SERIEALBARAN = '${serie}'`;
+        if (terminal) itemsSql += ` AND TERMINALALBARAN = ${terminal}`;
+
+        // Note: We use * because listing columns explicitly was failing. 
+        // We will map carefully below.
 
         const items = await query(itemsSql, false);
 
@@ -337,14 +584,14 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             importe: parseFloat(header.IMPORTE) || 0,
             formaPago: (header.FORMA_PAGO || '').trim(),
             items: items.map(i => ({
-                itemId: i.ITEM_ID,
-                codigoArticulo: i.CODIGO,
-                descripcion: i.DESCRIP,
-                cantidadPedida: parseFloat(i.QTY) || 0,
-                cantidadCajas: parseFloat(i.CAJAS) || 0,
-                totalLinea: parseFloat(i.TOTAL_LINEA) || 0,
-                unidad: i.UNIT,
-                precioUnitario: (parseFloat(i.QTY) || 0) !== 0 ? (parseFloat(i.TOTAL_LINEA) || 0) / parseFloat(i.QTY) : 0,
+                itemId: i.SECUENCIA,
+                codigoArticulo: i.CODIGOARTICULO,
+                descripcion: i.DESCRIPCION,
+                cantidadPedida: parseFloat(i.CANTIDADUNIDADES) || 0,
+                cantidadCajas: parseFloat(i.CANTIDADCAJAS) || 0,
+                totalLinea: parseFloat(i.IMPORTEVENTA) || 0,
+                unidad: i.UNIDADMEDIDA,
+                precioUnitario: (parseFloat(i.CANTIDADUNIDADES) || 0) !== 0 ? (parseFloat(i.IMPORTEVENTA) || 0) / parseFloat(i.CANTIDADUNIDADES) : 0,
                 cantidadEntregada: 0,
                 estado: 'PENDIENTE'
             })),
@@ -359,15 +606,78 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 });
 
 // ===================================
-// POST /update (Mock implementation for now)
+// POST /update - Update delivery status with duplicate prevention
 // ===================================
 router.post('/update', async (req, res) => {
     try {
-        const { itemId, status, repartidorId, observaciones } = req.body;
-        logger.info(`[ENTREGAS] Updating ${itemId} to ${status} by ${repartidorId}`);
-        // Here you would update a tracking table. For now just success.
-        res.json({ success: true, message: 'Status updated' });
+        const { itemId: reqItemId, albaranId, status, repartidorId, observaciones, firma, fotos, latitud, longitud, forceUpdate } = req.body;
+        const itemId = reqItemId || albaranId; // Support both naming conventions
+
+        if (!itemId || !status || !repartidorId) {
+            return res.status(400).json({ success: false, error: 'Faltan datos obligatorios: itemId, status, repartidorId' });
+        }
+
+        logger.info(`[ENTREGAS] Updating ${itemId} to ${status} (Rep: ${repartidorId}, Force: ${forceUpdate || false})`);
+
+        // VALIDATION: Check if already delivered (prevents accidental duplicate confirmations)
+        if (status === 'ENTREGADO') {
+            try {
+                const checkSql = `SELECT STATUS, UPDATED_AT, REPARTIDOR_ID FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`;
+                const existing = await query(checkSql, false);
+
+                if (existing.length > 0 && existing[0].STATUS === 'ENTREGADO') {
+                    // Already delivered - only allow if forceUpdate is true
+                    if (!forceUpdate) {
+                        logger.warn(`[ENTREGAS] ⚠️ Duplicate confirmation attempt for ${itemId} (previously by ${existing[0].REPARTIDOR_ID} at ${existing[0].UPDATED_AT})`);
+                        return res.status(409).json({
+                            success: false,
+                            error: 'Esta entrega ya fue confirmada anteriormente',
+                            alreadyDelivered: true,
+                            previousRepartidor: existing[0].REPARTIDOR_ID,
+                            previousDate: existing[0].UPDATED_AT
+                        });
+                    }
+                    logger.info(`[ENTREGAS] Force update enabled for ${itemId}, overwriting previous delivery`);
+                }
+            } catch (checkErr) {
+                // Table might not exist yet, continue with insert
+                logger.warn(`[ENTREGAS] Check failed (table may not exist): ${checkErr.message}`);
+            }
+        }
+
+        // Upsert into JAVIER.DELIVERY_STATUS
+        // 1. Delete existing (if any)
+        await query(`DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
+
+        // 2. Insert new record
+        const obsSafe = observaciones ? observaciones.replace(/'/g, "''") : '';
+        const firmaSafe = firma ? firma.replace(/'/g, "''") : '';
+        const lat = latitud || 0;
+        const lon = longitud || 0;
+
+        // Identify who is performing the update
+        // repartidorId from body = the actual repartidor who did the delivery
+        // req.user.code = who is logged in (could be Jefe viewing as repartidor)
+        // Always store the ACTUAL repartidor from the body, not the logged-in user
+        let inspectorId = repartidorId;
+
+        // Safety truncation
+        if (inspectorId && inspectorId.length > 20) {
+            inspectorId = inspectorId.substring(0, 20);
+        }
+
+        const insertSql = `
+            INSERT INTO JAVIER.DELIVERY_STATUS 
+            (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT)
+            VALUES ('${itemId}', '${status}', '${obsSafe}', '${firmaSafe}', ${lat}, ${lon}, '${inspectorId}', CURRENT TIMESTAMP)
+        `;
+
+        await query(insertSql, false);
+        logger.info(`[ENTREGAS] ✅ Delivery ${itemId} updated to ${status} by ${inspectorId} (ReqRep: ${repartidorId})`);
+
+        res.json({ success: true, message: 'Estado actualizado correctamente' });
     } catch (error) {
+        logger.error(`[ENTREGAS] Error in /update: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -385,20 +695,270 @@ router.post('/uploads/photo', upload.single('photo'), (req, res) => {
 // ===================================
 router.post('/uploads/signature', async (req, res) => {
     try {
-        const { entregaId, firma } = req.body; // firma is base64
+        const { entregaId, firma, clientCode, dni, nombre } = req.body; // firma is base64
         if (!firma) return res.status(400).json({ success: false, error: 'No signature' });
+
+        // Create organized directory structure: /uploads/photos/YYYY/MM/
+        const now = new Date();
+        const year = now.getFullYear().toString();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+
+        const organizedDir = path.join(photosDir, year, month);
+        if (!fs.existsSync(organizedDir)) {
+            fs.mkdirSync(organizedDir, { recursive: true });
+        }
+
+        // Clean entregaId for filename (replace special chars)
+        const safeEntregaId = (entregaId || 'unknown').toString().replace(/[^a-zA-Z0-9-]/g, '_');
+        const safeClientCode = (clientCode || 'CLI').toString().replace(/[^a-zA-Z0-9]/g, '');
+
+        // Filename format: FIRMA_YYYY-MM-DD_ClientCode_EntregaId_Timestamp.png
+        // Example: FIRMA_2026-02-05_12345_2026-A-1-999_1707123456789.png
+        const fileName = `FIRMA_${year}-${month}-${day}_${safeClientCode}_${safeEntregaId}_${Date.now()}.png`;
+        const filePath = path.join(organizedDir, fileName);
+
+        // Relative path for database storage (easier for migrations)
+        const relativePath = `${year}/${month}/${fileName}`;
 
         // Save base64 to file
         const base64Data = firma.replace(/^data:image\/png;base64,/, "");
-        const fileName = `sig-${entregaId}-${Date.now()}.png`;
-        const filePath = path.join(photosDir, fileName);
+        fs.writeFileSync(filePath, base64Data, 'base64');
 
-        require('fs').writeFileSync(filePath, base64Data, 'base64');
+        logger.info(`[SIGN] Saved signature: ${relativePath} for delivery ${entregaId}`);
 
-        res.json({ success: true, path: filePath });
+        // Save Signer Info (Upsert)
+        if (clientCode && dni) {
+            try {
+                // Upsert logic (Delete + Insert is safest fallback)
+                const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
+                const safeDni = dni.replace(/[^a-zA-Z0-9]/g, '');
+                const safeNombre = (nombre || '').replace(/'/g, "''").replace(/[^a-zA-Z0-9 .,'áéíóúñÁÉÍÓÚÑ()-]/g, '');
+                await query(`
+                    DELETE FROM JAVIER.CLIENT_SIGNERS 
+                    WHERE CODIGOCLIENTE = '${safeClientCode}' AND DNI = '${safeDni}'
+                `, false, false);
+
+                await query(`
+                    INSERT INTO JAVIER.CLIENT_SIGNERS (CODIGOCLIENTE, DNI, NOMBRE, LAST_USED, USAGE_COUNT)
+                    VALUES ('${safeClientCode}', '${safeDni}', '${safeNombre}', CURRENT DATE, 1)
+                `, false, true);
+
+                logger.info(`[SIGN] Saved signer info for client ${clientCode}: ${dni} - ${nombre}`);
+            } catch (dbError) {
+                logger.warn(`[SIGN] Failed to save signer info: ${dbError.message}`);
+                // Don't fail the request just for this
+            }
+        }
+
+        // Return relative path (more portable) and full path
+        res.json({ success: true, path: relativePath, fullPath: filePath });
     } catch (error) {
+        logger.error(`[SIGN] Error saving signature: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ===================================
+// GET /signers/:clientCode
+// ===================================
+router.get('/signers/:clientCode', async (req, res) => {
+    try {
+        const { clientCode } = req.params;
+        const safeCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
+        const rows = await query(`
+            SELECT DNI, NOMBRE
+            FROM JAVIER.CLIENT_SIGNERS
+            WHERE CODIGOCLIENTE = '${safeCode}'
+            ORDER BY LAST_USED DESC
+            FETCH FIRST 5 ROWS ONLY
+        `);
+
+        res.json({ success: true, signers: rows });
+    } catch (error) {
+        logger.error(`Error get signers: ${error.message}`);
+        res.json({ success: true, signers: [] }); // Fail graceful
+    }
+});
+
+// ===================================
+// POST /receipt/:entregaId - Generate delivery receipt PDF
+// ===================================
+router.post('/receipt/:entregaId', async (req, res) => {
+    try {
+        const { entregaId } = req.params;
+        const { signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor } = req.body;
+
+        const { saveReceipt } = require('../app/services/deliveryReceiptService');
+
+        // Parse entregaId to get DB identifiers: "EJERCICIO-SERIE-TERMINAL-NUMERO"
+        const parts = entregaId.split('-');
+        const ejercicio = parts[0] ? parseInt(parts[0]) : null;
+        const serie = parts[1] || '';
+        const terminal = parts[2] ? parseInt(parts[2]) : null;
+        const numero = parts[3] ? parseInt(parts[3]) : null;
+
+        const deliveryData = {
+            ejercicio, serie, terminal, numero,
+            albaranNum: albaranNum || `${ejercicio}/${serie}${String(terminal || 0).padStart(2, '0')}/${numero}`,
+            facturaNum,
+            clientCode,
+            clientName,
+            fecha,
+            items: items || [],
+            subtotal: subtotal || 0,
+            iva: iva || 0,
+            total: total || 0,
+            formaPago,
+            repartidor
+        };
+
+        // Resolve signature path if relative
+        let fullSignaturePath = null;
+        if (signaturePath) {
+            fullSignaturePath = path.join(photosDir, signaturePath);
+            logger.info(`[RECEIPT] Signature path: relative='${signaturePath}' full='${fullSignaturePath}' exists=${fs.existsSync(fullSignaturePath)}`);
+            if (!fs.existsSync(fullSignaturePath)) {
+                // Try absolute path directly (in case signaturePath is already absolute)
+                if (fs.existsSync(signaturePath)) {
+                    fullSignaturePath = signaturePath;
+                    logger.info(`[RECEIPT] Using absolute signature path: ${signaturePath}`);
+                } else {
+                    // Try under uploads/photos
+                    const altPath = path.join(photosDir, '..', signaturePath);
+                    if (fs.existsSync(altPath)) {
+                        fullSignaturePath = altPath;
+                        logger.info(`[RECEIPT] Using alt signature path: ${altPath}`);
+                    } else {
+                        fullSignaturePath = null;
+                        logger.warn(`[RECEIPT] Signature not found at either path`);
+                    }
+                }
+            }
+        } else {
+            logger.info(`[RECEIPT] No signature path provided for ${entregaId}`);
+        }
+
+        // Fallback: try to get signature base64 from DB if no file found
+        if (!fullSignaturePath && ejercicio && numero) {
+            try {
+                const albId = `${ejercicio}-${(serie || '').trim()}-${terminal || 0}-${numero}`;
+                // Try DELIVERY_STATUS
+                const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
+                if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                    const fpTest = path.join(photosDir, dsRows[0].FIRMA_PATH);
+                    if (fs.existsSync(fpTest)) {
+                        fullSignaturePath = fpTest;
+                        logger.info(`[RECEIPT] Found signature via DELIVERY_STATUS: ${fpTest}`);
+                    }
+                }
+                // Try REPARTIDOR_FIRMAS for base64 
+                if (!fullSignaturePath) {
+                    const firmaRows = await query(`
+                        SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE FROM JAVIER.REPARTIDOR_FIRMAS RF
+                        INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
+                        WHERE RE.NUMERO_ALBARAN = ${numero}
+                          AND RE.EJERCICIO_ALBARAN = ${ejercicio}
+                          AND RE.SERIE_ALBARAN = '${(serie || '').trim()}'
+                        FETCH FIRST 1 ROW ONLY
+                    `, false);
+                    if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
+                        deliveryData.signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                        deliveryData.firmante = firmaRows[0].FIRMANTE_NOMBRE || null;
+                        logger.info(`[RECEIPT] Using base64 signature from REPARTIDOR_FIRMAS`);
+                    }
+                }
+            } catch (e) {
+                logger.warn(`[RECEIPT] DB signature fallback error: ${e.message}`);
+            }
+        }
+
+        const result = await saveReceipt(deliveryData, fullSignaturePath);
+
+        // Convert PDF to base64 for mobile sharing
+        const pdfBase64 = result.buffer.toString('base64');
+
+        logger.info(`[RECEIPT] Generated receipt for ${entregaId} (signature: ${fullSignaturePath ? 'YES' : 'NO'})`);
+        res.json({
+            success: true,
+            pdfPath: result.relativePath,
+            pdfBase64: pdfBase64,
+            fileName: path.basename(result.filePath)
+        });
+    } catch (error) {
+        logger.error(`[RECEIPT] Error: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ===================================
+// POST /receipt/:entregaId/email - Send receipt via email
+// ===================================
+router.post('/receipt/:entregaId/email', async (req, res) => {
+    try {
+        const { entregaId } = req.params;
+        const { email, signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ success: false, error: 'Email is required' });
+        }
+
+        const { saveReceipt } = require('../app/services/deliveryReceiptService');
+        const { sendDeliveryReceipt } = require('../app/services/emailService');
+
+        // Parse entregaId for DB lookup
+        const parts = entregaId.split('-');
+        const ejercicio = parts[0] ? parseInt(parts[0]) : null;
+        const serie = parts[1] || '';
+        const terminal = parts[2] ? parseInt(parts[2]) : null;
+        const numero = parts[3] ? parseInt(parts[3]) : null;
+
+        const deliveryData = {
+            ejercicio, serie, terminal, numero,
+            albaranNum: albaranNum || `${ejercicio}/${serie}${String(terminal || 0).padStart(2, '0')}/${numero}`,
+            facturaNum,
+            clientCode,
+            clientName,
+            fecha,
+            items: items || [],
+            subtotal: subtotal || 0,
+            iva: iva || 0,
+            total: total || 0,
+            formaPago,
+            repartidor
+        };
+
+        // Resolve signature path
+        let fullSignaturePath = null;
+        if (signaturePath) {
+            fullSignaturePath = path.join(photosDir, signaturePath);
+            if (!fs.existsSync(fullSignaturePath)) {
+                if (fs.existsSync(signaturePath)) {
+                    fullSignaturePath = signaturePath;
+                } else {
+                    fullSignaturePath = null;
+                    logger.warn(`[RECEIPT-EMAIL] Signature not found: ${signaturePath}`);
+                }
+            }
+        }
+
+        const receipt = await saveReceipt(deliveryData, fullSignaturePath);
+
+        // Send email
+        const emailResult = await sendDeliveryReceipt(email, receipt.buffer, {
+            albaranNum: facturaNum || albaranNum,
+            clientName,
+            total: (total || 0).toFixed(2),
+            fecha
+        });
+
+        logger.info(`[RECEIPT] Email sent to ${email} for ${entregaId}`);
+        res.json({ success: true, messageId: emailResult.messageId });
+    } catch (error) {
+        logger.error(`[RECEIPT] Email error: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
 module.exports = router;
+

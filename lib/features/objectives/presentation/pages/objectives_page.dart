@@ -238,17 +238,70 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
             final sales = (monthData['sales'] as num?)?.toDouble() ?? 0;
             final obj = (monthData['objective'] as num?)?.toDouble() ?? 0;
             
-            // Pacing Logic
-            final workingDays = (monthData['workingDays'] as num?)?.toInt() ?? 22; // Default 22 if missing
-            final daysPassed = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
+            // Pacing Logic - FIXED 2.0:
+            // Ensure we count proper days for current month
+            // Pacing Logic - FIXED 2.0:
+            // Ensure we count proper days for current month
+            int workingDays = (monthData['workingDays'] as num?)?.toInt() ?? 22;
+            int daysPassed = 0;
+            
+            final now = DateTime.now();
+            final isCurrentMonth = year == now.year && monthNum == now.month;
+            final isSelectedMonth = _selectedMonths.contains(monthNum);
+            
+            // SPECIAL FIX FOR 'All Agents' (Jefe de Ventas view)
+            // If viewing all agents (no specific filter), calculate standard Mon-Sat working days
+            // This avoids issues where aggregated data might have incorrect average days (e.g. 20 vs 24)
+            bool isAllAgentsView = widget.isJefeVentas && (_selectedVendedor == null || _selectedVendedor!.isEmpty);
+            
+            if (isAllAgentsView) {
+               // Calculate strict Mon-Sat days for this month
+               int totalDaysInMonth = DateTime(year, monthNum + 1, 0).day;
+               int monSatDays = 0;
+               for (int day = 1; day <= totalDaysInMonth; day++) {
+                 final d = DateTime(year, monthNum, day);
+                 if (d.weekday != DateTime.sunday) {
+                   monSatDays++;
+                 }
+               }
+               workingDays = monSatDays;
+               
+               // Calculate days passed based on Mon-Sat logic
+               if (year < now.year || (year == now.year && monthNum < now.month)) {
+                 daysPassed = workingDays;
+               } else if (isCurrentMonth && isSelectedMonth) {
+                  // Count Mon-Sat days up to today
+                  int passedCount = 0;
+                  for (int day = 1; day <= now.day; day++) {
+                    final d = DateTime(year, monthNum, day);
+                    if (d.weekday != DateTime.sunday) {
+                      passedCount++;
+                    }
+                  }
+                  daysPassed = passedCount;
+               }
+            } else {
+                // Standard logic for individual agents (trust backend data)
+                if (year < now.year || (year == now.year && monthNum < now.month)) {
+                  // Past month - use full working days
+                  daysPassed = workingDays;
+                } else if (isCurrentMonth && isSelectedMonth) {
+                  // Current month and selected
+                  final backendDays = (monthData['daysPassed'] as num?)?.toInt() ?? 0;
+                  daysPassed = backendDays;
+                }
+            }
+            // Future months = 0 daysPassed
             
             double paceObj = 0;
+            // Allow daysPassed to be 0 for calculation (paceObj = 0)
             if (workingDays > 0) {
                paceObj = (obj / workingDays) * daysPassed;
             }
             
             totalSales += sales;
             totalObjective += obj;
+            // Just sum paceObj directly
             totalPaceObjective += paceObj;
             totalWorkingDays += workingDays;
             totalDaysPassed += daysPassed;
@@ -286,12 +339,11 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     double monthlyObjective = totalAnnualObjective > 0 ? totalAnnualObjective / 12 : 0;
     double consistentTarget = (monthlyObjective * _selectedMonths.length);
     
-    // Use consistent target if totalObjective is zero or we prefer consistency
+    // Use consistent target ONLY if totalObjective is zero (missing granular data)
     if (totalObjective == 0 && consistentTarget > 0) {
         totalObjective = consistentTarget;
-    } else {
-        totalObjective = consistentTarget;
     }
+    // ELSE: Keep totalObjective as the sum of selected months (respects seasonality)
     
     // If pace calculation yielded 0 (e.g. historical data where daysPassed might be 0 or full), 
     // we should ensure it makes sense. 
@@ -1040,7 +1092,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     final ytdProgress = (ytd['progress'] as num?)?.toDouble() ?? 0;
     final year = (ytd['year'] as num?)?.toInt() ?? DateTime.now().year;
     
-    if (ytdObjective == 0) return const SizedBox.shrink();
+    // FIX: Only show YTD banner if strictly more than 1 month is selected
+    // User expectation: Single month view should focus on that month's specific data, not "Acumulado"
+    if (_selectedMonths.length <= 1) return const SizedBox.shrink();
     
     final isOnTrack = ytdProgress >= 100;
     final color = isOnTrack ? AppTheme.success : (ytdProgress >= 90 ? Colors.orange : AppTheme.error);
@@ -1062,7 +1116,8 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Acumulado $year (hasta ${_monthNamesShort[DateTime.now().month - 1]})',
+                // Dynamic label based on selection
+                Text('Acumulado $year (${_selectedMonths.length} meses)',
                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
                 Text('${_formatCurrency(ytdSales)} de ${_formatCurrency(ytdObjective)}',
                     style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
@@ -1353,7 +1408,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
               const SizedBox(height: 4),
               */
               
-              // Period objective (based on selected months)
+              // FIX: Period objective label hidden as per user request
+              // Kept commented for potential future use
+              /*
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -1368,6 +1425,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                   ],
                 ),
               ),
+              */
               const SizedBox(height: 10),
               
               // Current sales - big display
@@ -1419,8 +1477,10 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                 // Green when on track, orange when behind - clear visual feedback
                 final paceColor = isOnTrack ? AppTheme.success : Colors.orangeAccent;
                 
-                // Only show if there's a meaningful pace calculation
-                if (workingDays <= 0 || daysPassed <= 0) return const SizedBox.shrink();
+                // Only show if there's a meaningful pace calculation context (working days exist)
+                // FIX: Do NOT hide if daysPassed is 0. Only hide if workingDays is 0 (invalid data).
+                // We want to see "Ritmo Diario" even on day 1 of the month.
+                if (workingDays <= 0) return const SizedBox.shrink();
                 
                 return Container(
                   margin: const EdgeInsets.only(top: 16),
@@ -1549,8 +1609,8 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                                       ? '¡Objetivo cumplido!' 
                                       : 'Objetivo no alcanzado')
                                   : (isOnTrack
-                                      ? 'Vas ${((dailyActual / dailyTarget - 1) * 100).toStringAsFixed(0)}% por ENCIMA del ritmo'
-                                      : 'Vas ${((1 - dailyActual / dailyTarget) * 100).toStringAsFixed(0)}% por DEBAJO del ritmo'),
+                                      ? 'Vas ${((dailyActual / dailyTarget - 1) * 100).toStringAsFixed(2)}% por ENCIMA del ritmo'
+                                      : 'Vas ${((1 - dailyActual / dailyTarget) * 100).toStringAsFixed(2)}% por DEBAJO del ritmo'),
                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: paceColor),
                             ),
                           ],
@@ -1702,8 +1762,11 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         // For current month, use proportional objective
         double displayObj = obj;
         final isCurrentMonth = year == now.year && m['month'] == now.month;
-        if (isCurrentMonth && workingDays > 0 && daysPassed > 0 && daysPassed < workingDays) {
+        // FIX: For current month, ALWAYS use proportional logic to match chart
+        if (isCurrentMonth && workingDays > 0) {
           displayObj = (obj / workingDays) * daysPassed;
+        } else if (isCurrentMonth && workingDays <= 0) {
+          displayObj = 0;
         }
         
         if (sales > maxY) maxY = sales;
@@ -1789,8 +1852,13 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         // For current month, show proportional objective based on days worked
         // For past months, show full objective (daysPassed == workingDays)
         double displayObj = weightedObj;
-        if (isCurrentMonth && workingDays > 0 && daysPassed > 0 && daysPassed < workingDays) {
-          displayObj = (weightedObj / workingDays) * daysPassed;
+        
+        // FIX: For current month, ALWAYS use proportional, even if daysPassed is 0
+        if (isCurrentMonth && workingDays > 0) {
+           displayObj = (weightedObj / workingDays) * daysPassed;
+        } else if (isCurrentMonth && workingDays <= 0) {
+           // Fallback if no working days defined for current month
+           displayObj = 0; 
         }
         
         return FlSpot((m - 1).toDouble(), displayObj);

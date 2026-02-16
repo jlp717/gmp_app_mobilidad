@@ -257,6 +257,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           'year': _selectedYear,
           'month': _selectedMonth,
           'week': _selectedWeek,
+          'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
         },
       );
 
@@ -603,7 +604,14 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                   )).toList(),
                   onChanged: (value) {
                     if (value != null) {
+                      final oldMode = _sortMode;
                       setState(() => _sortMode = value);
+                      
+                      // If we are switching TO or FROM 'route' (Original), we need to fetch fresh data
+                      // because the backend returns different datasets (ignored vs respected overrides).
+                      if (value == 'route' || oldMode == 'route') {
+                        _loadDayClients();
+                      }
                     }
                   },
                 ),

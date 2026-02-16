@@ -11,6 +11,7 @@ import '../widgets/futuristic_week_navigator.dart';
 import '../widgets/holographic_kpi_dashboard.dart';
 import '../widgets/smart_delivery_card.dart';
 import '../widgets/rutero_detail_modal.dart';
+import 'repartidor_historico_page.dart';
 
 /// Repartidor Rutero Page - Futuristic Redesign
 /// Features:
@@ -21,8 +22,9 @@ import '../widgets/rutero_detail_modal.dart';
 /// - Director "View As" with auto-reload
 class RepartidorRuteroPage extends StatefulWidget {
   final String? repartidorId;
+  final Map<String, String>? repartidorNames;
 
-  const RepartidorRuteroPage({super.key, this.repartidorId});
+  const RepartidorRuteroPage({super.key, this.repartidorId, this.repartidorNames});
 
   @override
   State<RepartidorRuteroPage> createState() => _RepartidorRuteroPageState();
@@ -34,16 +36,12 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   List<Map<String, dynamic>> _weekDays = [];
   bool _isLoadingWeek = false;
   String? _lastLoadedId;
-  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchClientController = TextEditingController();
+  final TextEditingController _searchAlbaranController = TextEditingController();
   
-  // Gamification state (will be loaded from backend)
-  int _streakDays = 0;
-  String _currentLevel = 'BRONCE';
-  double _levelProgress = 0.0;
-  String? _aiSuggestion;
-  
-  // Animation controllers
   late AnimationController _listAnimController;
+  // Cache the repartidores future to avoid re-fetching on every rebuild
+  Future<List<Map<String, dynamic>>>? _repartidoresFuture;
 
   @override
   void initState() {
@@ -52,10 +50,13 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
+    // Pre-fetch repartidores list once
+    _repartidoresFuture = ApiClient.getList('/repartidores').then(
+      (val) => val.map((e) => e as Map<String, dynamic>).toList(),
+    );
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
-      _loadGamificationData();
       _listAnimController.forward();
     });
   }
@@ -63,27 +64,14 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final filter = Provider.of<FilterProvider>(context, listen: true);
-
-    String targetId = widget.repartidorId ?? auth.currentUser?.code ?? '';
-    if (auth.isDirector && filter.selectedVendor != null) {
-      targetId = filter.selectedVendor!;
-    }
-
-    if (targetId.isNotEmpty && targetId != _lastLoadedId) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _lastLoadedId = targetId;
-          _loadData();
-        }
-      });
-    }
+    // Logic removed to prevent infinite loop. 
+    // Data loading is handled by initState and Dropdown changes.
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _searchClientController.dispose();
+    _searchAlbaranController.dispose();
     _listAnimController.dispose();
     super.dispose();
   }
@@ -99,6 +87,9 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
     if (auth.isDirector && filter.selectedVendor != null) {
       targetId = filter.selectedVendor!;
     }
+    
+    // NOTE: Multi-ID (comma-separated) IS supported by /pendientes endpoint
+    // The week endpoint needs single ID, handled in _loadWeekData
 
     if (targetId.isNotEmpty) {
       if (_lastLoadedId != targetId) {
@@ -107,6 +98,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
 
       entregas.setRepartidor(targetId, autoReload: false);
       entregas.seleccionarFecha(_selectedDate);
+      
+      // Backend supports multi-ID for week endpoint (uses IN clause)
       _loadWeekData(targetId);
     }
   }
@@ -131,18 +124,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
     }
   }
 
-  Future<void> _loadGamificationData() async {
-    // TODO: Load from backend when endpoint is ready
-    // For now, simulate some data
-    if (mounted) {
-      setState(() {
-        _streakDays = 3; // Simulated
-        _currentLevel = 'PLATA';
-        _levelProgress = 0.65;
-        _aiSuggestion = '2 clientes cercanos con cobro pendiente';
-      });
-    }
-  }
+
 
   void _onDaySelected(DateTime date) {
     HapticFeedback.selectionClick();
@@ -239,21 +221,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
           // HOLOGRAPHIC KPI DASHBOARD
           HolographicKpiDashboard(
             totalEntregas: entregas.albaranes.length,
-            entregasCompletadas: entregas.albaranes
-                .where((a) => a.estado == EstadoEntrega.entregado)
-                .length,
+            entregasCompletadas: entregas.resumenCompletedCount,
             montoACobrar: entregas.resumenTotalACobrar,
             montoOpcional: entregas.resumenTotalOpcional,
-            totalMonto: entregas.albaranes.fold(
-              0.0,
-              (sum, item) => sum + item.importeTotal,
-            ),
+            totalMonto: entregas.resumenTotalBruto,
             isLoading: entregas.isLoading,
-            streakDays: _streakDays,
-            currentLevel: _currentLevel,
-            levelProgress: _levelProgress,
-            aiSuggestion: _aiSuggestion,
-            onAiAction: () => _showAiSuggestions(context),
           ),
 
           // CLIENT LIST
@@ -275,9 +247,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: FutureBuilder<List<Map<String, dynamic>>>(
-        future: ApiClient.getList('/repartidores').then(
-          (val) => val.map((e) => e as Map<String, dynamic>).toList(),
-        ),
+        future: _repartidoresFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const SizedBox.shrink();
 
@@ -328,17 +298,16 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
                         fontSize: 13,
                       ),
                       items: repartidores.map((r) {
-                        // Clean name - remove ID redundancy like "41 - 41 ALFONSO"
-                        final code = r['code'].toString();
-                        final name = r['name'].toString();
-                        final displayName = name.startsWith('$code ')
-                            ? name.replaceFirst('$code ', '')
-                            : name;
+                        final code = r['code'].toString().trim();
+                        final name = r['name'].toString().trim();
+                        // Format requested: R. 44: NOMBRE
+                        final displayName = 'R. $code: ${name.startsWith('$code ') ? name.replaceFirst('$code ', '') : name}';
 
                         return DropdownMenuItem(
                           value: code,
                           child: Text(
                             displayName,
+                            style: const TextStyle(fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -347,8 +316,16 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
                         if (val != null) {
                           HapticFeedback.selectionClick();
                           filter.setVendor(val);
-                          setState(() => _lastLoadedId = null);
+                          
+                          // Manually trigger reload and pivot _lastLoadedId to prevent
+                          // duplicate/conflicting loads from didChangeDependencies
+                          if (mounted) {
+                            setState(() => _lastLoadedId = val);
+                          }
+                          
+                          // Force immediate reload
                           entregas.setRepartidor(val, forceReload: true);
+                          entregas.seleccionarFecha(_selectedDate);
                           _loadWeekData(val);
                         }
                       },
@@ -386,57 +363,91 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          // Search field
+          // Clients Filter
           Expanded(
-            flex: 3,
+            flex: 4,
             child: Container(
-              height: 38,
+              height: 36,
               decoration: BoxDecoration(
                 color: AppTheme.darkCard,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.borderColor),
               ),
               child: Row(
                 children: [
-                  const SizedBox(width: 10),
-                  const Icon(
-                    Icons.search,
-                    size: 18,
-                    color: AppTheme.textSecondary,
-                  ),
-                  const SizedBox(width: 8),
+                   const SizedBox(width: 8),
+                  const Icon(Icons.person_outline, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: TextField(
-                      controller: _searchController,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textPrimary,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Buscar cliente o nº albarán...',
-                        hintStyle: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
+                      controller: _searchClientController,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        hintText: 'Cliente...',
+                        hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      onChanged: (v) => entregas.setSearchQuery(v),
+                      onChanged: (v) => entregas.setSearchClient(v),
                     ),
                   ),
-                  if (_searchController.text.isNotEmpty)
+                  if (_searchClientController.text.isNotEmpty)
                     IconButton(
-                      icon: const Icon(Icons.clear, size: 16),
-                      color: AppTheme.textSecondary,
+                      icon: const Icon(Icons.clear, size: 14),
                       onPressed: () {
-                        _searchController.clear();
-                        entregas.setSearchQuery('');
+                        _searchClientController.clear();
+                        entregas.setSearchClient('');
                       },
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(width: 6),
+
+          // Albaranes Filter
+          Expanded(
+            flex: 3,
+            child: Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.darkCard,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Row(
+                children: [
                   const SizedBox(width: 8),
+                  const Icon(Icons.description_outlined, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchAlbaranController,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        hintText: 'Nº Alb/Fac...',
+                        hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (v) => entregas.setSearchAlbaran(v),
+                    ),
+                  ),
+                  if (_searchAlbaranController.text.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 14),
+                      onPressed: () {
+                        _searchAlbaranController.clear();
+                        entregas.setSearchAlbaran('');
+                      },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                 ],
               ),
             ),
@@ -525,6 +536,8 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               ),
             ),
           ),
+          
+
         ],
       ),
     );
@@ -613,26 +626,38 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               parent: _listAnimController,
               curve: Curves.easeOutCubic,
             )),
-            child: ListView.builder(
-              padding: const EdgeInsets.only(top: 8, bottom: 100),
-              itemCount: provider.albaranes.length,
-              itemBuilder: (context, index) {
-                final albaran = provider.albaranes[index];
-                
-                // Generate AI suggestion for some items (demo)
-                String? aiSuggestion;
-                if (albaran.esCTR && albaran.importeTotal > 500) {
-                  aiSuggestion = 'Cobro prioritario - importe elevado';
-                }
-                
-                return SmartDeliveryCard(
-                  albaran: albaran,
-                  onTap: () => _showDetailDialog(albaran),
-                  onSwipeComplete: () => _handleQuickComplete(albaran),
-                  onSwipeNote: () => _showQuickNoteDialog(albaran),
-                  aiSuggestion: aiSuggestion,
-                );
-              },
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              color: AppTheme.neonBlue,
+              backgroundColor: AppTheme.surfaceColor,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(top: 4, bottom: 100),
+                itemCount: provider.albaranes.length,
+                itemBuilder: (context, index) {
+                  final albaran = provider.albaranes[index];
+                  
+                  return Column(
+                    children: [
+                      SmartDeliveryCard(
+                        albaran: albaran,
+                        onTap: () => _showDetailDialog(albaran),
+                        onSwipeComplete: () => _handleQuickComplete(albaran),
+                        onSwipeNote: () => _showQuickNoteDialog(albaran),
+                        repartidorNames: widget.repartidorNames,
+                      ),
+                      if (index < provider.albaranes.length - 1)
+                        Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: AppTheme.borderColor.withOpacity(0.3),
+                          indent: 12,
+                          endIndent: 12,
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         );
@@ -703,6 +728,32 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
     );
   }
 
+  void _showAiDetail(BuildContext context, String? suggestion) {
+    if (suggestion == null) return;
+    HapticFeedback.mediumImpact();
+    // Simple alert dialog for now
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        title: Row(
+          children: const [
+            Icon(Icons.auto_awesome, color: AppTheme.neonPurple),
+            SizedBox(width: 10),
+            Text('Análisis Inteligente', style: TextStyle(color: AppTheme.neonPurple)),
+          ],
+        ),
+        content: Text(suggestion, style: const TextStyle(color: AppTheme.textPrimary)),
+        actions: [
+          TextButton(
+            child: const Text('Entendido'),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showDetailDialog(AlbaranEntrega albaran) {
     final entregasProvider = Provider.of<EntregasProvider>(context, listen: false);
 
@@ -722,26 +773,87 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   }
 
   void _handleQuickComplete(AlbaranEntrega albaran) {
+    // 1. Validation: If CTR (Must Pay), prevent quick swipe
+    if (albaran.esCTR) {
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(Icons.warning_amber_rounded, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(child: Text('Cobro obligatorio. Abra el detalle para registrar pago.')),
+            ],
+          ),
+          backgroundColor: AppTheme.obligatorio,
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'ABRIR',
+            textColor: Colors.white,
+            onPressed: () => _showDetailDialog(albaran),
+          ),
+        ),
+      );
+      // Re-open detail slightly delayed
+      Future.delayed(const Duration(milliseconds: 300), () => _showDetailDialog(albaran));
+      return;
+    }
+
+    // 2. Perform Quick Complete
+    final provider = Provider.of<EntregasProvider>(context, listen: false);
+    
+    // Optimistic UI update or wait? 
+    // Let's show loading snackbar then success
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text('Completado: ${albaran.nombreCliente}'),
+            SizedBox(
+              width: 20, 
+              height: 20, 
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)
             ),
+            const SizedBox(width: 12),
+            Expanded(child: Text('Completando ${albaran.nombreCliente}...')),
           ],
         ),
-        backgroundColor: AppTheme.success,
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'VER DETALLE',
-          textColor: Colors.white,
-          onPressed: () => _showDetailDialog(albaran),
-        ),
+        backgroundColor: AppTheme.darkCard,
+        duration: const Duration(seconds: 1),
       ),
     );
+
+    provider.marcarEntregado(
+      albaranId: albaran.id,
+      observaciones: 'Completado rápido (Swipe)',
+      // No signature/photos for quick swipe
+    ).then((success) {
+      if (success) {
+        HapticFeedback.lightImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Completado: ${albaran.nombreCliente}')),
+              ],
+            ),
+            backgroundColor: AppTheme.success,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        provider.cargarAlbaranesPendientes(); // Refresh list
+      } else {
+        HapticFeedback.heavyImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al completar: ${provider.error ?? "Desconocido"}'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    });
   }
 
   void _showQuickNoteDialog(AlbaranEntrega albaran) {

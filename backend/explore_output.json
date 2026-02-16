@@ -1,0 +1,295 @@
+{
+  "interestingColumns": [
+    {
+      "name": "ANOESTADO",
+      "type": "NUMERIC",
+      "text": "AnoEstado                                   KCAAES"
+    },
+    {
+      "name": "CONFORMADOSN",
+      "type": "CHAR",
+      "text": "ConformadoSN                                KCSNCO"
+    },
+    {
+      "name": "DIACREACION",
+      "type": "NUMERIC",
+      "text": "DiaCreacion                                 KCDDCR"
+    },
+    {
+      "name": "DIADOCUMENTO",
+      "type": "NUMERIC",
+      "text": "DiaDocumento                                KCDDDC"
+    },
+    {
+      "name": "DIAENVIADO",
+      "type": "NUMERIC",
+      "text": "DiaEnviado                                  KCDDEV"
+    },
+    {
+      "name": "DIAESTADO",
+      "type": "NUMERIC",
+      "text": "DiaEstado                                   KCDDES"
+    },
+    {
+      "name": "DIAIMPRESO",
+      "type": "NUMERIC",
+      "text": "DiaImpreso                                  KCDDPT"
+    },
+    {
+      "name": "DIALLEGADA",
+      "type": "NUMERIC",
+      "text": "DiaLlegada                                  KCDDLL"
+    },
+    {
+      "name": "DIAPRIMERPAGO",
+      "type": "NUMERIC",
+      "text": "DiaPrimerPago                               KCDDPP"
+    },
+    {
+      "name": "DIASERVICIO",
+      "type": "NUMERIC",
+      "text": "DiaServicio                                 KCDDSV"
+    },
+    {
+      "name": "ESTADOORDENPREPARACION",
+      "type": "CHAR",
+      "text": "EstadoOrdenPreparacion                      KCESOP"
+    },
+    {
+      "name": "ESTADOPRODUCCION",
+      "type": "CHAR",
+      "text": "EstadoProduccion                            KCESPR"
+    },
+    {
+      "name": "ESTADOPRODUCCIONWEB",
+      "type": "CHAR",
+      "text": "EstadoProduccionWeb                         KCESPW"
+    },
+    {
+      "name": "HORACREACION",
+      "type": "NUMERIC",
+      "text": "HoraCreacion                                KCHRCR"
+    },
+    {
+      "name": "HORADOCUMENTO",
+      "type": "NUMERIC",
+      "text": "HoraDocumento                               KCHRDC"
+    },
+    {
+      "name": "HORALLEGADA",
+      "type": "NUMERIC",
+      "text": "HoraLlegada                                 KCHRLL"
+    },
+    {
+      "name": "MESESTADO",
+      "type": "NUMERIC",
+      "text": "MesEstado                                   KCMMES"
+    },
+    {
+      "name": "SITUACIONALBARAN",
+      "type": "CHAR",
+      "text": "SituacionAlbaran                            KCSTAB"
+    },
+    {
+      "name": "SITUACIONCARGA",
+      "type": "CHAR",
+      "text": "SituacionCarga                              KCSTCZ"
+    },
+    {
+      "name": "SITUACIONPEDIDO",
+      "type": "CHAR",
+      "text": "SituacionPedido                             KCSTPD"
+    }
+  ],
+  "stats2026": [
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": "S",
+      "CNT": 3209
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": " ",
+      "CNT": 535
+    },
+    {
+      "SITUACIONALBARAN": " ",
+      "CONFORMADOSN": "S",
+      "CNT": 40
+    },
+    {
+      "SITUACIONALBARAN": " ",
+      "CONFORMADOSN": " ",
+      "CNT": 1
+    }
+  ],
+  "stats2025": [
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": "S",
+      "CNT": 6411
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": " ",
+      "CNT": 1428
+    },
+    {
+      "SITUACIONALBARAN": "R",
+      "CONFORMADOSN": " ",
+      "CNT": 92
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": "7",
+      "CNT": 6
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": "2",
+      "CNT": 1
+    }
+  ],
+  "samples": [
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": " ",
+      "DIADOCUMENTO": 13,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 125751,
+      "DIALLEGADA": 12,
+      "MESLLEGADA": 2,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 125751,
+      "DIACREACION": 12,
+      "HORACREACION": 125445
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": " ",
+      "DIADOCUMENTO": 10,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 95527,
+      "DIALLEGADA": 7,
+      "MESLLEGADA": 2,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 95527,
+      "DIACREACION": 7,
+      "HORACREACION": 74836
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": "S",
+      "DIADOCUMENTO": 13,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 191833,
+      "DIALLEGADA": 12,
+      "MESLLEGADA": 2,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 191833,
+      "DIACREACION": 12,
+      "HORACREACION": 172923
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": "S",
+      "DIADOCUMENTO": 3,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 151131,
+      "DIALLEGADA": 28,
+      "MESLLEGADA": 1,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 151131,
+      "DIACREACION": 28,
+      "HORACREACION": 134152
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": " ",
+      "DIADOCUMENTO": 3,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 162844,
+      "DIALLEGADA": 28,
+      "MESLLEGADA": 1,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 162844,
+      "DIACREACION": 28,
+      "HORACREACION": 162445
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": " ",
+      "DIADOCUMENTO": 3,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 162844,
+      "DIALLEGADA": 28,
+      "MESLLEGADA": 1,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 162844,
+      "DIACREACION": 28,
+      "HORACREACION": 162550
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": " ",
+      "DIADOCUMENTO": 3,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 162844,
+      "DIALLEGADA": 28,
+      "MESLLEGADA": 1,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 162844,
+      "DIACREACION": 28,
+      "HORACREACION": 162658
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": "S",
+      "DIADOCUMENTO": 3,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 162844,
+      "DIALLEGADA": 28,
+      "MESLLEGADA": 1,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 162844,
+      "DIACREACION": 31,
+      "HORACREACION": 101658
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": "S",
+      "DIADOCUMENTO": 3,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 162844,
+      "DIALLEGADA": 28,
+      "MESLLEGADA": 1,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 162844,
+      "DIACREACION": 31,
+      "HORACREACION": 101658
+    },
+    {
+      "SITUACIONALBARAN": "X",
+      "CONFORMADOSN": "S",
+      "DIADOCUMENTO": 3,
+      "MESDOCUMENTO": 2,
+      "ANODOCUMENTO": 2025,
+      "HORADOCUMENTO": 162844,
+      "DIALLEGADA": 28,
+      "MESLLEGADA": 1,
+      "ANOLLEGADA": 2025,
+      "HORALLEGADA": 162844,
+      "DIACREACION": 31,
+      "HORACREACION": 101658
+    }
+  ]
+}

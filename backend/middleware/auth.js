@@ -1,9 +1,26 @@
+const crypto = require('crypto');
 const logger = require('./logger');
+
+// =============================================================================
+// TOKEN SECURITY — HMAC-SHA256 signed tokens
+// =============================================================================
+const TOKEN_SECRET = process.env.TOKEN_SECRET || crypto.randomBytes(32).toString('hex');
+const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Sign a payload into an HMAC token: base64(payload).signature
+ * Prevents token forgery — only the server can produce valid signatures.
+ */
+function signToken(payload) {
+    const data = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const sig = crypto.createHmac('sha256', TOKEN_SECRET).update(data).digest('hex');
+    return `${data}.${sig}`;
+}
 
 /**
  * Middleware to verify Authentication Token
- * Expects header: Authorization: Bearer <token>
- * Token format: Base64(ID:USER:TIMESTAMP)
+ * Accepts HMAC-signed tokens (new) and legacy Base64 tokens (backward-compatible)
+ * Header: Authorization: Bearer <token>
  */
 function verifyToken(req, res, next) {
     // 1. Check Header
@@ -20,9 +37,27 @@ function verifyToken(req, res, next) {
     }
 
     try {
-        // 3. Decode Token
+        // Attempt HMAC-signed token first (new format: base64payload.signature)
+        if (token.includes('.')) {
+            const [data, sig] = token.split('.');
+            if (data && sig) {
+                const expectedSig = crypto.createHmac('sha256', TOKEN_SECRET).update(data).digest('hex');
+                // Timing-safe comparison to prevent timing attacks
+                if (sig.length === expectedSig.length &&
+                    crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'))) {
+                    const payload = JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
+                    if (Date.now() - payload.timestamp > TOKEN_TTL_MS) {
+                        logger.warn(`⛔ Expired HMAC token: ${payload.user}`);
+                        return res.status(401).json({ error: 'Sesión expirada. Por favor, inicia sesión de nuevo.' });
+                    }
+                    req.user = { id: payload.id, code: payload.user };
+                    return next();
+                }
+            }
+        }
+
+        // Fallback: Legacy Base64 token (backward-compatible for existing sessions)
         const decoded = Buffer.from(token, 'base64').toString('ascii');
-        // Expected format: ID:USER:TIMESTAMP
         const parts = decoded.split(':');
 
         if (parts.length < 3) {
@@ -31,18 +66,13 @@ function verifyToken(req, res, next) {
         }
 
         const [id, user, timestamp] = parts;
-
-        // 4. Check Expiry (24 hours)
         const tokenTime = parseInt(timestamp);
-        const now = Date.now();
-        const headers = 24 * 60 * 60 * 1000;
 
-        if (isNaN(tokenTime) || (now - tokenTime > headers)) {
-            logger.warn(`⛔ Expired token usage: ${user}`);
+        if (isNaN(tokenTime) || (Date.now() - tokenTime > TOKEN_TTL_MS)) {
+            logger.warn(`⛔ Expired legacy token: ${user}`);
             return res.status(401).json({ error: 'Sesión expirada. Por favor, inicia sesión de nuevo.' });
         }
 
-        // 5. Attach User to Request
         req.user = { id, code: user };
         next();
 
@@ -53,3 +83,4 @@ function verifyToken(req, res, next) {
 }
 
 module.exports = verifyToken;
+module.exports.signToken = signToken;

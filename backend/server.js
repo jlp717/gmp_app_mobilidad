@@ -15,6 +15,7 @@ const { globalLimiter } = require('./middleware/security');
 const { loadMetadataCache } = require('./services/metadataCache');
 const { preloadCache } = require('./services/cache-preloader');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
+const { setDeliveryStatusAvailable } = require('./utils/delivery-status-check');
 
 // ==================== OPTIMIZATION IMPORTS ====================
 const { initCache, getCacheStats } = require('./services/redis-cache');
@@ -36,13 +37,19 @@ const filtersRoutes = require('./routes/filters');
 const entregasRoutes = require('./routes/entregas');
 const repartidorRoutes = require('./routes/repartidor');
 const userActionsRoutes = require('./routes/user-actions');
+const facturasRoutes = require('./routes/facturas');
 
 const app = express();
 app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
 const PORT = process.env.PORT || 3334;
 
-// Middleware
-app.use(cors());
+// Middleware — Security
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || true, // Restrict in production via CORS_ORIGIN env var
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400 // Cache preflight for 24h
+}));
 app.use(helmet());
 app.use(compression());
 app.use(express.json({ limit: '10kb' }));
@@ -83,38 +90,7 @@ app.get('/api/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       mode: 'modular',
       security: 'enabled',
-      dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' },
-      endpoints: [
-        '/api/auth/login',
-        '/api/dashboard/metrics',
-        '/api/dashboard/sales-evolution',
-        '/api/dashboard/matrix-data',
-        '/api/dashboard/recent-sales',
-        '/api/clients',
-        '/api/clients/:code',
-        '/api/clients/:code/sales-history',
-        '/api/clients/compare',
-        '/api/router/calendar',
-        '/api/rutero/week',
-        '/api/rutero/day/:day',
-        '/api/rutero/client/:code/status',
-        '/api/rutero/client/:code/detail',
-        '/api/analytics/yoy-comparison',
-        '/api/analytics/top-clients',
-        '/api/analytics/top-products',
-        '/api/analytics/margins',
-        '/api/analytics/trends',
-        '/api/analytics/sales-history',
-        '/api/objectives',
-        '/api/objectives/matrix',
-        '/api/objectives/evolution',
-        '/api/objectives/by-client',
-        '/api/export/client-report',
-        '/api/chatbot/message',
-        '/api/products',
-        '/api/vendedores',
-        '/api/commissions/summary'
-      ]
+      dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' }
     });
   } catch (error) {
     res.status(500).json({ status: 'error', error: error.message });
@@ -140,10 +116,46 @@ app.use('/api/filters', filtersRoutes);
 app.use('/api/entregas', entregasRoutes);
 app.use('/api/repartidor', repartidorRoutes);
 app.use('/api/logs', userActionsRoutes);
+app.use('/api/facturas', facturasRoutes);
 
 // Start server
 async function startServer() {
   await initDb();
+
+  // Ensure Delivery Status Table Exists (Safe Strategy for DB2 i5/OS)
+  // NOTE: SYSIBM.SYSTABLES does not exist on i5/OS. Use direct SELECT to probe.
+  try {
+    // Try a lightweight probe query on the table itself
+    await query(`SELECT COUNT(*) as CNT FROM JAVIER.DELIVERY_STATUS`, false, false);
+    logger.info('✅ JAVIER.DELIVERY_STATUS table verified and ready.');    setDeliveryStatusAvailable(true);  } catch (probeErr) {
+    // Table likely doesn't exist (SQL0204) — attempt to create it
+    logger.warn(`⚠️ DELIVERY_STATUS probe failed (${probeErr.message}). Attempting to create table...`);
+    try {
+      await query(`
+            CREATE TABLE JAVIER.DELIVERY_STATUS (
+                ID VARCHAR(64) NOT NULL PRIMARY KEY,
+                STATUS VARCHAR(20) DEFAULT 'PENDIENTE',
+                OBSERVACIONES VARCHAR(512),
+                FIRMA_PATH VARCHAR(255),
+                LATITUD DECIMAL(10, 8),
+                LONGITUD DECIMAL(11, 8),
+                UPDATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
+                REPARTIDOR_ID VARCHAR(20)
+            )
+        `, false, false);
+      logger.info('✅ JAVIER.DELIVERY_STATUS table created successfully.');
+      setDeliveryStatusAvailable(true);
+    } catch (createErr) {
+      // Table might already exist (race condition) or we lack DDL permissions
+      if (createErr.message && createErr.message.includes('SQL0601')) {
+        logger.info('✅ JAVIER.DELIVERY_STATUS already exists (confirmed via SQL0601).');
+        setDeliveryStatusAvailable(true);
+      } else {
+        logger.error(`❌ Cannot create DELIVERY_STATUS table: ${createErr.message}`);
+        logger.warn('⚠️ Delivery status tracking will use in-memory fallback. Deliveries module will still work but status changes won\'t persist across restarts.');
+      }
+    }
+  }
 
   // Initialize Redis cache (non-blocking - works without Redis too)
   initCache()
@@ -153,10 +165,10 @@ async function startServer() {
   // Start server first so it's responsive
   app.listen(PORT, '0.0.0.0', () => {
     logger.info('═'.repeat(60));
-    logger.info(`  GMP Sales Analytics Server - http://192.168.1.238:${PORT}`);
+    logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);
     logger.info(`  Listening on ALL interfaces (0.0.0.0:${PORT})`);
     logger.info(`  Connected to DB2 via ODBC - Real Data`);
-    logger.info(`  Security: TOKEN AUTH ENFORCED 🔒`);
+    logger.info(`  Security: HMAC TOKEN AUTH 🔒`);
     logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
     logger.info('═'.repeat(60));
 
@@ -198,14 +210,18 @@ app.get('/api/optimization/query-stats', verifyToken, (req, res) => {
   }
 });
 
-startServer();
-
 // ==================== GLOBAL ERROR HANDLERS ====================
+// Global Error Middleware (must be registered BEFORE server starts listening)
+app.use((err, req, res, next) => {
+  logger.error(`❌ Global Middleware Error: ${err.message}`);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal Server Error', id: Date.now() });
+  }
+});
+
 // Prevent crashes from unhandled exceptions (like header errors)
 process.on('uncaughtException', (err) => {
   logger.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, { stack: err.stack });
-  // Keep alive if possible, but PM2 will restart if we exit. 
-  // For header errors, we can usually continue.
   if (err.code !== 'ERR_HTTP_HEADERS_SENT') {
     // process.exit(1); // Let PM2 restart for critical state corruption
   }
@@ -215,11 +231,5 @@ process.on('unhandledRejection', (reason, promise) => {
   logger.error(`🔥 UNHANDLED REJECTION: ${reason}`);
 });
 
-// Global Error Middleware (Last resort)
-app.use((err, req, res, next) => {
-  logger.error(`❌ Global Middleware Error: ${err.message}`);
-  if (!res.headersSent) {
-    res.status(500).json({ error: 'Internal Server Error', id: Date.now() });
-  }
-});
+startServer();
 

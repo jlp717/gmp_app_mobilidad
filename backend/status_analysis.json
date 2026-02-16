@@ -1,0 +1,118 @@
+{
+  "today": [
+    {
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "CNT": 436
+    },
+    {
+      "CONFORMADOSN": " ",
+      "SITUACIONALBARAN": "X",
+      "CNT": 62
+    },
+    {
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": " ",
+      "CNT": 1
+    }
+  ],
+  "history": [
+    {
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "CNT": 297
+    },
+    {
+      "CONFORMADOSN": " ",
+      "SITUACIONALBARAN": "X",
+      "CNT": 57
+    },
+    {
+      "CONFORMADOSN": " ",
+      "SITUACIONALBARAN": "R",
+      "CNT": 6
+    }
+  ],
+  "examples": [
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": " ",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    },
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    },
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    },
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    },
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    },
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    },
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    },
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    },
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    },
+    {
+      "NUMEROALBARAN": 999999,
+      "CONFORMADOSN": "S",
+      "SITUACIONALBARAN": "X",
+      "ESTADOORDENPREPARACION": " ",
+      "ENVIADOSN": " ",
+      "IMPRESOSN": " "
+    }
+  ]
+}

@@ -44,7 +44,23 @@ class _GlobalVendorSelectorState extends State<GlobalVendorSelector> {
       if (mounted) {
         setState(() {
           final rawList = response['vendedores'] ?? [];
-          _vendedores = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+          _vendedores = (rawList as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .where((v) {
+                final code = v['code']?.toString() ?? '';
+                final name = v['name']?.toString() ?? '';
+                if (code.isEmpty) return false;
+                // Filter out ZZ-prefixed obsolete entries
+                if (name.toUpperCase().startsWith('ZZ')) return false;
+                return true;
+              })
+              .toList();
+          // Sort by code ascending (numeric-aware)
+          _vendedores.sort((a, b) {
+            final codeA = a['code']?.toString() ?? '';
+            final codeB = b['code']?.toString() ?? '';
+            return codeA.compareTo(codeB);
+          });
           _isLoading = false;
         });
       }
@@ -121,11 +137,10 @@ class _GlobalVendorSelectorState extends State<GlobalVendorSelector> {
                               ..._vendedores.map((v) {
                                 final code = v['code']?.toString() ?? '';
                                 final name = v['name']?.toString() ?? '';
-                                // REMOVED (0) count as requested by User
-                                final displayName = name.isNotEmpty ? name : 'Vendedor $code';
+                                final displayName = name.isNotEmpty ? '$code - $name' : 'Vendedor $code';
                                 return DropdownMenuItem<String>(
                                   value: code,
-                                  child: Text(displayName, style: const TextStyle(color: Colors.white)),
+                                  child: Text(displayName, style: const TextStyle(color: Colors.white, fontSize: 12)),
                                 );
                               }),
                             ],
