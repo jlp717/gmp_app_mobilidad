@@ -1,105 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_config.dart';
+import '../../../core/models/estado_entrega.dart';
 
-/// Estados posibles de una entrega
-enum EstadoEntrega {
-  pendiente,
-  enRuta,
-  entregado,
-  parcial,
-  noEntregado,
-  rechazado,
-}
-
-extension EstadoEntregaExtension on EstadoEntrega {
-  String get value {
-    switch (this) {
-      case EstadoEntrega.pendiente:
-        return 'PENDIENTE';
-      case EstadoEntrega.enRuta:
-        return 'EN_RUTA';
-      case EstadoEntrega.entregado:
-        return 'ENTREGADO';
-      case EstadoEntrega.parcial:
-        return 'PARCIAL';
-      case EstadoEntrega.noEntregado:
-        return 'NO_ENTREGADO';
-      case EstadoEntrega.rechazado:
-        return 'RECHAZADO';
-    }
-  }
-
-  String get label {
-    switch (this) {
-      case EstadoEntrega.pendiente:
-        return 'Pendiente';
-      case EstadoEntrega.enRuta:
-        return 'En Ruta';
-      case EstadoEntrega.entregado:
-        return 'Entregado';
-      case EstadoEntrega.parcial:
-        return 'Parcial';
-      case EstadoEntrega.noEntregado:
-        return 'No Entregado';
-      case EstadoEntrega.rechazado:
-        return 'Rechazado';
-    }
-  }
-
-  Color get color {
-    switch (this) {
-      case EstadoEntrega.pendiente:
-        return Colors.orange;
-      case EstadoEntrega.enRuta:
-        return Colors.blue;
-      case EstadoEntrega.entregado:
-        return Colors.green;
-      case EstadoEntrega.parcial:
-        return Colors.amber;
-      case EstadoEntrega.noEntregado:
-        return Colors.red;
-      case EstadoEntrega.rechazado:
-        return Colors.red.shade900;
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case EstadoEntrega.pendiente:
-        return Icons.schedule;
-      case EstadoEntrega.enRuta:
-        return Icons.local_shipping;
-      case EstadoEntrega.entregado:
-        return Icons.check_circle;
-      case EstadoEntrega.parcial:
-        return Icons.pie_chart;
-      case EstadoEntrega.noEntregado:
-        return Icons.cancel;
-      case EstadoEntrega.rechazado:
-        return Icons.block;
-    }
-  }
-
-  static EstadoEntrega fromString(String value) {
-    switch (value.toUpperCase()) {
-      case 'PENDIENTE':
-        return EstadoEntrega.pendiente;
-      case 'EN_RUTA':
-        return EstadoEntrega.enRuta;
-      case 'ENTREGADO':
-        return EstadoEntrega.entregado;
-      case 'PARCIAL':
-        return EstadoEntrega.parcial;
-      case 'NO_ENTREGADO':
-        return EstadoEntrega.noEntregado;
-      case 'RECHAZADO':
-        return EstadoEntrega.rechazado;
-      default:
-        return EstadoEntrega.pendiente;
-    }
-  }
-}
+// Re-export so existing importers of this file still get EstadoEntrega
+export '../../../core/models/estado_entrega.dart';
 
 /// Item de un albarán (línea de producto)
 class EntregaItem {
@@ -130,12 +35,12 @@ class EntregaItem {
       itemId: json['itemId']?.toString() ?? '',
       codigoArticulo: json['codigoArticulo']?.toString() ?? '',
       descripcion: json['descripcion']?.toString() ?? '',
-      cantidadPedida: (json['cantidadPedida'] ?? json['QTY'] ?? 0).toDouble(),
+      cantidadPedida: ((json['cantidadPedida'] ?? json['QTY'] ?? 0) as num).toDouble(),
       unit: json['UNIT']?.toString() ?? json['unit']?.toString(), // Handle both cases
-      precioUnitario: (json['precioUnitario'] ?? json['PRICE'] ?? 0).toDouble(),
-      cantidadEntregada: (json['cantidadEntregada'] ?? 0).toDouble(),
-      estado: EstadoEntregaExtension.fromString(json['estado'] ?? 'PENDIENTE'),
-      observacion: json['observacion'],
+      precioUnitario: ((json['precioUnitario'] ?? json['PRICE'] ?? 0) as num).toDouble(),
+      cantidadEntregada: ((json['cantidadEntregada'] ?? 0) as num).toDouble(),
+      estado: EstadoEntrega.fromString((json['estado'] ?? 'PENDIENTE') as String),
+      observacion: json['observacion'] as String?,
     );
   }
 
@@ -220,11 +125,11 @@ class AlbaranEntrega {
   factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
     return AlbaranEntrega(
       id: json['id']?.toString() ?? '',
-      numeroAlbaran: json['numeroAlbaran'] ?? json['numero'] ?? 0,
-      ejercicio: json['ejercicio'] ?? DateTime.now().year,
+      numeroAlbaran: (json['numeroAlbaran'] ?? json['numero'] ?? 0) as int,
+      ejercicio: (json['ejercicio'] ?? DateTime.now().year) as int,
       serie: json['serie']?.toString() ?? '',
-      terminal: json['terminal'] ?? 0,
-      numeroFactura: json['numeroFactura'] ?? 0,
+      terminal: (json['terminal'] ?? 0) as int,
+      numeroFactura: (json['numeroFactura'] ?? 0) as int,
       serieFactura: json['serieFactura']?.toString() ?? '',
       codigoCliente: json['codigoCliente']?.toString() ?? '',
       nombreCliente: json['nombreCliente']?.toString() ?? 'Cliente',
@@ -234,11 +139,11 @@ class AlbaranEntrega {
       telefono2: json['telefono2']?.toString() ?? '',
       emailCliente: json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
       fecha: json['fecha']?.toString() ?? '',
-      importeTotal: (json['importe'] ?? json['importeTotal'] ?? 0).toDouble(),
+      importeTotal: ((json['importe'] ?? json['importeTotal'] ?? 0) as num).toDouble(),
       formaPago: json['formaPago']?.toString() ?? '',
       formaPagoDesc: json['formaPagoDesc']?.toString() ?? '',
       tipoPago: json['tipoPago']?.toString() ?? '',
-      diasPago: json['diasPago'] ?? 0,
+      diasPago: (json['diasPago'] ?? 0) as int,
       esCTR: json['esCTR'] == true,
       puedeCobrarse: json['puedeCobrarse'] == true,
       colorEstado: json['colorEstado']?.toString() ?? 'green',
@@ -246,14 +151,14 @@ class AlbaranEntrega {
       codigoVendedor: json['codigoVendedor']?.toString() ?? '',
       nombreVendedor: json['nombreVendedor']?.toString() ?? '',
       codigoRepartidor: json['codigoRepartidor']?.toString() ?? '',
-      estado: EstadoEntregaExtension.fromString(json['estado'] ?? 'PENDIENTE'),
+      estado: EstadoEntrega.fromString((json['estado'] ?? 'PENDIENTE') as String),
       items: (json['items'] as List<dynamic>?)
-              ?.map((e) => EntregaItem.fromJson(e))
+              ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      observaciones: json['observaciones'],
+      observaciones: json['observaciones'] as String?,
       fotos: (json['fotos'] as List<dynamic>?)?.cast<String>() ?? [],
-      firma: json['firma'],
+      firma: json['firma'] as String?,
       horaPrevista: _parseHoraPrevista(json['HORALLEGADA']),
     );
   }
@@ -437,18 +342,18 @@ class EntregasProvider extends ChangeNotifier {
 
       if (response['success'] == true) {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
-        _albaranes = lista.map((e) => AlbaranEntrega.fromJson(e)).toList();
+        _albaranes = lista.map((e) => AlbaranEntrega.fromJson(e as Map<String, dynamic>)).toList();
         
         // Parse resumen totals
         final resumen = response['resumen'] as Map<String, dynamic>? ?? {};
-        _resumenTotalBruto = (resumen['totalBruto'] ?? 0).toDouble();
-        _resumenTotalACobrar = (resumen['totalACobrar'] ?? 0).toDouble();
-        _resumenTotalOpcional = (resumen['totalOpcional'] ?? 0).toDouble();
+        _resumenTotalBruto = ((resumen['totalBruto'] ?? 0) as num).toDouble();
+        _resumenTotalACobrar = ((resumen['totalACobrar'] ?? 0) as num).toDouble();
+        _resumenTotalOpcional = ((resumen['totalOpcional'] ?? 0) as num).toDouble();
         _resumenCompletedCount = (resumen['completedCount'] ?? 0) as int;
         
         print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada, completed=$_resumenCompletedCount');
       } else {
-        _error = response['error'] ?? 'Error cargando entregas';
+        _error = (response['error'] ?? 'Error cargando entregas') as String;
       }
     } catch (e) {
       _error = 'Error de conexión: $e';
@@ -486,7 +391,7 @@ class EntregasProvider extends ChangeNotifier {
       print('[ENTREGAS_PROVIDER] Albaran detail response: success=${response['success']}');
       
       if (response['success'] == true && response['albaran'] != null) {
-        _albaranSeleccionado = AlbaranEntrega.fromJson(response['albaran']);
+        _albaranSeleccionado = AlbaranEntrega.fromJson(response['albaran'] as Map<String, dynamic>);
         print('[ENTREGAS_PROVIDER] Parsed albaran with ${_albaranSeleccionado?.items.length ?? 0} items');
         notifyListeners();
         return _albaranSeleccionado;
@@ -528,7 +433,7 @@ class EntregasProvider extends ChangeNotifier {
            'nombre': nombre,
         });
         if (res['success'] == true) {
-           firmaPath = res['path'];
+           firmaPath = res['path'] as String?;
            print('[ENTREGAS_PROVIDER] Signature saved: $firmaPath');
         }
       } catch (e) {
@@ -691,7 +596,7 @@ class EntregasProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       } else {
-        _error = response['error'] ?? 'Error desconocido';
+        _error = (response['error'] ?? 'Error desconocido') as String;
         notifyListeners();
         return false;
       }

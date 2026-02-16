@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 class KPICard extends StatelessWidget {
   final String title;
@@ -26,10 +27,10 @@ class KPICard extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: AppColors.surface,
+      color: AppColors.surfaceColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppColors.surfaceHighlight.withOpacity(0.5)),
+        side: BorderSide(color: AppColors.cardColor.withOpacity(0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),

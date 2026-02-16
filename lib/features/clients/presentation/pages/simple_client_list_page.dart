@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../data/clients_service.dart';
 import '../../../objectives/presentation/pages/enhanced_client_matrix_page.dart';
 
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
@@ -83,27 +82,13 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
          codesToPass = widget.employeeCode;
       }
 
-      final params = <String, dynamic>{
-        'limit': '1000',
-      };
-      if (codesToPass != null && codesToPass.isNotEmpty) {
-         params['vendedorCodes'] = codesToPass;
-      }
-      
-      if (query != null && query.isNotEmpty) {
-        params['search'] = query;
-      }
-
-      final response = await ApiClient.get(
-        ApiConfig.clientsList,
-        queryParameters: params,
-        cacheKey: 'clients_list_${codesToPass ?? "ALL"}_${query ?? ''}',
-        cacheTTL: const Duration(minutes: 5), // Short cache for list
+      final results = await ClientsService.getClientsList(
+        vendedorCodes: codesToPass,
+        search: query,
       );
 
       setState(() {
-        final rawList = response['clients'] ?? [];
-        _clients = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        _clients = results;
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
@@ -156,11 +141,11 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
               ),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
-              title: Text(p['number'] ?? ''),
-              subtitle: Text(p['type'] ?? 'Teléfono'),
+              title: Text((p['number'] as String?) ?? ''),
+              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
               onTap: () {
                 Navigator.pop(ctx);
-                _launchWhatsApp(p['number'] ?? '');
+                _launchWhatsApp((p['number'] as String?) ?? '');
               },
             )),
             const Divider(),
@@ -419,14 +404,14 @@ class _ClientCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = client['name'] ?? 'Sin nombre';
-    final code = client['code'] ?? '';
-    final city = client['city'] ?? '';
-    final phone = client['phone'] ?? '';
-    final route = client['route'] ?? '';
+    final name = (client['name'] as String?) ?? 'Sin nombre';
+    final code = (client['code'] as String?) ?? '';
+    final city = (client['city'] as String?) ?? '';
+    final phone = (client['phone'] as String?) ?? '';
+    final route = (client['route'] as String?) ?? '';
     final totalPurchases = (client['totalPurchases'] as num?)?.toDouble() ?? 0;
-    final numOrders = client['numOrders'] ?? 0;
-    final lastPurchase = client['lastPurchase'] ?? '';
+    final numOrders = (client['numOrders'] as int?) ?? 0;
+    final lastPurchase = (client['lastPurchase'] as String?) ?? '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),

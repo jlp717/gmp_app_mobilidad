@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/utils/currency_formatter.dart';
-import '../../data/repartidor_commission_service.dart';
+import '../../../../core/widgets/error_state_widget.dart';
 import '../../data/repartidor_data_service.dart';
 
 /// Página de comisiones para repartidores
@@ -139,22 +139,9 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
     if (_error != null && _clientData.isEmpty) {
       return Scaffold(
         backgroundColor: AppTheme.darkBase,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: AppTheme.error),
-              const SizedBox(height: 16),
-              Text(_error!, style: const TextStyle(color: AppTheme.textSecondary)),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _loadData,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reintentar'),
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonGreen),
-              ),
-            ],
-          ),
+        body: ErrorStateWidget(
+          message: _error!,
+          onRetry: _loadData,
         ),
       );
     }

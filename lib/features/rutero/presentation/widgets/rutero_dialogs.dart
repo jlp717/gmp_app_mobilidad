@@ -203,7 +203,7 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
       
       if (mounted) {
         setState(() {
-          _totalClients = response['count'] ?? 0;
+          _totalClients = (response['count'] as int?) ?? 0;
           _isLoading = false;
         });
       }

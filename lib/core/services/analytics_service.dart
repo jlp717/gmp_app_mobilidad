@@ -45,7 +45,7 @@ class AnalyticsService {
     if (_installLogged) return;
     
     try {
-      await ApiClient.instance.post('/logs/app-install', data: {
+      await ApiClient.post('/logs/app-install', {
         'userId': _userId,
         'userEmail': _userEmail,
         'appVersion': _appVersion,
@@ -66,7 +66,7 @@ class AnalyticsService {
     if (_userId == null) return; // Not logged in yet
     
     try {
-      await ApiClient.instance.post('/logs/user-action', data: {
+      await ApiClient.post('/logs/user-action', {
         'userId': _userId,
         'userEmail': _userEmail,
         'action': action,

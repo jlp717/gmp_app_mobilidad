@@ -99,7 +99,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _clientData['client']?['razonSocial'] ?? widget.clientName,
+              (_clientData['client']?['razonSocial'] as String?) ?? widget.clientName,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -192,9 +192,9 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   Widget _buildSummaryTab() {
     final totals = _clientData['totals'] as Map<String, dynamic>? ?? {};
     final monthlyData =
-        List<Map<String, dynamic>>.from(_clientData['monthlyData'] ?? []);
+        List<Map<String, dynamic>>.from((_clientData['monthlyData'] as List?) ?? []);
     final yearlyTotals =
-        List<Map<String, dynamic>>.from(_clientData['yearlyTotals'] ?? []);
+        List<Map<String, dynamic>>.from((_clientData['yearlyTotals'] as List?) ?? []);
     final freq = _clientData['purchaseFrequency'] as Map<String, dynamic>? ?? {};
 
     return RefreshIndicator(
@@ -307,7 +307,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     Text(
-                      totals['currentYearFormatted'] ?? '0 €',
+                      (totals['currentYearFormatted'] as String?) ?? '0 €',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -335,9 +335,9 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatColumn('Año Anterior', isNew ? 'Sin ventas' : (totals['lastYearFormatted'] ?? '0 €')),
+              _buildStatColumn('Año Anterior', isNew ? 'Sin ventas' : ((totals['lastYearFormatted'] as String?) ?? '0 €')),
               _buildStatColumn(
-                  'Promedio Mensual', totals['monthlyAverageFormatted'] ?? '0 €'),
+                  'Promedio Mensual', (totals['monthlyAverageFormatted'] as String?) ?? '0 €'),
             ],
           ),
         ],
@@ -381,7 +381,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                     ? month['currentYear']
                     : month['lastYear'];
                 return BarTooltipItem(
-                  '${rodIndex == 0 ? _selectedYear : _selectedYear - 1}\n${CurrencyFormatter.formatWhole(value)}',
+                  '${rodIndex == 0 ? _selectedYear : _selectedYear - 1}\n${CurrencyFormatter.formatWhole((value as num?)?.toDouble() ?? 0)}',
                   const TextStyle(color: Colors.white, fontSize: 11),
                 );
               },
@@ -397,7 +397,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                     return Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        monthlyData[value.toInt()]['monthName'] ?? '',
+                        (monthlyData[value.toInt()]['monthName'] as String?) ?? '',
                         style: const TextStyle(fontSize: 9),
                       ),
                     );
@@ -533,7 +533,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  month['currentYearFormatted'] ?? '0 €',
+                  (month['currentYearFormatted'] as String?) ?? '0 €',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Container(
@@ -582,7 +582,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        y['totalSalesFormatted'] ?? '0 €',
+                        (y['totalSalesFormatted'] as String?) ?? '0 €',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       Text(
@@ -653,7 +653,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   // ==================== PURCHASES TAB ====================
   Widget _buildPurchasesTab() {
     final purchases =
-        List<Map<String, dynamic>>.from(_clientData['productPurchases'] ?? []);
+        List<Map<String, dynamic>>.from((_clientData['productPurchases'] as List?) ?? []);
 
     return Column(
       children: [
@@ -686,7 +686,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                       child: ListTile(
                         dense: true,
                         title: Text(
-                          p['productName'] ?? 'Sin nombre',
+                          (p['productName'] as String?) ?? 'Sin nombre',
                           style: const TextStyle(fontWeight: FontWeight.w500),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -709,7 +709,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              p['totalFormatted'] ?? '0 €',
+                              (p['totalFormatted'] as String?) ?? '0 €',
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             Text(
@@ -747,7 +747,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   // ==================== PRODUCTS TAB ====================
   Widget _buildProductsTab() {
     final topProducts =
-        List<Map<String, dynamic>>.from(_clientData['topProducts'] ?? []);
+        List<Map<String, dynamic>>.from((_clientData['topProducts'] as List?) ?? []);
 
     if (topProducts.isEmpty) {
       return const Center(child: Text('No hay productos'));
@@ -779,7 +779,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        p['name'] ?? 'Sin nombre',
+                        (p['name'] as String?) ?? 'Sin nombre',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -799,7 +799,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      p['totalSalesFormatted'] ?? '0 €',
+                      (p['totalSalesFormatted'] as String?) ?? '0 €',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,

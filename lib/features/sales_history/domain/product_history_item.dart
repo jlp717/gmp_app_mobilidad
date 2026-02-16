@@ -29,18 +29,18 @@ class ProductHistoryItem {
 
   factory ProductHistoryItem.fromJson(Map<String, dynamic> json) {
     return ProductHistoryItem(
-      date: json['date'] ?? '',
-      year: json['year'] ?? 0,
-      month: json['month'] ?? 0,
-      clientCode: json['clientCode'] ?? '',
-      productCode: json['productCode'] ?? '',
-      productName: json['productName'] ?? '',
-      price: json['price'] ?? '0.00€',
+      date: (json['date'] as String?) ?? '',
+      year: (json['year'] as int?) ?? 0,
+      month: (json['month'] as int?) ?? 0,
+      clientCode: (json['clientCode'] as String?) ?? '',
+      productCode: (json['productCode'] as String?) ?? '',
+      productName: (json['productName'] as String?) ?? '',
+      price: (json['price'] as String?) ?? '0.00€',
       quantity: (json['quantity'] as num?)?.toDouble() ?? 0.0,
-      total: json['total'] ?? '0.00€',
-      lote: json['lote'] ?? '',
-      ref: json['ref'] ?? '',
-      invoice: json['invoice'] ?? '',
+      total: (json['total'] as String?) ?? '0.00€',
+      lote: (json['lote'] as String?) ?? '',
+      ref: (json['ref'] as String?) ?? '',
+      invoice: (json['invoice'] as String?) ?? '',
     );
   }
 }

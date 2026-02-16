@@ -56,6 +56,35 @@ const LAC_SERIEALBARAN_FILTER = `L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')`;
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
+
+/**
+ * Sanitize a value for safe SQL interpolation.
+ * Only allows alphanumeric chars, spaces, dots, hyphens, underscores.
+ * Use this when parameterized queries are not possible (legacy routes).
+ * @param {string} value - The value to sanitize
+ * @returns {string} Sanitized value safe for SQL
+ */
+function sanitizeForSQL(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).replace(/[^a-zA-Z0-9\s.\-_áéíóúÁÉÍÓÚñÑ]/g, '');
+}
+
+/**
+ * Sanitize a comma-separated list of codes for SQL IN clauses.
+ * Returns "'code1','code2'" format, with each code sanitized.
+ * @param {string} codeString - Comma-separated codes
+ * @returns {string} Sanitized SQL-safe IN-clause string
+ */
+function sanitizeCodeList(codeString) {
+    if (!codeString) return '';
+    return codeString
+        .split(',')
+        .map(c => c.trim())
+        .filter(c => /^[a-zA-Z0-9]+$/.test(c))
+        .map(c => `'${c}'`)
+        .join(',');
+}
+
 function formatCurrency(value) {
     // Returns raw number - formatting done in Flutter frontend with Spanish locale
     return parseFloat(value) || 0;
@@ -68,8 +97,12 @@ function buildVendedorFilter(vendedorCodes, tableAlias = '') {
     const codeList = vendedorCodes.split(',').map(c => c.trim());
     const hasUnk = codeList.includes('UNK');
 
-    // Filter out UNK from standard list
-    const validCodes = codeList.filter(c => c !== 'UNK').map(c => `'${c}'`).join(',');
+    // SECURITY FIX: Sanitize vendor codes - only allow alphanumeric characters
+    const validCodes = codeList
+        .filter(c => c !== 'UNK')
+        .filter(c => /^[a-zA-Z0-9]+$/.test(c))
+        .map(c => `'${c}'`)
+        .join(',');
 
     logger.info(`[FILTER] Codes: ${vendedorCodes} | Valid: ${validCodes} | HasUnk: ${hasUnk}`);
 
@@ -102,7 +135,12 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
     const codeList = vendedorCodes.split(',').map(c => c.trim());
     const hasUnk = codeList.includes('UNK');
 
-    const validCodes = codeList.filter(c => c !== 'UNK').map(c => `'${c}'`).join(',');
+    // SECURITY FIX: Sanitize vendor codes - only allow alphanumeric characters
+    const validCodes = codeList
+        .filter(c => c !== 'UNK')
+        .filter(c => /^[a-zA-Z0-9]+$/.test(c))
+        .map(c => `'${c}'`)
+        .join(',');
 
     const conditions = [];
     if (validCodes.length > 0) {
@@ -183,6 +221,8 @@ module.exports = {
     buildDateFilter,
     getVendorName, // Added Export
     getBSales, // Shared B-sales lookup
+    sanitizeForSQL,
+    sanitizeCodeList,
 
     // Helper to calculate working days (Mon-Fri + Sat/Sun if active)
     calculateWorkingDays: (year, month, activeWeekDays = []) => {

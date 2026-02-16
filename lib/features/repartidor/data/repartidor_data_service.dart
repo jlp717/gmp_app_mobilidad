@@ -34,19 +34,19 @@ class CollectionsSummary {
   factory CollectionsSummary.fromJson(Map<String, dynamic> json) {
     final summary = Map<String, dynamic>.from((json['summary'] as Map?) ?? {});
     final clientsList = (json['clients'] as List? ?? [])
-        .map((c) => ClientCollectionData.fromJson(c))
+        .map((c) => ClientCollectionData.fromJson(c as Map<String, dynamic>))
         .toList();
     
     return CollectionsSummary(
-      repartidorId: json['repartidorId'] ?? '',
-      year: json['period']?['year'] ?? DateTime.now().year,
-      month: json['period']?['month'] ?? DateTime.now().month,
-      totalCollectable: (summary['totalCollectable'] ?? 0).toDouble(),
-      totalCollected: (summary['totalCollected'] ?? 0).toDouble(),
-      totalCommission: (summary['totalCommission'] ?? 0).toDouble(),
-      overallPercentage: (summary['overallPercentage'] ?? 0).toDouble(),
-      thresholdMet: summary['thresholdMet'] ?? false,
-      clientCount: summary['clientCount'] ?? 0,
+      repartidorId: (json['repartidorId'] as String?) ?? '',
+      year: (json['period']?['year'] as int?) ?? DateTime.now().year,
+      month: (json['period']?['month'] as int?) ?? DateTime.now().month,
+      totalCollectable: ((summary['totalCollectable'] ?? 0) as num).toDouble(),
+      totalCollected: ((summary['totalCollected'] ?? 0) as num).toDouble(),
+      totalCommission: ((summary['totalCommission'] ?? 0) as num).toDouble(),
+      overallPercentage: ((summary['overallPercentage'] ?? 0) as num).toDouble(),
+      thresholdMet: (summary['thresholdMet'] as bool?) ?? false,
+      clientCount: (summary['clientCount'] as int?) ?? 0,
       clients: clientsList,
     );
   }
@@ -82,17 +82,17 @@ class ClientCollectionData {
 
   factory ClientCollectionData.fromJson(Map<String, dynamic> json) {
     return ClientCollectionData(
-      clientId: json['clientId'] ?? '',
-      clientName: json['clientName'] ?? json['clientId'] ?? '',
-      collectable: (json['collectable'] ?? 0).toDouble(),
-      collected: (json['collected'] ?? 0).toDouble(),
-      percentage: (json['percentage'] ?? 0).toDouble(),
-      thresholdMet: json['thresholdMet'] ?? false,
-      thresholdProgress: (json['thresholdProgress'] ?? 0).toDouble(),
-      commission: (json['commission'] ?? 0).toDouble(),
-      tier: json['tier'] ?? 0,
-      paymentType: json['paymentType'] ?? 'Otro',
-      numDocuments: json['numDocuments'] ?? 0,
+      clientId: (json['clientId'] as String?) ?? '',
+      clientName: (json['clientName'] as String?) ?? (json['clientId'] as String?) ?? '',
+      collectable: ((json['collectable'] ?? 0) as num).toDouble(),
+      collected: ((json['collected'] ?? 0) as num).toDouble(),
+      percentage: ((json['percentage'] ?? 0) as num).toDouble(),
+      thresholdMet: (json['thresholdMet'] as bool?) ?? false,
+      thresholdProgress: ((json['thresholdProgress'] ?? 0) as num).toDouble(),
+      commission: ((json['commission'] ?? 0) as num).toDouble(),
+      tier: (json['tier'] as int?) ?? 0,
+      paymentType: (json['paymentType'] as String?) ?? 'Otro',
+      numDocuments: (json['numDocuments'] as int?) ?? 0,
     );
   }
 }
@@ -113,10 +113,10 @@ class DailyCollection {
 
   factory DailyCollection.fromJson(Map<String, dynamic> json) {
     return DailyCollection(
-      day: json['day'] ?? 0,
-      date: json['date'] ?? '',
-      collectable: (json['collectable'] ?? 0).toDouble(),
-      collected: (json['collected'] ?? 0).toDouble(),
+      day: (json['day'] as int?) ?? 0,
+      date: (json['date'] as String?) ?? '',
+      collectable: ((json['collectable'] ?? 0) as num).toDouble(),
+      collected: ((json['collected'] ?? 0) as num).toDouble(),
     );
   }
 }
@@ -145,14 +145,14 @@ class HistoryClient {
 
   factory HistoryClient.fromJson(Map<String, dynamic> json) {
     return HistoryClient(
-      id: json['id'] ?? '',
-      name: json['name'] ?? json['id'] ?? '',
-      address: json['address'] ?? '',
-      totalDocuments: json['totalDocuments'] ?? 0,
-      totalAmount: (json['totalAmount'] ?? 0).toDouble(),
-      lastVisit: json['lastVisit'],
-      repCode: json['repCode'],
-      repName: json['repName'],
+      id: (json['id'] as String?) ?? '',
+      name: (json['name'] as String?) ?? (json['id'] as String?) ?? '',
+      address: (json['address'] as String?) ?? '',
+      totalDocuments: (json['totalDocuments'] as int?) ?? 0,
+      totalAmount: ((json['totalAmount'] ?? 0) as num).toDouble(),
+      lastVisit: json['lastVisit'] as String?,
+      repCode: json['repCode'] as String?,
+      repName: json['repName'] as String?,
     );
   }
 }
@@ -212,29 +212,29 @@ class HistoryDocument {
 
   factory HistoryDocument.fromJson(Map<String, dynamic> json) {
     return HistoryDocument(
-      id: json['id'] ?? '',
-      type: json['type'] ?? 'albaran',
-      number: json['number'] ?? 0,
-      albaranNumber: json['albaranNumber'],
-      facturaNumber: json['facturaNumber'],
-      serieFactura: json['serieFactura'],
-      ejercicioFactura: json['ejercicioFactura'],
-      serie: json['serie'] ?? 'A',
-      ejercicio: json['ejercicio'] ?? 0,
-      terminal: json['terminal'] ?? 0,
-      date: json['date'] ?? '',
-      amount: (json['amount'] ?? 0).toDouble(),
-      pending: (json['pending'] ?? 0).toDouble(),
-      status: json['status'] ?? 'notDelivered',
-      hasSignature: json['hasSignature'] ?? false,
-      signaturePath: json['signaturePath'],
-      deliveryDate: json['deliveryDate'],
-      deliveryRepartidor: json['deliveryRepartidor'],
-      deliveryObs: json['deliveryObs'],
-      time: json['time'],
-      legacySignatureName: json['legacySignatureName'],
-      hasLegacySignature: json['hasLegacySignature'] ?? false,
-      legacyDate: json['legacyDate'],
+      id: (json['id'] as String?) ?? '',
+      type: (json['type'] as String?) ?? 'albaran',
+      number: (json['number'] as int?) ?? 0,
+      albaranNumber: json['albaranNumber'] as int?,
+      facturaNumber: json['facturaNumber'] as int?,
+      serieFactura: json['serieFactura'] as String?,
+      ejercicioFactura: json['ejercicioFactura'] as int?,
+      serie: (json['serie'] as String?) ?? 'A',
+      ejercicio: (json['ejercicio'] as int?) ?? 0,
+      terminal: (json['terminal'] as int?) ?? 0,
+      date: (json['date'] as String?) ?? '',
+      amount: ((json['amount'] ?? 0) as num).toDouble(),
+      pending: ((json['pending'] ?? 0) as num).toDouble(),
+      status: (json['status'] as String?) ?? 'notDelivered',
+      hasSignature: (json['hasSignature'] as bool?) ?? false,
+      signaturePath: json['signaturePath'] as String?,
+      deliveryDate: json['deliveryDate'] as String?,
+      deliveryRepartidor: json['deliveryRepartidor'] as String?,
+      deliveryObs: json['deliveryObs'] as String?,
+      time: json['time'] as String?,
+      legacySignatureName: json['legacySignatureName'] as String?,
+      hasLegacySignature: (json['hasLegacySignature'] as bool?) ?? false,
+      legacyDate: json['legacyDate'] as String?,
     );
   }
 }
@@ -261,15 +261,49 @@ class MonthlyObjective {
 
   factory MonthlyObjective.fromJson(Map<String, dynamic> json) {
     return MonthlyObjective(
-      month: json['month'] ?? '',
-      year: json['year'] ?? DateTime.now().year,
-      monthNum: json['monthNum'] ?? 1,
-      collectable: (json['collectable'] ?? 0).toDouble(),
-      collected: (json['collected'] ?? 0).toDouble(),
-      percentage: (json['percentage'] ?? 0).toDouble(),
-      thresholdMet: json['thresholdMet'] ?? false,
+      month: (json['month'] as String?) ?? '',
+      year: (json['year'] as int?) ?? DateTime.now().year,
+      monthNum: (json['monthNum'] as int?) ?? 1,
+      collectable: ((json['collectable'] ?? 0) as num).toDouble(),
+      collected: ((json['collected'] ?? 0) as num).toDouble(),
+      percentage: ((json['percentage'] ?? 0) as num).toDouble(),
+      thresholdMet: (json['thresholdMet'] as bool?) ?? false,
     );
   }
+}
+
+/// Resultado del cálculo de comisión
+class CommissionResult {
+  final double collectable;
+  final double collected;
+  final double percentageCollected;
+  final bool thresholdMet;
+  final double thresholdProgress;
+  final int currentTier;
+  final double commissionEarned;
+  final String tierLabel;
+
+  const CommissionResult({
+    required this.collectable,
+    required this.collected,
+    required this.percentageCollected,
+    required this.thresholdMet,
+    required this.thresholdProgress,
+    required this.currentTier,
+    required this.commissionEarned,
+    required this.tierLabel,
+  });
+
+  factory CommissionResult.empty() => const CommissionResult(
+    collectable: 0.0,
+    collected: 0.0,
+    percentageCollected: 0.0,
+    thresholdMet: false,
+    thresholdProgress: 0.0,
+    currentTier: 0,
+    commissionEarned: 0.0,
+    tierLabel: 'Sin cobros',
+  );
 }
 
 /// Servicio de datos para repartidor
@@ -323,7 +357,7 @@ class RepartidorDataService {
       );
       
       final dailyList = (response['daily'] as List? ?? [])
-          .map((d) => DailyCollection.fromJson(d))
+          .map((d) => DailyCollection.fromJson(d as Map<String, dynamic>))
           .toList();
           
       return dailyList;
@@ -354,7 +388,7 @@ class RepartidorDataService {
       );
       
       final clients = (response['clients'] as List? ?? [])
-          .map((c) => HistoryClient.fromJson(Map<String, dynamic>.from(c)))
+          .map((c) => HistoryClient.fromJson(Map<String, dynamic>.from(c as Map)))
           .toList();
           
       return clients;
@@ -391,7 +425,7 @@ class RepartidorDataService {
       );
       
       final docs = (response['documents'] as List? ?? [])
-          .map((d) => HistoryDocument.fromJson(Map<String, dynamic>.from(d)))
+          .map((d) => HistoryDocument.fromJson(Map<String, dynamic>.from(d as Map)))
           .toList();
           
       return docs;
@@ -421,7 +455,7 @@ class RepartidorDataService {
       );
       
       final objectives = (response['objectives'] as List? ?? [])
-          .map((o) => MonthlyObjective.fromJson(o))
+          .map((o) => MonthlyObjective.fromJson(o as Map<String, dynamic>))
           .toList();
           
       return objectives;
@@ -551,6 +585,54 @@ class RepartidorDataService {
       return response;
     } catch (e) {
       return {'summary': {}, 'daily': []};
+    }
+  }
+
+  /// Enviar documento por email (Server-side)
+  static Future<Map<String, dynamic>> sendEmail({
+    required int year,
+    required String serie,
+    required int number,
+    required String type, // 'factura' o 'albaran'
+    required String destinatario,
+    int terminal = 0,
+    String? asunto,
+    String? cuerpo,
+    // Factura specific
+    int? facturaNumber,
+    String? serieFactura,
+    int? ejercicioFactura,
+    // Albaran specific
+    int? albaranNumber,
+    String? albaranSerie,
+    int? albaranTerminal,
+    int? albaranYear,
+  }) async {
+    try {
+      final response = await ApiClient.post('/repartidor/document/send-email', {
+        'year': year,
+        'serie': serie,
+        'number': number,
+        'type': type,
+        'destinatario': destinatario,
+        'terminal': terminal,
+        'asunto': asunto,
+        'cuerpo': cuerpo,
+        'facturaNumber': facturaNumber,
+        'serieFactura': serieFactura,
+        'ejercicioFactura': ejercicioFactura,
+        'albaranNumber': albaranNumber,
+        'albaranSerie': albaranSerie,
+        'albaranTerminal': albaranTerminal,
+        'albaranYear': albaranYear,
+      });
+
+      if (response['success'] == true) {
+        return response;
+      }
+      throw Exception(response['error'] ?? 'Error enviando email');
+    } catch (e) {
+      throw Exception('Error enviando email: $e');
     }
   }
 }

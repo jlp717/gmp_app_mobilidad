@@ -53,15 +53,15 @@ class UserModel extends Equatable {
     return UserModel(
       id: json['id'].toString(),
       code: json['code']?.toString() ?? '',
-      name: json['name'] ?? '',
-      company: json['company'] ?? 'GMP',
-      delegation: json['delegation'],
-      vendedorCode: json['vendedorCode'],
+      name: (json['name'] as String?) ?? '',
+      company: (json['company'] as String?) ?? 'GMP',
+      delegation: json['delegation'] as String?,
+      vendedorCode: json['vendedorCode'] as String?,
       isJefeVentas: _parseBool(json['isJefeVentas']),
-      tipoVendedor: json['tipoVendedor'],
-      role: json['role'] ?? 'COMERCIAL',
-      codigoConductor: json['codigoConductor'],
-      showCommissions: json['showCommissions'] ?? true, // Parse logic
+      tipoVendedor: json['tipoVendedor'] as String?,
+      role: (json['role'] as String?) ?? 'COMERCIAL',
+      codigoConductor: json['codigoConductor'] as String?,
+      showCommissions: (json['showCommissions'] as bool?) ?? true,
     );
   }
 

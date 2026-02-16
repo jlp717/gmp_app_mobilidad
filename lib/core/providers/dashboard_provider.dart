@@ -5,7 +5,7 @@ import '../models/dashboard_models.dart';
 
 /// Dashboard data provider with date filtering
 class DashboardProvider with ChangeNotifier {
-  final List<String> vendedorCodes;
+  List<String> vendedorCodes;
   final bool isJefeVentas;
   
   int _selectedYear;
@@ -41,6 +41,14 @@ class DashboardProvider with ChangeNotifier {
   int get selectedMonth => _selectedMonth;
 
   bool get hasData => _metrics != null || _recentSales.isNotEmpty || _salesEvolution.isNotEmpty;
+
+  /// Update vendor codes and refresh (called when FilterProvider changes)
+  void updateVendedorCodes(List<String> newCodes) {
+    if (newCodes.join(',') != vendedorCodes.join(',')) {
+      vendedorCodes = newCodes;
+      fetchDashboardData();
+    }
+  }
 
   /// Update date filter and refresh
   void updateDateFilter(int year, int month) {

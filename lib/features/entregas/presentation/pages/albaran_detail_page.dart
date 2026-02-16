@@ -940,9 +940,9 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
         return;
       }
 
-      final Uint8List bytes = base64Decode(result['pdfBase64']);
+      final Uint8List bytes = base64Decode(result['pdfBase64'] as String);
       final dir = await getTemporaryDirectory();
-      final fileName = result['fileName'] ?? 'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
+      final fileName = (result['fileName'] as String?) ?? 'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
@@ -982,9 +982,9 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
         return;
       }
 
-      final Uint8List bytes = base64Decode(result['pdfBase64']);
+      final Uint8List bytes = base64Decode(result['pdfBase64'] as String);
       final dir = await getTemporaryDirectory();
-      final fileName = result['fileName'] ?? 'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
+      final fileName = (result['fileName'] as String?) ?? 'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes(bytes);
 

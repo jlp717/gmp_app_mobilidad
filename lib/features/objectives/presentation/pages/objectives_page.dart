@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
+import '../../data/objectives_service.dart';
 import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import 'enhanced_client_matrix_page.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
+import '../../../../core/widgets/error_state_widget.dart';
 
 /// Objectives Page - Track sales goals with multi-select filters
 class ObjectivesPage extends StatefulWidget {
@@ -84,9 +84,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
   
   Future<void> _loadPopulations() async {
     try {
-      final res = await ApiClient.getList('/objectives/populations');
+      final res = await ObjectivesService.getPopulations();
       setState(() {
-        _populations = res.map((e) => e.toString()).toList();
+        _populations = res;
       });
     } catch (e) {
       debugPrint('Error loading populations: $e');
@@ -119,27 +119,21 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
 
     try {
       // Load evolution data for selected years
-      final evolutionRes = await ApiClient.get(
-        ApiConfig.objectivesEvolution,
-        queryParameters: {
-          'vendedorCodes': _activeVendedorCode,
-          'years': _selectedYears.join(','),
-        },
+      final evolutionRes = await ObjectivesService.getEvolution(
+        vendedorCodes: _activeVendedorCode,
+        years: _selectedYears.toList(),
       );
-      
+
       // Load by-client objectives for selected periods
-      final clientsRes = await ApiClient.get(
-        ApiConfig.objectivesByClient,
-        queryParameters: {
-          'vendedorCodes': _activeVendedorCode,
-          'years': _selectedYears.join(','),
-          'months': _selectedMonths.join(','),
-          'limit': '100', // Increased limit for filtered views
-          if (_selectedPopulation != null) 'city': _selectedPopulation,
-          if (_clientCodeFilter.isNotEmpty) 'code': _clientCodeFilter,
-          if (_nifFilter.isNotEmpty) 'nif': _nifFilter,
-          if (_clientSearchQuery.isNotEmpty) 'name': _clientSearchQuery, // Backend search by name
-        },
+      final clientsRes = await ObjectivesService.getByClient(
+        vendedorCodes: _activeVendedorCode,
+        years: _selectedYears.toList(),
+        months: _selectedMonths.toList(),
+        city: _selectedPopulation,
+        code: _clientCodeFilter.isNotEmpty ? _clientCodeFilter : null,
+        nif: _nifFilter.isNotEmpty ? _nifFilter : null,
+        name: _clientSearchQuery.isNotEmpty ? _clientSearchQuery : null,
+        limit: 100,
       );
       
       // Parse new backend format: yearlyData
@@ -849,17 +843,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
   }
 
   Widget _buildError() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, size: 48, color: AppTheme.error),
-          const SizedBox(height: 16),
-          Text('Error: $_error', textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          ElevatedButton(onPressed: _loadData, child: const Text('Reintentar')),
-        ],
-      ),
+    return ErrorStateWidget(
+      message: 'Error: $_error',
+      onRetry: _loadData,
     );
   }
 
@@ -2199,8 +2185,8 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                   context,
                   MaterialPageRoute(
                     builder: (context) => EnhancedClientMatrixPage(
-                      clientCode: client['code'],
-                      clientName: client['name'] ?? 'Cliente',
+                      clientCode: (client['code'] as String?) ?? '',
+                      clientName: (client['name'] as String?) ?? 'Cliente',
                       isJefeVentas: widget.isJefeVentas,
                     ),
                   ),

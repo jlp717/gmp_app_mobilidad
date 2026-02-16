@@ -7,6 +7,8 @@
 
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
+import { toInt, toStr } from '../utils/db-helpers';
+import { queryCache, TTL } from '../utils/query-cache';
 
 export interface ClienteRutero {
   codigo: string;
@@ -47,6 +49,16 @@ class RuteroService {
    * Obtiene los clientes del rutero para un día específico
    */
   async getRuteroDia(dia?: string): Promise<ClienteRutero[]> {
+    const diasSemana = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    const diaKey = dia?.toLowerCase() || diasSemana[new Date().getDay()];
+    return queryCache.getOrSet(
+      `gmp:rutero:dia:${diaKey}`,
+      () => this._fetchRuteroDia(dia),
+      TTL.LONG
+    );
+  }
+
+  private async _fetchRuteroDia(dia?: string): Promise<ClienteRutero[]> {
     try {
       // Determinar el día de la semana
       const diasSemana = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
@@ -100,12 +112,12 @@ class RuteroService {
       const result = await odbcPool.query<any[]>(query);
 
       return result.map((row: any) => ({
-        codigo: row.CODIGO || '',
-        nombre: row.NOMBRE || `Cliente ${row.CODIGO}`,
-        direccion: row.DIRECCION || '',
-        poblacion: row.POBLACION || '',
-        telefono: row.TELEFONO || '',
-        comercial: row.COMERCIAL || '',
+        codigo: toStr(row.CODIGO),
+        nombre: toStr(row.NOMBRE) || `Cliente ${row.CODIGO}`,
+        direccion: toStr(row.DIRECCION),
+        poblacion: toStr(row.POBLACION),
+        telefono: toStr(row.TELEFONO),
+        comercial: toStr(row.COMERCIAL),
         diasVisita: {
           lunes: row.DIALUNES === 'S',
           martes: row.DIAMARTES === 'S',
@@ -126,6 +138,10 @@ class RuteroService {
    * Obtiene el rutero completo de la semana
    */
   async getRuteroSemana(): Promise<RuteroSemana> {
+    return queryCache.getOrSet('gmp:rutero:semana', () => this._fetchRuteroSemana(), TTL.LONG);
+  }
+
+  private async _fetchRuteroSemana(): Promise<RuteroSemana> {
     try {
       const query = `
         SELECT DISTINCT
@@ -181,12 +197,12 @@ class RuteroService {
 
       for (const row of result) {
         const cliente: ClienteRutero = {
-          codigo: row.CODIGO || '',
-          nombre: row.NOMBRE || `Cliente ${row.CODIGO}`,
-          direccion: row.DIRECCION || '',
-          poblacion: row.POBLACION || '',
-          telefono: row.TELEFONO || '',
-          comercial: row.COMERCIAL || '',
+          codigo: toStr(row.CODIGO),
+          nombre: toStr(row.NOMBRE) || `Cliente ${row.CODIGO}`,
+          direccion: toStr(row.DIRECCION),
+          poblacion: toStr(row.POBLACION),
+          telefono: toStr(row.TELEFONO),
+          comercial: toStr(row.COMERCIAL),
           diasVisita: {
             lunes: row.DIALUNES === 'S',
             martes: row.DIAMARTES === 'S',
@@ -218,6 +234,13 @@ class RuteroService {
    * Obtiene resumen del rutero (conteo por día)
    */
   async getResumenRutero(): Promise<{
+    lunes: number; martes: number; miercoles: number; jueves: number;
+    viernes: number; sabado: number; domingo: number; total: number;
+  }> {
+    return queryCache.getOrSet('gmp:rutero:resumen', () => this._fetchResumenRutero(), TTL.LONG);
+  }
+
+  private async _fetchResumenRutero(): Promise<{
     lunes: number;
     martes: number;
     miercoles: number;
@@ -254,14 +277,14 @@ class RuteroService {
       const row = result[0] || {};
 
       return {
-        lunes: parseInt(row.LUNES) || 0,
-        martes: parseInt(row.MARTES) || 0,
-        miercoles: parseInt(row.MIERCOLES) || 0,
-        jueves: parseInt(row.JUEVES) || 0,
-        viernes: parseInt(row.VIERNES) || 0,
-        sabado: parseInt(row.SABADO) || 0,
-        domingo: parseInt(row.DOMINGO) || 0,
-        total: parseInt(row.TOTAL) || 0,
+        lunes: toInt(row.LUNES),
+        martes: toInt(row.MARTES),
+        miercoles: toInt(row.MIERCOLES),
+        jueves: toInt(row.JUEVES),
+        viernes: toInt(row.VIERNES),
+        sabado: toInt(row.SABADO),
+        domingo: toInt(row.DOMINGO),
+        total: toInt(row.TOTAL),
       };
     } catch (error) {
       logger.error('Error obteniendo resumen de rutero:', error);

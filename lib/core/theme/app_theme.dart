@@ -40,6 +40,12 @@ class AppTheme {
   static const Color error = Color(0xFFFF3B5C);   // Red for negative
   static const Color warning = Color(0xFFFFAA00);
   static const Color info = Color(0xFF00D4FF);
+
+  // Aliases for compatibility
+  static const Color successColor = success;
+  static const Color errorColor = error;
+  static const Color warningColor = warning;
+  static const Color infoColor = info;
   
   // NEW: Payment status colors
   static const Color obligatorio = Color(0xFFFF3B5C); // Red - must collect
@@ -68,6 +74,16 @@ class AppTheme {
   // GRADIENTS - Holographic & Futuristic
   // ============================================================================
   
+  /// Primary brand gradient (neon blue)
+  static LinearGradient get primaryGradient => LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [
+      neonBlue.withOpacity(0.3),
+      neonBlue.withOpacity(0.1),
+    ],
+  );
+
   /// Holographic gradient for premium cards
   static LinearGradient get holoGradient => LinearGradient(
     begin: Alignment.topLeft,

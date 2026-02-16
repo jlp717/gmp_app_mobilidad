@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/providers/dashboard_provider.dart';
 import '../../../../core/widgets/coming_soon_placeholder.dart';
@@ -23,6 +24,7 @@ import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_panel_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_clientes_page.dart';
 import '../../../facturas/presentation/pages/facturas_page.dart';
+import '../../../../core/models/user_model.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -58,13 +60,42 @@ class _MainShellState extends State<MainShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnection();
       _checkForUpdates();
-      
+
       // Init mode based on real user role
       final auth = context.read<AuthProvider>();
       if (auth.currentUser?.isRepartidor == true) {
          _forceRepartidorMode = true;
       }
+
+      // Listen to FilterProvider changes to refresh DashboardProvider
+      final filterProvider = context.read<FilterProvider>();
+      filterProvider.addListener(_onFilterChanged);
     });
+  }
+
+  void _onFilterChanged() {
+    if (_dashboardProvider == null) return;
+    final filterProvider = context.read<FilterProvider>();
+    final authProvider = context.read<AuthProvider>();
+    final selectedVendor = filterProvider.selectedVendor;
+
+    if (selectedVendor != null && selectedVendor.isNotEmpty) {
+      _dashboardProvider!.updateVendedorCodes(selectedVendor.split(','));
+    } else {
+      // No filter = show all vendor codes
+      _dashboardProvider!.updateVendedorCodes(authProvider.vendedorCodes);
+    }
+  }
+
+  @override
+  void dispose() {
+    // Remove FilterProvider listener to avoid leaks
+    if (mounted) {
+      try {
+        context.read<FilterProvider>().removeListener(_onFilterChanged);
+      } catch (_) {}
+    }
+    super.dispose();
   }
 
   // Helper to determine effective mode
@@ -504,7 +535,7 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _buildUserAvatar(user, bool isJefeVentas) {
+  Widget _buildUserAvatar(UserModel user, bool isJefeVentas) {
     return Column(
       children: [
         Container(

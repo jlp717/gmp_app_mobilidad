@@ -2,87 +2,14 @@
 /// Modelos de datos para el módulo de cobros y entregas
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+
+// Re-export EstadoEntrega from shared location
+export 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
 
 // ============================================
 // ENUMS
 // ============================================
-
-enum EstadoEntrega {
-  pendiente,
-  enRuta,
-  entregado,
-  parcial,
-  noEntregado,
-  rechazado;
-
-  String get label {
-    switch (this) {
-      case EstadoEntrega.pendiente:
-        return 'Pendiente';
-      case EstadoEntrega.enRuta:
-        return 'En Ruta';
-      case EstadoEntrega.entregado:
-        return 'Entregado';
-      case EstadoEntrega.parcial:
-        return 'Parcial';
-      case EstadoEntrega.noEntregado:
-        return 'No Entregado';
-      case EstadoEntrega.rechazado:
-        return 'Rechazado';
-    }
-  }
-
-  Color get color {
-    switch (this) {
-      case EstadoEntrega.pendiente:
-        return Colors.orange;
-      case EstadoEntrega.enRuta:
-        return Colors.blue;
-      case EstadoEntrega.entregado:
-        return Colors.green;
-      case EstadoEntrega.parcial:
-        return Colors.amber;
-      case EstadoEntrega.noEntregado:
-        return Colors.red;
-      case EstadoEntrega.rechazado:
-        return Colors.grey;
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case EstadoEntrega.pendiente:
-        return Icons.schedule;
-      case EstadoEntrega.enRuta:
-        return Icons.local_shipping;
-      case EstadoEntrega.entregado:
-        return Icons.check_circle;
-      case EstadoEntrega.parcial:
-        return Icons.pending;
-      case EstadoEntrega.noEntregado:
-        return Icons.cancel;
-      case EstadoEntrega.rechazado:
-        return Icons.block;
-    }
-  }
-
-  static EstadoEntrega fromString(String value) {
-    switch (value.toUpperCase()) {
-      case 'EN_RUTA':
-        return EstadoEntrega.enRuta;
-      case 'ENTREGADO':
-        return EstadoEntrega.entregado;
-      case 'PARCIAL':
-        return EstadoEntrega.parcial;
-      case 'NO_ENTREGADO':
-        return EstadoEntrega.noEntregado;
-      case 'RECHAZADO':
-        return EstadoEntrega.rechazado;
-      default:
-        return EstadoEntrega.pendiente;
-    }
-  }
-}
 
 enum TipoCobro {
   albaran,
@@ -146,12 +73,12 @@ class CobroPendiente {
   factory CobroPendiente.fromJson(Map<String, dynamic> json) {
     return CobroPendiente(
       id: json['id']?.toString() ?? '',
-      referencia: json['referencia'] ?? '',
-      tipo: _parseTipoCobro(json['tipo'] ?? 'normal'),
-      fecha: DateTime.tryParse(json['fecha'] ?? '') ?? DateTime.now(),
-      importeTotal: (json['importeTotal'] ?? json['importe'] ?? 0).toDouble(),
-      importePendiente: (json['importePendiente'] ?? json['importe'] ?? 0).toDouble(),
-      formaPago: json['formaPago'],
+      referencia: (json['referencia'] as String?) ?? '',
+      tipo: _parseTipoCobro((json['tipo'] as String?) ?? 'normal'),
+      fecha: DateTime.tryParse((json['fecha'] as String?) ?? '') ?? DateTime.now(),
+      importeTotal: ((json['importeTotal'] ?? json['importe'] ?? 0) as num).toDouble(),
+      importePendiente: ((json['importePendiente'] ?? json['importe'] ?? 0) as num).toDouble(),
+      formaPago: json['formaPago'] as String?,
       esCTR: json['esCTR'] == true,
     );
   }
@@ -190,12 +117,12 @@ class EntregaItem {
 
   factory EntregaItem.fromJson(Map<String, dynamic> json) {
     return EntregaItem(
-      itemId: json['itemId'] ?? '',
-      codigoArticulo: json['codigoArticulo'] ?? '',
-      descripcion: json['descripcion'] ?? '',
-      cantidadPedida: json['cantidadPedida'] ?? 0,
-      cantidadEntregada: json['cantidadEntregada'] ?? 0,
-      estado: EstadoEntrega.fromString(json['estado'] ?? 'PENDIENTE'),
+      itemId: (json['itemId'] as String?) ?? '',
+      codigoArticulo: (json['codigoArticulo'] as String?) ?? '',
+      descripcion: (json['descripcion'] as String?) ?? '',
+      cantidadPedida: (json['cantidadPedida'] as int?) ?? 0,
+      cantidadEntregada: (json['cantidadEntregada'] as int?) ?? 0,
+      estado: EstadoEntrega.fromString((json['estado'] as String?) ?? 'PENDIENTE'),
     );
   }
 
@@ -237,20 +164,20 @@ class Albaran {
 
   factory Albaran.fromJson(Map<String, dynamic> json) {
     return Albaran(
-      id: json['id'] ?? '',
-      numeroAlbaran: json['numeroAlbaran'] ?? 0,
-      codigoCliente: json['codigoCliente'] ?? '',
-      nombreCliente: json['nombreCliente'] ?? '',
-      direccion: json['direccion'] ?? '',
+      id: (json['id'] as String?) ?? '',
+      numeroAlbaran: (json['numeroAlbaran'] as int?) ?? 0,
+      codigoCliente: (json['codigoCliente'] as String?) ?? '',
+      nombreCliente: (json['nombreCliente'] as String?) ?? '',
+      direccion: (json['direccion'] as String?) ?? '',
       fecha: _parseDate(json['fecha']),
-      importeTotal: (json['importeTotal'] ?? 0).toDouble(),
-      estado: EstadoEntrega.fromString(json['estado'] ?? 'PENDIENTE'),
+      importeTotal: ((json['importeTotal'] ?? 0) as num).toDouble(),
+      estado: EstadoEntrega.fromString((json['estado'] as String?) ?? 'PENDIENTE'),
       items: (json['items'] as List<dynamic>?)
-          ?.map((e) => EntregaItem.fromJson(e))
+          ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
           .toList() ?? [],
-      formaPago: json['formaPago'],
+      formaPago: json['formaPago'] as String?,
       esCTR: json['esCTR'] == true,
-      fotos: List<String>.from(json['fotos'] ?? []),
+      fotos: List<String>.from(json['fotos'] as List? ?? []),
     );
   }
 
@@ -302,13 +229,13 @@ class EstadoCliente {
 
   factory EstadoCliente.fromJson(Map<String, dynamic> json) {
     return EstadoCliente(
-      codigo: json['codigo'] ?? '',
-      nombre: json['nombre'] ?? '',
-      limiteCredito: (json['limiteCredito'] ?? 0).toDouble(),
-      totalPendiente: (json['totalPendiente'] ?? 0).toDouble(),
-      diasMora: json['diasMora'] ?? 0,
-      estado: json['estado'] ?? 'ACTIVO',
-      motivo: json['motivo'],
+      codigo: (json['codigo'] as String?) ?? '',
+      nombre: (json['nombre'] as String?) ?? '',
+      limiteCredito: ((json['limiteCredito'] ?? 0) as num).toDouble(),
+      totalPendiente: ((json['totalPendiente'] ?? 0) as num).toDouble(),
+      diasMora: (json['diasMora'] as int?) ?? 0,
+      estado: (json['estado'] as String?) ?? 'ACTIVO',
+      motivo: json['motivo'] as String?,
     );
   }
 
@@ -348,12 +275,12 @@ class ResumenCobros {
 
   factory ResumenCobros.fromJson(Map<String, dynamic> json) {
     return ResumenCobros(
-      totalPendiente: (json['totalPendiente'] ?? 0).toDouble(),
-      numFacturas: json['facturas'] ?? 0,
-      numAlbaranes: json['albaranes'] ?? 0,
-      diasMoraMaximo: json['diasMoraMaximo'] ?? 0,
+      totalPendiente: ((json['totalPendiente'] ?? 0) as num).toDouble(),
+      numFacturas: (json['facturas'] as int?) ?? 0,
+      numAlbaranes: (json['albaranes'] as int?) ?? 0,
+      diasMoraMaximo: (json['diasMoraMaximo'] as int?) ?? 0,
       cobros: (json['cobros'] as List<dynamic>?)
-          ?.map((e) => CobroPendiente.fromJson(e))
+          ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
           .toList() ?? [],
     );
   }

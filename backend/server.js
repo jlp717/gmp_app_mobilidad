@@ -22,22 +22,73 @@ const { initCache, getCacheStats } = require('./services/redis-cache');
 const { networkOptimizer, responseCoalescing } = require('./middleware/network-optimizer');
 const { createOptimizedQuery } = require('./services/query-optimizer');
 
-// Import Routes
-const authRoutes = require('./routes/auth');
-const dashboardRoutes = require('./routes/dashboard');
-const analyticsRoutes = require('./routes/analytics');
-const masterRoutes = require('./routes/master');
-const clientsRoutes = require('./routes/clients');
-const plannerRoutes = require('./routes/planner');
-const objectivesRoutes = require('./routes/objectives');
-const exportRoutes = require('./routes/export');
-const chatbotRoutes = require('./routes/chatbot');
-const commissionsRoutes = require('./routes/commissions');
-const filtersRoutes = require('./routes/filters');
-const entregasRoutes = require('./routes/entregas');
-const repartidorRoutes = require('./routes/repartidor');
-const userActionsRoutes = require('./routes/user-actions');
-const facturasRoutes = require('./routes/facturas');
+// =============================================================================
+// FEATURE TOGGLE: USE_TS_ROUTES
+// Set USE_TS_ROUTES=true to use compiled TypeScript routes (from dist/)
+// Set USE_TS_ROUTES=false (default) to use legacy JavaScript routes
+// =============================================================================
+const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
+
+let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
+    plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
+    commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
+    userActionsRoutes, facturasRoutes;
+
+if (USE_TS_ROUTES) {
+  // ==================== COMPILED TYPESCRIPT ROUTES ====================
+  logger.info('🚀 Loading COMPILED TypeScript routes from dist/');
+  try {
+    const tsApp = require('./dist/index').default;
+    // We don't mount individual routes - the TS app is self-contained
+    // Instead we'll mount the entire TS app as middleware
+    // (Individual route vars set to empty routers for legacy mount compatibility)
+    const { Router } = require('express');
+    const emptyRouter = Router();
+    authRoutes = emptyRouter;
+    dashboardRoutes = emptyRouter;
+    analyticsRoutes = emptyRouter;
+    masterRoutes = emptyRouter;
+    clientsRoutes = emptyRouter;
+    plannerRoutes = emptyRouter;
+    objectivesRoutes = emptyRouter;
+    exportRoutes = emptyRouter;
+    chatbotRoutes = emptyRouter;
+    commissionsRoutes = emptyRouter;
+    filtersRoutes = emptyRouter;
+    entregasRoutes = emptyRouter;
+    repartidorRoutes = emptyRouter;
+    userActionsRoutes = emptyRouter;
+    facturasRoutes = emptyRouter;
+
+    // Mount TS app - it handles its own /api prefix, auth, etc.
+    // We use a flag so startServer can mount it after middleware
+    global.__TS_APP__ = tsApp;
+  } catch (err) {
+    logger.error(`❌ Failed to load TS routes: ${err.message}`);
+    logger.warn('⚠️ Falling back to legacy JavaScript routes');
+    process.env.USE_TS_ROUTES = 'false';
+    // Fall through to legacy imports below
+  }
+}
+
+if (process.env.USE_TS_ROUTES !== 'true') {
+  // ==================== LEGACY JAVASCRIPT ROUTES ====================
+  authRoutes = require('./routes/auth');
+  dashboardRoutes = require('./routes/dashboard');
+  analyticsRoutes = require('./routes/analytics');
+  masterRoutes = require('./routes/master');
+  clientsRoutes = require('./routes/clients');
+  plannerRoutes = require('./routes/planner');
+  objectivesRoutes = require('./routes/objectives');
+  exportRoutes = require('./routes/export');
+  chatbotRoutes = require('./routes/chatbot');
+  commissionsRoutes = require('./routes/commissions');
+  filtersRoutes = require('./routes/filters');
+  entregasRoutes = require('./routes/entregas');
+  repartidorRoutes = require('./routes/repartidor');
+  userActionsRoutes = require('./routes/user-actions');
+  facturasRoutes = require('./routes/facturas');
+}
 
 const app = express();
 app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
@@ -100,23 +151,31 @@ app.get('/api/health', async (req, res) => {
 // =============================================================================
 // PROTECTED ROUTES (Token Required)
 // =============================================================================
-app.use('/api', verifyToken);
 
-// Mount Protected Modules
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api', masterRoutes); // mounts /products and /vendedores
-app.use('/api/clients', clientsRoutes);
-app.use('/api', plannerRoutes); // mounts /router/* and /rutero/*
-app.use('/api/objectives', objectivesRoutes);
-app.use('/api/export', exportRoutes);
-app.use('/api/chatbot', chatbotRoutes);
-app.use('/api/commissions', commissionsRoutes);
-app.use('/api/filters', filtersRoutes);
-app.use('/api/entregas', entregasRoutes);
-app.use('/api/repartidor', repartidorRoutes);
-app.use('/api/logs', userActionsRoutes);
-app.use('/api/facturas', facturasRoutes);
+if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
+  // TS app handles its own auth, routes, and middleware
+  app.use(global.__TS_APP__);
+  logger.info('✅ TypeScript routes mounted (compiled from src/)');
+} else {
+  // Legacy JavaScript routes
+  app.use('/api', verifyToken);
+
+  // Mount Protected Modules
+  app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/analytics', analyticsRoutes);
+  app.use('/api', masterRoutes); // mounts /products and /vendedores
+  app.use('/api/clients', clientsRoutes);
+  app.use('/api', plannerRoutes); // mounts /router/* and /rutero/*
+  app.use('/api/objectives', objectivesRoutes);
+  app.use('/api/export', exportRoutes);
+  app.use('/api/chatbot', chatbotRoutes);
+  app.use('/api/commissions', commissionsRoutes);
+  app.use('/api/filters', filtersRoutes);
+  app.use('/api/entregas', entregasRoutes);
+  app.use('/api/repartidor', repartidorRoutes);
+  app.use('/api/logs', userActionsRoutes);
+  app.use('/api/facturas', facturasRoutes);
+}
 
 // Start server
 async function startServer() {

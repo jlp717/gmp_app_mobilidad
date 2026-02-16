@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/widgets/error_state_widget.dart';
 import '../../data/repartidor_data_service.dart';
 
 class RepartidorPanelPage extends StatefulWidget {
@@ -48,11 +49,17 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           year: _selectedYear,
           month: _selectedMonth,
         ),
-        RepartidorDataService.getCollectionsSummary(
-          repartidorId: widget.repartidorId,
-          year: _selectedYear,
-          month: _selectedMonth,
-        ).catchError((_) => null),
+        (() async {
+          try {
+            return await RepartidorDataService.getCollectionsSummary(
+              repartidorId: widget.repartidorId,
+              year: _selectedYear,
+              month: _selectedMonth,
+            );
+          } catch (_) {
+            return null;
+          }
+        })(),
       ]);
 
       final deliveryData = Map<String, dynamic>.from(results[0] as Map? ?? {});
@@ -91,20 +98,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
                 : _error != null
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.error_outline, color: AppTheme.error, size: 48),
-                            const SizedBox(height: 12),
-                            Text('Error: $_error', style: const TextStyle(color: AppTheme.textSecondary)),
-                            const SizedBox(height: 12),
-                            ElevatedButton(
-                              onPressed: _loadAllData,
-                              child: const Text('Reintentar'),
-                            ),
-                          ],
-                        ),
+                    ? ErrorStateWidget(
+                        message: 'Error: $_error',
+                        onRetry: _loadAllData,
                       )
                     : RefreshIndicator(
                         onRefresh: _loadAllData,
@@ -228,12 +224,12 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
   }
 
   Widget _buildKPICards() {
-    final total = _deliverySummary['totalAlbaranes'] ?? 0;
-    final entregados = _deliverySummary['entregados'] ?? 0;
-    final noEntregados = _deliverySummary['noEntregados'] ?? 0;
-    final rawPendientes = _deliverySummary['pendientes'] ?? 0;
+    final total = (_deliverySummary['totalAlbaranes'] as int?) ?? 0;
+    final entregados = (_deliverySummary['entregados'] as int?) ?? 0;
+    final noEntregados = (_deliverySummary['noEntregados'] as int?) ?? 0;
+    final rawPendientes = (_deliverySummary['pendientes'] as int?) ?? 0;
     final pendientes = rawPendientes < 0 ? 0 : rawPendientes;
-    final importe = (_deliverySummary['importeTotal'] ?? 0).toDouble();
+    final importe = ((_deliverySummary['importeTotal'] ?? 0) as num).toDouble();
     final pctEntrega = total > 0 ? (entregados / total * 100).clamp(0.0, 100.0) : 0.0;
 
     return Column(
@@ -375,7 +371,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
     }
 
     final maxTotal = _dailyData.fold<double>(0, (max, d) {
-      final t = (d['total'] ?? 0).toDouble();
+      final t = ((d['total'] ?? 0) as num).toDouble();
       return t > max ? t : max;
     });
 
@@ -401,8 +397,8 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: _dailyData.map((d) {
-                final total = (d['total'] ?? 0).toDouble();
-                final delivered = (d['delivered'] ?? 0).toDouble();
+                final total = ((d['total'] ?? 0) as num).toDouble();
+                final delivered = ((d['delivered'] ?? 0) as num).toDouble();
                 final height = maxTotal > 0 ? (total / maxTotal * 100) : 0.0;
                 final deliveredHeight = maxTotal > 0 ? (delivered / maxTotal * 100) : 0.0;
                 final day = d['day'] ?? 0;
@@ -500,12 +496,12 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             ),
           ),
           ..._dailyData.map((d) {
-            final day = d['day'] ?? 0;
-            final total = d['total'] ?? 0;
-            final delivered = d['delivered'] ?? 0;
-            final notDel = d['notDelivered'] ?? 0;
-            final pending = d['pending'] ?? 0;
-            final amount = (d['amount'] ?? 0).toDouble();
+            final day = (d['day'] as int?) ?? 0;
+            final total = (d['total'] as int?) ?? 0;
+            final delivered = (d['delivered'] as int?) ?? 0;
+            final notDel = (d['notDelivered'] as int?) ?? 0;
+            final pending = (d['pending'] as int?) ?? 0;
+            final amount = ((d['amount'] ?? 0) as num).toDouble();
 
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),

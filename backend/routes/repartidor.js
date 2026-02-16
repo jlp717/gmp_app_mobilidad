@@ -1040,9 +1040,9 @@ router.get('/debug/signatures', async (req, res) => {
         }));
 
         logger.info(`[REPARTIDOR] Debug: Found ${signatures.length} albaranes with signatures in CACFIRMAS`);
-        res.json({ 
-            success: true, 
-            total: signatures.length, 
+        res.json({
+            success: true,
+            total: signatures.length,
             signatures,
             note: 'These are albaranes with actual Base64 signatures in CACFIRMAS'
         });
@@ -1926,7 +1926,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         const actualTermAlb = header.TERMINALALBARAN || 0;
         const actualNumAlb = header.NUMEROALBARAN;
 
-        logger.info(`[PDF] Found CAC header: albaran=${actualEjAlb}-${actualSerieAlb}-${actualTermAlb}-${actualNumAlb}, factura=${header.EJERCICIOFACTURA}-${(header.SERIEFACTURA||'').toString().trim()}-${header.NUMEROFACTURA}`);
+        logger.info(`[PDF] Found CAC header: albaran=${actualEjAlb}-${actualSerieAlb}-${actualTermAlb}-${actualNumAlb}, factura=${header.EJERCICIOFACTURA}-${(header.SERIEFACTURA || '').toString().trim()}-${header.NUMEROFACTURA}`);
 
         // Fetch IVA breakdown from CPC
         try {
@@ -2193,6 +2193,111 @@ router.get('/history/legacy-signature/:id', async (req, res) => {
     } catch (error) {
         logger.error(`Error fetching legacy signature: ${error.message}`);
         res.status(500).send('Error fetching signature');
+    }
+});
+
+// =============================================================================
+// POST /document/send-email
+// Server-side email sending with PDF attachment for repartidor documents
+// =============================================================================
+router.post('/document/send-email', async (req, res) => {
+    try {
+        const { ejercicio, serie, terminal, numero, type, destinatario, asunto, cuerpo, clienteNombre } = req.body;
+
+        // Validate required fields
+        if (!ejercicio || !serie || !numero || !destinatario) {
+            return res.status(400).json({
+                success: false,
+                error: 'Campos requeridos: ejercicio, serie, numero, destinatario'
+            });
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(destinatario)) {
+            return res.status(400).json({ success: false, error: 'Email destinatario inválido' });
+        }
+
+        const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+        const docType = (type || 'albaran').toLowerCase();
+        const isFactura = docType === 'factura';
+        const typeLabel = isFactura ? 'Factura' : 'Albarán';
+
+        // Generate or retrieve cached PDF
+        const cacheKey = `${docType}_${serie}_${numero}_${ejercicio}`;
+        let pdfBuffer = getCachedPdf(cacheKey);
+
+        if (!pdfBuffer) {
+            if (isFactura) {
+                // Generate invoice PDF
+                const facturasService = require('../services/facturas.service');
+                const pdfService = require('../services/pdf.service');
+                const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+                if (!factura) {
+                    return res.status(404).json({ success: false, error: 'Factura no encontrada' });
+                }
+                pdfBuffer = await pdfService.generateInvoicePDF(factura);
+            } else {
+                // Generate albaran/delivery receipt PDF
+                const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
+                try {
+                    pdfBuffer = await generateDeliveryReceipt({
+                        ejercicio: parseInt(ejercicio),
+                        serie: serie,
+                        terminal: parseInt(terminal) || 0,
+                        numero: parseInt(numero)
+                    });
+                } catch (pdfErr) {
+                    logger.warn(`[REPARTIDOR] DeliveryReceipt generation failed, trying invoice PDF: ${pdfErr.message}`);
+                    // Fallback: try generating as invoice
+                    const facturasService = require('../services/facturas.service');
+                    const pdfService = require('../services/pdf.service');
+                    try {
+                        const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+                        pdfBuffer = await pdfService.generateInvoicePDF(factura);
+                    } catch (invErr) {
+                        return res.status(500).json({ success: false, error: `No se pudo generar el PDF: ${pdfErr.message}` });
+                    }
+                }
+            }
+
+            if (pdfBuffer) {
+                cachePdf(cacheKey, pdfBuffer);
+            }
+        }
+
+        if (!pdfBuffer) {
+            return res.status(500).json({ success: false, error: 'No se pudo generar el PDF del documento' });
+        }
+
+        // Build email
+        const emailSubject = asunto || `${typeLabel} ${serie}-${numero} - Granja Mari Pepa`;
+        const pdfFilename = `${typeLabel}_${serie}_${numero}_${ejercicio}.pdf`;
+
+        const htmlBody = isFactura
+            ? generateInvoiceEmailHtml({ serie, numero, clienteNombre, customBody: cuerpo })
+            : generateDeliveryEmailHtml({ serie, numero, clienteNombre, customBody: cuerpo });
+
+        const result = await sendEmailWithPdf({
+            to: destinatario,
+            subject: emailSubject,
+            htmlBody,
+            pdfBuffer,
+            pdfFilename
+        });
+
+        logger.info(`[REPARTIDOR] Email sent: ${typeLabel} ${serie}-${numero} to ${destinatario} (${result.messageId})`);
+
+        res.json({
+            success: true,
+            message: `Email enviado correctamente a ${destinatario}`,
+            messageId: result.messageId
+        });
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in document/send-email: ${error.message}`);
+        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+            return res.status(503).json({ success: false, error: 'Error de conexión con servidor de email. Inténtelo de nuevo.' });
+        }
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 

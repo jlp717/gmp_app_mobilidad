@@ -6,6 +6,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
+import { sanitizeCode } from '../utils/validators';
+import { toFloat, toStr, formatDateDMY } from '../utils/db-helpers';
 import type { Cobro, TipoCobro, LineaPedido } from '../types/entities';
 
 interface CrearCobroParams {
@@ -58,7 +60,7 @@ class CobrosService {
           AND COALESCE(CVC.IMPORTEPENDIENTE, CAC.IMPORTETOTAL) > 0
         ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC, CAC.DIADOCUMENTO DESC
         FETCH FIRST 100 ROWS ONLY`,
-        [this.sanitizarCodigo(codigoCliente)]
+        [sanitizeCode(codigoCliente)]
       );
 
       const ahora = new Date();
@@ -84,13 +86,9 @@ class CobrosService {
         return {
           tipo,
           referencia,
-          fecha: this.formatearFecha(
-            Number(row.DIADOCUMENTO),
-            Number(row.MESDOCUMENTO),
-            Number(row.ANODOCUMENTO)
-          ),
-          importe: parseFloat(String(row.IMPORTETOTAL)) || 0,
-          importePendiente: parseFloat(String(row.IMPORTE_PENDIENTE)) || 0,
+          fecha: formatDateDMY(row.DIADOCUMENTO, row.MESDOCUMENTO, row.ANODOCUMENTO),
+          importe: toFloat(row.IMPORTETOTAL),
+          importePendiente: toFloat(row.IMPORTE_PENDIENTE),
           descripcion: esFactura
             ? `Factura ${row.SERIEFACTURA}-${row.NUMEROFACTURA}`
             : `Albarán ${row.NUMEROALBARAN}`,
@@ -158,7 +156,7 @@ class CobrosService {
           ) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, 'PENDIENTE', ?)`,
           [
             id,
-            this.sanitizarCodigo(codigoCliente),
+            sanitizeCode(codigoCliente),
             importeTotal,
             formaPago,
             observaciones || '',
@@ -249,7 +247,7 @@ class CobrosService {
         WHERE CODIGO_CLIENTE = ?
         ORDER BY FECHA DESC
         FETCH FIRST 50 ROWS ONLY`,
-        [this.sanitizarCodigo(codigoCliente)]
+        [sanitizeCode(codigoCliente)]
       );
 
       return resultado.map((row) => ({
@@ -257,11 +255,11 @@ class CobrosService {
         codigoCliente: String(row.CODIGO_CLIENTE),
         tipo: 'presupuesto' as TipoCobro,
         fecha: row.FECHA ? new Date(row.FECHA as string).toISOString().split('T')[0] : '',
-        importeTotal: parseFloat(String(row.IMPORTE_TOTAL)) || 0,
+        importeTotal: toFloat(row.IMPORTE_TOTAL),
         importeCobrado: 0,
-        importePendiente: parseFloat(String(row.IMPORTE_TOTAL)) || 0,
-        formaPago: String(row.FORMA_PAGO || ''),
-        observaciones: String(row.OBSERVACIONES || ''),
+        importePendiente: toFloat(row.IMPORTE_TOTAL),
+        formaPago: toStr(row.FORMA_PAGO),
+        observaciones: toStr(row.OBSERVACIONES),
         esPresupuesto: true,
         convertidoAPedido: row.ESTADO === 'CONVERTIDO',
         numeroPedidoConvertido: row.NUMERO_PEDIDO ? Number(row.NUMERO_PEDIDO) : undefined,
@@ -294,7 +292,7 @@ class CobrosService {
           ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
           [
             uuidv4(),
-            this.sanitizarCodigo(params.codigoCliente),
+            sanitizeCode(params.codigoCliente),
             params.referencia,
             params.importe,
             params.formaPago,
@@ -312,23 +310,6 @@ class CobrosService {
     }
   }
 
-  // ============================================
-  // UTILIDADES
-  // ============================================
-
-  private sanitizarCodigo(codigo: string): string {
-    return String(codigo)
-      .trim()
-      .replace(/\s+/g, '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9-]/g, '')
-      .substring(0, 10);
-  }
-
-  private formatearFecha(dia: number, mes: number, ano: number): string {
-    if (!dia || !mes || !ano) return '';
-    return `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`;
-  }
 }
 
 export const cobrosService = new CobrosService();

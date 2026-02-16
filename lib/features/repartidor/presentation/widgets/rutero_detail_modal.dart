@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,12 +9,13 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:io';
-import 'dart:typed_data';
-import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/widgets/async_operation_modal.dart';
+import '../../../../core/widgets/pdf_preview_screen.dart';
+import '../../../../core/widgets/email_form_modal.dart';
+import '../../../../core/widgets/whatsapp_form_modal.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 
 /// Rutero Detail Modal - Futuristic Redesign v2
@@ -327,6 +331,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
           const SizedBox(height: 12),
 
+          // View PDF
+          _buildShareButton(
+            icon: Icons.visibility,
+            label: 'Ver PDF',
+            color: AppTheme.neonPurple,
+            onTap: _previewReceiptPdf,
+          ),
+          const SizedBox(height: 10),
+
           // Download PDF
           _buildShareButton(
             icon: Icons.download,
@@ -380,17 +393,51 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
+  Future<void> _previewReceiptPdf() async {
+    final modal = AsyncOperationModal.show(context, text: 'Generando vista previa...');
+    try {
+      final pdfData = await _generateReceiptPdf();
+      if (pdfData == null) throw Exception('No se pudo generar el PDF');
+      
+      modal.close();
+      if (!mounted) return;
+
+      final pdfBytes = base64Decode(pdfData);
+      final docLabel = widget.albaran.numeroFactura > 0
+          ? 'Factura ${widget.albaran.numeroFactura}'
+          : 'Albarán ${widget.albaran.numeroAlbaran}';
+      final fileName = 'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: pdfBytes,
+            title: docLabel,
+            fileName: fileName,
+            onEmailTap: () {
+              Navigator.pop(context); // Close preview
+              _shareViaEmail();
+            },
+            onWhatsAppTap: () {
+              Navigator.pop(context); // Close preview
+              _shareViaWhatsApp();
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      modal.error('Error al visualizar: $e');
+    }
+  }
+
   /// Descargar el PDF y abrirlo con share sheet
   Future<void> _downloadReceiptPdf() async {
+    final modal = AsyncOperationModal.show(context, text: 'Descargando...');
     try {
       final pdfData = await _generateReceiptPdf();
       if (pdfData == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Error al generar el PDF'), backgroundColor: AppTheme.error),
-          );
-        }
-        return;
+        throw Exception('Error al generar el PDF');
       }
 
       final tempDir = await getTemporaryDirectory();
@@ -400,14 +447,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final file = File('${tempDir.path}/Nota_Entrega_$docLabel.pdf');
       await file.writeAsBytes(base64Decode(pdfData));
 
+      modal.success('Guardado en Descargas');
       await OpenFilex.open(file.path);
     } catch (e) {
-      debugPrint('[RECEIPT] Error downloading PDF: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
-        );
-      }
+      modal.error('Error descargando PDF: $e');
     }
   }
 
@@ -1840,18 +1883,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         await _showShareReceiptDialog();
         if (!mounted) return;
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: const [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 12),
-                Text('Entrega registrada correctamente'),
-              ],
-            ),
-            backgroundColor: AppTheme.success,
-          ),
-        );
+        AsyncOperationModal.show(context, text: 'Entrega registrada correctamente').success();
       } else {
         // Handle already delivered error specially
         final errorMsg = provider.error ?? 'Error al guardar entrega';
@@ -1945,6 +1977,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               style: TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 20),
+            // View PDF
+            _buildShareButton(
+              icon: Icons.visibility,
+              label: 'Ver PDF',
+              color: AppTheme.neonPurple,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _previewReceiptPdf();
+              },
+            ),
+            const SizedBox(height: 12),
             // Download PDF
             _buildShareButton(
               icon: Icons.download,
@@ -2018,54 +2061,61 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _shareViaWhatsApp() async {
-    try {
-      // Prompt for phone number
-      final phone = await _showWhatsAppInputDialog();
-      if (phone == null || phone.isEmpty) return;
+    final result = await WhatsAppFormModal.show(
+      context,
+      defaultMessage: 'Nota de entrega - Albarán ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}',
+    );
+    if (result == null || !mounted) return;
 
+    final modal = AsyncOperationModal.show(context, text: 'Preparando WhatsApp...');
+    try {
       // Generate receipt PDF via API
       final pdfData = await _generateReceiptPdf();
-      if (pdfData == null) return;
+      if (pdfData == null) throw Exception('Error generando PDF para WhatsApp');
 
       // Save PDF temporarily
       final tempDir = await getTemporaryDirectory();
       final file = File('${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}.pdf');
       await file.writeAsBytes(base64Decode(pdfData));
 
-      final message = 'Nota de entrega - Albarán ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}';
+      modal.close();
+      if (!mounted) return;
 
-      // Join phone with 34 if it doesn't have it
-      String cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+      // Clean phone
+      String cleanPhone = result.phone.replaceAll(RegExp(r'[^\d]'), '');
       if (cleanPhone.length == 9) cleanPhone = '34$cleanPhone';
 
       // Share via WhatsApp
-      final whatsappUrl = 'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}';
+      final whatsappUrl = 'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(result.message)}';
       if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
         await launchUrl(Uri.parse(whatsappUrl), mode: LaunchMode.externalApplication);
+      } else {
+        // Fallback
+        await Share.shareXFiles([XFile(file.path)], text: result.message);
       }
       
-      // Also share the file using native share (as backup)
-      await Share.shareXFiles([XFile(file.path)], text: message);
     } catch (e) {
-      debugPrint('Error sharing via WhatsApp: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al compartir: $e'), backgroundColor: AppTheme.error),
-        );
-      }
+      modal.error('Error al compartir: $e');
     }
   }
 
   Future<void> _shareViaEmail() async {
-    try {
-      final email = await _showEmailInputDialog();
-      if (email == null || email.isEmpty) return;
+    final result = await EmailFormModal.show(
+      context,
+      defaultSubject: 'Nota de entrega - ${widget.albaran.nombreCliente}',
+      defaultBody: 'Adjunto le remitimos la nota de entrega correspondiente.\n\nSaludos,\nGranja Mari Pepa',
+    );
+    if (result == null || !mounted) return;
 
+    final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
+    try {
       // Send via API
       final response = await ApiClient.post(
         '/entregas/receipt/${widget.albaran.id}/email',
         {
-          'email': email,
+          'email': result.email,
+          'subject': result.subject,
+          'body': result.body,
           'signaturePath': widget.albaran.firma,
           'clientCode': widget.albaran.codigoCliente,
           'clientName': widget.albaran.nombreCliente,
@@ -2085,21 +2135,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         },
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response['success'] == true ? 'Email enviado a $email' : 'Error al enviar email'),
-            backgroundColor: response['success'] == true ? AppTheme.success : AppTheme.error,
-          ),
-        );
+      if (response['success'] == true) {
+        modal.success('Email enviado a ${result.email}');
+      } else {
+        modal.error((response['error'] as String?) ?? 'Error al enviar email');
       }
     } catch (e) {
-      debugPrint('Error sending email: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al enviar email: $e'), backgroundColor: AppTheme.error),
-        );
-      }
+      modal.error('Error al enviar email: $e');
     }
   }
 

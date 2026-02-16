@@ -84,13 +84,19 @@ router.get('/:codigo/perfil', requireAuth, generalLimiter, asyncHandler(async (r
  */
 router.get('/:codigo/facturas', requireAuth, generalLimiter, asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const { codigo } = req.params;
+  const { limit, offset } = req.query;
 
-  const facturas = await clienteService.obtenerFacturas(codigo);
+  const result = await clienteService.obtenerFacturas(
+    codigo,
+    limit ? parseInt(limit as string, 10) : undefined,
+    offset ? parseInt(offset as string, 10) : undefined,
+  );
 
   res.json({
     success: true,
-    facturas,
-    total: facturas.length,
+    facturas: result.facturas,
+    total: result.total,
+    paginacion: result.paginacion,
   });
 }));
 
@@ -172,17 +178,20 @@ router.put('/:codigo/contacto', requireAuth, generalLimiter, asyncHandler(async 
  * Obtener clientes para el rutero
  */
 router.get('/rutero/lista', requireAuth, generalLimiter, asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const { ruta, diaVisita } = req.query;
+  const { ruta, diaVisita, limit, offset } = req.query;
 
-  const clientes = await clienteService.obtenerClientesRutero(
+  const result = await clienteService.obtenerClientesRutero(
     ruta as string | undefined,
-    diaVisita as string | undefined
+    diaVisita as string | undefined,
+    limit ? parseInt(limit as string, 10) : undefined,
+    offset ? parseInt(offset as string, 10) : undefined,
   );
 
   res.json({
     success: true,
-    clientes,
-    total: clientes.length,
+    clientes: result.clientes,
+    total: result.total,
+    paginacion: result.paginacion,
   });
 }));
 

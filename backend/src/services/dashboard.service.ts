@@ -7,6 +7,8 @@
 
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
+import { toFloat, toInt, toStr, formatDateDMY } from '../utils/db-helpers';
+import { queryCache, TTL } from '../utils/query-cache';
 
 export interface DashboardData {
   ventasHoy: {
@@ -60,6 +62,14 @@ class DashboardService {
    * Obtiene todos los datos del dashboard para un vendedor
    */
   async getDashboardVendedor(codigoVendedor: string): Promise<DashboardData> {
+    return queryCache.getOrSet(
+      `gmp:dashboard:${codigoVendedor}`,
+      () => this._fetchDashboardVendedor(codigoVendedor),
+      TTL.SHORT
+    );
+  }
+
+  private async _fetchDashboardVendedor(codigoVendedor: string): Promise<DashboardData> {
     try {
       const now = new Date();
       const dia = now.getDate();
@@ -172,9 +182,9 @@ class DashboardService {
 
       const row = result[0];
       return {
-        total: parseFloat(String(row.TOTAL || '0')),
-        cantidad: parseInt(String(row.CANTIDAD || '0')),
-        margen: parseFloat(String(row.MARGEN || '0')),
+        total: toFloat(row.TOTAL),
+        cantidad: toInt(row.CANTIDAD),
+        margen: toFloat(row.MARGEN),
       };
     } catch (error) {
       logger.error('Error obteniendo ventas del período:', error);
@@ -218,7 +228,7 @@ class DashboardService {
         anioHasta, anioHasta, mesHasta, anioHasta, mesHasta, diaHasta,
       ]);
 
-      return parseInt(String(result[0]?.TOTAL || '0'));
+      return toInt(result[0]?.TOTAL);
     } catch (error) {
       logger.error('Error contando clientes atendidos:', error);
       return 0;
@@ -239,7 +249,7 @@ class DashboardService {
       `;
 
       const result = await odbcPool.query<Record<string, unknown>[]>(query, [codigoVendedor]);
-      return parseInt(String(result[0]?.TOTAL || '0'));
+      return toInt(result[0]?.TOTAL);
     } catch (error) {
       logger.error('Error obteniendo clientes asignados:', error);
       return 0;
@@ -267,7 +277,7 @@ class DashboardService {
         codigoVendedor, codigoVendedor, anioActual
       ]);
 
-      return parseInt(String(result[0]?.TOTAL || '0'));
+      return toInt(result[0]?.TOTAL);
     } catch (error) {
       logger.error('Error contando pedidos pendientes:', error);
       return 0;
@@ -283,15 +293,17 @@ class DashboardService {
   ): Promise<Array<{ fecha: string; cliente: string; importe: number; numeroAlbaran: string }>> {
     try {
       const query = `
-        SELECT 
-          DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO,
-          CODIGOCLIENTEALBARAN,
-          IMPORTETOTAL,
-          SERIEALBARAN, NUMEROALBARAN
-        FROM DSEDAC.CAC
-        WHERE (TRIM(CODIGOPROMOTORPREVENTA) = ? OR TRIM(CODIGOVENDEDOR) = ?)
-          AND ELIMINADOSN <> 'S'
-        ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC, HORADOCUMENTO DESC
+        SELECT
+          CAC.DIADOCUMENTO, CAC.MESDOCUMENTO, CAC.ANODOCUMENTO,
+          CAC.CODIGOCLIENTEALBARAN,
+          TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) AS NOMBRE_CLIENTE,
+          CAC.IMPORTETOTAL,
+          CAC.SERIEALBARAN, CAC.NUMEROALBARAN
+        FROM DSEDAC.CAC CAC
+        LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+        WHERE (TRIM(CAC.CODIGOPROMOTORPREVENTA) = ? OR TRIM(CAC.CODIGOVENDEDOR) = ?)
+          AND CAC.ELIMINADOSN <> 'S'
+        ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC, CAC.DIADOCUMENTO DESC, CAC.HORADOCUMENTO DESC
         FETCH FIRST ? ROWS ONLY
       `;
 
@@ -299,22 +311,15 @@ class DashboardService {
         codigoVendedor, codigoVendedor, limite
       ]);
 
-      // Obtener nombres de clientes
-      const ventas = await Promise.all(
-        result.map(async (row) => {
-          const codigoCliente = String(row.CODIGOCLIENTEALBARAN || '').trim();
-          const nombreCliente = await this.getNombreCliente(codigoCliente);
-
-          return {
-            fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
-            cliente: nombreCliente || codigoCliente,
-            importe: parseFloat(String(row.IMPORTETOTAL || '0')),
-            numeroAlbaran: `${String(row.SERIEALBARAN || '').trim()}-${row.NUMEROALBARAN}`,
-          };
-        })
-      );
-
-      return ventas;
+      return result.map((row) => {
+        const codigoCliente = toStr(row.CODIGOCLIENTEALBARAN);
+        return {
+          fecha: formatDateDMY(row.DIADOCUMENTO, row.MESDOCUMENTO, row.ANODOCUMENTO),
+          cliente: toStr(row.NOMBRE_CLIENTE) || codigoCliente,
+          importe: toFloat(row.IMPORTETOTAL),
+          numeroAlbaran: `${toStr(row.SERIEALBARAN)}-${row.NUMEROALBARAN}`,
+        };
+      });
     } catch (error) {
       logger.error('Error obteniendo últimas ventas:', error);
       return [];
@@ -322,30 +327,19 @@ class DashboardService {
   }
 
   /**
-   * Helper para obtener nombre de cliente
-   */
-  private async getNombreCliente(codigoCliente: string): Promise<string> {
-    try {
-      const query = `
-        SELECT TRIM(NOMBRECLIENTE) AS nombre
-        FROM DSEDAC.CLI
-        WHERE CODIGOCLIENTE = ?
-        FETCH FIRST 1 ROWS ONLY
-      `;
-
-      const result = await odbcPool.query<Record<string, unknown>[]>(query, [codigoCliente]);
-      return String(result[0]?.NOMBRE || '');
-    } catch (error) {
-      return '';
-    }
-  }
-
-  /**
    * Obtiene ventas mensuales del año para gráfico de evolución
    */
   async getVentasMensuales(codigoVendedor: string, anio?: number): Promise<VentasMensuales[]> {
+    const anioConsulta = anio || new Date().getFullYear();
+    return queryCache.getOrSet(
+      `gmp:dashboard:mensuales:${codigoVendedor}:${anioConsulta}`,
+      () => this._fetchVentasMensuales(codigoVendedor, anioConsulta),
+      TTL.MEDIUM
+    );
+  }
+
+  private async _fetchVentasMensuales(codigoVendedor: string, anioConsulta: number): Promise<VentasMensuales[]> {
     try {
-      const anioConsulta = anio || new Date().getFullYear();
 
       const query = `
         SELECT 
@@ -368,14 +362,14 @@ class DashboardService {
       const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
       return result.map((row) => {
-        const mesNum = parseInt(String(row.MES || '1'));
+        const mesNum = toInt(row.MES) || 1;
         return {
           mes: meses[mesNum - 1] || 'N/A',
           mesNumero: mesNum,
           anio: anioConsulta,
-          total: parseFloat(String(row.TOTAL || '0')),
-          cantidad: parseInt(String(row.CANTIDAD || '0')),
-          margen: parseFloat(String(row.MARGEN || '0')),
+          total: toFloat(row.TOTAL),
+          cantidad: toInt(row.CANTIDAD),
+          margen: toFloat(row.MARGEN),
         };
       });
     } catch (error) {
@@ -388,19 +382,29 @@ class DashboardService {
    * Obtiene top clientes del vendedor
    */
   async getTopClientes(codigoVendedor: string, limite: number = 10): Promise<TopClientes[]> {
+    return queryCache.getOrSet(
+      `gmp:dashboard:top:${codigoVendedor}:${limite}`,
+      () => this._fetchTopClientes(codigoVendedor, limite),
+      TTL.MEDIUM
+    );
+  }
+
+  private async _fetchTopClientes(codigoVendedor: string, limite: number): Promise<TopClientes[]> {
     try {
       const anioActual = new Date().getFullYear();
 
       const query = `
-        SELECT 
+        SELECT
           c.CODIGOCLIENTEALBARAN AS codigo,
+          TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) AS nombre,
           COALESCE(SUM(c.IMPORTETOTAL), 0) AS total,
           COUNT(*) AS operaciones
         FROM DSEDAC.CAC c
+        LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(c.CODIGOCLIENTEALBARAN)
         WHERE (TRIM(c.CODIGOPROMOTORPREVENTA) = ? OR TRIM(c.CODIGOVENDEDOR) = ?)
           AND c.ANODOCUMENTO = ?
           AND c.ELIMINADOSN <> 'S'
-        GROUP BY c.CODIGOCLIENTEALBARAN
+        GROUP BY c.CODIGOCLIENTEALBARAN, TRIM(COALESCE(CLI.NOMBRECLIENTE, ''))
         ORDER BY total DESC
         FETCH FIRST ? ROWS ONLY
       `;
@@ -409,22 +413,15 @@ class DashboardService {
         codigoVendedor, codigoVendedor, anioActual, limite
       ]);
 
-      // Enriquecer con nombres de cliente
-      const clientes = await Promise.all(
-        result.map(async (row) => {
-          const codigo = String(row.CODIGO || '').trim();
-          const nombre = await this.getNombreCliente(codigo);
-
-          return {
-            codigoCliente: codigo,
-            nombreCliente: nombre || codigo,
-            totalVentas: parseFloat(String(row.TOTAL || '0')),
-            numeroOperaciones: parseInt(String(row.OPERACIONES || '0')),
-          };
-        })
-      );
-
-      return clientes;
+      return result.map((row) => {
+        const codigo = toStr(row.CODIGO);
+        return {
+          codigoCliente: codigo,
+          nombreCliente: toStr(row.NOMBRE) || codigo,
+          totalVentas: toFloat(row.TOTAL),
+          numeroOperaciones: toInt(row.OPERACIONES),
+        };
+      });
     } catch (error) {
       logger.error('Error obteniendo top clientes:', error);
       return [];

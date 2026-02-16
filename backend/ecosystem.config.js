@@ -20,10 +20,17 @@ module.exports = {
             env: {
                 NODE_ENV: 'development',
                 PORT: 3334,
+                USE_TS_ROUTES: 'false',
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3334,
+                USE_TS_ROUTES: 'false',
+            },
+            env_ts: {
+                NODE_ENV: 'production',
+                PORT: 3334,
+                USE_TS_ROUTES: 'true',
             },
 
             // ==================== MEMORY & RESTART ====================
@@ -108,7 +115,7 @@ module.exports = {
             repo: 'git@github.com:user/gmp_app_mobilidad.git',
             path: '/var/www/gmp-api',
             'pre-deploy-local': '',
-            'post-deploy': 'npm ci && pm2 reload ecosystem.config.js --env production',
+            'post-deploy': 'npm ci && npm run build:ts && pm2 reload ecosystem.config.js --env production',
             'pre-setup': '',
             env: {
                 NODE_ENV: 'production',

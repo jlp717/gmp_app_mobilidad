@@ -1002,7 +1002,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ..._topClients.asMap().entries.map((entry) {
             final index = entry.key;
             final client = entry.value;
-            final name = client['name'] ?? '';
+            final name = (client['name'] as String?) ?? '';
             final sales = (client['totalSales'] as num?)?.toDouble() ?? 0.0;
             return _buildRankedListItem(index + 1, name, CurrencyFormatter.formatWhole(sales));
           }),
@@ -1030,7 +1030,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ..._topProducts.asMap().entries.map((entry) {
             final index = entry.key;
             final product = entry.value;
-            final name = product['name'] ?? '';
+            final name = (product['name'] as String?) ?? '';
             final sales = (product['totalSales'] as num?)?.toDouble() ?? 0.0;
             return _buildRankedListItem(index + 1, name, CurrencyFormatter.formatWhole(sales));
           }),

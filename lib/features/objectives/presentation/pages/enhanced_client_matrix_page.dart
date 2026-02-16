@@ -116,12 +116,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         final rawFiHierarchy = response['fiHierarchy'] ?? [];
         _fiHierarchy = (rawFiHierarchy as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         
-        _grandTotal = response['grandTotal'] ?? {};
-        _summary = response['summary'] ?? {};
-        _monthlyTotals = response['monthlyTotals'] ?? {};
-        _availableFilters = response['availableFilters'] ?? {};
-        _editableNotes = response['editableNotes'];
-        _contactInfo = response['contactInfo'] ?? {};
+        _grandTotal = (response['grandTotal'] as Map<String, dynamic>?) ?? {};
+        _summary = (response['summary'] as Map<String, dynamic>?) ?? {};
+        _monthlyTotals = (response['monthlyTotals'] as Map<String, dynamic>?) ?? {};
+        _availableFilters = (response['availableFilters'] as Map<String, dynamic>?) ?? {};
+        _editableNotes = response['editableNotes'] as Map<String, dynamic>?;
+        _contactInfo = (response['contactInfo'] as Map<String, dynamic>?) ?? {};
         
         // Parse FI options from availableFilters
         // Solo FI1 y FI5 precargadas, FI2/FI3/FI4 se cargan en cascada desde API
@@ -137,10 +137,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         
         // Auto-expand first item if only one
         if (_fiHierarchy.length == 1) {
-          _expandedFiNodes.add('fi1_${_fiHierarchy.first['fi1Code'] ?? ''}');
+          _expandedFiNodes.add('fi1_${(_fiHierarchy.first['fi1Code'] as String?) ?? ''}');
         }
         if (_families.length == 1) {
-          _expandedFamilies.add(_families.first['familyCode'] ?? '');
+          _expandedFamilies.add((_families.first['familyCode'] as String?) ?? '');
         }
       });
     } catch (e) {
@@ -1574,7 +1574,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final margin = (f['totalMarginPercent'] as num?)?.toDouble() ?? 0;
     
     int pCount = 0;
-    for (var s in subs) pCount += (List.from(s['products'] ?? [])).length;
+    for (var s in subs) pCount += (List.from((s['products'] as List?) ?? [])).length;
 
     return Card(
       color: AppTheme.surfaceColor,

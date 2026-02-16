@@ -6,22 +6,18 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ruteroService } from '../services/rutero.service';
 import { requireAuth } from '../middleware/auth.middleware';
+import { validate } from '../middleware/validation.middleware';
+import { schemas } from '../utils/validators';
 import { logger } from '../utils/logger';
 
 const router = Router();
 
-// Aplicar autenticación a todas las rutas de rutero
 router.use(requireAuth);
 
 /**
  * GET /api/rutero
- * Obtiene el rutero del día actual o de un día específico
- * 
- * Query params:
- * - dia: 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes' | 'sabado' | 'domingo'
- *        Si no se especifica, usa el día actual
  */
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', validate(schemas.ruteroQuery, 'query'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const dia = req.query.dia as string | undefined;
     const clientes = await ruteroService.getRuteroDia(dia);

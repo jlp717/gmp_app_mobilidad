@@ -249,13 +249,13 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
           ),
         ),
         title: Text(
-          client['name'] ?? 'Sin Nombre',
+          (client['name'] as String?) ?? 'Sin Nombre',
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          client['code'] ?? '',
+          (client['code'] as String?) ?? '',
           style: TextStyle(color: Colors.grey.shade400),
         ),
         trailing: isReorderable 

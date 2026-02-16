@@ -1,0 +1,526 @@
+# COPIAR Y PEGAR ESTE TEXTO EXACTAMENTE A CLAUDE
+
+---
+
+🚀 GMP APP - MASTER OPTIMIZATION PROMPT v3.0 (ACTUALIZADO)
+
+⚠️ ESTADO ACTUAL: PASOS 1-7 COMPLETADOS EN TYPESCRIPT.
+⚠️ PRODUCCIÓN SIGUE CORRIENDO LEGACY JS CON VULNERABILIDADES.
+⚠️ TAREA ACTUAL: PASO 8 (Testing Exhaustivo) + PASO 9 (Migración/Docs) + Cerrar Gaps.
+
+---
+
+## 📋 CONTEXTO DEL PROYECTO
+
+Stack Principal:
+- Backend: Node.js + Express + ODBC (DB2) con Redis
+- Frontend: Flutter 3.2.0+23 (Dart >=3.0.0) - Tablet landscape, Provider + flutter_bloc
+- Caché: Redis L2 (backend, pub/sub invalidation) + In-Memory L1 (backend) + Hive L1 (Flutter)
+- Database: DB2 con esquemas DSED (LACLAE/LAC), DSEDAC (OPP/CPC/CAC/CLI), JAVIER (custom)
+- Autenticación: HMAC-SHA256 tokens (24h TTL), rate limiting (2000/15min global, 5/15min login)
+- Deployment: PM2 clustering (ecosystem.config.js existe)
+- Testing: Jest (JS+TS), ts-jest, jest-junit, 50% coverage thresholds
+
+---
+
+## 🔴 ALERTA CRÍTICA: DOS CODEBASES PARALELOS
+
+PRODUCCIÓN (LEGACY JS - LO QUE CORRE server.js):
+- server.js → routes/commissions.js (1087 líneas)
+- server.js → routes/objectives.js (1930 líneas)
+- server.js → routes/repartidor.js (2200 líneas)
+- server.js → routes/dashboard.js (522 líneas)
+- server.js → routes/auth.js
+- VULNERABILIDADES: SQL injection en 8+ ubicaciones (string interpolation directa)
+- NO usa cachedQuery en commissions ni objectives (las rutas más lentas, 15s)
+- queryWithParams existe en config/db.js pero las rutas legacy NO lo usan
+
+REFACTORIZADO (TYPESCRIPT - NO ESTÁ EN PRODUCCIÓN AÚN):
+- src/index.ts → src/routes/*.routes.ts (14 archivos, ~100 líneas c/u)
+- src/services/*.service.ts (14 servicios, ej: commissions.service.ts = 722 líneas)
+- src/utils/validators.ts (470 líneas, Joi schemas, sanitización)
+- src/utils/query-cache.ts (dual-layer L1/L2 con TTL tiers)
+- src/utils/db-helpers.ts (clampLimit, clampOffset, pagination helpers)
+- src/__tests__/ (10 archivos de tests, ~2500 líneas total)
+- CORRECTO: Parametrized queries (?), Joi validation, cachedQuery en todos los services
+
+LA PRIORIDAD #1: Migrar server.js para que use el codebase TS y RETIRAR las rutas legacy JS.
+
+---
+
+## ✅ ESTADO DE IMPLEMENTACIÓN (QUÉ ESTÁ HECHO)
+
+PASO 1 ✅ Validación Input:
+- HECHO en src/utils/validators.ts (470 líneas)
+- parseVendorCodes(), sanitizeCode(), sanitizeSearch(), Joi schemas
+- Tests: src/__tests__/validators.test.ts (750 líneas, 40+ test cases)
+- GAP: validators.js en routes legacy NO existe. Solo validators.ts para TS.
+
+PASO 2 ✅ Servicios Centralizados:
+- HECHO: 14 services en src/services/ (auth, cliente, cobros, commissions, dashboard, entregas, facturas, objectives, products, promociones, repartidor, roles, rutero, ventas)
+- commissions.service.ts = 722 líneas con parameterized queries
+- GAP: Legacy routes/commissions.js (1087 líneas) NO usa estos services.
+
+PASO 3 ✅ Query Optimization:
+- HECHO: services/query-optimizer.js (351 líneas) - stats, batching, index suggestions
+- HECHO: config/db.js tiene queryWithParams con retry (3 attempts, exponential backoff)
+- HECHO: Promise.all en services TS para queries paralelas
+- GAP: Legacy routes/*.js siguen haciendo queries secuenciales con string interpolation.
+
+PASO 4 ✅ Redis Caching:
+- HECHO: services/redis-cache.js (~400 líneas) - L1+L2, pub/sub invalidation, graceful degradation
+- HECHO: src/utils/query-cache.ts - getOrSet pattern, TTL tiers (REALTIME 60s, SHORT 120s, MEDIUM 300s, LONG 1800s)
+- GAP: Solo dashboard.js (legacy) usa cachedQuery. commissions.js y objectives.js (los más lentos) NO lo usan.
+
+PASO 5 ✅ Paginación:
+- HECHO: src/utils/db-helpers.ts - clampLimit, clampOffset, currentPage, totalPages
+- HECHO: Frontend tiene defaultPageSize/maxPageSize en api_config.dart
+- HECHO: Algunos endpoints usan FETCH FIRST
+- GAP: No universal en todas las rutas legacy. Frontend no tiene scroll lazy loading completo.
+
+PASO 6 ✅ Rutas Refactorizadas:
+- HECHO: 14 rutas en src/routes/ (ej: commissions.routes.ts = 112 líneas vs legacy 1087)
+- Cada ruta: requireAuth → generalLimiter → validate(schema) → service call
+- GAP: Estas rutas TS NO están conectadas a server.js. No sirven tráfico real.
+
+PASO 7 ✅ Frontend:
+- HECHO: lib/core/api/api_client.dart (407 líneas) - Dio, gzip, keep-alive, IsolateTransformer, retry, request deduplication
+- HECHO: lib/core/cache/cache_service.dart (227 líneas) - dual-layer memory+Hive, TTL, LRU
+- HECHO: lib/core/providers/dashboard_provider.dart (189 líneas) - Future.wait parallel 6 endpoints
+- GAP: No todos los providers usan el patrón de deduplicación.
+
+---
+
+## 🎯 TAREA PENDIENTE: PASO 8 + PASO 9 + MIGRACIÓN
+
+---
+
+### PASO 8: TESTING EXHAUSTIVO (PRIORIDAD ALTA)
+
+ESTADO ACTUAL DE TESTS:
+- 10 archivos en src/__tests__/ (~2500 líneas total):
+  1. validators.test.ts (750 líneas) - SQL injection, parseVendorCodes, sanitizeCode
+  2. commissions.test.ts (211 líneas) - getExcludedVendors, verifyAdminAuth (mocked DB)
+  3. objectives.test.ts
+  4. repartidor.test.ts
+  5. cobros.test.ts
+  6. entregas.test.ts
+  7. pagination.test.ts (415 líneas) - clampLimit, clampOffset, totalPages helpers
+  8. query-cache.test.ts (465 líneas) - L1/L2 hit/miss, getOrSet, invalidation, stats
+  9. query-optimization.test.ts
+  10. db-helpers.test.ts
+- jest.config.js configurado (130 líneas): JS+TS, ts-jest, 50% coverage thresholds, jest-junit
+- TODOS estos tests son para el codebase TS. NINGUNO testea las rutas legacy JS en producción.
+
+QUÉ FALTA IMPLEMENTAR:
+
+8A. Tests E2E de integración del servidor TS completo:
+- Levantar el server TS (src/index.ts) con supertest
+- Testear CADA endpoint real: GET /commissions/summary, GET /objectives/summary, etc.
+- Verificar: status codes, response shape, pagination metadata, error responses
+- Mínimo 50 tests de integración
+- Archivo: src/__tests__/integration/endpoints.test.ts
+
+8B. Tests de seguridad contra SQL injection en endpoints reales:
+```typescript
+// src/__tests__/security/sql-injection.test.ts
+const INJECTION_PAYLOADS = [
+  "1'; DROP TABLE users--",
+  "1 OR 1=1",
+  "1) UNION SELECT * FROM SYSIBM.SYSTABLES--",
+  "1'; WAITFOR DELAY '00:00:05'--",
+  "1%27%20OR%20%271%27%3D%271",
+  "1; CALL SYSPROC.ADMIN_CMD('EXPORT TO /tmp/x')--",
+];
+
+// Cada payload contra cada endpoint debe retornar 400, NO 500
+```
+
+8C. Tests de performance (benchmarks):
+```typescript
+// src/__tests__/performance/latency.test.ts
+describe('Performance Benchmarks', () => {
+  test('GET /commissions/summary responde en <500ms', async () => {
+    const start = Date.now();
+    const res = await request(app).get('/api/commissions/summary').query({...});
+    expect(Date.now() - start).toBeLessThan(500);
+  });
+  // Repetir para objectives, dashboard, repartidor
+  // Test con 100+ vendor codes (stress test)
+  // Test cache hit vs cache miss latency difference
+});
+```
+
+8D. Tests de resiliencia:
+- Redis down → graceful degradation a DB directa
+- DB timeout → retry con backoff → error amigable
+- Token expirado → 401 con mensaje claro
+- Concurrent requests → no race conditions
+- Connection pool exhaustion → queue o error limpio
+
+8E. CI Pipeline (GitHub Actions o similar):
+```yaml
+# .github/workflows/test.yml
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - run: cd backend && npm ci
+      - run: cd backend && npm test -- --coverage --ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: backend/coverage/
+```
+
+8F. Flutter tests:
+- Unit tests para CacheService (TTL, eviction, key sanitization)
+- Unit tests para ApiClient (retry, deduplication, gzip)
+- Widget tests para providers (loading → data → error states)
+- Archivo: test/core/cache_service_test.dart, test/core/api_client_test.dart
+
+CRITERIOS DE ACEPTACIÓN PASO 8:
+- [ ] >70% code coverage en codebase TS
+- [ ] 100% de endpoints tienen test E2E
+- [ ] 100% de injection payloads bloqueados (return 400, never 500)
+- [ ] Benchmarks documentados: antes/después por endpoint
+- [ ] CI pipeline verde en cada push
+- [ ] Flutter tests pasan (unit + widget)
+
+---
+
+### PASO 9: DOCUMENTACIÓN, MIGRACIÓN & ROLLBACK (PRIORIDAD ALTA)
+
+9A. MIGRACIÓN DE LEGACY JS A TS (LO MÁS CRÍTICO):
+
+El codebase TS refactorizado (src/) tiene TODO correcto pero NO sirve tráfico.
+server.js sigue usando las rutas legacy JS con vulnerabilidades.
+
+ESTRATEGIA DE MIGRACIÓN INCREMENTAL:
+
+Fase 1 - Coexistencia (sin romper nada):
+```javascript
+// server.js - Agregar flag de feature toggle
+const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
+
+if (USE_TS_ROUTES) {
+  // Nuevas rutas TS (compiladas a JS)
+  const tsCommissions = require('./dist/routes/commissions.routes');
+  const tsObjectives = require('./dist/routes/objectives.routes');
+  app.use('/api/commissions', tsCommissions);
+  app.use('/api/objectives', tsObjectives);
+} else {
+  // Legacy (actual producción)
+  app.use('/api/commissions', require('./routes/commissions'));
+  app.use('/api/objectives', require('./routes/objectives'));
+}
+```
+
+Fase 2 - Ruta por ruta:
+- Activar USE_TS_ROUTES en staging
+- Correr tests E2E contra staging
+- Comparar responses legacy vs TS (deben ser idénticos)
+- Activar en producción ruta por ruta (commissions primero, luego objectives, etc.)
+
+Fase 3 - Retirar legacy:
+- Cuando TODAS las rutas TS estén en producción, eliminar routes/*.js
+- Actualizar server.js para usar solo dist/
+- Archivo de tracking: MIGRATION_STATUS.md
+
+ARCHIVOS NECESARIOS:
+- backend/tsconfig.json (compilar src/ a dist/)
+- backend/scripts/build.sh (tsc + copy assets)
+- backend/scripts/migrate.sh (toggle feature flags)
+- backend/MIGRATION_STATUS.md (tracking por ruta)
+
+9B. PARCHE URGENTE DE SEGURIDAD (Mientras se migra):
+
+Si la migración toma tiempo, MÍNIMO parchear SQL injection en legacy:
+```javascript
+// routes/objectives.js línea 39-40, 66, 683-715, 1661-1663
+// ANTES: const cleanIds = codes.split(',').map(id => `'${id.trim()}'`).join(',');
+// DESPUÉS: usar queryWithParams que YA existe en config/db.js
+
+// routes/commissions.js - wrappear vendor IDs con queryWithParams
+// routes/repartidor.js línea 55 - cleanIds, línea 303-346 subconsultas
+// routes/dashboard.js líneas 184-188 - filter params
+// routes/auth.js - safeUser interpolation
+```
+
+9C. API DOCUMENTATION (Swagger/OpenAPI):
+```javascript
+// backend/swagger.js
+const swaggerJSDoc = require('swagger-jsdoc');
+const options = {
+  definition: {
+    openapi: '3.0.0',
+    info: { title: 'GMP Mobilidad API', version: '3.0.0' },
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer' }
+      }
+    }
+  },
+  apis: ['./src/routes/*.ts'],
+};
+// Documentar TODOS los endpoints con @swagger JSDoc comments
+```
+
+Endpoints a documentar:
+- GET /api/commissions/summary - params: vendedorCode, year
+- GET /api/commissions/excluded-vendors
+- POST /api/commissions/pay - body: vendorCode, year, quarter, amount
+- GET /api/objectives/summary - params: vendedorCodes, year, month
+- GET /api/objectives/vendors - params: bossCode
+- GET /api/dashboard/metrics - params: vendedorCodes, year, month
+- GET /api/repartidor/* (10+ sub-endpoints)
+- POST /api/auth/login - body: username, password
+- Todos los endpoints de cobros, entregas, facturas, productos, promociones, rutero, ventas
+
+9D. ÍNDICES DB2 (Script de migración):
+```sql
+-- backend/scripts/db-indices.sql
+-- Índices críticos para performance (verificar con EXPLAIN PLAN)
+
+CREATE INDEX IDX_OPP_REPARTIDOR_YEAR_MONTH ON DSEDAC.OPP (CODIGOREPARTIDOR, ANOREPARTO, MESREPARTO);
+CREATE INDEX IDX_LACLAE_VENDOR_YEAR_MONTH ON DSED.LACLAE (LCCDVD, LCAADC, LCMMDC);
+CREATE INDEX IDX_CPC_VENDOR ON DSEDAC.CPC (CODIGOREPARTIDOR);
+CREATE INDEX IDX_CAC_VENDOR ON DSEDAC.CAC (CODIGOREPARTIDOR);
+CREATE INDEX IDX_CLI_CODE ON DSEDAC.CLI (CODIGOCLIENTE);
+
+-- Estadísticas actualizadas
+RUNSTATS ON TABLE DSEDAC.OPP WITH DISTRIBUTION AND INDEXES ALL;
+RUNSTATS ON TABLE DSED.LACLAE WITH DISTRIBUTION AND INDEXES ALL;
+RUNSTATS ON TABLE DSEDAC.CPC WITH DISTRIBUTION AND INDEXES ALL;
+```
+
+9E. ROLLBACK SCRIPTS:
+```bash
+#!/bin/bash
+# backend/scripts/rollback.sh
+# Volver a legacy JS si hay problemas
+
+echo "Rolling back to legacy routes..."
+export USE_TS_ROUTES=false
+pm2 restart gmp-backend --update-env
+echo "Rolled back. Legacy routes active."
+
+# Verificar
+curl -s http://localhost:3000/api/health | jq .
+```
+
+9F. ECOSYSTEM PM2 ACTUALIZADO:
+```javascript
+// backend/ecosystem.config.js - actualizar para TS compilado
+module.exports = {
+  apps: [{
+    name: 'gmp-backend',
+    script: './dist/index.js', // Compilado de src/index.ts
+    instances: 'max',
+    exec_mode: 'cluster',
+    env: { NODE_ENV: 'production', USE_TS_ROUTES: 'true' },
+    env_staging: { NODE_ENV: 'staging', USE_TS_ROUTES: 'true' },
+    env_rollback: { NODE_ENV: 'production', USE_TS_ROUTES: 'false' },
+    max_memory_restart: '500M',
+    error_file: './logs/error.log',
+    out_file: './logs/out.log',
+  }]
+};
+```
+
+CRITERIOS DE ACEPTACIÓN PASO 9:
+- [ ] Migración documentada paso a paso en MIGRATION_STATUS.md
+- [ ] Feature toggle funcional (USE_TS_ROUTES)
+- [ ] tsconfig.json compila src/ a dist/ sin errores
+- [ ] Swagger UI accesible en /api-docs con todos los endpoints
+- [ ] Script de índices DB2 listo (verificado con EXPLAIN PLAN)
+- [ ] Rollback script funcional (< 30 segundos volver a legacy)
+- [ ] PM2 ecosystem actualizado para producción con TS
+- [ ] Parche de seguridad en legacy (queryWithParams) aplicado
+
+---
+
+## 🤖 INSTRUCCIONES EJECUTIVAS PARA CLAUDE
+
+TU TAREA (NO sugerencias, NO pseudo-código):
+
+1. IMPLEMENTAR TODO: Código completo, production-ready, testeable
+2. SIN PARCHES PARCIALES: Refactorizar completo, no half-fixes
+3. CADA ARCHIVO debe compilar y pasar tests sin errores
+4. RESPETAR la arquitectura TS existente (src/services, src/routes, src/utils)
+5. NO duplicar lógica que ya existe en los 14 services TS
+6. MANTENER compatibilidad: la migración debe ser reversible
+
+PRIORIDAD DE EJECUCIÓN:
+1. PRIMERO: Parche de seguridad en legacy JS (queryWithParams en las 8 ubicaciones con SQL injection)
+2. SEGUNDO: Tests E2E + Security + Performance para el codebase TS
+3. TERCERO: Pipeline CI/CD
+4. CUARTO: Migración server.js → TS routes con feature toggle
+5. QUINTO: Swagger docs + DB indices script + rollback scripts
+6. SEXTO: Flutter tests (unit + widget)
+
+NO HAGAS:
+- ❌ Sugerencias vagas ("considera usar Promise.all")
+- ❌ Pseudo-código ("implement like this...")
+- ❌ Tests mínimos con 2-3 test cases
+- ❌ Ignorar edge cases
+- ❌ Crear archivos que dupliquen lógica de src/services/
+- ❌ Asumir que el codebase TS ya está en producción (NO LO ESTÁ)
+- ❌ Olvidar el parche de seguridad legacy
+
+CUANDO TENGAS DUDAS:
+- Pregunta al usuario
+- O asume el enfoque más conservador (safety first)
+- Documenta tus suposiciones
+
+---
+
+## 📊 MÉTRICAS (Línea Base vs Target vs Actual)
+
+Latencia de Endpoints:
+
+| Endpoint | Legacy (actual) | Target | Mejora |
+|----------|----------------|--------|--------|
+| GET /dashboard/metrics | 12s | <300ms | 40x |
+| GET /commissions/summary | 15s | <300ms | 50x |
+| GET /objectives/summary | 20s | <500ms | 40x |
+| GET /repartidor/collections | 10s | <400ms | 25x |
+| GET /repartidor/history | 8s | <200ms | 40x |
+
+Seguridad:
+
+| Métrica | Legacy (actual) | TS (ready) | Target |
+|---------|----------------|------------|--------|
+| SQL injection vulnerabilities | 8+ | 0 | 0 |
+| Input validation coverage | ~20% | 100% | 100% |
+| Prepared statements usage | ~10% | 100% | 100% |
+| cachedQuery en rutas lentas | 0% | 100% | 100% |
+
+Arquitectura:
+
+| Métrica | Legacy (actual) | TS (ready) | Target |
+|---------|----------------|------------|--------|
+| Líneas por ruta | 1000-2200 | 80-120 | <150 |
+| Tests | 0 | 10 archivos | >70% coverage |
+| Cache hit rate | ~5% (solo dashboard) | Diseñado >70% | >70% |
+
+---
+
+## 🚨 NOTAS CRÍTICAS PARA CLAUDE
+
+MUST DO:
+1. NO SKIP TESTING - Testing es tan importante como código
+2. NO GENERIC ERROR HANDLING - Específico y log-friendly
+3. NO HARDCODED VALUES - Todo en .env o constants
+4. NO SQL CONCATENATION - Siempre prepared statements (?)
+5. NO CACHE WITHOUT INVALIDATION - Stale data = bugs
+6. RESPETAR ESTRUCTURA TS EXISTENTE - No reinventar lo que ya existe en src/
+
+UBICACIONES EXACTAS DE SQL INJECTION EN LEGACY (PARCHEAR):
+- routes/objectives.js líneas 39-40 (cleanIds)
+- routes/objectives.js línea 66 (cleanIds en WHERE IN)
+- routes/objectives.js líneas 683-715 (city/code/nif params directos)
+- routes/objectives.js líneas 1661-1663 (vendor codes)
+- routes/commissions.js (vendor IDs interpolados)
+- routes/repartidor.js línea 55 (cleanIds)
+- routes/repartidor.js líneas 303-346 (subconsultas)
+- routes/dashboard.js líneas 184-188 (filter params)
+- routes/auth.js (safeUser interpolation)
+
+EDGE CASES QUE TESTEAR:
+- Vendedor con cero datos en periodo
+- Cliente con múltiples órdenes sin facturar
+- Query con 100+ vendor codes (stress test)
+- Cache Redis down → fallback a DB directa (ya implementado, testear)
+- DB timeout → retry con backoff → error amigable
+- Token expirado mid-request → 401 claro
+- Invalid dates (Feb 30th, month=13, year=1900)
+- Unicode/special chars en nombres
+- vendedorCodes="ALL" con role jefe (miles de resultados)
+- Pagination: offset beyond total, limit=0, limit=99999
+
+RED FLAGS:
+- ⛔ Si test tarda >50ms (sin DB) = lógica podría ser más rápida
+- ⛔ Si response >500KB = demasiado data, necesita paginación
+- ⛔ Si cache hit rate <50% = TTL muy corto o key strategy mal
+- ⛔ Si error retorna status 500 sin detalles = logging incompleto
+- ⛔ Si endpoint acepta comillas/punto-coma sin rechazar = SQL injection risk
+- ⛔ Si legacy route NO tiene validación Joi = vulnerabilidad abierta
+
+---
+
+## ✅ CHECKLIST FINAL (Antes de Merge)
+
+Seguridad (BLOCKER):
+- [ ] SQL injection parcheada en TODAS las rutas legacy JS (9 ubicaciones)
+- [ ] Todos los injection payloads retornan 400, NUNCA 500
+- [ ] Zero string interpolation en SQL queries
+- [ ] Rate limiting configurado en todos los endpoints
+
+Testing:
+- [ ] >70% code coverage en codebase TS
+- [ ] Tests E2E para cada endpoint (supertest)
+- [ ] Tests de seguridad con 10+ injection payloads
+- [ ] Tests de performance con benchmarks documentados
+- [ ] Tests de resiliencia (Redis down, DB timeout)
+- [ ] CI pipeline configurado y verde
+- [ ] Flutter unit + widget tests pasan
+
+Migración:
+- [ ] tsconfig.json compila src/ → dist/ sin errores
+- [ ] Feature toggle USE_TS_ROUTES funcional
+- [ ] server.js puede usar rutas TS compiladas
+- [ ] Rollback script probado (< 30s)
+- [ ] Response parity: legacy vs TS producen mismos resultados
+- [ ] PM2 ecosystem actualizado
+
+Documentación:
+- [ ] Swagger/OpenAPI con todos los endpoints
+- [ ] MIGRATION_STATUS.md con checklist por ruta
+- [ ] Script de índices DB2 listo
+- [ ] README actualizado con nueva arquitectura
+
+Performance:
+- [ ] Latencia <500ms en endpoints críticos (con TS routes)
+- [ ] Cache hit rate >70%
+- [ ] Response size <500KB (paginación)
+- [ ] Frontend: JSON parsing en isolate (no UI blocking)
+
+---
+
+## CÓMO USAR ESTE PROMPT
+
+Copia este texto completo a Claude junto con tu código fuente (lib/, backend/).
+
+Mensaje sugerido:
+
+"Aquí está el MASTER PROMPT v3.0 con el estado ACTUAL de mi app GMP.
+Adjunto todo mi código (lib/, backend/).
+
+PASOS 1-7 están hechos en TypeScript (ver src/), pero PRODUCCIÓN sigue
+corriendo el legacy JS con SQL injection.
+
+Necesito que implementes:
+1. [PASO 8/9/Parche de seguridad - elige uno]
+
+Requisitos:
+- Código 100% production-ready
+- Tests exhaustivos (unit + integration + security + performance)
+- Compatible con la estructura TS existente (src/services, src/routes, src/utils)
+- Migración reversible con feature toggle
+
+Adelante 🚀"
+
+---
+
+FIN DEL PROMPT v3.0

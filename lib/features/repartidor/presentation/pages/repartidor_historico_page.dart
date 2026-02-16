@@ -15,6 +15,10 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/widgets/async_operation_modal.dart';
+import '../../../../core/widgets/pdf_preview_screen.dart';
+import '../../../../core/widgets/email_form_modal.dart';
+import '../../../../core/widgets/whatsapp_form_modal.dart';
 import '../../data/repartidor_data_service.dart';
 
 class RepartidorHistoricoPage extends StatefulWidget {
@@ -1181,21 +1185,39 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
             // Actions
             _buildActionTile(
-              icon: Icons.picture_as_pdf,
-              label: 'Ver / Compartir PDF',
-              color: AppTheme.error,
+              icon: Icons.visibility,
+              label: 'Ver PDF',
+              color: AppTheme.neonBlue,
               onTap: () {
                 Navigator.pop(ctx);
-                _shareDocumentPdf(doc);
+                _previewDocument(doc);
               },
             ),
             _buildActionTile(
               icon: Icons.email_outlined,
               label: 'Enviar por Email',
-              color: AppTheme.neonBlue,
+              color: AppTheme.neonPurple,
               onTap: () {
                 Navigator.pop(ctx);
                 _emailDocument(doc);
+              },
+            ),
+            _buildActionTile(
+              icon: Icons.chat,
+              label: 'WhatsApp',
+              color: const Color(0xFF25D366),
+              onTap: () {
+                Navigator.pop(ctx);
+                _whatsAppDocument(doc);
+              },
+            ),
+            _buildActionTile(
+              icon: Icons.download_rounded,
+              label: 'Descargar',
+              color: AppTheme.neonGreen,
+              onTap: () {
+                Navigator.pop(ctx);
+                _downloadDocument(doc);
               },
             ),
             if (hasAnySignature)
@@ -1205,7 +1227,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 subtitle: doc.legacySignatureName != null && doc.legacySignatureName!.trim().isNotEmpty
                     ? 'Firmado por: ${doc.legacySignatureName!.trim()}'
                     : null,
-                color: AppTheme.neonPurple,
+                color: Colors.amber,
                 onTap: () {
                   Navigator.pop(ctx);
                   _showSignatureDialog(doc);
@@ -1266,11 +1288,57 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   // ACTIONS
   // ==========================================================================
 
-  Future<void> _shareDocumentPdf(_DocumentItem doc) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Generando PDF...'), duration: Duration(seconds: 2), backgroundColor: AppTheme.info),
-    );
+  Future<void> _previewDocument(_DocumentItem doc) async {
+    final modal = AsyncOperationModal.show(context, text: 'Cargando previsualización...');
+    try {
+      final isFactura = doc.type == _DocType.factura;
+      final bytes = await RepartidorDataService.downloadDocument(
+        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
+        serie: doc.serie,
+        number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
+        terminal: doc.terminal,
+        type: isFactura ? 'factura' : 'albaran',
+        facturaNumber: doc.facturaNumber,
+        serieFactura: doc.serieFactura,
+        ejercicioFactura: doc.ejercicioFactura,
+        albaranNumber: doc.albaranNumber ?? doc.number,
+        albaranSerie: doc.serie,
+        albaranTerminal: doc.terminal,
+        albaranYear: doc.ejercicio,
+      );
+      modal.close();
 
+      if (!mounted) return;
+
+      final pdfBytes = Uint8List.fromList(bytes);
+      final typeLabel = isFactura ? 'Factura' : 'Albaran';
+      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: pdfBytes,
+            title: '$typeLabel ${doc.number}',
+            fileName: fileName,
+            onEmailTap: () {
+              Navigator.pop(context);
+              _emailDocument(doc);
+            },
+            onWhatsAppTap: () {
+              Navigator.pop(context);
+              _whatsAppDocument(doc);
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      modal.error('Error al visualizar: $e');
+    }
+  }
+
+  Future<void> _downloadDocument(_DocumentItem doc) async {
+    final modal = AsyncOperationModal.show(context, text: 'Descargando...');
     try {
       final isFactura = doc.type == _DocType.factura;
       final bytes = await RepartidorDataService.downloadDocument(
@@ -1288,35 +1356,71 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranYear: doc.ejercicio,
       );
 
-      final tempDir = await getTemporaryDirectory();
-      final typeLabel = doc.type == _DocType.factura ? 'Factura' : 'Albaran';
+      final downloadsDir = Directory('/storage/emulated/0/Download');
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+      
+      final typeLabel = isFactura ? 'Factura' : 'Albaran';
       final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
-      final file = File('${tempDir.path}/$fileName');
+      final file = File('${downloadsDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: '$typeLabel ${doc.number} - ${DateFormat('dd/MM/yyyy').format(doc.date)}',
-      );
+      modal.success('Guardado en Descargas');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al compartir: $e'), backgroundColor: AppTheme.error),
-        );
-      }
+      modal.error('Error al descargar: $e');
     }
   }
 
   Future<void> _emailDocument(_DocumentItem doc) async {
-    final email = await _showEmailInputDialog();
-    if (email == null || email.isEmpty) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Enviando a $email...'), duration: const Duration(seconds: 2), backgroundColor: AppTheme.info),
+    final isFactura = doc.type == _DocType.factura; 
+    final typeLabel = isFactura ? 'Factura' : 'Albarán';
+    final result = await EmailFormModal.show(
+      context,
+      defaultSubject: '$typeLabel ${doc.number} - GMP',
+      defaultBody: 'Adjunto le remitimos el documento $typeLabel ${doc.number}.\n\nSaludos,\nGranja Mari Pepa',
     );
 
+    if (result == null || !mounted) return;
+
+    final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
     try {
-      final isFactura = doc.type == _DocType.factura;
+      await RepartidorDataService.sendEmail(
+        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
+        serie: doc.serie,
+        number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
+        type: isFactura ? 'factura' : 'albaran',
+        destinatario: result.email,
+        terminal: doc.terminal,
+        asunto: result.subject,
+        cuerpo: result.body,
+        facturaNumber: doc.facturaNumber,
+        serieFactura: doc.serieFactura,
+        ejercicioFactura: doc.ejercicioFactura,
+        albaranNumber: doc.albaranNumber ?? doc.number,
+        albaranSerie: doc.serie,
+        albaranTerminal: doc.terminal,
+        albaranYear: doc.ejercicio,
+      );
+      modal.success('Email enviado correctamente');
+    } catch (e) {
+      modal.error('Error enviando email: $e');
+    }
+  }
+
+  Future<void> _whatsAppDocument(_DocumentItem doc) async {
+    final isFactura = doc.type == _DocType.factura;
+    final typeLabel = isFactura ? 'Factura' : 'Albarán';
+    
+    final result = await WhatsAppFormModal.show(
+      context,
+      defaultMessage: 'Le adjunto el documento $typeLabel ${doc.number} - GMP',
+    );
+
+    if (result == null || !mounted) return;
+
+    final modal = AsyncOperationModal.show(context, text: 'Preparando WhatsApp...');
+    try {
       final bytes = await RepartidorDataService.downloadDocument(
         year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
         serie: doc.serie,
@@ -1331,62 +1435,22 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
       );
+      modal.close();
 
       final tempDir = await getTemporaryDirectory();
-      final typeLabel = doc.type == _DocType.factura ? 'Factura' : 'Albaran';
       final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
+      if (!mounted) return;
+
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: '$typeLabel ${doc.number} - ${DateFormat('dd/MM/yyyy').format(doc.date)}',
+        text: result.message,
       );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
-        );
-      }
+      modal.error('Error preparando WhatsApp: $e');
     }
-  }
-
-  Future<String?> _showEmailInputDialog() async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.email, color: AppTheme.neonBlue, size: 22),
-            const SizedBox(width: 8),
-            const Text('Enviar por Email', style: TextStyle(fontSize: 16, color: AppTheme.textPrimary)),
-          ],
-        ),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.emailAddress,
-          style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: InputDecoration(
-            hintText: 'email@ejemplo.com',
-            hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
-            prefixIcon: const Icon(Icons.alternate_email, color: AppTheme.textSecondary),
-            filled: true,
-            fillColor: AppTheme.darkBase,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Enviar', style: TextStyle(color: AppTheme.neonBlue)),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showSignatureDialog(_DocumentItem doc) {

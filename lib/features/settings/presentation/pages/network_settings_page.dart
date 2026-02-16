@@ -488,9 +488,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _diagRow('Plataforma', _diagnostics!['platform'] ?? 'N/A'),
+                  _diagRow('Plataforma', (_diagnostics!['platform'] as String?) ?? 'N/A'),
                   _diagRow('Inicializado', _diagnostics!['isInitialized']?.toString() ?? 'N/A'),
-                  _diagRow('Servidor Activo', _diagnostics!['activeServer'] ?? 'N/A'),
+                  _diagRow('Servidor Activo', (_diagnostics!['activeServer'] as String?) ?? 'N/A'),
                   const Divider(color: Colors.grey),
                   const Text(
                     'Test de Conectividad:',
@@ -512,7 +512,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                s['name'] ?? '',
+                                (s['name'] as String?) ?? '',
                                 style: TextStyle(
                                   color: s['isActive'] == true ? const Color(0xFF22D3EE) : Colors.white70,
                                 ),
