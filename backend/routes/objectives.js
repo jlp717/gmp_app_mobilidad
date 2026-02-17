@@ -7,6 +7,7 @@ const {
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
     VENDOR_COLUMN,
+    getVendorColumn,
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
@@ -35,21 +36,23 @@ const {
  * Get all clients currently managed by a vendor (from current year or most recent data)
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
-    // Uses VENDOR_COLUMN (LCCDVD or R1_T8CDVD) based on env config
+    // Uses getVendorColumn(year) for date-aware column (LCCDVD before March 2026, R1_T8CDVD after)
+    const col = getVendorColumn(currentYear);
     const rows = await query(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.${VENDOR_COLUMN} = '${vendorCode}'
+        WHERE L.${col} = '${vendorCode}'
           AND L.LCAADC = ${currentYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
 
     // If no clients in current year, try previous year
     if (rows.length === 0) {
+        const prevCol = getVendorColumn(currentYear - 1);
         const prevRows = await query(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.${VENDOR_COLUMN} = '${vendorCode}'
+            WHERE L.${prevCol} = '${vendorCode}'
               AND L.LCAADC = ${currentYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);

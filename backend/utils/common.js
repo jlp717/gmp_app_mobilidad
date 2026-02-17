@@ -7,15 +7,48 @@ const getCurrentYear = () => getCurrentDate().getFullYear();
 const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 
 // =============================================================================
-// VENDOR COLUMN FEATURE FLAG
+// VENDOR COLUMN FEATURE FLAG (with transition date logic)
 // =============================================================================
 // VENDOR_COLUMN controls which DB2 column is used for vendor filtering:
 //   LCCDVD    = "Quién vendió" (lógica actual de producción)
 //   R1_T8CDVD = "Quién tiene el cliente asignado" (nueva lógica 2026)
 //
 // Set via environment variable. Default: LCCDVD (backward compatible)
+//
+// TRANSITION: For PRE (VENDOR_COLUMN=R1_T8CDVD), Jan/Feb 2026 keep using
+// LCCDVD so objectives match production. From March 2026, use R1_T8CDVD.
 const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'LCCDVD';
-logger.info(`[CONFIG] 🏷️  VENDOR_COLUMN = ${VENDOR_COLUMN}`);
+const TRANSITION_YEAR = 2026;
+const TRANSITION_MONTH = 3; // March
+
+/**
+ * Get the vendor column to use based on the target date.
+ * - Production (LCCDVD env or default): always returns LCCDVD
+ * - PRE (R1_T8CDVD env): returns LCCDVD for dates before March 2026,
+ *   R1_T8CDVD from March 2026 onwards.
+ * @param {number} [year] - Target year (defaults to current)
+ * @param {number} [month] - Target month 1-12 (defaults to current)
+ * @returns {string} 'LCCDVD' or 'R1_T8CDVD'
+ */
+function getVendorColumn(year, month) {
+    // Production: always LCCDVD, no transition needed
+    if (VENDOR_COLUMN === 'LCCDVD') return 'LCCDVD';
+
+    // PRE: date-based transition
+    const now = getCurrentDate();
+    const y = parseInt(year) || now.getFullYear();
+    const m = parseInt(month) || (now.getMonth() + 1);
+
+    // Before transition date → old column (same as production)
+    if (y < TRANSITION_YEAR || (y === TRANSITION_YEAR && m < TRANSITION_MONTH)) {
+        return 'LCCDVD';
+    }
+
+    // March 2026+ → new column
+    return VENDOR_COLUMN; // R1_T8CDVD
+}
+
+logger.info(`[CONFIG] 🏷️  VENDOR_COLUMN = ${VENDOR_COLUMN} (transition: ${TRANSITION_MONTH}/${TRANSITION_YEAR})`);
 
 // =============================================================================
 // SALES FILTER CONSTANTS
@@ -142,11 +175,11 @@ function buildDateFilter(yearParam, monthParam, tableAlias = '') {
 }
 
 // Vendor filter for LACLAE table
-// Uses VENDOR_COLUMN env var: LCCDVD (default) or R1_T8CDVD (new 2026 logic)
-function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
+// Uses getVendorColumn(year, month) for date-aware column selection
+function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L', year, month) {
     if (!vendedorCodes || vendedorCodes === 'ALL') return '';
     const prefix = tableAlias ? `${tableAlias}.` : '';
-    const col = VENDOR_COLUMN; // LCCDVD or R1_T8CDVD
+    const col = getVendorColumn(year, month); // Date-aware: LCCDVD or R1_T8CDVD
 
     const codeList = vendedorCodes.split(',').map(c => c.trim());
     const hasUnk = codeList.includes('UNK');
@@ -249,6 +282,7 @@ module.exports = {
     getCurrentYear,
     MIN_YEAR,
     VENDOR_COLUMN,
+    getVendorColumn,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     LAC_TIPOVENTA_FILTER,
