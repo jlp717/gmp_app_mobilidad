@@ -15,18 +15,18 @@ class NetworkService {
   /// Lista de servidores ordenados por prioridad
   /// El sistema probará cada uno en orden hasta encontrar uno que funcione
   static final List<ServerConfig> _servers = [
-    // 1. Servidor LAN directo - PRE (port 3002, nueva lógica R1_T8CDVD)
+    // 1. PRE via Cloudflare Tunnel (acceso desde cualquier red)
+    ServerConfig(
+      name: 'PRE (Cloudflare)',
+      baseUrl: 'https://delight-intersection-farm-assuming.trycloudflare.com/api',
+      priority: 1,
+      isSecure: true,
+    ),
+
+    // 2. Servidor LAN directo - PRE (port 3002, nueva lógica R1_T8CDVD)
     ServerConfig(
       name: 'Servidor PRE (LAN)',
-      baseUrl: 'http://192.168.1.238:3002/api',
-      priority: 1,
-      isSecure: false,
-    ),
-    
-    // 2. Servidor LAN directo (para red local)
-    ServerConfig(
-      name: 'Servidor Local (LAN)',
-      baseUrl: 'http://192.168.1.238:3002/api',
+      baseUrl: 'http://192.168.1.230:3002/api',
       priority: 2,
       isSecure: false,
     ),
@@ -41,10 +41,9 @@ class NetworkService {
     ),
     
     // 4. WSA (Windows Subsystem for Android) - IP especial Hyper-V
-    // Nota: Esta IP puede variar, se detectará automáticamente
     ServerConfig(
       name: 'WSA (Windows)',
-      baseUrl: 'http://172.31.192.1:3002/api', // IP típica de vEthernet WSL
+      baseUrl: 'http://172.31.192.1:3002/api',
       priority: 4,
       isSecure: false,
       isWSAOnly: true,

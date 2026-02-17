@@ -18,8 +18,8 @@ class ApiConfig {
   static String _developmentIp = '127.0.0.1';
   static const int _serverPort = 3002;
 
-  // -----------------------------------------------------------------------------\n  // 2. PRE-PRODUCCION (LAN directo, port 3002 - nueva lógica R1_T8CDVD)
-  static String _productionUrl = 'http://192.168.1.238:3002'; 
+  // -----------------------------------------------------------------------------\n  // 2. PRE-PRODUCCION (Cloudflare Tunnel → port 3002, nueva lógica R1_T8CDVD)
+  static String _productionUrl = 'https://delight-intersection-farm-assuming.trycloudflare.com'; 
 
   // =============================================================================
 
