@@ -949,7 +949,6 @@ router.get('/summary', async (req, res) => {
                 };
 
                 // PERF: Cache the ALL result for 5 minutes
-                const cacheKey = `comm:summary:ALL:${years.join(',')}`;
                 await redisCache.set('route', cacheKey, yearResult, TTL.SHORT);
                 logger.info(`[COMMISSIONS] 💾 Cached ALL summary (${cacheKey})`);
 
