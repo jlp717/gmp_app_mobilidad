@@ -16,10 +16,10 @@ class ApiConfig {
   // -----------------------------------------------------------------------------
   // 1. DESARROLLO (WiFi Local)
   static String _developmentIp = '127.0.0.1';
-  static const int _serverPort = 3001;
+  static const int _serverPort = 3002;
 
-  // -----------------------------------------------------------------------------\n  // 2. PRE-PRODUCCION (LAN directo, port 3001 - nueva lógica R1_T8CDVD)
-  static String _productionUrl = 'http://192.168.1.238:3001'; 
+  // -----------------------------------------------------------------------------\n  // 2. PRE-PRODUCCION (LAN directo, port 3002 - nueva lógica R1_T8CDVD)
+  static String _productionUrl = 'http://192.168.1.238:3002'; 
 
   // =============================================================================
 
@@ -77,8 +77,8 @@ class ApiConfig {
   }
   
   // Alternativas para referencia
-  static const String emulatorUrl = 'http://10.0.2.2:3001/api';
-  static const String wsaUrl = 'http://172.31.192.1:3001/api';
+  static const String emulatorUrl = 'http://10.0.2.2:3002/api';
+  static const String wsaUrl = 'http://172.31.192.1:3002/api';
 
 
   // Auth Endpoints

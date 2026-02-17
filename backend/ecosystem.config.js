@@ -86,10 +86,10 @@ module.exports = {
             instances: 1,
             exec_mode: 'fork',
 
-            // PRE environment: R1_T8CDVD logic + port 3001
+            // PRE environment: R1_T8CDVD logic + port 3002
             env: {
                 NODE_ENV: 'production',
-                PORT: 3001,
+                PORT: 3002,
                 USE_TS_ROUTES: 'false',
                 VENDOR_COLUMN: 'R1_T8CDVD',
             },
