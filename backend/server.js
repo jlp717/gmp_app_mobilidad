@@ -21,6 +21,7 @@ const { setDeliveryStatusAvailable } = require('./utils/delivery-status-check');
 const { initCache, getCacheStats } = require('./services/redis-cache');
 const { networkOptimizer, responseCoalescing } = require('./middleware/network-optimizer');
 const { createOptimizedQuery } = require('./services/query-optimizer');
+const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
 
 // =============================================================================
 // FEATURE TOGGLE: USE_TS_ROUTES
@@ -109,15 +110,17 @@ app.use(express.json({ limit: '10kb' }));
 app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers
 app.use(responseCoalescing); // Combine identical concurrent requests
 
-// Logging
+// ==================== AUDIT MIDDLEWARE (logs IP, user, action) ====================
+app.use(auditMiddleware);
+
+// Logging (concise, only method/path/status/duration for PM2)
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    const logLevel = res.statusCode >= 400 ? 'warn' : 'info';
-    // Don't log health checks to reduce noise
-    if (req.path !== '/api/health') {
-      logger[logLevel](`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+    // Only log warnings/errors here — audit middleware handles the rest
+    if (res.statusCode >= 400 && req.path !== '/api/health') {
+      logger.warn(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
     }
   });
   next();
@@ -263,6 +266,41 @@ app.get('/api/optimization/query-stats', verifyToken, (req, res) => {
       slowQueries: optimizedQuery.getSlowQueries(500),
       queryStats: optimizedQuery.getStats().slice(0, 20),
       indexSuggestions: optimizedQuery.suggestIndexes(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== AUDIT ENDPOINTS (protected, admin only) ====================
+// Recent audit log entries (last 500)
+app.get('/api/optimization/audit-log', verifyToken, (req, res) => {
+  try {
+    const entries = getRecentAuditEntries();
+    const { limit = 100, user, status } = req.query;
+    let filtered = entries;
+    if (user) filtered = filtered.filter(e => e.user === user);
+    if (status) filtered = filtered.filter(e => String(e.status) === status);
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      total: filtered.length,
+      entries: filtered.slice(-parseInt(limit)).reverse() // Most recent first
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Active sessions overview (who's connected, from where)
+app.get('/api/optimization/active-sessions', verifyToken, (req, res) => {
+  try {
+    const sessions = getActiveSessions();
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      activeSessions: Object.keys(sessions).length,
+      sessions
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
