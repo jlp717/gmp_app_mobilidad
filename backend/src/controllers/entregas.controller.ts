@@ -15,15 +15,21 @@ import { logger } from '../utils/logger';
 export const obtenerEntregasPendientes = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
         const { repartidorId } = req.params;
+        const { limit, offset } = req.query;
 
         logger.info(`[ENTREGAS] Obteniendo pendientes para repartidor: ${repartidorId}`);
 
-        const albaranes = await entregasService.obtenerAlbaranesPendientes(repartidorId);
+        const result = await entregasService.obtenerAlbaranesPendientes(
+            repartidorId,
+            limit ? parseInt(limit as string, 10) : undefined,
+            offset ? parseInt(offset as string, 10) : undefined,
+        );
 
         res.json({
             success: true,
-            albaranes,
-            total: albaranes.length,
+            albaranes: result.albaranes,
+            total: result.total,
+            paginacion: result.paginacion,
             fecha: new Date().toISOString().split('T')[0]
         });
     }

@@ -328,7 +328,7 @@ class IsolatePoolService {
       'completedTasks': _tasksCompleted,
       'failedTasks': _tasksFailed,
       'avgQueueTimeMs': avgQueueTime.toStringAsFixed(2),
-      'workers': _workers.map((w) => {
+      'workers': _workers.map((w) {
         return {
           'id': w.id,
           'busy': w.isBusy,

@@ -5,6 +5,7 @@ const logger = require('../middleware/logger');
 const authenticateToken = require('../middleware/auth');
 const { signToken } = require('../middleware/auth');
 const { loginLimiter } = require('../middleware/security');
+const { auditLogin, getClientIP } = require('../middleware/audit');
 
 // Track failed login attempts per username (in-memory)
 const failedLoginAttempts = new Map();
@@ -241,10 +242,12 @@ router.post('/login', loginLimiter, async (req, res) => {
         };
 
         logger.info(`✅ Login successful: ${vendedorCode} - ${vendedorName} (${response.user.role})`);
+        auditLogin(req, vendedorCode, vendedorName, finalRole, true);
         res.json(response);
 
     } catch (error) {
         logger.error(`Login error: ${error.message}`);
+        auditLogin(req, req.body?.user || 'unknown', null, null, false);
         res.status(401).json({ error: 'Error de autenticación. Verifique sus credenciales.' });
     }
 });
@@ -257,6 +260,7 @@ router.post('/switch-role', authenticateToken, async (req, res) => {
         const { userId, newRole, viewAs } = req.body;
 
         logger.info(`[Auth] Role switch request: User ${userId} -> ${newRole}`);
+        auditLogin(req, userId, null, newRole, true);
 
         // Validate role
         if (!['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR'].includes(newRole)) {

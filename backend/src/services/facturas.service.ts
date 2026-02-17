@@ -3,10 +3,16 @@
  * =================
  * Service for invoice operations for commercial profile
  * Ported from granja_mari_pepa web app
+ *
+ * SECURITY: All queries use parameterized placeholders (?) instead of
+ * string concatenation. Input validation is done via validators.ts.
  */
 
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
+import { parseVendorCodes, sanitizeCode, sanitizeSearch, buildInClause, buildSearchClause } from '../utils/validators';
+import { toFloat, toStr, formatDateDMY, clampLimit, clampOffset, currentPage, totalPages } from '../utils/db-helpers';
+import { queryCache, TTL } from '../utils/query-cache';
 
 interface FacturaListItem {
     id: string;
@@ -58,6 +64,18 @@ interface GetFacturasParams {
     month?: number;
     search?: string;
     clientId?: string;
+    limit?: number;
+    offset?: number;
+}
+
+interface PaginatedFacturas {
+    facturas: FacturaListItem[];
+    total: number;
+    paginacion: {
+        pagina: number;
+        limite: number;
+        totalPaginas: number;
+    };
 }
 
 interface GetSummaryParams {
@@ -68,18 +86,58 @@ interface GetSummaryParams {
 
 class FacturasService {
 
-    async getFacturas(params: GetFacturasParams): Promise<FacturaListItem[]> {
+    async getFacturas(params: GetFacturasParams): Promise<PaginatedFacturas> {
+        const limit = clampLimit(params.limit, 50, 500);
+        const offset = clampOffset(params.offset);
+        const cacheKey = `gmp:facturas:${params.vendedorCodes}:${params.year || ''}:${params.month || ''}:${params.search || ''}:${params.clientId || ''}:${limit}:${offset}`;
+        return queryCache.getOrSet(cacheKey, () => this._fetchFacturas({ ...params, limit, offset }), TTL.SHORT);
+    }
+
+    private async _fetchFacturas(params: GetFacturasParams): Promise<PaginatedFacturas> {
         const { vendedorCodes, year, month, search, clientId } = params;
+        const limit = params.limit!;
+        const offset = params.offset!;
 
-        if (!vendedorCodes) {
-            throw new Error('vendedorCodes is required');
-        }
-
-        const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
+        const vendorCodes = parseVendorCodes(vendedorCodes);
         const currentYear = year || new Date().getFullYear();
 
-        let sql = `
-      SELECT 
+        // Build parameterized query
+        const conditions: string[] = [
+            'CAC.EJERCICIOFACTURA = ?',
+            'CAC.NUMEROFACTURA > 0',
+        ];
+        const queryParams: unknown[] = [currentYear];
+
+        // Vendor IN clause (parameterized)
+        const vendorIn = buildInClause('TRIM(CAC.CODIGOVENDEDOR)', vendorCodes);
+        conditions.push(vendorIn.clause);
+        queryParams.push(...vendorIn.params);
+
+        if (month) {
+            conditions.push('CAC.MESFACTURA = ?');
+            queryParams.push(month);
+        }
+
+        if (clientId) {
+            conditions.push('TRIM(CAC.CODIGOCLIENTE) = ?');
+            queryParams.push(sanitizeCode(clientId));
+        }
+
+        if (search) {
+            const searchClause = buildSearchClause(
+                ['UPPER(CLI.NOMBRECLIENTE)', 'UPPER(CLI.NOMBREALTERNATIVO)', 'CAST(CAC.NUMEROFACTURA AS CHAR(20))', 'TRIM(CAC.CODIGOCLIENTE)'],
+                search
+            );
+            if (searchClause.clause) {
+                conditions.push(searchClause.clause);
+                queryParams.push(...searchClause.params);
+            }
+        }
+
+        const whereClause = conditions.join(' AND ');
+
+        const dataSql = `
+      SELECT
         TRIM(CAC.SERIEFACTURA) as SERIE,
         CAC.NUMEROFACTURA as NUMERO,
         CAC.EJERCICIOFACTURA as EJERCICIO,
@@ -93,33 +151,25 @@ class FacturasService {
         CAC.IMPORTEIVA1 + CAC.IMPORTEIVA2 + CAC.IMPORTEIVA3 as IVA
       FROM DSEDAC.CAC CAC
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTE)
-      WHERE CAC.EJERCICIOFACTURA = ${currentYear}
-        AND CAC.NUMEROFACTURA > 0
-        AND TRIM(CAC.CODIGOVENDEDOR) IN (${vendorList})
+      WHERE ${whereClause}
+      ORDER BY CAC.ANOFACTURA DESC, CAC.MESFACTURA DESC, CAC.DIAFACTURA DESC, CAC.NUMEROFACTURA DESC
+      OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
     `;
 
-        if (month) {
-            sql += ` AND CAC.MESFACTURA = ${month}`;
-        }
-
-        if (clientId) {
-            sql += ` AND TRIM(CAC.CODIGOCLIENTE) = '${clientId.trim()}'`;
-        }
-
-        if (search) {
-            const safeSearch = search.toUpperCase().replace(/'/g, "''");
-            sql += ` AND (
-        UPPER(CLI.NOMBRECLIENTE) LIKE '%${safeSearch}%' OR
-        UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${safeSearch}%' OR
-        CAST(CAC.NUMEROFACTURA AS CHAR(20)) LIKE '%${safeSearch}%' OR
-        TRIM(CAC.CODIGOCLIENTE) LIKE '%${safeSearch}%'
-      )`;
-        }
-
-        sql += ` ORDER BY CAC.ANOFACTURA DESC, CAC.MESFACTURA DESC, CAC.DIAFACTURA DESC, CAC.NUMEROFACTURA DESC`;
+        const countSql = `
+      SELECT COUNT(DISTINCT TRIM(CAC.SERIEFACTURA) || '-' || CAC.NUMEROFACTURA) as TOTAL
+      FROM DSEDAC.CAC CAC
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTE)
+      WHERE ${whereClause}
+    `;
 
         try {
-            const rows: any[] = await odbcPool.query(sql);
+            const [rows, countResult]: [any[], any[]] = await Promise.all([
+                odbcPool.query(dataSql, [...queryParams, offset, limit]),
+                odbcPool.query(countSql, queryParams),
+            ]);
+
+            const total = Number(countResult[0]?.TOTAL) || 0;
 
             const invoiceMap = new Map<string, FacturaListItem>();
             for (const row of rows) {
@@ -130,17 +180,26 @@ class FacturasService {
                         serie: row.SERIE,
                         numero: row.NUMERO,
                         ejercicio: row.EJERCICIO,
-                        fecha: `${String(row.DIA).padStart(2, '0')}/${String(row.MES).padStart(2, '0')}/${row.ANO}`,
+                        fecha: formatDateDMY(row.DIA, row.MES, row.ANO),
                         clienteId: row.CODIGO_CLIENTE,
                         clienteNombre: row.NOMBRE_CLIENTE || `Cliente ${row.CODIGO_CLIENTE}`,
-                        total: parseFloat(row.TOTAL) || 0,
-                        base: parseFloat(row.BASE) || 0,
-                        iva: parseFloat(row.IVA) || 0
+                        total: toFloat(row.TOTAL),
+                        base: toFloat(row.BASE),
+                        iva: toFloat(row.IVA)
                     });
                 }
             }
 
-            return Array.from(invoiceMap.values());
+            const facturas = Array.from(invoiceMap.values());
+            return {
+                facturas,
+                total,
+                paginacion: {
+                    pagina: currentPage(offset, limit),
+                    limite: limit,
+                    totalPaginas: totalPages(total, limit),
+                },
+            };
         } catch (error) {
             logger.error('Error fetching facturas:', error);
             throw error;
@@ -148,22 +207,27 @@ class FacturasService {
     }
 
     async getAvailableYears(vendedorCodes: string): Promise<number[]> {
-        if (!vendedorCodes) {
-            throw new Error('vendedorCodes is required');
-        }
+        return queryCache.getOrSet(
+            `gmp:facturas:years:${vendedorCodes}`,
+            () => this._fetchAvailableYears(vendedorCodes),
+            TTL.LONG
+        );
+    }
 
-        const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
+    private async _fetchAvailableYears(vendedorCodes: string): Promise<number[]> {
+        const vendorCodes = parseVendorCodes(vendedorCodes);
+        const vendorIn = buildInClause('TRIM(CODIGOVENDEDOR)', vendorCodes);
 
         const sql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
       FROM DSEDAC.CAC
       WHERE NUMEROFACTURA > 0
-        AND TRIM(CODIGOVENDEDOR) IN (${vendorList})
+        AND ${vendorIn.clause}
       ORDER BY YEAR DESC
     `;
 
         try {
-            const rows: any[] = await odbcPool.query(sql);
+            const rows: any[] = await odbcPool.query(sql, vendorIn.params);
             return rows.map(r => r.YEAR);
         } catch (error) {
             logger.error('Error fetching available years:', error);
@@ -172,40 +236,50 @@ class FacturasService {
     }
 
     async getSummary(params: GetSummaryParams): Promise<FacturaSummary> {
+        const cacheKey = `gmp:facturas:summary:${params.vendedorCodes}:${params.year || ''}:${params.month || ''}`;
+        return queryCache.getOrSet(cacheKey, () => this._fetchSummary(params), TTL.SHORT);
+    }
+
+    private async _fetchSummary(params: GetSummaryParams): Promise<FacturaSummary> {
         const { vendedorCodes, year, month } = params;
 
-        if (!vendedorCodes) {
-            throw new Error('vendedorCodes is required');
-        }
-
-        const vendorList = vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
+        const vendorCodes = parseVendorCodes(vendedorCodes);
         const currentYear = year || new Date().getFullYear();
 
-        let sql = `
-      SELECT 
+        const conditions: string[] = [
+            'EJERCICIOFACTURA = ?',
+            'NUMEROFACTURA > 0',
+        ];
+        const queryParams: unknown[] = [currentYear];
+
+        const vendorIn = buildInClause('TRIM(CODIGOVENDEDOR)', vendorCodes);
+        conditions.push(vendorIn.clause);
+        queryParams.push(...vendorIn.params);
+
+        if (month) {
+            conditions.push('MESFACTURA = ?');
+            queryParams.push(month);
+        }
+
+        const sql = `
+      SELECT
         COUNT(DISTINCT TRIM(SERIEFACTURA) || '-' || NUMEROFACTURA) as NUM_FACTURAS,
         SUM(IMPORTETOTAL) as TOTAL,
         SUM(IMPORTEBASEIMPONIBLE1 + IMPORTEBASEIMPONIBLE2 + IMPORTEBASEIMPONIBLE3) as BASE,
         SUM(IMPORTEIVA1 + IMPORTEIVA2 + IMPORTEIVA3) as IVA
       FROM DSEDAC.CAC
-      WHERE EJERCICIOFACTURA = ${currentYear}
-        AND NUMEROFACTURA > 0
-        AND TRIM(CODIGOVENDEDOR) IN (${vendorList})
+      WHERE ${conditions.join(' AND ')}
     `;
 
-        if (month) {
-            sql += ` AND MESFACTURA = ${month}`;
-        }
-
         try {
-            const rows: any[] = await odbcPool.query(sql);
+            const rows: any[] = await odbcPool.query(sql, queryParams);
             const stats: any = rows[0] || {};
 
             return {
-                totalFacturas: parseInt(stats.NUM_FACTURAS) || 0,
-                totalImporte: parseFloat(stats.TOTAL) || 0,
-                totalBase: parseFloat(stats.BASE) || 0,
-                totalIva: parseFloat(stats.IVA) || 0
+                totalFacturas: toFloat(stats.NUM_FACTURAS),
+                totalImporte: toFloat(stats.TOTAL),
+                totalBase: toFloat(stats.BASE),
+                totalIva: toFloat(stats.IVA)
             };
         } catch (error) {
             logger.error('Error fetching summary:', error);
@@ -214,8 +288,16 @@ class FacturasService {
     }
 
     async getFacturaDetail(serie: string, numero: number, ejercicio: number): Promise<FacturaDetail> {
+        return queryCache.getOrSet(
+            `gmp:facturas:detail:${serie}:${numero}:${ejercicio}`,
+            () => this._fetchFacturaDetail(serie, numero, ejercicio),
+            TTL.MEDIUM
+        );
+    }
+
+    private async _fetchFacturaDetail(serie: string, numero: number, ejercicio: number): Promise<FacturaDetail> {
         const headerSql = `
-      SELECT 
+      SELECT
         CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
         CAC.DIAFACTURA, CAC.MESFACTURA, CAC.ANOFACTURA,
         TRIM(CAC.CODIGOCLIENTE) as CODIGOCLIENTE,
@@ -229,23 +311,14 @@ class FacturasService {
         CAC.IMPORTEBASEIMPONIBLE3, CAC.PORCENTAJEIVA3, CAC.IMPORTEIVA3
       FROM DSEDAC.CAC CAC
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTE)
-      WHERE TRIM(CAC.SERIEFACTURA) = '${serie}'
-        AND CAC.NUMEROFACTURA = ${numero}
-        AND CAC.EJERCICIOFACTURA = ${ejercicio}
+      WHERE TRIM(CAC.SERIEFACTURA) = ?
+        AND CAC.NUMEROFACTURA = ?
+        AND CAC.EJERCICIOFACTURA = ?
       FETCH FIRST 1 ROWS ONLY
     `;
 
-        try {
-            const headers: any[] = await odbcPool.query(headerSql);
-
-            if (!headers || headers.length === 0) {
-                throw new Error('Factura no encontrada');
-            }
-
-            const header: any = headers[0];
-
-            const linesSql = `
-        SELECT 
+        const linesSql = `
+        SELECT
           LAC.CODIGOARTICULO,
           LAC.DESCRIPCION as DESCRIPCIONARTICULO,
           LAC.CANTIDADUNIDADES as CANTIDAD,
@@ -253,46 +326,58 @@ class FacturasService {
           LAC.IMPORTEVENTA as IMPORTE,
           LAC.PORCENTAJEDESCUENTO as DESCUENTO
         FROM DSEDAC.LAC LAC
-        INNER JOIN DSEDAC.CAC CAC 
+        INNER JOIN DSEDAC.CAC CAC
           ON LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
           AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
           AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN
           AND LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
-        WHERE TRIM(CAC.SERIEFACTURA) = '${serie}'
-          AND CAC.NUMEROFACTURA = ${numero}
-          AND CAC.EJERCICIOFACTURA = ${ejercicio}
+        WHERE TRIM(CAC.SERIEFACTURA) = ?
+          AND CAC.NUMEROFACTURA = ?
+          AND CAC.EJERCICIOFACTURA = ?
         ORDER BY LAC.SECUENCIA
       `;
 
-            const lines: any[] = await odbcPool.query(linesSql);
+        try {
+            // Ejecutar header + lines en paralelo
+            const queryParams = [serie, numero, ejercicio];
+            const [headers, lines]: [any[], any[]] = await Promise.all([
+                odbcPool.query(headerSql, queryParams),
+                odbcPool.query(linesSql, queryParams),
+            ]);
+
+            if (!headers || headers.length === 0) {
+                throw new Error('Factura no encontrada');
+            }
+
+            const header: any = headers[0];
 
             const bases = [
-                { base: parseFloat(header.IMPORTEBASEIMPONIBLE1) || 0, pct: header.PORCENTAJEIVA1 || 0, iva: parseFloat(header.IMPORTEIVA1) || 0 },
-                { base: parseFloat(header.IMPORTEBASEIMPONIBLE2) || 0, pct: header.PORCENTAJEIVA2 || 0, iva: parseFloat(header.IMPORTEIVA2) || 0 },
-                { base: parseFloat(header.IMPORTEBASEIMPONIBLE3) || 0, pct: header.PORCENTAJEIVA3 || 0, iva: parseFloat(header.IMPORTEIVA3) || 0 }
+                { base: toFloat(header.IMPORTEBASEIMPONIBLE1), pct: toFloat(header.PORCENTAJEIVA1), iva: toFloat(header.IMPORTEIVA1) },
+                { base: toFloat(header.IMPORTEBASEIMPONIBLE2), pct: toFloat(header.PORCENTAJEIVA2), iva: toFloat(header.IMPORTEIVA2) },
+                { base: toFloat(header.IMPORTEBASEIMPONIBLE3), pct: toFloat(header.PORCENTAJEIVA3), iva: toFloat(header.IMPORTEIVA3) }
             ].filter(b => b.base > 0);
 
             return {
                 header: {
-                    serie: header.SERIEFACTURA?.trim() || serie,
+                    serie: toStr(header.SERIEFACTURA) || serie,
                     numero: header.NUMEROFACTURA,
                     ejercicio: header.EJERCICIOFACTURA,
-                    fecha: `${String(header.DIAFACTURA).padStart(2, '0')}/${String(header.MESFACTURA).padStart(2, '0')}/${header.ANOFACTURA}`,
+                    fecha: formatDateDMY(header.DIAFACTURA, header.MESFACTURA, header.ANOFACTURA),
                     clienteId: header.CODIGOCLIENTE,
                     clienteNombre: header.NOMBRECLIENTEFACTURA,
                     clienteDireccion: header.DIRECCIONCLIENTEFACTURA,
                     clientePoblacion: header.POBLACIONCLIENTEFACTURA,
                     clienteNif: header.CIFCLIENTEFACTURA,
-                    total: parseFloat(header.TOTALFACTURA) || 0,
+                    total: toFloat(header.TOTALFACTURA),
                     bases
                 },
                 lines: lines.map(l => ({
-                    codigo: l.CODIGOARTICULO?.trim() || '',
-                    descripcion: l.DESCRIPCIONARTICULO?.trim() || '',
-                    cantidad: parseFloat(l.CANTIDAD) || 0,
-                    precio: parseFloat(l.PRECIO) || 0,
-                    importe: parseFloat(l.IMPORTE) || 0,
-                    descuento: parseFloat(l.DESCUENTO) || 0
+                    codigo: toStr(l.CODIGOARTICULO),
+                    descripcion: toStr(l.DESCRIPCIONARTICULO),
+                    cantidad: toFloat(l.CANTIDAD),
+                    precio: toFloat(l.PRECIO),
+                    importe: toFloat(l.IMPORTE),
+                    descuento: toFloat(l.DESCUENTO)
                 }))
             };
         } catch (error) {

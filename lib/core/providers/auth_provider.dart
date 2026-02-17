@@ -50,12 +50,12 @@ class AuthProvider with ChangeNotifier {
         if (currentVersion < minRequiredVersion) {
           _updateAvailable = true;
           _isMandatoryUpdate = true;
-          _updateMessage = response['message'] ?? 'Es necesaria una nueva versión para continuar.';
+          _updateMessage = (response['message'] as String?) ?? 'Es necesaria una nueva versión para continuar.';
           notifyListeners();
         } else if (currentVersion < latestVersion) {
           _updateAvailable = true;
           _isMandatoryUpdate = false;
-          _updateMessage = response['message'] ?? 'Hay una nueva versión disponible.';
+          _updateMessage = (response['message'] as String?) ?? 'Hay una nueva versión disponible.';
           notifyListeners();
         }
       }
@@ -97,14 +97,14 @@ class AuthProvider with ChangeNotifier {
         
         // Handle vendedor codes
         if (response['vendedorCodes'] != null) {
-          _vendedorCodes = List<String>.from(response['vendedorCodes']);
+          _vendedorCodes = List<String>.from(response['vendedorCodes'] as Iterable);
         }
         
-        ApiClient.setAuthToken(response['token']);
+        ApiClient.setAuthToken(response['token'] as String);
 
         // Save to persistent storage
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_token', response['token']);
+        await prefs.setString('user_token', response['token'] as String);
         await prefs.setString('user_data', jsonEncode(response['user']));
         await prefs.setStringList('vendedor_codes', _vendedorCodes);
 
@@ -139,7 +139,7 @@ class AuthProvider with ChangeNotifier {
 
       if (token != null && userDataStr != null) {
         ApiClient.setAuthToken(token);
-        _currentUser = UserModel.fromJson(jsonDecode(userDataStr));
+        _currentUser = UserModel.fromJson(jsonDecode(userDataStr) as Map<String, dynamic>);
         if (codes != null) _vendedorCodes = codes;
         
         notifyListeners();
@@ -186,9 +186,9 @@ class AuthProvider with ChangeNotifier {
       if (response != null && response['success'] == true) {
         // Update token
         if (response['token'] != null) {
-          ApiClient.setAuthToken(response['token']);
+          ApiClient.setAuthToken(response['token'] as String);
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('user_token', response['token']);
+          await prefs.setString('user_token', response['token'] as String);
           
           // Update local user model with new role
           if (_currentUser != null) {

@@ -5,6 +5,9 @@
 
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
+import { sanitizeCode, sanitizeSearch } from '../utils/validators';
+import { toFloat, toInt, toStr, clampLimit, clampOffset, totalPages, formatNumericDate } from '../utils/db-helpers';
+import { queryCache, TTL } from '../utils/query-cache';
 import type { Producto, PaginatedResponse } from '../types/entities';
 
 interface ObtenerProductosParams {
@@ -26,6 +29,11 @@ class ProductsService {
    * Obtiene productos con paginación y filtros
    */
   async obtenerProductos(params: ObtenerProductosParams): Promise<PaginatedResponse<Producto>> {
+    const cacheKey = `gmp:productos:${params.codigoCliente || 'all'}:${params.pagina || 1}:${params.limite || 100}:${params.busqueda || ''}:${params.familia || ''}`;
+    return queryCache.getOrSet(cacheKey, () => this._fetchProductos(params), TTL.STATIC);
+  }
+
+  private async _fetchProductos(params: ObtenerProductosParams): Promise<PaginatedResponse<Producto>> {
     try {
       const {
         pagina = 1,
@@ -38,8 +46,8 @@ class ProductsService {
       logger.info(`[PRODUCTOS] Obteniendo - Cliente: ${codigoCliente}, Búsqueda: ${busqueda}`);
 
       const paginaNum = Math.max(1, pagina);
-      const limiteNum = Math.min(200, Math.max(1, limite));
-      const offset = (paginaNum - 1) * limiteNum;
+      const limiteNum = clampLimit(limite, 100, 200);
+      const offset = clampOffset((paginaNum - 1) * limiteNum);
 
       const whereConditions: string[] = [];
       const queryParams: unknown[] = [];
@@ -47,7 +55,7 @@ class ProductsService {
       // Filtro por cliente
       if (codigoCliente) {
         whereConditions.push(`TRIM(LAC.CODIGOCLIENTEFACTURA) = ?`);
-        queryParams.push(this.sanitizarCodigo(codigoCliente));
+        queryParams.push(sanitizeCode(codigoCliente));
       }
 
       // Filtro por búsqueda
@@ -56,14 +64,14 @@ class ProductsService {
           UPPER(TRIM(LAC.DESCRIPCION)) LIKE ? OR 
           UPPER(TRIM(LAC.CODIGOARTICULO)) LIKE ?
         )`);
-        const searchTerm = `%${this.sanitizarBusqueda(busqueda)}%`;
+        const searchTerm = `%${sanitizeSearch(busqueda)}%`;
         queryParams.push(searchTerm, searchTerm);
       }
 
       // Filtro por familia
       if (familia) {
         whereConditions.push(`TRIM(LAC.CODIGOSECCION) = ?`);
-        queryParams.push(this.sanitizarCodigo(familia));
+        queryParams.push(sanitizeCode(familia));
       }
 
       const whereClause = whereConditions.length > 0 
@@ -89,20 +97,21 @@ class ProductsService {
         ${whereClause}
         GROUP BY TRIM(LAC.CODIGOARTICULO)
         ORDER BY COUNT(*) DESC
-        OFFSET ${offset} ROWS
-        FETCH NEXT ${limiteNum} ROWS ONLY
+        OFFSET ? ROWS
+        FETCH NEXT ? ROWS ONLY
       `;
 
-      const productos = await odbcPool.query<Record<string, unknown>[]>(query, queryParams);
-
-      // Contar total
+      // Ejecutar data + count en paralelo
       const countQuery = `
         SELECT COUNT(DISTINCT TRIM(LAC.CODIGOARTICULO)) AS TOTAL
         FROM DSEDAC.LAC AS LAC
         ${whereClause}
       `;
 
-      const countResult = await odbcPool.query<{ TOTAL: number }[]>(countQuery, queryParams);
+      const [productos, countResult] = await Promise.all([
+        odbcPool.query<Record<string, unknown>[]>(query, [...queryParams, offset, limiteNum]),
+        odbcPool.query<{ TOTAL: number }[]>(countQuery, queryParams),
+      ]);
       const totalProductos = countResult[0]?.TOTAL || 0;
 
       // Formatear productos
@@ -115,7 +124,7 @@ class ProductsService {
           pagina: paginaNum,
           limite: limiteNum,
           total: totalProductos,
-          totalPaginas: Math.ceil(totalProductos / limiteNum),
+          totalPaginas: totalPages(totalProductos, limiteNum),
         },
       };
     } catch (error) {
@@ -135,11 +144,11 @@ class ProductsService {
       logger.info(`[PRODUCTO] Obteniendo ${codigoArticulo} para cliente ${codigoCliente}`);
 
       const whereConditions = [`TRIM(LAC.CODIGOARTICULO) = ?`];
-      const params: unknown[] = [this.sanitizarCodigo(codigoArticulo)];
+      const params: unknown[] = [sanitizeCode(codigoArticulo)];
 
       if (codigoCliente) {
         whereConditions.push(`TRIM(LAC.CODIGOCLIENTEFACTURA) = ?`);
-        params.push(this.sanitizarCodigo(codigoCliente));
+        params.push(sanitizeCode(codigoCliente));
       }
 
       const query = `
@@ -181,13 +190,21 @@ class ProductsService {
    * Obtiene familias/categorías de productos
    */
   async obtenerFamilias(codigoCliente?: string): Promise<{ success: boolean; familias: FamiliaProducto[] }> {
+    return queryCache.getOrSet(
+      `gmp:productos:familias:${codigoCliente || 'all'}`,
+      () => this._fetchFamilias(codigoCliente),
+      TTL.STATIC
+    );
+  }
+
+  private async _fetchFamilias(codigoCliente?: string): Promise<{ success: boolean; familias: FamiliaProducto[] }> {
     try {
       const whereConditions: string[] = [];
       const params: unknown[] = [];
 
       if (codigoCliente) {
         whereConditions.push(`TRIM(LAC.CODIGOCLIENTEFACTURA) = ?`);
-        params.push(this.sanitizarCodigo(codigoCliente));
+        params.push(sanitizeCode(codigoCliente));
       }
 
       const whereClause = whereConditions.length > 0 
@@ -210,9 +227,9 @@ class ProductsService {
       const resultado = await odbcPool.query<Record<string, unknown>[]>(query, params);
 
       const familias: FamiliaProducto[] = resultado.map((row) => ({
-        codigo: String(row.CODIGO || ''),
-        nombre: String(row.CODIGO || 'Sin categoría'),
-        totalProductos: Number(row.TOTALPRODUCTOS) || 0,
+        codigo: toStr(row.CODIGO),
+        nombre: toStr(row.CODIGO) || 'Sin categoría',
+        totalProductos: toInt(row.TOTALPRODUCTOS),
       }));
 
       return { success: true, familias };
@@ -235,11 +252,11 @@ class ProductsService {
   // ============================================
 
   private formatearProducto(prod: Record<string, unknown>, detallado = false): Producto {
-    const precio = parseFloat(String(prod.PRECIO)) || 0;
-    const precioTarifaCliente = parseFloat(String(prod.PRECIOTARIFACLIENTE)) || 0;
-    const precioTarifa01 = parseFloat(String(prod.PRECIOTARIFA01)) || 0;
-    const descuento1 = parseFloat(String(prod.DESCUENTOPORCENTAJE)) || 0;
-    const descuento2 = parseFloat(String(prod.DESCUENTOPORCENTAJE2)) || 0;
+    const precio = toFloat(prod.PRECIO);
+    const precioTarifaCliente = toFloat(prod.PRECIOTARIFACLIENTE);
+    const precioTarifa01 = toFloat(prod.PRECIOTARIFA01);
+    const descuento1 = toFloat(prod.DESCUENTOPORCENTAJE);
+    const descuento2 = toFloat(prod.DESCUENTOPORCENTAJE2);
 
     // Calcular precio final
     let precioFinal = precio || precioTarifaCliente || precioTarifa01 || 0;
@@ -251,19 +268,19 @@ class ProductsService {
       precioFinal = precioFinal * (1 - descuento2 / 100);
     }
 
-    const codigoPromocion = String(prod.CODIGOPROMOCION || '').trim();
+    const codigoPromocion = toStr(prod.CODIGOPROMOCION);
 
     const producto: Producto = {
-      id: String(prod.CODIGO || ''),
-      codigo: String(prod.CODIGO || ''),
-      nombre: String(prod.NOMBRE || 'Producto sin nombre'),
-      descripcion: String(prod.NOMBRE || 'Sin descripción'),
+      id: toStr(prod.CODIGO),
+      codigo: toStr(prod.CODIGO),
+      nombre: toStr(prod.NOMBRE) || 'Producto sin nombre',
+      descripcion: toStr(prod.NOMBRE) || 'Sin descripción',
       precio: parseFloat(precioFinal.toFixed(2)),
       precioOriginal: parseFloat(precio.toFixed(2)),
       descuento: descuento1 + descuento2,
-      codigoIva: String(prod.CODIGOIVA || ''),
+      codigoIva: toStr(prod.CODIGOIVA),
       porcentajeIva: 10, // Por defecto, debería obtenerse de la tabla IVA
-      familia: String(prod.FAMILIA || ''),
+      familia: toStr(prod.FAMILIA),
       stock: 999,
       disponible: true,
       promocion: codigoPromocion
@@ -271,7 +288,7 @@ class ProductsService {
         : undefined,
       metadata: {
         vecesComprado: Number(prod.VECESCOMPRADO) || 0,
-        ultimaCompra: this.formatearFecha(Number(prod.ULTIMACOMPRANUMA)),
+        ultimaCompra: formatNumericDate(Number(prod.ULTIMACOMPRANUMA)),
       },
     };
 
@@ -286,28 +303,6 @@ class ProductsService {
     return producto;
   }
 
-  private sanitizarCodigo(codigo: string): string {
-    return String(codigo)
-      .trim()
-      .replace(/\s+/g, '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9-]/g, '')
-      .substring(0, 20);
-  }
-
-  private sanitizarBusqueda(busqueda: string): string {
-    return String(busqueda)
-      .replace(/[';\-\-]/g, '')
-      .substring(0, 100)
-      .toUpperCase();
-  }
-
-  private formatearFecha(numeroFecha: number): string | undefined {
-    if (!numeroFecha) return undefined;
-    const str = String(numeroFecha);
-    if (str.length < 8) return undefined;
-    return `${str.substring(6, 8)}/${str.substring(4, 6)}/${str.substring(0, 4)}`;
-  }
 }
 
 export const productsService = new ProductsService();

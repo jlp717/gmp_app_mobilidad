@@ -32,7 +32,7 @@ describe('EntregasService', () => {
     });
 
     describe('obtenerAlbaranesPendientes', () => {
-        it('debe retornar lista de albaranes pendientes', async () => {
+        it('debe retornar lista de albaranes pendientes con paginación', async () => {
             const mockAlbaranes = [
                 {
                     SUBEMPRESAALBARAN: '01',
@@ -50,24 +50,32 @@ describe('EntregasService', () => {
                 }
             ];
 
-            (odbcPool.query as jest.Mock).mockResolvedValue(mockAlbaranes);
+            (odbcPool.query as jest.Mock)
+                .mockResolvedValueOnce(mockAlbaranes)
+                .mockResolvedValueOnce([{ TOTAL: 1 }]);
 
             const resultado = await entregasService.obtenerAlbaranesPendientes('REP01');
 
-            expect(resultado).toHaveLength(1);
-            expect(resultado[0]).toMatchObject({
+            expect(resultado.albaranes).toHaveLength(1);
+            expect(resultado.albaranes[0]).toMatchObject({
                 numeroAlbaran: 1001,
                 codigoCliente: '9900',
                 esCTR: true
             });
+            expect(resultado.total).toBe(1);
+            expect(resultado.paginacion).toBeDefined();
+            expect(resultado.paginacion.pagina).toBe(1);
         });
 
         it('debe retornar lista vacía cuando no hay albaranes', async () => {
-            (odbcPool.query as jest.Mock).mockResolvedValue([]);
+            (odbcPool.query as jest.Mock)
+                .mockResolvedValueOnce([])
+                .mockResolvedValueOnce([{ TOTAL: 0 }]);
 
             const resultado = await entregasService.obtenerAlbaranesPendientes('REP01');
 
-            expect(resultado).toEqual([]);
+            expect(resultado.albaranes).toEqual([]);
+            expect(resultado.total).toBe(0);
         });
     });
 
@@ -190,11 +198,13 @@ describe('Detección de CTR', () => {
             IMPORTETOTAL: 100
         }];
 
-        (odbcPool.query as jest.Mock).mockResolvedValue(mockAlbaran);
+        (odbcPool.query as jest.Mock)
+            .mockResolvedValueOnce(mockAlbaran)
+            .mockResolvedValueOnce([{ TOTAL: 1 }]);
 
         const resultado = await entregasService.obtenerAlbaranesPendientes('REP01');
 
-        expect(resultado[0].esCTR).toBe(true);
+        expect(resultado.albaranes[0].esCTR).toBe(true);
     });
 
     it('debe detectar CTR por código REEMBOLSO', async () => {
@@ -207,11 +217,13 @@ describe('Detección de CTR', () => {
             IMPORTETOTAL: 100
         }];
 
-        (odbcPool.query as jest.Mock).mockResolvedValue(mockAlbaran);
+        (odbcPool.query as jest.Mock)
+            .mockResolvedValueOnce(mockAlbaran)
+            .mockResolvedValueOnce([{ TOTAL: 1 }]);
 
         const resultado = await entregasService.obtenerAlbaranesPendientes('REP01');
 
-        expect(resultado[0].esCTR).toBe(true);
+        expect(resultado.albaranes[0].esCTR).toBe(true);
     });
 
     it('debe marcar como no CTR para otros códigos', async () => {
@@ -224,10 +236,12 @@ describe('Detección de CTR', () => {
             IMPORTETOTAL: 100
         }];
 
-        (odbcPool.query as jest.Mock).mockResolvedValue(mockAlbaran);
+        (odbcPool.query as jest.Mock)
+            .mockResolvedValueOnce(mockAlbaran)
+            .mockResolvedValueOnce([{ TOTAL: 1 }]);
 
         const resultado = await entregasService.obtenerAlbaranesPendientes('REP01');
 
-        expect(resultado[0].esCTR).toBe(false);
+        expect(resultado.albaranes[0].esCTR).toBe(false);
     });
 });

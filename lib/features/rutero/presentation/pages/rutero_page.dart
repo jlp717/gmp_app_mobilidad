@@ -262,12 +262,13 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       );
 
       setState(() {
-        final rawList = response['clients'] ?? [];
+        final rawList = response['clients'] ?? <dynamic>[];
         _dayClients = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         // Parse completed weeks and period label from metadata
         if (response['period'] != null) {
-           _completedWeeks = (response['period']['weeks'] as num?)?.toInt() ?? 0;
-           _periodLabel = response['period']['current'] as String? ?? '';
+           final period = response['period'] as Map<String, dynamic>;
+           _completedWeeks = (period['weeks'] as num?)?.toInt() ?? 0;
+           _periodLabel = period['current'] as String? ?? '';
         }
         _isLoadingClients = false;
       });
@@ -672,7 +673,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
 
     // Filter clients based on search query
     List<Map<String, dynamic>> filteredClients = _searchQuery.isEmpty
-        ? List.from(_dayClients)
+        ? List<Map<String, dynamic>>.from(_dayClients)
         : _dayClients.where((client) {
             final code = (client['code'] as String? ?? '').toLowerCase();
             final name = (client['name'] as String? ?? '').toLowerCase();
@@ -683,15 +684,15 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     switch (_sortMode) {
       case 'sales_desc':
         filteredClients.sort((a, b) {
-          final salesA = (a['status']?['ytdSales'] as num?)?.toDouble() ?? 0;
-          final salesB = (b['status']?['ytdSales'] as num?)?.toDouble() ?? 0;
+          final salesA = ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)?.toDouble() ?? 0;
+          final salesB = ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)?.toDouble() ?? 0;
           return salesB.compareTo(salesA); // Descending
         });
         break;
       case 'sales_asc':
         filteredClients.sort((a, b) {
-          final salesA = (a['status']?['ytdSales'] as num?)?.toDouble() ?? 0;
-          final salesB = (b['status']?['ytdSales'] as num?)?.toDouble() ?? 0;
+          final salesA = ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)?.toDouble() ?? 0;
+          final salesB = ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)?.toDouble() ?? 0;
           return salesA.compareTo(salesB); // Ascending  
         });
         break;
@@ -766,10 +767,10 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   void _navigateToMatrix(Map<String, dynamic> client) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (context) => EnhancedClientMatrixPage(
-          clientCode: client['code'] ?? '',
-          clientName: client['name'] ?? 'Cliente',
+          clientCode: (client['code'] as String?) ?? '',
+          clientName: (client['name'] as String?) ?? 'Cliente',
           isJefeVentas: widget.isJefeVentas,
         ),
       ),
@@ -779,9 +780,9 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   Future<void> _openMaps(Map<String, dynamic> client) async {
     final latitude = client['latitude'] as num?;
     final longitude = client['longitude'] as num?;
-    final address = client['address'] ?? '';
-    final city = client['city'] ?? '';
-    final name = client['name'] ?? '';
+    final address = (client['address'] as String?) ?? '';
+    final city = (client['city'] as String?) ?? '';
+    final name = (client['name'] as String?) ?? '';
     
     // If we have GPS coordinates, use them directly
     if (latitude != null && longitude != null && latitude != 0 && longitude != 0) {
@@ -834,7 +835,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
     
     // Show selector with all phones + custom option
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.surfaceColor,
       shape: const RoundedRectangleBorder(
@@ -857,11 +858,11 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
               ),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone, color: AppTheme.neonBlue),
-              title: Text(p['number'] ?? ''),
-              subtitle: Text(p['type'] ?? 'Teléfono'),
+              title: Text((p['number'] as String?) ?? ''),
+              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
               onTap: () {
                 Navigator.pop(ctx);
-                _launchPhoneCall(p['number'] ?? '');
+                _launchPhoneCall((p['number'] as String?) ?? '');
               },
             )),
             const Divider(),
@@ -934,7 +935,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   }
 
   Future<void> _openNotesDialog(Map<String, dynamic> client) async {
-    final Map<String, dynamic> currentNotes = Map<String, dynamic>.from(client['observaciones'] ?? {});
+    final Map<String, dynamic> currentNotes = Map<String, dynamic>.from((client['observaciones'] as Map?) ?? {});
     final text = currentNotes['text'] as String? ?? '';
     final ctrl = TextEditingController(text: text);
 
@@ -973,7 +974,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   Future<void> _saveNotes(Map<String, dynamic> client, String notes) async {
     // Optimistic update locally
     final updatedClient = Map<String, dynamic>.from(client);
-    final obs = Map<String, dynamic>.from(updatedClient['observaciones'] ?? {});
+    final obs = Map<String, dynamic>.from((updatedClient['observaciones'] as Map?) ?? {});
     obs['text'] = notes;
     updatedClient['observaciones'] = obs;
     
@@ -986,7 +987,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       await ApiClient.put(
         '${ApiConfig.clientsList}/notes',
         data: {
-          'clientCode': client['code'],
+          'clientCode': (client['code'] as String?) ?? '',
           'notes': notes,
         },
       );
@@ -1010,7 +1011,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
 
     // Always show selector with custom option
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.surfaceColor,
       shape: const RoundedRectangleBorder(
@@ -1033,11 +1034,11 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
               ),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
-              title: Text(p['number'] ?? ''),
-              subtitle: Text(p['type'] ?? 'Teléfono'),
+              title: Text((p['number'] as String?) ?? ''),
+              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
               onTap: () {
                 Navigator.pop(ctx);
-                _launchWhatsApp(p['number'] ?? '');
+                _launchWhatsApp((p['number'] as String?) ?? '');
               },
             )),
             const Divider(),
@@ -1147,10 +1148,10 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   Future<void> _saveNewOrder(List<Map<String, dynamic>> newOrder) async {
       setState(() => _isLoadingWeek = true);
       try {
-          final orderPayload = newOrder.asMap().entries.map((e) => {
-              'cliente': e.value['code'],
+          final orderPayload = newOrder.asMap().entries.map((e) => <String, dynamic>{
+              'cliente': (e.value['code'] as String?) ?? '',
               'posicion': e.key,
-              'posicionOriginal': e.value['posicionOriginal'] ?? e.key,
+              'posicionOriginal': (e.value['posicionOriginal'] as int?) ?? e.key,
           }).toList();
           
           await ApiClient.post('/rutero/config', {
@@ -1716,8 +1717,8 @@ class _ReorderDialogState extends State<ReorderDialog> {
   /// NUEVO FLUJO: Mover cliente a otro día con confirmación completa
   Future<void> _moveClientToDay(int index) async {
       final client = _items[index];
-      final clientName = client['name'] ?? 'Cliente';
-      final clientCode = client['code'] ?? '';
+      final clientName = (client['name'] as String?) ?? 'Cliente';
+      final clientCode = (client['code'] as String?) ?? '';
       
       // PASO 1: Selector de día destino (excluye Domingo)
       final selectedDay = await showDialog<String>(
@@ -1769,7 +1770,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     int index,
   ) async {
     // Mostrar loading
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => const AlertDialog(
@@ -1799,9 +1800,9 @@ class _ReorderDialogState extends State<ReorderDialog> {
         'vendedor': widget.activeVendedor,
         'moves': [
           {
-            'client': client['code'],
+            'client': (client['code'] as String?) ?? '',
             'toDay': toDay.toLowerCase(),
-            'clientName': client['name'],
+            'clientName': (client['name'] as String?) ?? '',
             'position': targetPosition,
           }
         ],
@@ -1820,7 +1821,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${client['name']} movido al ${toDay.toUpperCase()}'),
+            content: Text('${(client['name'] as String?) ?? ''} movido al ${toDay.toUpperCase()}'),
             backgroundColor: AppTheme.success,
           ),
         );
@@ -1994,8 +1995,8 @@ class _ReorderDialogState extends State<ReorderDialog> {
                                               child: Icon(Icons.drag_handle, color: Colors.grey),
                                           ),
                                       ),
-                                      title: Text(item['name'] ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                      subtitle: Text(item['code'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                      title: Text((item['name'] as String?) ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                      subtitle: Text((item['code'] as String?) ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                                       trailing: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [

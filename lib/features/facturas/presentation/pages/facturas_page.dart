@@ -5,15 +5,21 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/widgets/optimized_list.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../../../core/providers/filter_provider.dart'; // Import FilterProvider
+import '../../../../core/widgets/async_operation_modal.dart';
+import '../../../../core/widgets/pdf_preview_screen.dart';
+import '../../../../core/widgets/email_form_modal.dart';
+import '../../../../core/widgets/whatsapp_form_modal.dart';
+import '../../../../core/providers/filter_provider.dart';
 import '../../data/facturas_service.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -378,30 +384,47 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                 const SizedBox(height: 12),
                 
                 // Actions
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _buildActionButton(
-                      icon: Icons.visibility,
-                      label: 'Ver',
-                      onTap: () => _previewFactura(factura),
-                      isPrimary: false, 
-                    ),
-                    const SizedBox(width: 8),
-                    _buildActionButton(
-                      icon: Icons.share_outlined,
-                      label: 'Compartir',
-                      onTap: () => _shareFacturaPdf(factura),
-                      isPrimary: false,
-                    ),
-                    const SizedBox(width: 12),
-                    _buildActionButton(
-                      icon: Icons.download_outlined,
-                      label: 'Descargar',
-                      onTap: () => _downloadFactura(factura),
-                      isPrimary: true,
-                    ),
-                  ],
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildActionButton(
+                        icon: Icons.visibility,
+                        label: 'Ver',
+                        onTap: () => _previewFactura(factura),
+                        isPrimary: false, 
+                      ),
+                      const SizedBox(width: 6),
+                      _buildActionButton(
+                        icon: Icons.email_outlined,
+                        label: 'Email',
+                        onTap: () => _emailFactura(factura),
+                        isPrimary: false,
+                      ),
+                      const SizedBox(width: 6),
+                      _buildActionButton(
+                        icon: Icons.chat,
+                        label: 'WhatsApp',
+                        onTap: () => _whatsAppFactura(factura),
+                        isPrimary: false,
+                      ),
+                      const SizedBox(width: 6),
+                      _buildActionButton(
+                        icon: Icons.share_outlined,
+                        label: 'Compartir',
+                        onTap: () => _shareFacturaPdf(factura),
+                        isPrimary: false,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildActionButton(
+                        icon: Icons.download_outlined,
+                        label: 'Descargar',
+                        onTap: () => _downloadFactura(factura),
+                        isPrimary: true,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -533,169 +556,148 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
 
 
 
-  Future<void> _previewFactura(Factura factura) async {
-    try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-              SizedBox(width: 16),
-              Text('Cargando previsualización...'),
-            ],
-          ),
-          duration: Duration(seconds: 1),
-        ),
-      );
-      
-      await FacturasService.previewFacturaPdf(
-        factura.serie,
-        factura.numero,
-        factura.ejercicio,
-      );
-      
-      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al previsualizar: $e'), backgroundColor: Colors.red),
-      );
-    }
-  }
+  // ============================================================================
+  // PDF ACTIONS (with AsyncOperationModal + PdfPreviewScreen)
+  // ============================================================================
 
-  Future<void> _downloadFactura(Factura factura) async {
+  Future<void> _previewFactura(Factura factura) async {
+    final modal = AsyncOperationModal.show(context, text: 'Cargando previsualización...');
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-              SizedBox(width: 16),
-              Text('Descargando factura...'),
-            ],
-          ),
-          duration: Duration(seconds: 3),
-        ),
+      final bytes = await FacturasService.downloadFacturaPdfBytes(
+        factura.serie, factura.numero, factura.ejercicio,
       );
-      
-      final tempFile = await FacturasService.downloadFacturaPdf(
-        factura.serie,
-        factura.numero,
-        factura.ejercicio,
-      );
-      
+      modal.close();
+
       if (!mounted) return;
-      
-      // Copy to Downloads folder
-      final downloadsDir = Directory('/storage/emulated/0/Download');
-      if (!await downloadsDir.exists()) {
-        await downloadsDir.create(recursive: true);
-      }
-      
+
+      final pdfBytes = Uint8List.fromList(bytes);
       final fileName = 'Factura_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
-      final savedFile = await tempFile.copy('${downloadsDir.path}/$fileName');
-      
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✓ Guardado en Descargas: $fileName'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'ABRIR',
-            textColor: Colors.white,
-            onPressed: () async {
-              await Share.shareXFiles([XFile(savedFile.path)]);
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: pdfBytes,
+            title: 'Factura ${factura.numeroFormateado}',
+            fileName: fileName,
+            onEmailTap: () {
+              Navigator.pop(context);
+              _emailFactura(factura);
+            },
+            onWhatsAppTap: () {
+              Navigator.pop(context);
+              _whatsAppFactura(factura);
             },
           ),
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      modal.error('Error al previsualizar: $e', onRetry: () => _previewFactura(factura));
+    }
+  }
+
+  Future<void> _downloadFactura(Factura factura) async {
+    final modal = AsyncOperationModal.show(context, text: 'Descargando factura...');
+    try {
+      final tempFile = await FacturasService.downloadFacturaPdf(
+        factura.serie, factura.numero, factura.ejercicio,
       );
+
+      final downloadsDir = Directory('/storage/emulated/0/Download');
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+
+      final fileName = 'Factura_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
+      final savedFile = await tempFile.copy('${downloadsDir.path}/$fileName');
+
+      modal.success('✓ Guardado en Descargas: $fileName');
+    } catch (e) {
+      modal.error('Error al descargar: $e', onRetry: () => _downloadFactura(factura));
     }
   }
 
   Future<void> _shareFacturaPdf(Factura factura) async {
+    final modal = AsyncOperationModal.show(context, text: 'Preparando PDF...');
     try {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-              SizedBox(width: 16),
-              Text('Generando y descargando PDF...'),
-            ],
-          ),
-          duration: Duration(seconds: 2),
-        ),
-      );
-
       final file = await FacturasService.downloadFacturaPdf(
-        factura.serie,
-        factura.numero,
-        factura.ejercicio,
+        factura.serie, factura.numero, factura.ejercicio,
       );
+      modal.close();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      
-      final text = '''
-Estimado cliente,
 
-Adjunto le remitimos la factura ${factura.numeroFormateado} correspondiente a su pedido.
+      final text = 'Adjunto: Factura ${factura.numeroFormateado} - '
+          '${factura.total.toStringAsFixed(2)} € - Granja Mari Pepa';
 
-Importe total: ${factura.total.toStringAsFixed(2)} €
-
-Gracias por su confianza.
-Equipo Granja Mari Pepa''';
-
-      final result = await Share.shareXFiles(
+      await Share.shareXFiles(
         [XFile(file.path)],
         text: text,
         subject: 'Factura ${factura.numeroFormateado} - Granja Mari Pepa',
       );
-      
-      if (result.status == ShareResultStatus.success) {
-         if (!mounted) return;
-         _showSuccessDialog();
-      }
-      
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error compartiendo PDF: $e'), backgroundColor: Colors.red),
-        );
-      }
+      modal.error('Error al compartir: $e', onRetry: () => _shareFacturaPdf(factura));
     }
   }
 
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: const [
-            Icon(Icons.check_circle, color: Colors.green),
-            SizedBox(width: 8),
-            Text('Enviado'),
-          ],
-        ),
-        content: const Text('La factura se ha compartido correctamente.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('ACEPTAR'),
-          ),
-        ],
-      ),
+  // ============================================================================
+  // EMAIL & WHATSAPP ACTIONS
+  // ============================================================================
+
+  Future<void> _emailFactura(Factura factura) async {
+    final result = await EmailFormModal.show(
+      context,
+      defaultSubject: 'Factura ${factura.numeroFormateado} - Granja Mari Pepa',
+      defaultBody: 'Estimado cliente,\n\nAdjunto le remitimos la factura '
+          '${factura.numeroFormateado} por importe de '
+          '${factura.total.toStringAsFixed(2)} €.\n\n'
+          'Gracias por su confianza.\nEquipo Granja Mari Pepa',
     );
+
+    if (result == null || !mounted) return;
+
+    final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
+    try {
+      await FacturasService.sendEmailServerSide(
+        serie: factura.serie,
+        numero: factura.numero,
+        ejercicio: factura.ejercicio,
+        destinatario: result.email,
+        asunto: result.subject,
+        cuerpo: result.body,
+        clienteNombre: factura.clienteNombre,
+      );
+      modal.success('✓ Email enviado a ${result.email}');
+    } catch (e) {
+      modal.error('Error enviando email: $e', onRetry: () => _emailFactura(factura));
+    }
+  }
+
+  Future<void> _whatsAppFactura(Factura factura) async {
+    final result = await WhatsAppFormModal.show(
+      context,
+      defaultMessage: 'Le adjunto la factura ${factura.numeroFormateado} '
+          'por ${factura.total.toStringAsFixed(2)} € - Granja Mari Pepa',
+    );
+
+    if (result == null || !mounted) return;
+
+    final modal = AsyncOperationModal.show(context, text: 'Preparando PDF para WhatsApp...');
+    try {
+      final file = await FacturasService.downloadFacturaPdf(
+        factura.serie, factura.numero, factura.ejercicio,
+      );
+      modal.close();
+
+      if (!mounted) return;
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: result.message,
+      );
+    } catch (e) {
+      modal.error('Error al compartir: $e', onRetry: () => _whatsAppFactura(factura));
+    }
   }
   
   @override

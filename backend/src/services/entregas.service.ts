@@ -6,6 +6,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
+import { sanitizeCode } from '../utils/validators';
+import { toFloat, toStr, formatDateDMY, clampLimit, clampOffset, currentPage, totalPages } from '../utils/db-helpers';
 import fs from 'fs';
 import path from 'path';
 
@@ -92,15 +94,23 @@ class EntregasService {
     }
 
     /**
-     * Obtiene albaranes pendientes para un repartidor
+     * Obtiene albaranes pendientes para un repartidor con paginación
      */
-    async obtenerAlbaranesPendientes(repartidorId: string): Promise<Albaran[]> {
+    async obtenerAlbaranesPendientes(repartidorId: string, limit?: number, offset?: number): Promise<{
+        albaranes: Albaran[];
+        total: number;
+        paginacion: { pagina: number; limite: number; totalPaginas: number };
+    }> {
+        const lim = clampLimit(limit, 50, 200);
+        const off = clampOffset(offset);
         try {
             logger.info(`[ENTREGAS] Obteniendo albaranes pendientes para repartidor: ${repartidorId}`);
 
-            // Query para obtener albaranes asignados al repartidor
-            // Ajustar según la estructura real de la BD
-            const query = `
+            const whereClause = `CAC.ANODOCUMENTO = YEAR(CURRENT_DATE)
+          AND CAC.MESDOCUMENTO = MONTH(CURRENT_DATE)
+          AND CAC.DIADOCUMENTO = DAY(CURRENT_DATE)`;
+
+            const dataSql = `
         SELECT
           CAC.SUBEMPRESAALBARAN,
           CAC.EJERCICIOALBARAN,
@@ -117,16 +127,33 @@ class EntregasService {
           CAC.CODIGOTIPOALBARAN
         FROM DSEDAC.CAC
         LEFT JOIN DSEDAC.CLI ON TRIM(CLI.CODCLI) = TRIM(CAC.CODIGOCLIENTEFACTURA)
-        WHERE CAC.ANODOCUMENTO = YEAR(CURRENT_DATE)
-          AND CAC.MESDOCUMENTO = MONTH(CURRENT_DATE)
-          AND CAC.DIADOCUMENTO = DAY(CURRENT_DATE)
+        WHERE ${whereClause}
         ORDER BY CAC.NUMEROALBARAN
-        FETCH FIRST 100 ROWS ONLY
+        OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
       `;
 
-            const resultado = await odbcPool.query<Record<string, unknown>[]>(query);
+            const countSql = `
+        SELECT COUNT(*) as TOTAL
+        FROM DSEDAC.CAC
+        WHERE ${whereClause}
+      `;
 
-            return resultado.map(row => this.mapearAlbaran(row));
+            const [resultado, countResult] = await Promise.all([
+                odbcPool.query<Record<string, unknown>[]>(dataSql, [off, lim]),
+                odbcPool.query<Record<string, unknown>[]>(countSql),
+            ]);
+
+            const total = Number(countResult[0]?.TOTAL) || 0;
+
+            return {
+                albaranes: resultado.map(row => this.mapearAlbaran(row)),
+                total,
+                paginacion: {
+                    pagina: currentPage(off, lim),
+                    limite: lim,
+                    totalPaginas: totalPages(total, lim),
+                },
+            };
         } catch (error) {
             logger.error('[ENTREGAS] Error obteniendo albaranes pendientes:', error);
             throw error;
@@ -159,14 +186,6 @@ class EntregasService {
         FETCH FIRST 1 ROWS ONLY
       `;
 
-            const [albaran] = await odbcPool.query<Record<string, unknown>[]>(
-                queryAlbaran,
-                [numeroAlbaran, ejercicio]
-            );
-
-            if (!albaran) return null;
-
-            // Obtener líneas del albarán (LAC = Líneas de albarán/factura)
             const queryLineas = `
         SELECT
           LAC.SECUENCIA,
@@ -181,16 +200,21 @@ class EntregasService {
         ORDER BY LAC.SECUENCIA
       `;
 
-            const lineas = await odbcPool.query<Record<string, unknown>[]>(
-                queryLineas,
-                [numeroAlbaran, ejercicio]
-            );
+            // Ejecutar header + lines en paralelo
+            const params = [numeroAlbaran, ejercicio];
+            const [albaranResult, lineas] = await Promise.all([
+                odbcPool.query<Record<string, unknown>[]>(queryAlbaran, params),
+                odbcPool.query<Record<string, unknown>[]>(queryLineas, params),
+            ]);
+
+            const albaran = albaranResult[0];
+            if (!albaran) return null;
 
             const albaranCompleto = this.mapearAlbaran(albaran);
             albaranCompleto.items = lineas.map(linea => ({
                 itemId: `${numeroAlbaran}-${linea.SECUENCIA}`,
-                codigoArticulo: String(linea.CODIGOARTICULO || '').trim(),
-                descripcion: String(linea.DESCRIPCIONARTICULO || '').trim(),
+                codigoArticulo: toStr(linea.CODIGOARTICULO),
+                descripcion: toStr(linea.DESCRIPCIONARTICULO),
                 cantidadPedida: Number(linea.CANTIDADENVASES) || Number(linea.CANTIDADUNIDADES) || 0,
                 cantidadEntregada: 0,
                 estado: 'PENDIENTE' as EstadoEntrega
@@ -227,7 +251,7 @@ class EntregasService {
                     [
                         registroId,
                         params.itemId,
-                        this.sanitizar(params.repartidorId),
+                        sanitizeCode(params.repartidorId),
                         params.status,
                         params.cantidadEntregada || 0,
                         params.latitud || null,
@@ -358,7 +382,7 @@ class EntregasService {
      * Mapea row de BD a Albaran
      */
     private mapearAlbaran(row: Record<string, unknown>): Albaran {
-        const formaPago = String(row.CODIGOFORMAPAGO || '').trim().toUpperCase();
+        const formaPago = toStr(row.CODIGOFORMAPAGO).toUpperCase();
         const esCTR = formaPago.includes('CTR') ||
             formaPago.includes('REEMB') ||
             formaPago === '03';
@@ -366,11 +390,11 @@ class EntregasService {
         return {
             id: `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.NUMEROALBARAN}`,
             numeroAlbaran: Number(row.NUMEROALBARAN),
-            codigoCliente: String(row.CODIGO_CLIENTE || '').trim(),
-            nombreCliente: String(row.NOMBRE_CLIENTE || '').trim(),
-            direccion: String(row.DIRECCION || '').trim(),
-            fecha: `${String(row.DIADOCUMENTO).padStart(2, '0')}/${String(row.MESDOCUMENTO).padStart(2, '0')}/${row.ANODOCUMENTO}`,
-            importeTotal: parseFloat(String(row.IMPORTETOTAL)) || 0,
+            codigoCliente: toStr(row.CODIGO_CLIENTE),
+            nombreCliente: toStr(row.NOMBRE_CLIENTE),
+            direccion: toStr(row.DIRECCION),
+            fecha: formatDateDMY(row.DIADOCUMENTO, row.MESDOCUMENTO, row.ANODOCUMENTO),
+            importeTotal: toFloat(row.IMPORTETOTAL),
             estado: 'PENDIENTE',
             items: [],
             formaPago,
@@ -378,15 +402,6 @@ class EntregasService {
         };
     }
 
-    /**
-     * Sanitiza strings para evitar inyección
-     */
-    private sanitizar(valor: string): string {
-        return String(valor)
-            .trim()
-            .replace(/[<>'"]/g, '')
-            .substring(0, 50);
-    }
 }
 
 export const entregasService = new EntregasService();

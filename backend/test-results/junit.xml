@@ -1,0 +1,1071 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="GMP Backend Tests" tests="520" failures="0" errors="0" time="14.758">
+  <testsuite name="Security - SQL Injection Prevention" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:13:58" time="7.12" tests="163">
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos; OR &apos;1&apos;=&apos;1...&quot;" time="0.074">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos;; DROP TABLE users; --...&quot;" time="0.011">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;1&apos; OR &apos;1&apos;=&apos;1&apos; --...&quot;" time="0.013">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;1; DELETE FROM DSED.LACLAE; --...&quot;" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos; UNION SELECT 1,2,3 --...&quot;" time="0.015">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos; UNION ALL SELECT NULL,NULL -...&quot;" time="0.011">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos; AND 1=1 --...&quot;" time="0.011">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos; AND 1=0 --...&quot;" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos; OR SLEEP(5) --...&quot;" time="0.012">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos; OR 1=1#...&quot;" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;admin&apos;--...&quot;" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;1/**/OR/**/1=1...&quot;" time="0.015">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos;; CALL SYSPROC.ADMIN_CMD(&apos;EXP...&quot;" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;&apos; AND SUBSTR((SELECT CURRENT U...&quot;" time="0.013">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;%27%20OR%20%271%27%3D%271...&quot;" time="0.009">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/commissions/summary with payload &quot;1%20OR%201%3D1...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos; OR &apos;1&apos;=&apos;1...&quot;" time="0.015">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos;; DROP TABLE users; --...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;1&apos; OR &apos;1&apos;=&apos;1&apos; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;1; DELETE FROM DSED.LACLAE; --...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos; UNION SELECT 1,2,3 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos; UNION ALL SELECT NULL,NULL -...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos; AND 1=1 --...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos; AND 1=0 --...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos; OR SLEEP(5) --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos; OR 1=1#...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;admin&apos;--...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;1/**/OR/**/1=1...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos;; CALL SYSPROC.ADMIN_CMD(&apos;EXP...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;&apos; AND SUBSTR((SELECT CURRENT U...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;%27%20OR%20%271%27%3D%271...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/objectives/summary with payload &quot;1%20OR%201%3D1...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos; OR &apos;1&apos;=&apos;1...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos;; DROP TABLE users; --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;1&apos; OR &apos;1&apos;=&apos;1&apos; --...&quot;" time="0.011">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;1; DELETE FROM DSED.LACLAE; --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos; UNION SELECT 1,2,3 --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos; UNION ALL SELECT NULL,NULL -...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos; AND 1=1 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos; AND 1=0 --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos; OR SLEEP(5) --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos; OR 1=1#...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;admin&apos;--...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;1/**/OR/**/1=1...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos;; CALL SYSPROC.ADMIN_CMD(&apos;EXP...&quot;" time="0.009">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;&apos; AND SUBSTR((SELECT CURRENT U...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;%27%20OR%20%271%27%3D%271...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/dashboard/summary with payload &quot;1%20OR%201%3D1...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos; OR &apos;1&apos;=&apos;1...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos;; DROP TABLE users; --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;1&apos; OR &apos;1&apos;=&apos;1&apos; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;1; DELETE FROM DSED.LACLAE; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos; UNION SELECT 1,2,3 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos; UNION ALL SELECT NULL,NULL -...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos; AND 1=1 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos; AND 1=0 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos; OR SLEEP(5) --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos; OR 1=1#...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;admin&apos;--...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;1/**/OR/**/1=1...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos;; CALL SYSPROC.ADMIN_CMD(&apos;EXP...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;&apos; AND SUBSTR((SELECT CURRENT U...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;%27%20OR%20%271%27%3D%271...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/entregas/list with payload &quot;1%20OR%201%3D1...&quot;" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos; OR &apos;1&apos;=&apos;1...&quot;" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos;; DROP TABLE users; --...&quot;" time="0.005">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;1&apos; OR &apos;1&apos;=&apos;1&apos; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;1; DELETE FROM DSED.LACLAE; --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos; UNION SELECT 1,2,3 --...&quot;" time="0.005">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos; UNION ALL SELECT NULL,NULL -...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos; AND 1=1 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos; AND 1=0 --...&quot;" time="0.009">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos; OR SLEEP(5) --...&quot;" time="0.005">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos; OR 1=1#...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;admin&apos;--...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;1/**/OR/**/1=1...&quot;" time="0.005">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos;; CALL SYSPROC.ADMIN_CMD(&apos;EXP...&quot;" time="0.005">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;&apos; AND SUBSTR((SELECT CURRENT U...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;%27%20OR%20%271%27%3D%271...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/clientes/list with payload &quot;1%20OR%201%3D1...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos; OR &apos;1&apos;=&apos;1...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos;; DROP TABLE users; --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;1&apos; OR &apos;1&apos;=&apos;1&apos; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;1; DELETE FROM DSED.LACLAE; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos; UNION SELECT 1,2,3 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos; UNION ALL SELECT NULL,NULL -...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos; AND 1=1 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos; AND 1=0 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos; OR SLEEP(5) --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos; OR 1=1#...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;admin&apos;--...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;1/**/OR/**/1=1...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos;; CALL SYSPROC.ADMIN_CMD(&apos;EXP...&quot;" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;&apos; AND SUBSTR((SELECT CURRENT U...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;%27%20OR%20%271%27%3D%271...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/ventas/summary with payload &quot;1%20OR%201%3D1...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos; OR &apos;1&apos;=&apos;1...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos;; DROP TABLE users; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;1&apos; OR &apos;1&apos;=&apos;1&apos; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;1; DELETE FROM DSED.LACLAE; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos; UNION SELECT 1,2,3 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos; UNION ALL SELECT NULL,NULL -...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos; AND 1=1 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos; AND 1=0 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos; OR SLEEP(5) --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos; OR 1=1#...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;admin&apos;--...&quot;" time="0.005">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;1/**/OR/**/1=1...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos;; CALL SYSPROC.ADMIN_CMD(&apos;EXP...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;&apos; AND SUBSTR((SELECT CURRENT U...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;%27%20OR%20%271%27%3D%271...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/rutero/routes with payload &quot;1%20OR%201%3D1...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos; OR &apos;1&apos;=&apos;1...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos;; DROP TABLE users; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;1&apos; OR &apos;1&apos;=&apos;1&apos; --...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;1; DELETE FROM DSED.LACLAE; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos; UNION SELECT 1,2,3 --...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos; UNION ALL SELECT NULL,NULL -...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos; AND 1=1 --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos; AND 1=0 --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos; OR SLEEP(5) --...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos; OR 1=1#...&quot;" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;admin&apos;--...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;1/**/OR/**/1=1...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos;; CALL SYSPROC.ADMIN_CMD(&apos;EXP...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;&apos; AND SUBSTR((SELECT CURRENT U...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;%27%20OR%20%271%27%3D%271...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/cobros/summary with payload &quot;1%20OR%201%3D1...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos; OR &apos;1&apos;=&apos;1...&quot;" time="0.009">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos;; DROP TABLE users; --...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;1&apos; OR &apos;1&apos;=&apos;1&apos; --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;1; DELETE FROM DSED.LACLAE; --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos; UNION SELECT 1,2,3 --...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos; UNION ALL SELECT NULL,NULL -...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos; AND 1=1 --...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos; AND 1=0 --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos; OR SLEEP(5) --...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos; OR 1=1#...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;admin&apos;--...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;1/**/OR/**/1=1...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos;; CALL SYSPROC.ADMIN_CMD(&apos;EXP...&quot;" time="0.006">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;&apos; AND SUBSTR((SELECT CURRENT U...&quot;" time="0.008">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;%27%20OR%20%271%27%3D%271...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention SQL injection payloads should be rejected (never 500)" name="GET /api/pedidos/list with payload &quot;1%20OR%201%3D1...&quot;" time="0.007">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention XSS prevention in inputs" name="Rejects XSS payload: &lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;..." time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention XSS prevention in inputs" name="Rejects XSS payload: &lt;img src=x onerror=alert(1)&gt;..." time="0.009">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention XSS prevention in inputs" name="Rejects XSS payload: &quot;&gt;&lt;svg onload=alert(1)&gt;..." time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention XSS prevention in inputs" name="Rejects XSS payload: javascript:alert(&apos;xss&apos;)..." time="0.012">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention Header injection prevention" name="Rejects oversized Authorization header" time="0.009">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention Header injection prevention" name="Rejects newline characters in custom headers" time="0.01">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention Body injection prevention" name="Rejects oversized JSON body" time="0.123">
+    </testcase>
+    <testcase classname="Security - SQL Injection Prevention Body injection prevention" name="Rejects malformed JSON body" time="0.053">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions sanitizeForSQL" name="allows alphanumeric values" time="0.001">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions sanitizeForSQL" name="strips SQL injection characters" time="0">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions sanitizeForSQL" name="strips quotes" time="0.001">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions sanitizeForSQL" name="handles null/undefined" time="0.001">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions sanitizeCodeList" name="sanitizes comma-separated codes" time="0.001">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions sanitizeCodeList" name="rejects injection in code list" time="0">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions sanitizeCodeList" name="handles empty input" time="0.001">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions buildVendedorFilter (patched)" name="returns empty for ALL" time="0">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions buildVendedorFilter (patched)" name="builds valid filter for clean codes" time="0.008">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions buildVendedorFilter (patched)" name="strips injection attempts from vendor codes" time="0.001">
+    </testcase>
+    <testcase classname="Security - Legacy Sanitization Functions buildVendedorFilter (patched)" name="handles UNK code" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="E2E Integration Tests" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:06" time="1.481" tests="26">
+    <testcase classname="E2E Integration Tests Health Checks" name="GET /health should return 200" time="0.021">
+    </testcase>
+    <testcase classname="E2E Integration Tests Health Checks" name="GET /api/health should return 200 with uptime" time="0.007">
+    </testcase>
+    <testcase classname="E2E Integration Tests Cache Management" name="GET /api/cache/stats should return cache stats" time="0.014">
+    </testcase>
+    <testcase classname="E2E Integration Tests Cache Management" name="POST /api/cache/invalidate requires pattern" time="0.016">
+    </testcase>
+    <testcase classname="E2E Integration Tests Cache Management" name="POST /api/cache/invalidate with valid pattern" time="0.01">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/commissions/summary should return 401 without auth" time="0.033">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/objectives should return 401 without auth" time="0.012">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/dashboard/summary should return 401 without auth" time="0.007">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/entregas/list should return 401 without auth" time="0.012">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/facturas/list should return 401 without auth" time="0.012">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/repartidor/deliveries should return 401 without auth" time="0.007">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/clientes/list should return 401 without auth" time="0.009">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/productos/list should return 401 without auth" time="0.008">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/ventas/summary should return 401 without auth" time="0.012">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/rutero/routes should return 401 without auth" time="0.01">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/pedidos/list should return 401 without auth" time="0.007">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/cobros/summary should return 401 without auth" time="0.008">
+    </testcase>
+    <testcase classname="E2E Integration Tests Auth Enforcement" name="GET /api/promociones/list should return 401 without auth" time="0.011">
+    </testcase>
+    <testcase classname="E2E Integration Tests Commissions" name="GET /api/commissions/summary returns data with valid auth" time="0.013">
+    </testcase>
+    <testcase classname="E2E Integration Tests Commissions" name="GET /api/commissions/summary validates vendedorCode" time="0.026">
+    </testcase>
+    <testcase classname="E2E Integration Tests Commissions" name="GET /api/commissions/excluded-vendors returns array" time="0.008">
+    </testcase>
+    <testcase classname="E2E Integration Tests Objectives" name="GET /api/objectives with valid params" time="0.009">
+    </testcase>
+    <testcase classname="E2E Integration Tests Objectives" name="GET /api/objectives without vendedorCode returns error or empty" time="0.006">
+    </testcase>
+    <testcase classname="E2E Integration Tests 404 Handler" name="GET /api/nonexistent should return 404" time="0.009">
+    </testcase>
+    <testcase classname="E2E Integration Tests Response Format" name="Health response should be JSON" time="0.006">
+    </testcase>
+    <testcase classname="E2E Integration Tests Response Format" name="Error responses should be JSON" time="0.006">
+    </testcase>
+  </testsuite>
+  <testsuite name="Performance - Latency" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:07" time="1.341" tests="11">
+    <testcase classname="Performance - Latency" name="GET /health responds in &lt; 200ms" time="0.025">
+    </testcase>
+    <testcase classname="Performance - Latency" name="GET /api/health responds in &lt; 50ms" time="0.009">
+    </testcase>
+    <testcase classname="Performance - Latency" name="GET /api/cache/stats responds in &lt; 50ms" time="0.011">
+    </testcase>
+    <testcase classname="Performance - Latency" name="GET /api/commissions/summary responds in &lt; 500ms" time="0.018">
+    </testcase>
+    <testcase classname="Performance - Latency" name="GET /api/commissions/excluded-vendors responds in &lt; 500ms" time="0.009">
+    </testcase>
+    <testcase classname="Performance - Latency" name="GET /api/objectives responds in &lt; 500ms" time="0.011">
+    </testcase>
+    <testcase classname="Performance - Concurrent Load" name="handles 50 concurrent health checks without errors" time="0.342">
+    </testcase>
+    <testcase classname="Performance - Concurrent Load" name="handles 20 concurrent API requests without crashes" time="0.107">
+    </testcase>
+    <testcase classname="Performance - Concurrent Load" name="handles mixed concurrent requests" time="0.064">
+    </testcase>
+    <testcase classname="Performance - Resource Usage" name="memory usage stays under 500MB during test suite" time="0.001">
+    </testcase>
+    <testcase classname="Performance - Resource Usage" name="response headers include compression hints" time="0.008">
+    </testcase>
+  </testsuite>
+  <testsuite name="Dashboard N+1 Elimination" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:09" time="0.347" tests="13">
+    <testcase classname="Dashboard N+1 Elimination" name="getUltimasVentas uses JOIN instead of per-row queries" time="0.003">
+    </testcase>
+    <testcase classname="Dashboard N+1 Elimination" name="getUltimasVentas falls back to code when name is empty" time="0.004">
+    </testcase>
+    <testcase classname="Dashboard N+1 Elimination" name="getTopClientes uses JOIN instead of per-row queries" time="0.001">
+    </testcase>
+    <testcase classname="Dashboard N+1 Elimination" name="getDashboardVendedor runs all queries in parallel via Promise.all" time="0.025">
+    </testcase>
+    <testcase classname="Facturas Query Parallelization" name="getFacturaDetail runs header + lines in parallel" time="0.031">
+    </testcase>
+    <testcase classname="Facturas Query Parallelization" name="getFacturaDetail throws when header not found" time="0.019">
+    </testcase>
+    <testcase classname="Roles N+1 Elimination" name="obtenerAlbaranesConductor determines CTR inline via JOIN" time="0.006">
+    </testcase>
+    <testcase classname="Products Query Parallelization" name="obtenerProductos runs data + count in parallel" time="0.019">
+    </testcase>
+    <testcase classname="Cliente Query Parallelization" name="listarClientes runs data + count in parallel" time="0.031">
+    </testcase>
+    <testcase classname="Entregas Query Parallelization" name="obtenerAlbaran runs header + lines in parallel" time="0.031">
+    </testcase>
+    <testcase classname="Entregas Query Parallelization" name="obtenerAlbaran returns null when not found" time="0.001">
+    </testcase>
+    <testcase classname="Query Count Regression Guards" name="getUltimasVentas with 10 results makes exactly 1 DB call" time="0.001">
+    </testcase>
+    <testcase classname="Query Count Regression Guards" name="getTopClientes with 10 results makes exactly 1 DB call" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="CommissionsService" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:09" time="0.304" tests="12">
+    <testcase classname="CommissionsService getExcludedVendors" name="returns default excluded vendors when DB is empty" time="0.003">
+    </testcase>
+    <testcase classname="CommissionsService getExcludedVendors" name="returns merged list when DB has exclusions" time="0.001">
+    </testcase>
+    <testcase classname="CommissionsService getExcludedVendors" name="handles DB error gracefully" time="0.007">
+    </testcase>
+    <testcase classname="CommissionsService verifyAdminAuth" name="returns false for empty admin code" time="0.001">
+    </testcase>
+    <testcase classname="CommissionsService verifyAdminAuth" name="returns true for vendor type ADMIN" time="0.001">
+    </testcase>
+    <testcase classname="CommissionsService verifyAdminAuth" name="returns true for vendor code 98 (normalized)" time="0.001">
+    </testcase>
+    <testcase classname="CommissionsService verifyAdminAuth" name="returns false for non-admin vendor" time="0.001">
+    </testcase>
+    <testcase classname="CommissionsService verifyAdminAuth" name="returns false on DB error" time="0">
+    </testcase>
+    <testcase classname="CommissionsService recordPayment" name="records a payment successfully" time="0.003">
+    </testcase>
+    <testcase classname="CommissionsService recordPayment" name="requires observaciones when amount &lt; generatedAmount" time="0.042">
+    </testcase>
+    <testcase classname="CommissionsService getSummary" name="returns commission summary for a single vendor" time="0.005">
+    </testcase>
+    <testcase classname="CommissionsService getSummary" name="returns aggregated data for ALL vendors" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="parseVendorCodes" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:09" time="0.313" tests="144">
+    <testcase classname="parseVendorCodes" name="accepts single numeric code" time="0.003">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="accepts multiple comma-separated codes" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="accepts codes with spaces and trims them" time="0.003">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="accepts &quot;ALL&quot; keyword" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="accepts &quot;all&quot; case-insensitive" time="0">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="accepts alphanumeric codes" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="accepts codes with hyphens" time="0">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="rejects SQL injection: single quote" time="0.032">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="rejects SQL injection: UNION SELECT" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="rejects SQL injection: OR 1=1" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="rejects SQL injection: comment injection" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="rejects SQL injection: semicolon" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="rejects SQL injection: backslash" time="0">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="throws on empty string" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="throws on null/undefined" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="throws on code longer than 10 chars" time="0.001">
+    </testcase>
+    <testcase classname="parseVendorCodes" name="filters out empty entries from trailing comma" time="0">
+    </testcase>
+    <testcase classname="sanitizeCode" name="trims and uppercases" time="0.001">
+    </testcase>
+    <testcase classname="sanitizeCode" name="removes special characters" time="0.001">
+    </testcase>
+    <testcase classname="sanitizeCode" name="allows hyphens" time="0.003">
+    </testcase>
+    <testcase classname="sanitizeCode" name="truncates to 20 chars" time="0.001">
+    </testcase>
+    <testcase classname="sanitizeCode" name="throws on empty string" time="0">
+    </testcase>
+    <testcase classname="sanitizeCode" name="removes SQL injection characters" time="0.001">
+    </testcase>
+    <testcase classname="sanitizeSearch" name="uppercases search string" time="0.001">
+    </testcase>
+    <testcase classname="sanitizeSearch" name="removes quotes" time="0.001">
+    </testcase>
+    <testcase classname="sanitizeSearch" name="removes SQL comment markers" time="0.001">
+    </testcase>
+    <testcase classname="sanitizeSearch" name="removes semicolons" time="0.001">
+    </testcase>
+    <testcase classname="sanitizeSearch" name="truncates to 100 chars" time="0">
+    </testcase>
+    <testcase classname="sanitizeSearch" name="normalizes whitespace" time="0">
+    </testcase>
+    <testcase classname="sanitizeSearch" name="returns empty for null/undefined/empty" time="0.001">
+    </testcase>
+    <testcase classname="validateYear" name="accepts valid years" time="0.001">
+    </testcase>
+    <testcase classname="validateYear" name="returns undefined for empty/null/undefined" time="0.001">
+    </testcase>
+    <testcase classname="validateYear" name="throws on invalid year" time="0.001">
+    </testcase>
+    <testcase classname="validateMonth" name="accepts 1-12" time="0.001">
+    </testcase>
+    <testcase classname="validateMonth" name="returns undefined for empty/null" time="0">
+    </testcase>
+    <testcase classname="validateMonth" name="throws on invalid month" time="0.001">
+    </testcase>
+    <testcase classname="validateDate" name="accepts YYYY-MM-DD format" time="0.002">
+    </testcase>
+    <testcase classname="validateDate" name="returns undefined for empty/null" time="0">
+    </testcase>
+    <testcase classname="validateDate" name="throws on invalid format" time="0.001">
+    </testcase>
+    <testcase classname="validateLimit" name="defaults to 50" time="0">
+    </testcase>
+    <testcase classname="validateLimit" name="clamps to min 1" time="0.001">
+    </testcase>
+    <testcase classname="validateLimit" name="clamps to max (default 500)" time="0.004">
+    </testcase>
+    <testcase classname="validateLimit" name="respects custom max" time="0.001">
+    </testcase>
+    <testcase classname="validateLimit" name="parses string numbers" time="0">
+    </testcase>
+    <testcase classname="validateOffset" name="defaults to 0" time="0.001">
+    </testcase>
+    <testcase classname="validateOffset" name="clamps to min 0" time="0">
+    </testcase>
+    <testcase classname="validateOffset" name="parses string numbers" time="0.001">
+    </testcase>
+    <testcase classname="validateSerie" name="accepts alphanumeric serie" time="0">
+    </testcase>
+    <testcase classname="validateSerie" name="uppercases and trims" time="0">
+    </testcase>
+    <testcase classname="validateSerie" name="throws on empty" time="0.001">
+    </testcase>
+    <testcase classname="validateSerie" name="throws on too long" time="0">
+    </testcase>
+    <testcase classname="validateSerie" name="strips SQL injection chars from serie" time="0.001">
+    </testcase>
+    <testcase classname="validateNumericId" name="accepts valid numbers" time="0.001">
+    </testcase>
+    <testcase classname="validateNumericId" name="throws on empty/null" time="0.001">
+    </testcase>
+    <testcase classname="validateNumericId" name="throws on non-numeric" time="0.001">
+    </testcase>
+    <testcase classname="validateNumericId" name="throws on negative" time="0">
+    </testcase>
+    <testcase classname="validateNumericId" name="throws on exceeding max" time="0.001">
+    </testcase>
+    <testcase classname="validateDiaSemana" name="accepts valid days" time="0.001">
+    </testcase>
+    <testcase classname="validateDiaSemana" name="returns undefined for empty" time="0">
+    </testcase>
+    <testcase classname="validateDiaSemana" name="throws on invalid day" time="0.001">
+    </testcase>
+    <testcase classname="validateAgrupacion" name="accepts valid values" time="0.001">
+    </testcase>
+    <testcase classname="validateAgrupacion" name="returns undefined for empty" time="0.001">
+    </testcase>
+    <testcase classname="validateAgrupacion" name="throws on invalid" time="0">
+    </testcase>
+    <testcase classname="validateTipoEstadistica" name="accepts valid values" time="0.001">
+    </testcase>
+    <testcase classname="validateTipoEstadistica" name="throws on invalid" time="0.001">
+    </testcase>
+    <testcase classname="validateSemanas" name="defaults to 12" time="0">
+    </testcase>
+    <testcase classname="validateSemanas" name="clamps to 1-52" time="0.001">
+    </testcase>
+    <testcase classname="validateSemanas" name="parses string" time="0">
+    </testcase>
+    <testcase classname="buildInClause" name="builds correct parameterized IN clause" time="0.001">
+    </testcase>
+    <testcase classname="buildInClause" name="works with single value" time="0.003">
+    </testcase>
+    <testcase classname="buildInClause" name="throws on empty array" time="0.001">
+    </testcase>
+    <testcase classname="buildInClause" name="never produces string concatenation in output" time="0.001">
+    </testcase>
+    <testcase classname="buildSearchClause" name="builds parameterized LIKE clause" time="0.001">
+    </testcase>
+    <testcase classname="buildSearchClause" name="sanitizes search input" time="0">
+    </testcase>
+    <testcase classname="buildSearchClause" name="returns empty for empty search" time="0.001">
+    </testcase>
+    <testcase classname="buildSearchClause" name="never puts raw values in clause" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: &apos; OR &apos;1&apos;=&apos;1" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: &apos;; DROP TABLE users; --" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: 1&apos; UNION SELECT * FROM information_schema.tables--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: &apos; OR 1=1--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: admin&apos;--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: 1; DELETE FROM users" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: &apos; OR &apos;&apos; = &apos;" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: 1&apos; AND &apos;1&apos; = &apos;1" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: %&apos; AND 1=1--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: &apos; HAVING 1=1--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: &apos; ORDER BY 1--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: 1/**/UNION/**/SELECT/**/1,2,3--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: &apos;; EXEC xp_cmdshell(&apos;dir&apos;)--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: 1&apos;; WAITFOR DELAY &apos;0:0:10&apos;--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="parseVendorCodes rejects: &apos; AND SUBSTRING(@@version,1,1)=&apos;M&apos;" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: &apos; OR &apos;1&apos;=&apos;1" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: &apos;; DROP TABLE users; --" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: 1&apos; UNION SELECT * FROM information_schema.tables--" time="0.003">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: &apos; OR 1=1--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: admin&apos;--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: 1; DELETE FROM users" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: &apos; OR &apos;&apos; = &apos;" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: 1&apos; AND &apos;1&apos; = &apos;1" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: %&apos; AND 1=1--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: &apos; HAVING 1=1--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: &apos; ORDER BY 1--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: 1/**/UNION/**/SELECT/**/1,2,3--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: &apos;; EXEC xp_cmdshell(&apos;dir&apos;)--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: 1&apos;; WAITFOR DELAY &apos;0:0:10&apos;--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeSearch removes dangerous chars from: &apos; AND SUBSTRING(@@version,1,1)=&apos;M&apos;" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: &apos; OR &apos;1&apos;=&apos;1" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: &apos;; DROP TABLE users; --" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: 1&apos; UNION SELECT * FROM information_schema.tables--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: &apos; OR 1=1--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: admin&apos;--" time="0.003">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: 1; DELETE FROM users" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: &apos; OR &apos;&apos; = &apos;" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: 1&apos; AND &apos;1&apos; = &apos;1" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: %&apos; AND 1=1--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: &apos; HAVING 1=1--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: &apos; ORDER BY 1--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: 1/**/UNION/**/SELECT/**/1,2,3--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: &apos;; EXEC xp_cmdshell(&apos;dir&apos;)--" time="0.001">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: 1&apos;; WAITFOR DELAY &apos;0:0:10&apos;--" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="sanitizeCode strips injection from: &apos; AND SUBSTRING(@@version,1,1)=&apos;M&apos;" time="0">
+    </testcase>
+    <testcase classname="SQL Injection Attack Suite" name="validateSerie strips dangerous chars from injection payloads" time="0.002">
+    </testcase>
+    <testcase classname="Joi Schemas - Commissions commissionsSummaryQuery" name="accepts valid query" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Commissions commissionsSummaryQuery" name="requires vendedorCode" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Commissions commissionsSummaryQuery" name="accepts comma-separated years" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Commissions commissionsSummaryQuery" name="rejects SQL injection in year" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Commissions commissionsPayBody" name="accepts valid payment body" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Commissions commissionsPayBody" name="accepts string amounts" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Commissions commissionsPayBody" name="rejects missing required fields" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Commissions commissionsPayBody" name="rejects SQL injection in vendor code" time="0">
+    </testcase>
+    <testcase classname="Joi Schemas - Objectives objectivesSummaryQuery" name="accepts valid query" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Objectives objectivesSummaryQuery" name="requires vendedorCodes" time="0">
+    </testcase>
+    <testcase classname="Joi Schemas - Objectives objectivesEvolutionQuery" name="accepts valid query" time="0">
+    </testcase>
+    <testcase classname="Joi Schemas - Objectives objectivesMatrixQuery" name="accepts valid matrix query" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Objectives objectivesMatrixQuery" name="requires clientCode" time="0">
+    </testcase>
+    <testcase classname="Joi Schemas - Objectives objectivesMatrixQuery" name="rejects invalid month range" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Objectives objectivesByClientQuery" name="accepts valid by-client query" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Objectives objectivesByClientQuery" name="defaults limit to 100" time="0">
+    </testcase>
+    <testcase classname="Joi Schemas - Repartidor repartidorIdParam" name="accepts single ID" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Repartidor repartidorIdParam" name="accepts comma-separated IDs" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Repartidor repartidorIdParam" name="requires repartidorId" time="0">
+    </testcase>
+    <testcase classname="Joi Schemas - Repartidor repartidorIdParam" name="rejects SQL injection" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Repartidor clientIdParam" name="accepts valid client ID" time="0.001">
+    </testcase>
+    <testcase classname="Joi Schemas - Repartidor clientIdParam" name="requires clientId" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="Resilience - Cache Degradation" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:10" time="0.315" tests="9">
+    <testcase classname="Resilience - Cache Degradation" name="queryCache works without Redis (L1 fallback)" time="0.002">
+    </testcase>
+    <testcase classname="Resilience - Database Errors" name="service handles DB query errors gracefully" time="0.079">
+    </testcase>
+    <testcase classname="Resilience - Auth Edge Cases" name="handles expired token format" time="0.006">
+    </testcase>
+    <testcase classname="Resilience - Input Boundaries" name="handles extremely long vendedorCode" time="0.116">
+    </testcase>
+    <testcase classname="Resilience - Input Boundaries" name="handles unicode in vendor codes" time="0.001">
+    </testcase>
+    <testcase classname="Resilience - Input Boundaries" name="handles null bytes" time="0">
+    </testcase>
+    <testcase classname="Resilience - Input Boundaries" name="handles numeric overflow in year parameter" time="0.001">
+    </testcase>
+    <testcase classname="Resilience - Process Level" name="unhandledRejection handler exists" time="0.001">
+    </testcase>
+    <testcase classname="Resilience - Process Level" name="memory usage is reasonable" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="ObjectivesService" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:10" time="0.382" tests="9">
+    <testcase classname="ObjectivesService getSummary" name="returns summary with calculated objective when no DB objective" time="0.006">
+    </testcase>
+    <testcase classname="ObjectivesService getSummary" name="uses DB objective (COFC) when available" time="0.001">
+    </testcase>
+    <testcase classname="ObjectivesService getSummary" name="generates alerts when sales are low" time="0.001">
+    </testcase>
+    <testcase classname="ObjectivesService getPopulations" name="returns list of distinct cities" time="0.001">
+    </testcase>
+    <testcase classname="ObjectivesService getPopulations" name="returns empty array on DB error" time="0.001">
+    </testcase>
+    <testcase classname="ObjectivesService getEvolution" name="returns monthly evolution data" time="0.016">
+    </testcase>
+    <testcase classname="ObjectivesService getByClient" name="returns per-client objective progress" time="0.003">
+    </testcase>
+    <testcase classname="ObjectivesService getByClient" name="correctly calculates status categories" time="0.002">
+    </testcase>
+    <testcase classname="ObjectivesService getMatrix" name="returns product-level analysis for a client" time="0.007">
+    </testcase>
+  </testsuite>
+  <testsuite name="EntregasService" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:10" time="0.347" tests="12">
+    <testcase classname="EntregasService obtenerAlbaranesPendientes" name="debe retornar lista de albaranes pendientes con paginación" time="0.008">
+    </testcase>
+    <testcase classname="EntregasService obtenerAlbaranesPendientes" name="debe retornar lista vacía cuando no hay albaranes" time="0.002">
+    </testcase>
+    <testcase classname="EntregasService actualizarEstadoEntrega" name="debe registrar entrega correctamente" time="0.007">
+    </testcase>
+    <testcase classname="EntregasService actualizarEstadoEntrega" name="debe guardar en log local si BD no disponible" time="0.004">
+    </testcase>
+    <testcase classname="EntregasService actualizarEstadoEntrega" name="debe manejar entregas parciales" time="0.002">
+    </testcase>
+    <testcase classname="EntregasService guardarFirma" name="debe guardar firma base64 correctamente" time="0.002">
+    </testcase>
+    <testcase classname="EntregasService guardarFirma" name="debe eliminar header data:image del base64" time="0.001">
+    </testcase>
+    <testcase classname="EntregasService obtenerAlbaran" name="debe retornar albarán con items" time="0.001">
+    </testcase>
+    <testcase classname="EntregasService obtenerAlbaran" name="debe retornar null si albarán no existe" time="0.001">
+    </testcase>
+    <testcase classname="Detección de CTR" name="debe detectar CTR por código CTR" time="0.001">
+    </testcase>
+    <testcase classname="Detección de CTR" name="debe detectar CTR por código REEMBOLSO" time="0.002">
+    </testcase>
+    <testcase classname="Detección de CTR" name="debe marcar como no CTR para otros códigos" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="TTL Constants" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:11" time="0.29" tests="19">
+    <testcase classname="TTL Constants" name="exports correct TTL values" time="0.002">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="cache miss calls fetcher and stores result" time="0.005">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="cache hit returns stored value without calling fetcher" time="0.003">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="different keys store independently" time="0.003">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="invalidate removes specific key" time="0.004">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="invalidatePattern removes matching keys" time="0.004">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="getStats returns correct structure" time="0.006">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="hit rate calculates correctly" time="0.004">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="isReady always true (L1 always available)" time="0.003">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="hasRedis false when Redis unavailable" time="0.003">
+    </testcase>
+    <testcase classname="L1 Cache (in-memory, no Redis)" name="close clears L1 cache" time="0.004">
+    </testcase>
+    <testcase classname="Cache data serialization" name="caches arrays correctly" time="0.004">
+    </testcase>
+    <testcase classname="Cache data serialization" name="caches nested objects correctly" time="0.003">
+    </testcase>
+    <testcase classname="Cache data serialization" name="caches null/empty results" time="0.004">
+    </testcase>
+    <testcase classname="Cache data serialization" name="caches numbers and strings" time="0.004">
+    </testcase>
+    <testcase classname="Service cache integration" name="dashboard.getDashboardVendedor caches on second call" time="0.007">
+    </testcase>
+    <testcase classname="Service cache integration" name="facturas.getFacturaDetail caches on second call" time="0.108">
+    </testcase>
+    <testcase classname="Service cache integration" name="different parameters create different cache entries" time="0.011">
+    </testcase>
+    <testcase classname="Cache key naming convention" name="keys follow gmp:entity:identifier pattern" time="0.007">
+    </testcase>
+  </testsuite>
+  <testsuite name="RepartidorService" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:11" time="0.555" tests="13">
+    <testcase classname="RepartidorService getConfig" name="returns commission tier configuration" time="0.005">
+    </testcase>
+    <testcase classname="RepartidorService getCollectionsSummary" name="returns empty summary for empty repartidor IDs" time="0.004">
+    </testcase>
+    <testcase classname="RepartidorService getCollectionsSummary" name="returns collection data per client" time="0.006">
+    </testcase>
+    <testcase classname="RepartidorService getCollectionsSummary" name="calculates commission when over 100%" time="0.004">
+    </testcase>
+    <testcase classname="RepartidorService getCollectionsSummary" name="handles DB error gracefully" time="0.013">
+    </testcase>
+    <testcase classname="RepartidorService getCollectionsSummary" name="calculates summary totals correctly" time="0.004">
+    </testcase>
+    <testcase classname="RepartidorService getCollectionsDaily" name="returns daily collection data" time="0.003">
+    </testcase>
+    <testcase classname="RepartidorService getCollectionsDaily" name="handles DB error gracefully" time="0.005">
+    </testcase>
+    <testcase classname="RepartidorService getDocumentHistory" name="returns document history for a client" time="0.007">
+    </testcase>
+    <testcase classname="RepartidorService getDocumentHistory" name="deduplicates documents by factura key" time="0.002">
+    </testcase>
+    <testcase classname="RepartidorService getDocumentHistory" name="determines status correctly from delivery cascade" time="0.002">
+    </testcase>
+    <testcase classname="RepartidorService getHistoricalObjectives" name="returns monthly threshold tracking data" time="0.007">
+    </testcase>
+    <testcase classname="RepartidorService getHistoricalObjectives" name="filters by clientId when provided" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="CobrosService" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:12" time="0.319" tests="9">
+    <testcase classname="CobrosService obtenerCobrosPendientes" name="debe retornar lista vacía cuando no hay cobros" time="0.006">
+    </testcase>
+    <testcase classname="CobrosService obtenerCobrosPendientes" name="debe retornar cobros pendientes formateados correctamente" time="0.003">
+    </testcase>
+    <testcase classname="CobrosService obtenerCobrosPendientes" name="debe sanitizar código de cliente correctamente" time="0.002">
+    </testcase>
+    <testcase classname="CobrosService registrarCobro" name="debe registrar cobro correctamente" time="0.002">
+    </testcase>
+    <testcase classname="CobrosService registrarCobro" name="debe manejar error cuando tabla COBROS no existe" time="0.002">
+    </testcase>
+    <testcase classname="CobrosService obtenerResumenCobros" name="debe calcular resumen correctamente" time="0.002">
+    </testcase>
+    <testcase classname="CobrosService crearPresupuesto" name="debe crear presupuesto correctamente" time="0.008">
+    </testcase>
+    <testcase classname="Edge Cases" name="debe manejar cliente con caracteres especiales" time="0.002">
+    </testcase>
+    <testcase classname="Edge Cases" name="debe manejar importe null" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="Pagination Helpers" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:12" time="0.241" tests="35">
+    <testcase classname="Pagination Helpers clampLimit" name="returns default when value is undefined" time="0.003">
+    </testcase>
+    <testcase classname="Pagination Helpers clampLimit" name="returns default when value is 0" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampLimit" name="returns default when value is null" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampLimit" name="clamps to max when value exceeds max" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampLimit" name="clamps to 1 when value is negative" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampLimit" name="accepts valid values within range" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampLimit" name="custom default and max work" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampLimit" name="parses string values" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampOffset" name="returns 0 for undefined" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampOffset" name="returns 0 for negative values" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampOffset" name="returns 0 for null" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampOffset" name="accepts valid values" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers clampOffset" name="parses string values" time="0.002">
+    </testcase>
+    <testcase classname="Pagination Helpers currentPage" name="first page when offset is 0" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers currentPage" name="second page when offset equals limit" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers currentPage" name="correct page for various offsets" time="0.002">
+    </testcase>
+    <testcase classname="Pagination Helpers totalPages" name="returns 0 for 0 total" time="0">
+    </testcase>
+    <testcase classname="Pagination Helpers totalPages" name="returns 1 for total less than limit" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers totalPages" name="returns exact pages for even division" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Helpers totalPages" name="rounds up for remainder" time="0">
+    </testcase>
+    <testcase classname="Pagination Helpers totalPages" name="1 item = 1 page" time="0.001">
+    </testcase>
+    <testcase classname="Facturas Service Pagination" name="getFacturas returns pagination metadata" time="0.077">
+    </testcase>
+    <testcase classname="Facturas Service Pagination" name="getFacturas page 2 calculates correctly" time="0.001">
+    </testcase>
+    <testcase classname="Facturas Service Pagination" name="getFacturas defaults to limit 50 when not provided" time="0.001">
+    </testcase>
+    <testcase classname="Facturas Service Pagination" name="getFacturas clamps limit to max 500" time="0">
+    </testcase>
+    <testcase classname="Entregas Service Pagination" name="obtenerAlbaranesPendientes returns pagination metadata" time="0.01">
+    </testcase>
+    <testcase classname="Entregas Service Pagination" name="obtenerAlbaranesPendientes defaults to limit 50" time="0.001">
+    </testcase>
+    <testcase classname="Cliente Service Pagination" name="obtenerFacturas returns pagination metadata" time="0.005">
+    </testcase>
+    <testcase classname="Cliente Service Pagination" name="obtenerFacturas defaults to limit 50" time="0.001">
+    </testcase>
+    <testcase classname="Cliente Service Pagination" name="obtenerClientesRutero returns pagination metadata" time="0.001">
+    </testcase>
+    <testcase classname="Cliente Service Pagination" name="obtenerClientesRutero defaults to limit 100" time="0.004">
+    </testcase>
+    <testcase classname="Pagination Edge Cases" name="offset beyond total returns empty array with correct metadata" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Edge Cases" name="negative limit is clamped to 1" time="0">
+    </testcase>
+    <testcase classname="Pagination Edge Cases" name="negative offset is clamped to 0" time="0.001">
+    </testcase>
+    <testcase classname="Pagination Edge Cases" name="totalPages with 1 item per page" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="toFloat" errors="0" failures="0" skipped="0" timestamp="2026-02-16T23:14:12" time="0.139" tests="45">
+    <testcase classname="toFloat" name="converts number values" time="0.002">
+    </testcase>
+    <testcase classname="toFloat" name="converts string values" time="0.001">
+    </testcase>
+    <testcase classname="toFloat" name="returns 0 for null/undefined" time="0.001">
+    </testcase>
+    <testcase classname="toFloat" name="returns 0 for NaN-producing values" time="0.001">
+    </testcase>
+    <testcase classname="toFloat" name="handles DB-style string numbers" time="0">
+    </testcase>
+    <testcase classname="toInt" name="converts number values" time="0">
+    </testcase>
+    <testcase classname="toInt" name="truncates floating point numbers" time="0.001">
+    </testcase>
+    <testcase classname="toInt" name="converts string values" time="0.001">
+    </testcase>
+    <testcase classname="toInt" name="returns 0 for null/undefined" time="0">
+    </testcase>
+    <testcase classname="toInt" name="returns 0 for NaN-producing values" time="0.001">
+    </testcase>
+    <testcase classname="toInt" name="parses integer part of float strings" time="0.001">
+    </testcase>
+    <testcase classname="toStr" name="trims string values" time="0">
+    </testcase>
+    <testcase classname="toStr" name="converts number to string" time="0.001">
+    </testcase>
+    <testcase classname="toStr" name="returns empty string for null/undefined" time="0.001">
+    </testcase>
+    <testcase classname="toStr" name="handles boolean values" time="0">
+    </testcase>
+    <testcase classname="toStr" name="handles DB column values with trailing spaces" time="0.001">
+    </testcase>
+    <testcase classname="formatDateDMY" name="formats valid day/month/year" time="0.001">
+    </testcase>
+    <testcase classname="formatDateDMY" name="pads single-digit day and month" time="0">
+    </testcase>
+    <testcase classname="formatDateDMY" name="handles string values (from DB rows)" time="0">
+    </testcase>
+    <testcase classname="formatDateDMY" name="returns empty string for missing values" time="0.003">
+    </testcase>
+    <testcase classname="formatDateDMY" name="handles double-digit months and days without extra padding" time="0">
+    </testcase>
+    <testcase classname="formatNumericDate" name="formats YYYYMMDD integer to DD/MM/YYYY" time="0.001">
+    </testcase>
+    <testcase classname="formatNumericDate" name="returns undefined for falsy values" time="0.001">
+    </testcase>
+    <testcase classname="formatNumericDate" name="returns undefined for short numbers" time="0">
+    </testcase>
+    <testcase classname="formatNumericDate" name="handles string input" time="0.001">
+    </testcase>
+    <testcase classname="clampLimit" name="returns default when value is falsy" time="0">
+    </testcase>
+    <testcase classname="clampLimit" name="uses custom default" time="0.001">
+    </testcase>
+    <testcase classname="clampLimit" name="clamps to minimum 1" time="0">
+    </testcase>
+    <testcase classname="clampLimit" name="clamps to maximum (default 500)" time="0">
+    </testcase>
+    <testcase classname="clampLimit" name="clamps to custom maximum" time="0.001">
+    </testcase>
+    <testcase classname="clampLimit" name="accepts valid values within range" time="0">
+    </testcase>
+    <testcase classname="clampLimit" name="handles string values" time="0.001">
+    </testcase>
+    <testcase classname="clampOffset" name="returns 0 for falsy values" time="0">
+    </testcase>
+    <testcase classname="clampOffset" name="clamps negative to 0" time="0.001">
+    </testcase>
+    <testcase classname="clampOffset" name="accepts positive values" time="0">
+    </testcase>
+    <testcase classname="clampOffset" name="handles string values" time="0.001">
+    </testcase>
+    <testcase classname="currentPage" name="calculates page 1 for offset 0" time="0.001">
+    </testcase>
+    <testcase classname="currentPage" name="calculates correct page for offset" time="0">
+    </testcase>
+    <testcase classname="currentPage" name="handles non-aligned offsets" time="0">
+    </testcase>
+    <testcase classname="totalPages" name="calculates correct total pages" time="0.001">
+    </testcase>
+    <testcase classname="totalPages" name="handles single item per page" time="0.001">
+    </testcase>
+    <testcase classname="totalPages" name="handles exactly divisible totals" time="0">
+    </testcase>
+    <testcase classname="Integration: DB row processing" name="processes a typical DB2 CAC row" time="0.001">
+    </testcase>
+    <testcase classname="Integration: DB row processing" name="processes a row with null/missing fields" time="0.001">
+    </testcase>
+    <testcase classname="Integration: DB row processing" name="pagination calculation roundtrip" time="0">
+    </testcase>
+  </testsuite>
+</testsuites>

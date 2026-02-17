@@ -723,7 +723,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
       
       // Current month (January = 1)
       if (monthNum == DateTime.now().month) {
-        currentMonthData = m;
+        currentMonthData = m as Map<String, dynamic>?;
       }
     }
     
@@ -963,7 +963,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
        final isCurrent = qIndex == currentQ;
        final isFuture = qIndex > currentQ;
        
-       final name = q['name'] ?? 'Trimestre';
+       final name = (q['name'] as String?) ?? 'Trimestre';
        final commission = (q['commission'] as num?)?.toDouble() ?? 0;
        final additional = (q['additionalPayment'] as num?)?.toDouble() ?? 0;
        final total = commission + additional;
@@ -1020,16 +1020,16 @@ class _CommissionsPageState extends State<CommissionsPage> {
     // Build Sequence
     // Build Sequence
     final q1Months = months.where((m) => (m['month'] as int) <= 4).toList();
-    for (var m in q1Months) addMonthRow(m);
-    if (q1Months.isNotEmpty && quarters.isNotEmpty) addQuarterRow(quarters[0], 0);
+    for (var m in q1Months) addMonthRow(m as Map<String, dynamic>);
+    if (q1Months.isNotEmpty && quarters.isNotEmpty) addQuarterRow(quarters[0] as Map<String, dynamic>, 0);
 
     final q2Months = months.where((m) => (m['month'] as int) > 4 && (m['month'] as int) <= 8).toList();
-    for (var m in q2Months) addMonthRow(m);
-    if (q2Months.isNotEmpty && quarters.length > 1) addQuarterRow(quarters[1], 1);
+    for (var m in q2Months) addMonthRow(m as Map<String, dynamic>);
+    if (q2Months.isNotEmpty && quarters.length > 1) addQuarterRow(quarters[1] as Map<String, dynamic>, 1);
 
     final q3Months = months.where((m) => (m['month'] as int) > 8).toList();
-    for (var m in q3Months) addMonthRow(m);
-    if (q3Months.isNotEmpty && quarters.length > 2) addQuarterRow(quarters[2], 2);
+    for (var m in q3Months) addMonthRow(m as Map<String, dynamic>);
+    if (q3Months.isNotEmpty && quarters.length > 2) addQuarterRow(quarters[2] as Map<String, dynamic>, 2);
     
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
@@ -1084,7 +1084,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                    IconButton(
                      icon: const Icon(Icons.payment_rounded, color: AppTheme.neonBlue, size: 28),
                      // We need the ID/Code of the current single vendor
-                     onPressed: () => _showPayDialog(_data?['vendor'] ?? widget.employeeCode.split(',').first, 'Vendedor', grandTotal),
+                     onPressed: () => _showPayDialog((_data?['vendor'] as String?) ?? widget.employeeCode.split(',').first, 'Vendedor', grandTotal),
                      tooltip: 'Registrar Pago',
                    ),
                  IconButton(

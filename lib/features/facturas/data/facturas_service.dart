@@ -84,7 +84,7 @@ class FacturaDetail {
     
     return FacturaDetail(
       header: FacturaHeader.fromJson(headerJson),
-      lines: linesJson.map((l) => FacturaLine.fromJson(l)).toList(),
+      lines: linesJson.map((l) => FacturaLine.fromJson(l as Map<String, dynamic>)).toList(),
     );
   }
 }
@@ -128,8 +128,8 @@ class FacturaHeader {
       clienteDireccion: json['clienteDireccion']?.toString() ?? '',
       clientePoblacion: json['clientePoblacion']?.toString() ?? '',
       clienteNif: json['clienteNif']?.toString() ?? '',
-      total: (json['total'] is num ? json['total'] : double.tryParse(json['total']?.toString() ?? '0') ?? 0).toDouble(),
-      bases: basesJson.map((b) => FacturaBase.fromJson(b)).toList(),
+      total: (json['total'] is num ? (json['total'] as num) : double.tryParse(json['total']?.toString() ?? '0') ?? 0).toDouble(),
+      bases: basesJson.map((b) => FacturaBase.fromJson(b as Map<String, dynamic>)).toList(),
     );
   }
 
@@ -247,7 +247,7 @@ class FacturasService {
       
       if (response['success'] == true && response['facturas'] != null) {
         final List<dynamic> list = response['facturas'] as List<dynamic>;
-        var facturas = list.map((e) => Factura.fromJson(e)).toList();
+        var facturas = list.map((e) => Factura.fromJson(e as Map<String, dynamic>)).toList();
 
         // ---------------------------------------------------------
         // SENIOR FIX: Strict Client-Side Filtering (v9.3)
@@ -514,6 +514,48 @@ class FacturasService {
       return file;
     } catch (e) {
       debugPrint('Error downloading PDF: $e');
+      rethrow;
+    }
+  }
+
+  /// Download PDF as raw bytes (for in-app preview)
+  static Future<List<int>> downloadFacturaPdfBytes(String serie, int numero, int ejercicio) async {
+    try {
+      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?preview=true');
+      return bytes;
+    } catch (e) {
+      debugPrint('Error downloading PDF bytes: $e');
+      rethrow;
+    }
+  }
+
+  /// Send email server-side with PDF attachment (Nodemailer)
+  static Future<Map<String, dynamic>> sendEmailServerSide({
+    required String serie,
+    required int numero,
+    required int ejercicio,
+    required String destinatario,
+    String? asunto,
+    String? cuerpo,
+    String? clienteNombre,
+  }) async {
+    try {
+      final response = await ApiClient.post('/facturas/send-email', {
+        'serie': serie,
+        'numero': numero,
+        'ejercicio': ejercicio,
+        'destinatario': destinatario,
+        'asunto': asunto,
+        'cuerpo': cuerpo,
+        'clienteNombre': clienteNombre,
+      });
+
+      if (response['success'] == true) {
+        return response;
+      }
+      throw Exception(response['error'] ?? 'Error enviando email');
+    } catch (e) {
+      debugPrint('Error in sendEmailServerSide: $e');
       rethrow;
     }
   }

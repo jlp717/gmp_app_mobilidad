@@ -55,7 +55,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
         },
       );
 
-      final rows = List<Map<String, dynamic>>.from(response['rows'] ?? []);
+      final rows = List<Map<String, dynamic>>.from((response['rows'] as List?) ?? []);
       _processData(rows);
 
       setState(() {
@@ -225,8 +225,8 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Text(details['name'], style: const TextStyle(fontWeight: FontWeight.w500)),
-                                          Text(details['code'], style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                                          Text(details['name'].toString(), style: const TextStyle(fontWeight: FontWeight.w500)),
+                                          Text(details['code'].toString(), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
                                         ],
                                       )),
                                       DataCell(Column(
@@ -234,9 +234,9 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
                                           if (details['lote'].toString().isNotEmpty)
-                                            Text(details['lote'], style: const TextStyle(fontSize: 11)),
+                                            Text(details['lote'].toString(), style: const TextStyle(fontSize: 11)),
                                           if (details['ref'].toString().isNotEmpty)
-                                            Text(details['ref'], style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                                            Text(details['ref'].toString(), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
                                         ],
                                       )),
                                       DataCell(Text(_currencyFormat.format(details['price']))),

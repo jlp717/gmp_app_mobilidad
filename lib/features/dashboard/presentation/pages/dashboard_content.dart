@@ -13,6 +13,8 @@ import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/widgets/multi_select_dialog.dart';
 import '../../../../core/widgets/fi_filters_widget.dart';
+import '../../../../core/widgets/error_state_widget.dart';
+import '../../../../core/utils/date_formatter.dart';
 // SmartSyncHeader already imported in line 10 theoretically, but let's just keep one. 
 // Step 1420 lines 10 & 11 were both SmartSyncHeader.
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
@@ -331,7 +333,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
       setState(() {
         _matrixData = treeData;
         _selectionPath = []; // Reset selection on new fetch
-        _matrixPeriods = List<String>.from(matrixData['periods'] ?? []);
+        _matrixPeriods = List<String>.from((matrixData['periods'] as List?) ?? []);
         _kpiData = Map<String, dynamic>.from(results[1] as Map);
         _isLoading = false;
         _lastFetchTime = DateTime.now();
@@ -550,7 +552,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
                ..._vendedoresDisponibles.map((v) {
                  return DropdownMenuItem<String>(
                    value: v['code'].toString(),
-                   child: Text(v['name'] ?? v['code'].toString(), overflow: TextOverflow.ellipsis),
+                   child: Text((v['name'] as String?) ?? v['code'].toString(), overflow: TextOverflow.ellipsis),
                  );
                }),
             ],
@@ -837,7 +839,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
           children: [
             const Text('Indicadores Clave', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
             if (_kpiData != null)
-               Text('${['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][_kpiData!['period']['month']-1]} ${_kpiData!['period']['year']}', style: const TextStyle(color: Colors.white30, fontSize: 11)),
+               Text('${DateFormatter.getMonthName(_kpiData!['period']['month'] as int)} ${_kpiData!['period']['year']}', style: const TextStyle(color: Colors.white30, fontSize: 11)),
           ],
         ),
         const SizedBox(height: 12),
@@ -889,15 +891,9 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   }
 
   Widget _buildErrorWidget() {
-    return Center(
-      child: Column(
-        children: [
-          const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
-          const SizedBox(height: 12),
-          Text('Error: $_error', style: const TextStyle(color: Colors.white70)),
-          TextButton(onPressed: _fetchAllData, child: const Text('Reintentar')),
-        ],
-      ),
+    return ErrorStateWidget(
+      message: 'Error: $_error',
+      onRetry: _fetchAllData,
     );
   }
 

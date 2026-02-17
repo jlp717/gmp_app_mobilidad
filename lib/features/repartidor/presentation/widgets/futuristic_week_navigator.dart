@@ -354,11 +354,11 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   }
 
   Widget _buildDayTile(Map<String, dynamic> dayData, int index) {
-    final date = DateTime.parse(dayData['date']);
+    final date = DateTime.parse(dayData['date'] as String);
     final isSelected = DateUtils.isSameDay(date, widget.selectedDate);
     final isToday = DateUtils.isSameDay(date, DateTime.now());
-    final count = dayData['clients'] ?? 0;
-    final status = dayData['status'] ?? 'none';
+    final count = (dayData['clients'] as int?) ?? 0;
+    final status = (dayData['status'] as String?) ?? 'none';
     
     // Determine colors based on status
     Color statusColor = AppTheme.textSecondary;
@@ -561,8 +561,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   }
 
   void _showDayTooltip(BuildContext context, Map<String, dynamic> dayData, DateTime date) {
-    final status = dayData['status'] ?? 'none';
-    final count = dayData['clients'] ?? 0;
+    final status = (dayData['status'] as String?) ?? 'none';
+    final count = (dayData['clients'] as int?) ?? 0;
     
     String statusText = 'Sin entregas programadas';
     IconData statusIcon = Icons.event_busy;

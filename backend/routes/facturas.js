@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const facturasService = require('../services/facturas.service');
 const logger = require('../middleware/logger');
+const { sendEmailWithPdf, generateInvoiceEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
 
 /**
  * GET /api/facturas
@@ -122,23 +123,37 @@ router.get('/:serie/:numero/:ejercicio', async (req, res, next) => {
 router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
     try {
         const { serie, numero, ejercicio } = req.params;
+        const preview = req.query.preview === 'true';
+        const cacheKey = `factura_${serie}_${numero}_${ejercicio}`;
 
-        const factura = await facturasService.getFacturaDetail(
-            serie,
-            parseInt(numero),
-            parseInt(ejercicio)
-        );
+        // Check PDF cache first
+        let pdfBuffer = getCachedPdf(cacheKey);
 
-        if (!factura) {
-            return res.status(404).json({ success: false, error: 'Factura no encontrada' });
+        if (!pdfBuffer) {
+            const factura = await facturasService.getFacturaDetail(
+                serie,
+                parseInt(numero),
+                parseInt(ejercicio)
+            );
+
+            if (!factura) {
+                return res.status(404).json({ success: false, error: 'Factura no encontrada' });
+            }
+
+            const pdfService = require('../services/pdf.service');
+            pdfBuffer = await pdfService.generateInvoicePDF(factura);
+
+            // Cache for reuse
+            cachePdf(cacheKey, pdfBuffer);
         }
 
-        const pdfService = require('../services/pdf.service');
-        const pdfBuffer = await pdfService.generateInvoicePDF(factura);
+        const filename = `Factura_${serie}_${numero}_${ejercicio}.pdf`;
+        const disposition = preview ? 'inline' : 'attachment';
 
         res.set('Content-Type', 'application/pdf');
-        res.set('Content-Disposition', `attachment; filename=Factura_${serie}_${numero}_${ejercicio}.pdf`);
+        res.set('Content-Disposition', `${disposition}; filename=${filename}`);
         res.set('Content-Length', pdfBuffer.length);
+        res.set('Cache-Control', 'private, max-age=300');
 
         res.send(pdfBuffer);
     } catch (error) {
@@ -183,7 +198,77 @@ router.post('/share/whatsapp', async (req, res, next) => {
 });
 
 /**
- * POST /api/facturas/share/email
+ * POST /api/facturas/send-email
+ * Server-side email sending with PDF attachment via Nodemailer
+ */
+router.post('/send-email', async (req, res, next) => {
+    try {
+        const { serie, numero, ejercicio, destinatario, asunto, cuerpo, clienteNombre } = req.body;
+
+        if (!serie || !numero || !ejercicio || !destinatario) {
+            return res.status(400).json({ success: false, error: 'Campos requeridos: serie, numero, ejercicio, destinatario' });
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(destinatario)) {
+            return res.status(400).json({ success: false, error: 'Email destinatario inválido' });
+        }
+
+        // Get or generate PDF (with cache)
+        const cacheKey = `factura_${serie}_${numero}_${ejercicio}`;
+        let pdfBuffer = getCachedPdf(cacheKey);
+
+        if (!pdfBuffer) {
+            const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+            if (!factura) {
+                return res.status(404).json({ success: false, error: 'Factura no encontrada' });
+            }
+
+            const pdfService = require('../services/pdf.service');
+            pdfBuffer = await pdfService.generateInvoicePDF(factura);
+            cachePdf(cacheKey, pdfBuffer);
+        }
+
+        // Get factura details for email template
+        const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+
+        const emailSubject = asunto || `Factura ${serie}-${numero} - Granja Mari Pepa`;
+        const htmlBody = generateInvoiceEmailHtml({
+            serie,
+            numero,
+            fecha: factura.header.fecha,
+            total: factura.header.total,
+            clienteNombre: clienteNombre || factura.header.clienteNombre,
+            customBody: cuerpo
+        });
+
+        const pdfFilename = `Factura_${serie}_${numero}_${ejercicio}.pdf`;
+
+        const result = await sendEmailWithPdf({
+            to: destinatario,
+            subject: emailSubject,
+            htmlBody,
+            pdfBuffer,
+            pdfFilename
+        });
+
+        res.json({
+            success: true,
+            message: `Email enviado correctamente a ${destinatario}`,
+            messageId: result.messageId
+        });
+    } catch (error) {
+        logger.error(`Error en POST /facturas/send-email: ${error.message}`);
+        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+            return res.status(503).json({ success: false, error: 'Error de conexión con servidor de email. Inténtelo de nuevo.' });
+        }
+        next(error);
+    }
+});
+
+/**
+ * POST /api/facturas/share/email (LEGACY - kept for backward compatibility)
+ * Now redirects to send-email
  */
 router.post('/share/email', async (req, res, next) => {
     try {
@@ -198,17 +283,38 @@ router.post('/share/email', async (req, res, next) => {
             return res.status(400).json({ success: false, error: 'Email inválido' });
         }
 
-        const factura = await facturasService.getFacturaDetail(serie, numero, ejercicio);
+        // Use the new server-side sending
+        const cacheKey = `factura_${serie}_${numero}_${ejercicio}`;
+        let pdfBuffer = getCachedPdf(cacheKey);
 
-        const subject = `Factura ${serie}-${numero} - Granja Mari Pepa`;
-        const body = `Factura: ${serie}-${numero}\nFecha: ${factura.header.fecha}\nTotal: ${factura.header.total.toFixed(2)} €\n\nCliente: ${clienteNombre || factura.header.clienteNombre}`;
+        if (!pdfBuffer) {
+            const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+            const pdfService = require('../services/pdf.service');
+            pdfBuffer = await pdfService.generateInvoicePDF(factura);
+            cachePdf(cacheKey, pdfBuffer);
+        }
 
-        const mailtoUrl = `mailto:${destinatario}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+        const emailSubject = `Factura ${serie}-${numero} - Granja Mari Pepa`;
+        const htmlBody = generateInvoiceEmailHtml({
+            serie, numero,
+            fecha: factura.header.fecha,
+            total: factura.header.total,
+            clienteNombre: clienteNombre || factura.header.clienteNombre
+        });
+
+        const result = await sendEmailWithPdf({
+            to: destinatario,
+            subject: emailSubject,
+            htmlBody,
+            pdfBuffer,
+            pdfFilename: `Factura_${serie}_${numero}_${ejercicio}.pdf`
+        });
 
         res.json({
             success: true,
-            message: `Preparado para enviar a ${destinatario}`,
-            mailtoUrl
+            message: `Email enviado correctamente a ${destinatario}`,
+            messageId: result.messageId
         });
     } catch (error) {
         logger.error(`Error en POST /facturas/share/email: ${error.message}`);

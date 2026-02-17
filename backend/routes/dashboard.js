@@ -181,11 +181,11 @@ router.get('/matrix-data', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         const clientFilter = clientCodes && clientCodes !== 'ALL'
-            ? `AND TRIM(L.LCCDCL) IN (${clientCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
+            ? `AND L.LCCDCL IN (${clientCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
             : '';
 
         const productFilter = productCodes && productCodes !== 'ALL'
-            ? `AND TRIM(L.CODIGOARTICULO) IN (${productCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
+            ? `AND L.CODIGOARTICULO IN (${productCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
             : '';
 
         let familyProductFilter = '';
@@ -207,16 +207,16 @@ router.get('/matrix-data', async (req, res) => {
         hierarchy.forEach((level, index) => {
             const levelIdx = index + 1;
             if (level === 'vendor') {
-                selectClauses.push(`TRIM(L.LCCDVD) as ID_${levelIdx}`);
+                selectClauses.push(`RTRIM(L.LCCDVD) as ID_${levelIdx}`);
                 groupClauses.push('L.LCCDVD');
             } else if (level === 'client') {
-                selectClauses.push(`TRIM(L.LCCDCL) as ID_${levelIdx}`);
+                selectClauses.push(`RTRIM(L.LCCDCL) as ID_${levelIdx}`);
                 groupClauses.push('L.LCCDCL');
             } else if (level === 'product') {
-                selectClauses.push(`TRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
+                selectClauses.push(`RTRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
                 groupClauses.push('L.CODIGOARTICULO');
             } else if (level === 'family') {
-                selectClauses.push(`TRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
+                selectClauses.push(`RTRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
                 groupClauses.push('L.CODIGOARTICULO');
             }
         });

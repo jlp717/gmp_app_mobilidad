@@ -29,9 +29,18 @@ import pedidosRoutes from './routes/pedidos.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import entregasRoutes from './routes/entregas.routes';
 import facturasRoutes from './routes/facturas.routes';
+import commissionsRoutes from './routes/commissions.routes';
+import objectivesRoutes from './routes/objectives.routes';
+import repartidorRoutes from './routes/repartidor.routes';
 
 // Cron Jobs
 import { iniciarJobsCobros } from './cron/transferencias.job';
+
+// Cache
+import { queryCache } from './utils/query-cache';
+
+// Swagger/OpenAPI Documentation
+import { setupSwagger } from './config/swagger';
 
 
 // ============================================
@@ -113,6 +122,13 @@ if (config.env !== 'test') {
 app.use(securityMiddleware);
 
 // ============================================
+// SWAGGER API DOCUMENTATION
+// ============================================
+if (config.env !== 'production') {
+  setupSwagger(app);
+}
+
+// ============================================
 // HEALTH CHECK
 // ============================================
 
@@ -131,7 +147,26 @@ app.get('/api/health', (_req: Request, res: Response) => {
     uptime: process.uptime(),
     memory: process.memoryUsage(),
     timestamp: new Date().toISOString(),
+    cache: queryCache.getStats(),
   });
+});
+
+// ============================================
+// CACHE MANAGEMENT
+// ============================================
+
+app.get('/api/cache/stats', (_req: Request, res: Response) => {
+  res.json(queryCache.getStats());
+});
+
+app.post('/api/cache/invalidate', async (req: Request, res: Response) => {
+  const { pattern } = req.body;
+  if (!pattern || typeof pattern !== 'string') {
+    res.status(400).json({ error: 'pattern (string) is required' });
+    return;
+  }
+  const count = await queryCache.invalidatePattern(pattern);
+  res.json({ invalidated: count, pattern });
 });
 
 // ============================================
@@ -151,6 +186,9 @@ app.use(`${API_PREFIX}/pedidos`, pedidosRoutes);
 app.use(`${API_PREFIX}/dashboard`, dashboardRoutes);
 app.use(`${API_PREFIX}/entregas`, entregasRoutes);
 app.use(`${API_PREFIX}/facturas`, facturasRoutes);
+app.use(`${API_PREFIX}/commissions`, commissionsRoutes);
+app.use(`${API_PREFIX}/objectives`, objectivesRoutes);
+app.use(`${API_PREFIX}/repartidor`, repartidorRoutes);
 
 
 // ============================================
@@ -173,6 +211,11 @@ async function startServer(): Promise<void> {
     logger.info('Inicializando conexión a base de datos...');
     await initDatabase();
     logger.info('Base de datos conectada correctamente');
+
+    // Inicializar cache Redis (non-blocking, funciona sin Redis)
+    queryCache.init().then(() => {
+      logger.info(`Cache inicializado (Redis: ${queryCache.hasRedis ? 'conectado' : 'no disponible, usando L1'})`);
+    });
 
     // Iniciar jobs cron de cobros
     iniciarJobsCobros();
@@ -201,8 +244,9 @@ async function startServer(): Promise<void> {
         logger.info('Servidor HTTP cerrado');
 
         try {
+          await queryCache.close();
           await closeDatabase();
-          logger.info('Conexiones a BD cerradas');
+          logger.info('Conexiones a BD y cache cerradas');
           process.exit(0);
         } catch (err) {
           logger.error('Error cerrando conexiones:', err);
@@ -236,7 +280,9 @@ async function startServer(): Promise<void> {
   }
 }
 
-// Iniciar servidor
-startServer();
+// Iniciar servidor (skip when imported as module in tests)
+if (require.main === module || (config.env !== 'test' && !process.env.JEST_WORKER_ID)) {
+  startServer();
+}
 
 export default app;

@@ -2,12 +2,14 @@
  * FACTURAS ROUTES
  * ================
  * Endpoints for invoices in commercial profile
- * Ported from granja_mari_pepa web app
+ * All inputs validated via Joi schemas before reaching service layer.
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { facturasService } from '../services/facturas.service';
 import { requireAuth } from '../middleware/auth.middleware';
+import { validate } from '../middleware/validation.middleware';
+import { schemas } from '../utils/validators';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -17,27 +19,25 @@ router.use(requireAuth);
 /**
  * GET /api/facturas
  */
-router.get('/', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.get('/', validate(schemas.facturasQuery, 'query'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const params = {
             vendedorCodes: req.query.vendedorCodes as string,
-            year: req.query.year ? parseInt(req.query.year as string) : undefined,
-            month: req.query.month ? parseInt(req.query.month as string) : undefined,
+            year: req.query.year ? Number(req.query.year) : undefined,
+            month: req.query.month ? Number(req.query.month) : undefined,
             search: req.query.search as string | undefined,
-            clientId: req.query.clientId as string | undefined
+            clientId: req.query.clientId as string | undefined,
+            limit: req.query.limit ? Number(req.query.limit) : undefined,
+            offset: req.query.offset ? Number(req.query.offset) : undefined,
         };
 
-        if (!params.vendedorCodes) {
-            res.status(400).json({ success: false, error: 'vendedorCodes is required' });
-            return;
-        }
-
-        const facturas = await facturasService.getFacturas(params);
+        const result = await facturasService.getFacturas(params);
 
         res.json({
             success: true,
-            facturas,
-            count: facturas.length,
+            facturas: result.facturas,
+            total: result.total,
+            paginacion: result.paginacion,
             year: params.year || new Date().getFullYear()
         });
     } catch (error) {
@@ -49,15 +49,9 @@ router.get('/', async (req: Request, res: Response, next: NextFunction): Promise
 /**
  * GET /api/facturas/years
  */
-router.get('/years', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.get('/years', validate(schemas.facturasYearsQuery, 'query'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const vendedorCodes = req.query.vendedorCodes as string;
-
-        if (!vendedorCodes) {
-            res.status(400).json({ success: false, error: 'vendedorCodes is required' });
-            return;
-        }
-
         const years = await facturasService.getAvailableYears(vendedorCodes);
 
         res.json({ success: true, years });
@@ -70,18 +64,13 @@ router.get('/years', async (req: Request, res: Response, next: NextFunction): Pr
 /**
  * GET /api/facturas/summary
  */
-router.get('/summary', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.get('/summary', validate(schemas.facturasSummaryQuery, 'query'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const params = {
             vendedorCodes: req.query.vendedorCodes as string,
-            year: req.query.year ? parseInt(req.query.year as string) : undefined,
-            month: req.query.month ? parseInt(req.query.month as string) : undefined
+            year: req.query.year ? Number(req.query.year) : undefined,
+            month: req.query.month ? Number(req.query.month) : undefined
         };
-
-        if (!params.vendedorCodes) {
-            res.status(400).json({ success: false, error: 'vendedorCodes is required' });
-            return;
-        }
 
         const summary = await facturasService.getSummary(params);
 
@@ -95,7 +84,7 @@ router.get('/summary', async (req: Request, res: Response, next: NextFunction): 
 /**
  * GET /api/facturas/:serie/:numero/:ejercicio
  */
-router.get('/:serie/:numero/:ejercicio', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.get('/:serie/:numero/:ejercicio', validate(schemas.facturaDetailParams, 'params'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { serie, numero, ejercicio } = req.params;
 
@@ -119,14 +108,9 @@ router.get('/:serie/:numero/:ejercicio', async (req: Request, res: Response, nex
 /**
  * POST /api/facturas/share/whatsapp
  */
-router.post('/share/whatsapp', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/share/whatsapp', validate(schemas.shareWhatsapp, 'body'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { serie, numero, ejercicio, telefono, clienteNombre } = req.body;
-
-        if (!serie || !numero || !ejercicio || !telefono) {
-            res.status(400).json({ success: false, error: 'Missing required fields' });
-            return;
-        }
 
         const factura = await facturasService.getFacturaDetail(serie, numero, ejercicio);
 
@@ -155,20 +139,9 @@ router.post('/share/whatsapp', async (req: Request, res: Response, next: NextFun
 /**
  * POST /api/facturas/share/email
  */
-router.post('/share/email', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/share/email', validate(schemas.shareEmail, 'body'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { serie, numero, ejercicio, destinatario, clienteNombre } = req.body;
-
-        if (!serie || !numero || !ejercicio || !destinatario) {
-            res.status(400).json({ success: false, error: 'Missing required fields' });
-            return;
-        }
-
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(destinatario)) {
-            res.status(400).json({ success: false, error: 'Email inválido' });
-            return;
-        }
 
         const factura = await facturasService.getFacturaDetail(serie, numero, ejercicio);
 

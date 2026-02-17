@@ -10,6 +10,8 @@
 
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
+import { toFloat, toInt, toStr } from '../utils/db-helpers';
+import { queryCache, TTL } from '../utils/query-cache';
 
 // Tipos de rol
 export type UserRole = 'JEFE' | 'COMERCIAL' | 'REPARTIDOR';
@@ -50,7 +52,7 @@ class RolesService {
       `, [codigo]);
 
             if (resultado.length > 0) {
-                const rol = String(resultado[0].ROL).trim().toUpperCase() as UserRole;
+                const rol = toStr(resultado[0].ROL).toUpperCase() as UserRole;
                 logger.info(`[ROLES] Usuario ${codigo} → Rol desde APP_USERS: ${rol}`);
                 return rol;
             }
@@ -79,7 +81,7 @@ class RolesService {
             logger.info(`[ROLES] Resultado vehículo para ${codigo}: ${tieneVehiculo.length} filas`);
 
             if (tieneVehiculo.length > 0) {
-                const matricula = String(tieneVehiculo[0].MATRICULA || '').trim();
+                const matricula = toStr(tieneVehiculo[0].MATRICULA);
                 logger.info(`[ROLES] Usuario ${codigo} → REPARTIDOR (vehículo: ${matricula})`);
                 return 'REPARTIDOR';
             }
@@ -110,6 +112,10 @@ class RolesService {
      * Obtener lista de conductores existentes (para selector en admin)
      */
     async obtenerConductores(): Promise<{ codigo: string; totalAlbaranes: number }[]> {
+        return queryCache.getOrSet('gmp:roles:conductores', () => this._fetchConductores(), TTL.LONG);
+    }
+
+    private async _fetchConductores(): Promise<{ codigo: string; totalAlbaranes: number }[]> {
         try {
             const resultado = await odbcPool.query<Record<string, unknown>[]>(`
         SELECT 
@@ -125,8 +131,8 @@ class RolesService {
       `);
 
             return resultado.map(row => ({
-                codigo: String(row.CODIGO).trim(),
-                totalAlbaranes: Number(row.TOTAL),
+                codigo: toStr(row.CODIGO),
+                totalAlbaranes: toInt(row.TOTAL),
             }));
         } catch (error) {
             logger.error('[ROLES] Error obteniendo conductores:', error);
@@ -138,6 +144,10 @@ class RolesService {
      * Obtener formas de pago y detectar cuáles son CTR
      */
     async obtenerFormasPago(): Promise<{ codigo: string; descripcion: string; esCTR: boolean; total: number }[]> {
+        return queryCache.getOrSet('gmp:roles:formaspago', () => this._fetchFormasPago(), TTL.LONG);
+    }
+
+    private async _fetchFormasPago(): Promise<{ codigo: string; descripcion: string; esCTR: boolean; total: number }[]> {
         try {
             // Intentar obtener con descripción desde FPA
             let resultado: Record<string, unknown>[];
@@ -169,8 +179,8 @@ class RolesService {
             }
 
             return resultado.map(row => {
-                const codigo = String(row.CODIGO).trim().toUpperCase();
-                const descripcion = String(row.DESCRIPCION).trim().toUpperCase();
+                const codigo = toStr(row.CODIGO).toUpperCase();
+                const descripcion = toStr(row.DESCRIPCION).toUpperCase();
 
                 // Detectar CTR por código o descripción
                 const esCTR = CODIGOS_CTR_TIPICOS.some(c => codigo.includes(c)) ||
@@ -180,10 +190,10 @@ class RolesService {
                     descripcion.includes('CTR');
 
                 return {
-                    codigo: String(row.CODIGO).trim(),
-                    descripcion: String(row.DESCRIPCION).trim(),
+                    codigo: toStr(row.CODIGO),
+                    descripcion: toStr(row.DESCRIPCION),
                     esCTR,
-                    total: Number(row.TOTAL),
+                    total: toInt(row.TOTAL),
                 };
             });
         } catch (error) {
@@ -213,7 +223,7 @@ class RolesService {
       `, [codigoFormaPago.trim()]);
 
             if (resultado.length > 0) {
-                const desc = String(resultado[0].DESC).toUpperCase();
+                const desc = toStr(resultado[0].DESC).toUpperCase();
                 return desc.includes('CONTADO') ||
                     desc.includes('EFECTIVO') ||
                     desc.includes('REEMBOLSO');
@@ -236,7 +246,7 @@ class RolesService {
             const ano = hoy.getFullYear();
 
             const resultado = await odbcPool.query<Record<string, unknown>[]>(`
-        SELECT 
+        SELECT
           CAC.SUBEMPRESAALBARAN,
           CAC.EJERCICIOALBARAN,
           CAC.SERIEALBARAN,
@@ -246,10 +256,12 @@ class RolesService {
           TRIM(COALESCE(CLI.DIRECCION1, '')) as DIRECCION,
           CAC.IMPORTETOTAL / 100.0 as IMPORTE,
           TRIM(CAC.CODIGOFORMAPAGO) as FORMA_PAGO,
+          TRIM(COALESCE(FPA.NOMFPA, FPA.DESCRIPCION, '')) as DESC_FORMA_PAGO,
           CAC.DIADOCUMENTO, CAC.MESDOCUMENTO, CAC.ANODOCUMENTO,
           TRIM(CAC.CODIGORUTA) as RUTA
         FROM DSEDAC.CAC
         LEFT JOIN DSEDAC.CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
+        LEFT JOIN DSEDAC.FPA ON TRIM(FPA.CODFPA) = TRIM(CAC.CODIGOFORMAPAGO)
         WHERE TRIM(CAC.CODIGOCONDUCTOR) = ?
           AND CAC.ANODOCUMENTO = ?
           AND CAC.MESDOCUMENTO = ?
@@ -257,31 +269,35 @@ class RolesService {
         ORDER BY CAC.NUMEROALBARAN
       `, [codigoConductor.trim(), ano, mes, dia]);
 
-            // Procesar y añadir flag CTR
-            const albaranes = [];
-            for (const row of resultado) {
-                const formaPago = String(row.FORMA_PAGO).trim();
-                const esCTR = await this.esFormaPagoCTR(formaPago);
+            return resultado.map(row => {
+                const formaPago = toStr(row.FORMA_PAGO);
+                const descFormaPago = toStr(row.DESC_FORMA_PAGO).toUpperCase();
+                const codigoUpper = formaPago.toUpperCase();
 
-                albaranes.push({
+                // Determinar CTR inline en vez de query por fila
+                const esCTR = CODIGOS_CTR_TIPICOS.some(c => codigoUpper.includes(c)) ||
+                    descFormaPago.includes('CONTADO') ||
+                    descFormaPago.includes('EFECTIVO') ||
+                    descFormaPago.includes('REEMBOLSO') ||
+                    descFormaPago.includes('CTR');
+
+                return {
                     id: `${row.EJERCICIOALBARAN}-${row.SERIEALBARAN}-${row.NUMEROALBARAN}`,
-                    subempresa: String(row.SUBEMPRESAALBARAN).trim(),
-                    ejercicio: Number(row.EJERCICIOALBARAN),
-                    serie: String(row.SERIEALBARAN).trim(),
-                    numero: Number(row.NUMEROALBARAN),
-                    codigoCliente: String(row.CLIENTE),
-                    nombreCliente: String(row.NOMBRE_CLIENTE),
-                    direccion: String(row.DIRECCION),
-                    importe: Number(row.IMPORTE),
+                    subempresa: toStr(row.SUBEMPRESAALBARAN),
+                    ejercicio: toInt(row.EJERCICIOALBARAN),
+                    serie: toStr(row.SERIEALBARAN),
+                    numero: toInt(row.NUMEROALBARAN),
+                    codigoCliente: toStr(row.CLIENTE),
+                    nombreCliente: toStr(row.NOMBRE_CLIENTE),
+                    direccion: toStr(row.DIRECCION),
+                    importe: toFloat(row.IMPORTE),
                     formaPago,
                     esCTR,
                     fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
-                    ruta: String(row.RUTA),
+                    ruta: toStr(row.RUTA),
                     estado: 'PENDIENTE',
-                });
-            }
-
-            return albaranes;
+                };
+            });
         } catch (error) {
             logger.error('[ROLES] Error obteniendo albaranes conductor:', error);
             throw error;

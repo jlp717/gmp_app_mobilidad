@@ -5,6 +5,9 @@
 
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
+import { sanitizeCode } from '../utils/validators';
+import { toFloat, toInt, toStr, formatDateDMY, clampLimit, clampOffset, currentPage, totalPages } from '../utils/db-helpers';
+import { queryCache, TTL } from '../utils/query-cache';
 import type { Cliente, Factura, EstadisticasAnuales, TopProducto } from '../types/entities';
 
 interface ClienteCompleto extends Cliente {
@@ -44,12 +47,37 @@ interface ListarClientesResult {
   offset: number;
 }
 
+interface PaginatedClienteFacturas {
+  facturas: Factura[];
+  total: number;
+  paginacion: {
+    pagina: number;
+    limite: number;
+    totalPaginas: number;
+  };
+}
+
+interface PaginatedClienteRutero {
+  clientes: ClienteCompleto[];
+  total: number;
+  paginacion: {
+    pagina: number;
+    limite: number;
+    totalPaginas: number;
+  };
+}
+
 class ClienteService {
   /**
    * Lista clientes con paginación y filtros
    * Endpoint principal para sincronización móvil
    */
   async listarClientes(params: ListarClientesParams): Promise<ListarClientesResult> {
+    const cacheKey = `gmp:clientes:list:${params.limit || 500}:${params.offset || 0}:${params.search || ''}:${params.diaVisita || ''}`;
+    return queryCache.getOrSet(cacheKey, () => this._fetchListarClientes(params), TTL.MEDIUM);
+  }
+
+  private async _fetchListarClientes(params: ListarClientesParams): Promise<ListarClientesResult> {
     try {
       const { limit = 500, offset = 0, search, diaVisita: _diaVisita } = params;
       
@@ -80,33 +108,35 @@ class ClienteService {
         FROM DSEDAC.CLI CLI
         WHERE ${whereConditions.join(' AND ')}
         ORDER BY CLI.NOMBRECLIENTE
-        OFFSET ${offset} ROWS
-        FETCH FIRST ${limit} ROWS ONLY
+        OFFSET ? ROWS
+        FETCH FIRST ? ROWS ONLY
       `;
 
-      const resultado = await odbcPool.query<Record<string, unknown>[]>(query, queryParams);
-
-      // Contar total (sin paginación)
+      // Ejecutar data + count en paralelo
       const countQuery = `
         SELECT COUNT(*) as TOTAL
         FROM DSEDAC.CLI CLI
         WHERE ${whereConditions.join(' AND ')}
       `;
-      const countResult = await odbcPool.query<Record<string, unknown>[]>(countQuery, queryParams);
+
+      const [resultado, countResult] = await Promise.all([
+        odbcPool.query<Record<string, unknown>[]>(query, [...queryParams, offset, limit]),
+        odbcPool.query<Record<string, unknown>[]>(countQuery, queryParams),
+      ]);
       const total = Number(countResult[0]?.TOTAL) || resultado.length;
 
       const clientes: Cliente[] = resultado.map((row) => ({
-        codigo: String(row.CODIGO || '').trim(),
-        nombre: String(row.NOMBRE || '').trim(),
-        nombreAlternativo: String(row.NOMBRE_ALTERNATIVO || '').trim() || undefined,
-        nif: String(row.NIF || '').trim(),
-        direccion: String(row.DIRECCION || '').trim(),
-        poblacion: String(row.POBLACION || '').trim(),
-        provincia: String(row.PROVINCIA || '').trim(),
-        codigoPostal: String(row.CODIGO_POSTAL || '').trim(),
-        telefono1: String(row.TELEFONO1 || '').trim(),
-        telefono2: String(row.TELEFONO2 || '').trim() || undefined,
-        codigoRuta: String(row.CODIGO_RUTA || '').trim() || undefined,
+        codigo: toStr(row.CODIGO),
+        nombre: toStr(row.NOMBRE),
+        nombreAlternativo: toStr(row.NOMBRE_ALTERNATIVO) || undefined,
+        nif: toStr(row.NIF),
+        direccion: toStr(row.DIRECCION),
+        poblacion: toStr(row.POBLACION),
+        provincia: toStr(row.PROVINCIA),
+        codigoPostal: toStr(row.CODIGO_POSTAL),
+        telefono1: toStr(row.TELEFONO1),
+        telefono2: toStr(row.TELEFONO2) || undefined,
+        codigoRuta: toStr(row.CODIGO_RUTA) || undefined,
         recargo: row.RECARGO === 'S',
         exentoIva: row.EXENTO_IVA === 'S',
         activo: true,
@@ -125,8 +155,16 @@ class ClienteService {
    * Obtiene un cliente por código
    */
   async obtenerCliente(codigoCliente: string): Promise<{ success: boolean; cliente?: Cliente; error?: string; code?: string }> {
+    return queryCache.getOrSet(
+      `gmp:clientes:detail:${codigoCliente}`,
+      () => this._fetchObtenerCliente(codigoCliente),
+      TTL.MEDIUM
+    );
+  }
+
+  private async _fetchObtenerCliente(codigoCliente: string): Promise<{ success: boolean; cliente?: Cliente; error?: string; code?: string }> {
     try {
-      const sanitizedCode = this.sanitizarCodigo(codigoCliente);
+      const sanitizedCode = sanitizeCode(codigoCliente);
       
       const resultado = await odbcPool.query<Record<string, unknown>[]>(
         `SELECT
@@ -145,19 +183,19 @@ class ClienteService {
 
       const row = resultado[0];
       const cliente: Cliente = {
-        codigo: String(row.CODIGOCLIENTE || '').trim(),
-        nombre: String(row.NOMBRECLIENTE || '').trim(),
-        nombreAlternativo: String(row.NOMBREALTERNATIVO || '').trim(),
-        nif: String(row.NIF || '').trim(),
-        direccion: String(row.DIRECCION || '').trim(),
-        poblacion: String(row.POBLACION || '').trim(),
-        provincia: String(row.PROVINCIA || '').trim(),
-        codigoPostal: String(row.CODIGOPOSTAL || '').trim(),
-        telefono1: String(row.TELEFONO1 || '').trim(),
-        telefono2: String(row.TELEFONO2 || '').trim(),
+        codigo: toStr(row.CODIGOCLIENTE),
+        nombre: toStr(row.NOMBRECLIENTE),
+        nombreAlternativo: toStr(row.NOMBREALTERNATIVO),
+        nif: toStr(row.NIF),
+        direccion: toStr(row.DIRECCION),
+        poblacion: toStr(row.POBLACION),
+        provincia: toStr(row.PROVINCIA),
+        codigoPostal: toStr(row.CODIGOPOSTAL),
+        telefono1: toStr(row.TELEFONO1),
+        telefono2: toStr(row.TELEFONO2),
         recargo: row.RECARGOSN === 'S',
         exentoIva: row.EXENTOIVASN === 'S',
-        codigoRuta: String(row.CODIGORUTA || '').trim(),
+        codigoRuta: toStr(row.CODIGORUTA),
         activo: true,
       };
 
@@ -188,43 +226,42 @@ class ClienteService {
         FROM DSEDAC.CLI
         WHERE TRIM(CODIGOCLIENTE) = ?
         FETCH FIRST 1 ROWS ONLY`,
-        [this.sanitizarCodigo(codigoCliente)]
+        [sanitizeCode(codigoCliente)]
       );
 
       if (!resultado || resultado.length === 0) return null;
 
       const cliente = resultado[0];
-      const emailValue = String(cliente.EMAIL_RAW || '');
+      const emailValue = toStr(cliente.EMAIL_RAW);
       const isValidEmail = emailValue.includes('@') && emailValue.includes('.');
 
       const direccionCompleta = [
         cliente.DIRECCION,
-        cliente.CODIGO_POSTAL && cliente.POBLACION 
-          ? `${cliente.CODIGO_POSTAL} ${cliente.POBLACION}` 
+        cliente.CODIGO_POSTAL && cliente.POBLACION
+          ? `${cliente.CODIGO_POSTAL} ${cliente.POBLACION}`
           : cliente.POBLACION,
         cliente.PROVINCIA,
       ].filter(Boolean).join(', ');
 
-      const telefonoRaw = String(cliente.TELEFONO || '');
-      const telefonoLimpio = telefonoRaw.replace(/\s+/g, '');
+      const telefonoLimpio = toStr(cliente.TELEFONO).replace(/\s+/g, '');
       const esMovilValido = telefonoLimpio.length >= 9 && telefonoLimpio.startsWith('6');
 
       return {
-        codigoCliente: String(cliente.CODIGO_CLIENTE || ''),
-        nombre: String(cliente.NOMBRE || ''),
-        empresa: String(cliente.EMPRESA || cliente.NOMBRE || ''),
+        codigoCliente: toStr(cliente.CODIGO_CLIENTE),
+        nombre: toStr(cliente.NOMBRE),
+        empresa: toStr(cliente.EMPRESA) || toStr(cliente.NOMBRE),
         direccion: {
-          calle: String(cliente.DIRECCION || ''),
-          poblacion: String(cliente.POBLACION || ''),
-          provincia: String(cliente.PROVINCIA || ''),
-          codigoPostal: String(cliente.CODIGO_POSTAL || ''),
+          calle: toStr(cliente.DIRECCION),
+          poblacion: toStr(cliente.POBLACION),
+          provincia: toStr(cliente.PROVINCIA),
+          codigoPostal: toStr(cliente.CODIGO_POSTAL),
           completa: direccionCompleta || 'Sin dirección registrada',
         },
         contacto: {
           telefono: esMovilValido ? telefonoLimpio : '',
           email: isValidEmail ? emailValue : '',
         },
-        nif: String(cliente.NIF || ''),
+        nif: toStr(cliente.NIF),
       };
     } catch (error) {
       logger.error('Error obteniendo perfil:', error);
@@ -233,12 +270,28 @@ class ClienteService {
   }
 
   /**
-   * Obtiene facturas del cliente
+   * Obtiene facturas del cliente con paginación
    */
-  async obtenerFacturas(codigoCliente: string): Promise<Factura[]> {
+  async obtenerFacturas(codigoCliente: string, limit?: number, offset?: number): Promise<PaginatedClienteFacturas> {
+    const lim = clampLimit(limit, 50, 500);
+    const off = clampOffset(offset);
+    return queryCache.getOrSet(
+      `gmp:clientes:facturas:${codigoCliente}:${lim}:${off}`,
+      () => this._fetchObtenerFacturas(codigoCliente, lim, off),
+      TTL.SHORT
+    );
+  }
+
+  private async _fetchObtenerFacturas(codigoCliente: string, limit: number, offset: number): Promise<PaginatedClienteFacturas> {
     try {
-      const resultado = await odbcPool.query<Record<string, unknown>[]>(
-        `SELECT
+      const sanitized = sanitizeCode(codigoCliente);
+
+      const whereClause = `TRIM(CAC.CODIGOCLIENTEFACTURA) = ?
+          AND CAC.NUMEROFACTURA > 0
+          AND CAC.NUMEROALBARAN > 0`;
+
+      const dataSql = `
+        SELECT
           CAC.SUBEMPRESAALBARAN as SUBEMPRESA,
           CAC.EJERCICIOALBARAN as EJERCICIO,
           MIN(CAC.SERIEALBARAN) as SERIE,
@@ -256,48 +309,63 @@ class ClienteService {
           COALESCE(MAX(CVC.IMPORTEPENDIENTE), SUM(CAC.IMPORTETOTAL)) as IMPORTE_PENDIENTE,
           MIN(CAC.CODIGOTIPOALBARAN) as TIPO_DOCUMENTO
         FROM DSEDAC.CAC
-        LEFT JOIN DSEDAC.CVC 
+        LEFT JOIN DSEDAC.CVC
           ON CVC.SUBEMPRESADOCUMENTO = CAC.SUBEMPRESAALBARAN
           AND CVC.EJERCICIODOCUMENTO = CAC.EJERCICIOALBARAN
           AND CVC.SERIEDOCUMENTO = CAC.SERIEFACTURA
           AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
-        WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = ?
-          AND CAC.NUMEROFACTURA > 0
-          AND CAC.NUMEROALBARAN > 0
+        WHERE ${whereClause}
         GROUP BY CAC.SERIEFACTURA, CAC.NUMEROFACTURA, CAC.SUBEMPRESAALBARAN, CAC.EJERCICIOALBARAN
-        ORDER BY MAX(CAC.ANODOCUMENTO) DESC, MAX(CAC.MESDOCUMENTO) DESC, MAX(CAC.DIADOCUMENTO) DESC, CAC.NUMEROFACTURA DESC`,
-        [this.sanitizarCodigo(codigoCliente)]
-      );
+        ORDER BY MAX(CAC.ANODOCUMENTO) DESC, MAX(CAC.MESDOCUMENTO) DESC, MAX(CAC.DIADOCUMENTO) DESC, CAC.NUMEROFACTURA DESC
+        OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
 
-      return resultado.map((f) => {
-        const totalFactura = parseFloat(String(f.TOTAL_FACTURA)) || 0;
-        const importePendiente = parseFloat(String(f.IMPORTE_PENDIENTE)) || 0;
+      const countSql = `
+        SELECT COUNT(DISTINCT TRIM(CAC.SERIEFACTURA) || '-' || CAC.NUMEROFACTURA) as TOTAL
+        FROM DSEDAC.CAC
+        WHERE ${whereClause}`;
+
+      const [resultado, countResult] = await Promise.all([
+        odbcPool.query<Record<string, unknown>[]>(dataSql, [sanitized, offset, limit]),
+        odbcPool.query<Record<string, unknown>[]>(countSql, [sanitized]),
+      ]);
+
+      const total = Number(countResult[0]?.TOTAL) || 0;
+
+      const facturas = resultado.map((f) => {
+        const totalFactura = toFloat(f.TOTAL_FACTURA);
+        const importePendiente = toFloat(f.IMPORTE_PENDIENTE);
 
         return {
-          subempresa: String(f.SUBEMPRESA || '').trim(),
-          ejercicio: Number(f.EJERCICIO) || 0,
-          serie: String(f.SERIE || '').trim(),
-          terminal: Number(f.TERMINAL) || 0,
-          numeroAlbaran: Number(f.NUMERO_ALBARAN) || 0,
-          serieFactura: String(f.SERIEFACTURA || '').trim(),
-          numeroFactura: Number(f.NUMEROFACTURA) || 0,
-          tipoDocumento: String(f.TIPO_DOCUMENTO || '').trim(),
-          fecha: this.formatearFecha(
-            Number(f.DIADOCUMENTO),
-            Number(f.MESDOCUMENTO),
-            Number(f.ANODOCUMENTO)
-          ),
-          dia: Number(f.DIADOCUMENTO) || 0,
-          mes: Number(f.MESDOCUMENTO) || 0,
-          ano: Number(f.ANODOCUMENTO) || 0,
-          totalBase: parseFloat(String(f.TOTAL_BASE)) || 0,
-          totalIVA: parseFloat(String(f.TOTAL_IVA)) || 0,
+          subempresa: toStr(f.SUBEMPRESA),
+          ejercicio: toInt(f.EJERCICIO),
+          serie: toStr(f.SERIE),
+          terminal: toInt(f.TERMINAL),
+          numeroAlbaran: toInt(f.NUMERO_ALBARAN),
+          serieFactura: toStr(f.SERIEFACTURA),
+          numeroFactura: toInt(f.NUMEROFACTURA),
+          tipoDocumento: toStr(f.TIPO_DOCUMENTO),
+          fecha: formatDateDMY(f.DIADOCUMENTO, f.MESDOCUMENTO, f.ANODOCUMENTO),
+          dia: toInt(f.DIADOCUMENTO),
+          mes: toInt(f.MESDOCUMENTO),
+          ano: toInt(f.ANODOCUMENTO),
+          totalBase: toFloat(f.TOTAL_BASE),
+          totalIVA: toFloat(f.TOTAL_IVA),
           totalFactura,
           importePendiente,
           estadoPago: importePendiente === 0 ? 'pagada' : 'pendiente',
-          codigoFormaPago: f.CODIGOFORMAPAGO ? String(f.CODIGOFORMAPAGO).trim() : undefined,
-        };
+          codigoFormaPago: toStr(f.CODIGOFORMAPAGO) || undefined,
+        } as Factura;
       });
+
+      return {
+        facturas,
+        total,
+        paginacion: {
+          pagina: currentPage(offset, limit),
+          limite: limit,
+          totalPaginas: totalPages(total, limit),
+        },
+      };
     } catch (error) {
       logger.error('Error obteniendo facturas:', error);
       throw error;
@@ -308,6 +376,14 @@ class ClienteService {
    * Obtiene estadísticas de facturas por año
    */
   async obtenerEstadisticasFacturas(codigoCliente: string): Promise<EstadisticasAnuales[]> {
+    return queryCache.getOrSet(
+      `gmp:clientes:stats:${codigoCliente}`,
+      () => this._fetchEstadisticasFacturas(codigoCliente),
+      TTL.MEDIUM
+    );
+  }
+
+  private async _fetchEstadisticasFacturas(codigoCliente: string): Promise<EstadisticasAnuales[]> {
     try {
       const resultado = await odbcPool.query<Record<string, unknown>[]>(
         `SELECT
@@ -335,7 +411,7 @@ class ClienteService {
             ELSE 'desconocido'
           END
         ORDER BY ANO DESC, ESTADO`,
-        [this.sanitizarCodigo(codigoCliente)]
+        [sanitizeCode(codigoCliente)]
       );
 
       const stats: Record<number, EstadisticasAnuales> = {};
@@ -355,11 +431,11 @@ class ClienteService {
         }
 
         if (row.ESTADO === 'pagada') {
-          stats[year].pagadas = Number(row.CANTIDAD);
-          stats[year].totalPagadas = parseFloat(String(row.TOTAL)) || 0;
+          stats[year].pagadas = toInt(row.CANTIDAD);
+          stats[year].totalPagadas = toFloat(row.TOTAL);
         } else if (row.ESTADO === 'pendiente') {
-          stats[year].pendientes = Number(row.CANTIDAD);
-          stats[year].totalPendientes = parseFloat(String(row.TOTAL)) || 0;
+          stats[year].pendientes = toInt(row.CANTIDAD);
+          stats[year].totalPendientes = toFloat(row.TOTAL);
         }
 
         stats[year].total = stats[year].pagadas + stats[year].pendientes;
@@ -377,6 +453,14 @@ class ClienteService {
    * Obtiene top productos del cliente
    */
   async obtenerTopProductos(codigoCliente: string, limite = 10): Promise<TopProducto[]> {
+    return queryCache.getOrSet(
+      `gmp:clientes:topproductos:${codigoCliente}:${limite}`,
+      () => this._fetchTopProductos(codigoCliente, limite),
+      TTL.MEDIUM
+    );
+  }
+
+  private async _fetchTopProductos(codigoCliente: string, limite: number): Promise<TopProducto[]> {
     try {
       const resultado = await odbcPool.query<Record<string, unknown>[]>(
         `SELECT
@@ -390,16 +474,16 @@ class ClienteService {
           AND LAC.ANODOCUMENTO >= YEAR(CURRENT_DATE) - 2
         GROUP BY LAC.CODIGOARTICULO, LAC.DESCRIPCION
         ORDER BY TOTAL_IMPORTE DESC
-        FETCH FIRST ${limite} ROWS ONLY`,
-        [this.sanitizarCodigo(codigoCliente)]
+        FETCH FIRST ? ROWS ONLY`,
+        [sanitizeCode(codigoCliente), Math.min(50, Math.max(1, limite))]
       );
 
       return resultado.map((row) => ({
-        codigo: String(row.CODIGO_PRODUCTO || ''),
-        nombre: String(row.NOMBRE_PRODUCTO || row.CODIGO_PRODUCTO || 'Producto sin nombre'),
-        cantidad: parseInt(String(row.TOTAL_CANTIDAD)) || 0,
-        importe: parseFloat(String(row.TOTAL_IMPORTE)) || 0,
-        pedidos: parseInt(String(row.NUM_PEDIDOS)) || 0,
+        codigo: toStr(row.CODIGO_PRODUCTO),
+        nombre: toStr(row.NOMBRE_PRODUCTO) || toStr(row.CODIGO_PRODUCTO) || 'Producto sin nombre',
+        cantidad: toInt(row.TOTAL_CANTIDAD),
+        importe: toFloat(row.TOTAL_IMPORTE),
+        pedidos: toInt(row.NUM_PEDIDOS),
       }));
     } catch (error) {
       logger.error('Error obteniendo top productos:', error);
@@ -419,7 +503,7 @@ class ClienteService {
         FROM DSEDAC.CLI
         WHERE TRIM(CODIGOCLIENTE) = ?
         FETCH FIRST 1 ROWS ONLY`,
-        [this.sanitizarCodigo(codigoCliente)]
+        [sanitizeCode(codigoCliente)]
       );
 
       if (!resultado || resultado.length === 0) {
@@ -427,11 +511,11 @@ class ClienteService {
       }
 
       const cliente = resultado[0];
-      const emailValue = String(cliente.EMAIL || '');
+      const emailValue = toStr(cliente.EMAIL);
       const isValidEmail = emailValue.includes('@') && emailValue.includes('.');
 
       return {
-        telefono: String(cliente.TELEFONO || '') || null,
+        telefono: toStr(cliente.TELEFONO) || null,
         email: isValidEmail ? emailValue : null,
       };
     } catch (error) {
@@ -463,7 +547,7 @@ class ClienteService {
 
       if (updates.length === 0) return false;
 
-      params.push(this.sanitizarCodigo(codigoCliente));
+      params.push(sanitizeCode(codigoCliente));
 
       await odbcPool.query(
         `UPDATE DSEDAC.CLI SET ${updates.join(', ')} WHERE TRIM(CODIGOCLIENTE) = ?`,
@@ -478,20 +562,24 @@ class ClienteService {
   }
 
   /**
-   * Obtiene clientes para el rutero
+   * Obtiene clientes para el rutero con paginación
    */
-  async obtenerClientesRutero(codigoRuta?: string, _diaVisita?: string): Promise<ClienteCompleto[]> {
+  async obtenerClientesRutero(codigoRuta?: string, _diaVisita?: string, limit?: number, offset?: number): Promise<PaginatedClienteRutero> {
+    const lim = clampLimit(limit, 100, 500);
+    const off = clampOffset(offset);
     try {
-      let whereConditions = ['CLI.CODIGOCLIENTE IS NOT NULL'];
-      const params: string[] = [];
+      const whereConditions = ['CLI.CODIGOCLIENTE IS NOT NULL'];
+      const queryParams: (string | number)[] = [];
 
       if (codigoRuta) {
         whereConditions.push('TRIM(CLI.CODIGORUTA) = ?');
-        params.push(codigoRuta);
+        queryParams.push(codigoRuta);
       }
 
-      const resultado = await odbcPool.query<Record<string, unknown>[]>(
-        `SELECT
+      const whereClause = whereConditions.join(' AND ');
+
+      const dataSql = `
+        SELECT
           TRIM(CODIGOCLIENTE) as CODIGO,
           TRIM(NOMBRECLIENTE) as NOMBRE,
           TRIM(DIRECCION) as DIRECCION,
@@ -501,50 +589,53 @@ class ClienteService {
           TRIM(TELEFONO1) as TELEFONO,
           TRIM(CODIGORUTA) as RUTA
         FROM DSEDAC.CLI CLI
-        WHERE ${whereConditions.join(' AND ')}
+        WHERE ${whereClause}
         ORDER BY CLI.CODIGORUTA, CLI.NOMBRECLIENTE
-        FETCH FIRST 500 ROWS ONLY`,
-        params
-      );
+        OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
 
-      return resultado.map((row) => ({
-        codigo: String(row.CODIGO || ''),
-        nombre: String(row.NOMBRE || ''),
+      const countSql = `
+        SELECT COUNT(*) as TOTAL
+        FROM DSEDAC.CLI CLI
+        WHERE ${whereClause}`;
+
+      const [resultado, countResult] = await Promise.all([
+        odbcPool.query<Record<string, unknown>[]>(dataSql, [...queryParams, off, lim]),
+        odbcPool.query<Record<string, unknown>[]>(countSql, queryParams),
+      ]);
+
+      const total = Number(countResult[0]?.TOTAL) || 0;
+
+      const clientes = resultado.map((row) => ({
+        codigo: toStr(row.CODIGO),
+        nombre: toStr(row.NOMBRE),
         nombreAlternativo: undefined,
         nif: '',
-        direccion: String(row.DIRECCION || ''),
-        poblacion: String(row.POBLACION || ''),
-        provincia: String(row.PROVINCIA || ''),
-        codigoPostal: String(row.CODIGO_POSTAL || ''),
-        telefono1: String(row.TELEFONO || ''),
-        codigoRuta: String(row.RUTA || ''),
+        direccion: toStr(row.DIRECCION),
+        poblacion: toStr(row.POBLACION),
+        provincia: toStr(row.PROVINCIA),
+        codigoPostal: toStr(row.CODIGO_POSTAL),
+        telefono1: toStr(row.TELEFONO),
+        codigoRuta: toStr(row.RUTA),
         recargo: false,
         exentoIva: false,
         activo: true,
       }));
+
+      return {
+        clientes,
+        total,
+        paginacion: {
+          pagina: currentPage(off, lim),
+          limite: lim,
+          totalPaginas: totalPages(total, lim),
+        },
+      };
     } catch (error) {
       logger.error('Error obteniendo clientes rutero:', error);
       throw error;
     }
   }
 
-  // ============================================
-  // UTILIDADES
-  // ============================================
-
-  private sanitizarCodigo(codigo: string): string {
-    return String(codigo)
-      .trim()
-      .replace(/\s+/g, '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9-]/g, '')
-      .substring(0, 10);
-  }
-
-  private formatearFecha(dia: number, mes: number, ano: number): string {
-    if (!dia || !mes || !ano) return '';
-    return `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`;
-  }
 }
 
 export const clienteService = new ClienteService();

@@ -114,7 +114,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       );
       if (response['success'] == true && mounted) {
         setState(() {
-          _weekDays = List<Map<String, dynamic>>.from(response['days']);
+          _weekDays = List<Map<String, dynamic>>.from((response['days'] as List));
         });
       }
     } catch (e) {

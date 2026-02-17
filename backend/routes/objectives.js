@@ -12,6 +12,7 @@ const {
     getBSales
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
+const { redisCache, TTL } = require('../services/redis-cache');
 const {
     getCachedFamilyNames,
     getCachedFi1Names,
@@ -33,10 +34,11 @@ const {
  * Get all clients currently managed by a vendor (from current year or most recent data)
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
+    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
     const rows = await query(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE TRIM(L.LCCDVD) = '${vendorCode}'
+        WHERE L.LCCDVD = '${vendorCode}'
           AND L.LCAADC = ${currentYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
@@ -46,7 +48,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
         const prevRows = await query(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDVD) = '${vendorCode}'
+            WHERE L.LCCDVD = '${vendorCode}'
               AND L.LCAADC = ${currentYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);
@@ -65,6 +67,7 @@ async function getClientsMonthlySales(clientCodes, year) {
 
     const clientList = clientCodes.map(c => `'${c}'`).join(',');
 
+    // PERF: Removed TRIM(L.LCCDCL) - DB2 CHAR comparison handles trailing spaces
     const rows = await query(`
         SELECT 
             L.LCMMDC as MONTH,
@@ -72,7 +75,7 @@ async function getClientsMonthlySales(clientCodes, year) {
             SUM(L.LCIMCT) as COST,
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
         FROM DSED.LACLAE L
-        WHERE TRIM(L.LCCDCL) IN (${clientList})
+        WHERE L.LCCDCL IN (${clientList})
           AND L.LCAADC = ${year}
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
@@ -175,7 +178,7 @@ router.get('/', async (req, res) => {
           SELECT COALESCE(IMPORTEOBJETIVO, 0) as objetivo,
                  COALESCE(PORCENTAJEOBJETIVO, 0) as porcentaje
           FROM DSEDAC.CMV 
-          WHERE TRIM(CODIGOVENDEDOR) = '${code}'
+          WHERE CODIGOVENDEDOR = '${code}'
         `, false);
 
                 if (cmvResult[0]) {
@@ -334,6 +337,14 @@ router.get('/evolution', async (req, res) => {
         const now = getCurrentDate();
         const { calculateWorkingDays, calculateDaysPassed } = require('../utils/common');
         const { getVendorActiveDaysFromCache } = require('../services/laclae');
+
+        // PERF: Route-level cache for evolution data
+        const cacheKey = `obj:evolution:${vendedorCodes || 'ALL'}:${years || 'default'}`;
+        const cachedResult = await redisCache.get('route', cacheKey);
+        if (cachedResult) {
+            logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
+            return res.json(cachedResult);
+        }
 
         // Parse years - default to current year and previous 2 (3 years total)
         const yearsArray = years
@@ -593,12 +604,19 @@ router.get('/evolution', async (req, res) => {
             };
         });
 
-        res.json({
+        const responseData = {
             years: yearsArray,
             yearlyData,
             yearTotals,
             monthNames: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-        });
+        };
+
+        // PERF: Cache the result (5 min for specific vendor, 10 min for ALL)
+        const cacheTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.SHORT * 2 : TTL.SHORT;
+        await redisCache.set('route', cacheKey, responseData, cacheTTL);
+        logger.info(`[OBJECTIVES] 💾 Cached evolution (${cacheKey})`);
+
+        res.json(responseData);
 
     } catch (error) {
         logger.error(`Objectives evolution error: ${error.message}`);
@@ -1646,6 +1664,17 @@ router.get('/by-client', async (req, res) => {
         const { vendedorCodes, years, months, city, code, nif, name, limit } = req.query;
         const now = getCurrentDate();
 
+        // PERF: Route-level cache for by-client (only when no search filters)
+        const hasFilters = city || code || nif || name;
+        const cacheKey = `obj:byclient:${vendedorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${limit || '1000'}`;
+        if (!hasFilters) {
+            const cachedResult = await redisCache.get('route', cacheKey);
+            if (cachedResult) {
+                logger.info(`[OBJECTIVES] ⚡ Cache HIT for by-client (${cacheKey})`);
+                return res.json(cachedResult);
+            }
+        }
+
         // Parse years and months - default to full year
         const yearsArray = years ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR) : [now.getFullYear()];
         const monthsArray = months ? months.split(',').map(m => parseInt(m.trim())).filter(m => m >= 1 && m <= 12) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -1908,7 +1937,7 @@ router.get('/by-client', async (req, res) => {
         const atrisk = clients.filter(c => c.status === 'atrisk').length;
         const critical = clients.filter(c => c.status === 'critical').length;
 
-        res.json({
+        const responseData = {
             clients,
             count: totalClientsCount, // Return TRUE total
             start: 0,
@@ -1918,7 +1947,15 @@ router.get('/by-client', async (req, res) => {
             years: yearsArray,
             months: monthsArray,
             summary: { achieved, ontrack, atrisk, critical }
-        });
+        };
+
+        // PERF: Cache result if no search filters (5 min)
+        if (!hasFilters) {
+            await redisCache.set('route', cacheKey, responseData, TTL.SHORT);
+            logger.info(`[OBJECTIVES] 💾 Cached by-client (${cacheKey})`);
+        }
+
+        res.json(responseData);
 
     } catch (error) {
         logger.error(`Objectives by-client error: ${error.message}`);

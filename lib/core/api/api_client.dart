@@ -221,6 +221,7 @@ class ApiClient {
   }
 
   /// GET request returning bytes (Blob/PDF)
+  /// Uses extended timeout since PDF generation can be slow
   static Future<List<int>> getBytes(
     String endpoint, {
     Map<String, dynamic>? queryParameters,
@@ -229,7 +230,10 @@ class ApiClient {
       final response = await dio.get(
         endpoint,
         queryParameters: queryParameters,
-        options: Options(responseType: ResponseType.bytes),
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 60),
+        ),
       );
       return response.data as List<int>;
     } on DioException catch (e) {

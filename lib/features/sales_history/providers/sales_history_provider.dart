@@ -84,8 +84,8 @@ class SalesHistoryProvider with ChangeNotifier {
       final historyResult = results[0] as Map<String, dynamic>;
       _summary = results[1] as Map<String, dynamic>;
 
-      _items = historyResult['items'];
-      _totalCount = historyResult['count'];
+      _items = historyResult['items'] as List<ProductHistoryItem>;
+      _totalCount = historyResult['count'] as int;
       _isLoading = false;
       notifyListeners();
     } catch (e) {

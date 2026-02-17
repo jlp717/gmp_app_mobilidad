@@ -118,12 +118,12 @@ class CobrosProvider extends ChangeNotifier {
       
       if (response['success'] == true) {
         final albaranes = (response['albaranes'] as List<dynamic>?)
-            ?.map((e) => Albaran.fromJson(e))
+            ?.map((e) => Albaran.fromJson(e as Map<String, dynamic>))
             .toList() ?? [];
         
         _albaranesPendientes = albaranes;
       } else {
-        _error = response['error'] ?? 'Error cargando albaranes';
+        _error = (response['error'] as String?) ?? 'Error cargando albaranes';
       }
     } catch (e) {
       _error = 'Error de conexión: $e';
@@ -144,7 +144,7 @@ class CobrosProvider extends ChangeNotifier {
       final response = await ApiClient.get('/entregas/albaran/$numeroAlbaran/$ejercicio');
       
       if (response['success'] == true && response['albaran'] != null) {
-        _albaranActual = Albaran.fromJson(response['albaran']);
+        _albaranActual = Albaran.fromJson(response['albaran'] as Map<String, dynamic>);
       }
     } catch (e) {
       _error = 'Error cargando albarán: $e';
@@ -265,11 +265,11 @@ class CobrosProvider extends ChangeNotifier {
       
       if (response['success'] == true) {
         _cobrosPendientes = (response['cobros'] as List<dynamic>?)
-            ?.map((e) => CobroPendiente.fromJson(e))
+            ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
             .toList() ?? [];
         
         if (response['resumen'] != null) {
-          _resumenCobros = ResumenCobros.fromJson(response['resumen']);
+          _resumenCobros = ResumenCobros.fromJson(response['resumen'] as Map<String, dynamic>);
         }
       }
     } catch (e) {
@@ -286,7 +286,7 @@ class CobrosProvider extends ChangeNotifier {
       final response = await ApiClient.get('/cobros/$codigoCliente/estado');
       
       if (response['success'] == true && response['estadoCliente'] != null) {
-        _estadoClienteActual = EstadoCliente.fromJson(response['estadoCliente']);
+        _estadoClienteActual = EstadoCliente.fromJson(response['estadoCliente'] as Map<String, dynamic>);
         notifyListeners();
       }
     } catch (e) {

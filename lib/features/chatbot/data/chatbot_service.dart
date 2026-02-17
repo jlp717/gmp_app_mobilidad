@@ -26,7 +26,7 @@ class ChatbotService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['response'] ?? 'No se recibió respuesta del asistente.';
+        return (data['response'] as String?) ?? 'No se recibió respuesta del asistente.';
       } else {
         final error = jsonDecode(response.body);
         throw Exception(error['error'] ?? 'Error desconocido');

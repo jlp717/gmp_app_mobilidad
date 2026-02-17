@@ -862,7 +862,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
+            WHERE L.LCCDCL IN (${safeClientFilter})
               AND L.LCAADC = ${currentYear}
               AND ${LACLAE_SALES_FILTER}
               AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
@@ -888,7 +888,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                     SUM(L.LCIMVT) as SALES,
                     SUM(L.LCIMCT) as COST
                 FROM DSED.LACLAE L
-                WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
+                WHERE L.LCCDCL IN (${safeClientFilter})
                   AND L.LCAADC = ${previousYear}
                   AND ${LACLAE_SALES_FILTER}
                   AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
@@ -913,7 +913,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDCL) IN (${safeClientFilter})
+            WHERE L.LCCDCL IN (${safeClientFilter})
               AND L.LCAADC = ${previousYear}
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCCDCL
@@ -1141,7 +1141,7 @@ router.get('/diagnose/client/:code', async (req, res) => {
                     L.R1_T8DIVL as VIS_L, L.R1_T8DIVM as VIS_M, L.R1_T8DIVX as VIS_X,
                     L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S
                 FROM DSED.LACLAE L
-                WHERE TRIM(L.LCCDCL) = '${clientCode}'
+                WHERE L.LCCDCL = '${clientCode}'
                 ORDER BY L.LCYEAB DESC
                 FETCH FIRST 10 ROWS ONLY
             `);
@@ -1299,7 +1299,7 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 SUM(L.LCIMCT) as COST,
                 SUM(L.LCIMVT - L.LCIMCT) as MARGIN
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDCL) = '${clientCode}'
+            WHERE L.LCCDCL = '${clientCode}'
               AND L.LCYEAB IN (${currentYear}, ${previousYear})
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCYEAB, L.LCMMDC
@@ -1358,7 +1358,7 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 L.LCYEAB as YEAR,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDCL) = '${clientCode}'
+            WHERE L.LCCDCL = '${clientCode}'
               AND L.LCYEAB >= ${currentYear - 5}
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCYEAB
@@ -1378,7 +1378,7 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 COUNT(*) as LINE_COUNT,
                 MAX(L.LCAIDL * 10000 + L.LCMIDL * 100 + L.LCDIDL) as LAST_ORDER_DATE
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDCL) = '${clientCode}'
+            WHERE L.LCCDCL = '${clientCode}'
               AND L.LCYEAB = ${currentYear}
               AND ${LACLAE_SALES_FILTER}
         `;

@@ -207,7 +207,7 @@ router.get('/top-products', async (req, res) => {
   SUM(L.CANTIDADUNIDADES) as totalUnits,
   COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) as numClients
       FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.ART A ON TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
+      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
       WHERE L.ANODOCUMENTO = ${year} ${vendedorFilter}
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOMARCA, A.CODIGOFAMILIA
       ORDER BY totalSales DESC
@@ -267,7 +267,7 @@ router.get('/margins', async (req, res) => {
   SUM(L.IMPORTEVENTA) as sales,
   SUM(L.IMPORTEMARGENREAL) as margin
       FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.ART A ON TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
+      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
       WHERE L.ANODOCUMENTO = ${year} ${vendedorFilter}
       GROUP BY A.CODIGOFAMILIA
       ORDER BY sales DESC
@@ -417,7 +417,7 @@ router.get('/sales-history/summary', async (req, res) => {
         }
 
         // Client filter - adaptar para LACLAE (LCCDCL)
-        const clientFilter = clientCode ? `AND TRIM(L.LCCDCL) = '${clientCode}'` : '';
+        const clientFilter = clientCode ? `AND L.LCCDCL = '${clientCode}'` : '';
 
         // Product search filter - adaptar para LACLAE (LCCDRF, LCDESC)
         const searchFilter = productSearch

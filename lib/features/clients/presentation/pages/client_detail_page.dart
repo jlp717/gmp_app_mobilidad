@@ -5,9 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
-import '../../sales_history/presentation/widgets/sales_summary_header.dart';
+import '../../../../core/utils/currency_formatter.dart';
+import '../../data/clients_service.dart';
+import '../../../sales_history/presentation/widgets/sales_summary_header.dart';
 
 /// Client Detail Page - Shows comprehensive client information from DB2
 class ClientDetailPage extends StatefulWidget {
@@ -53,9 +53,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     });
 
     try {
-      final response = await ApiClient.get(
-        '${ApiConfig.clientDetail}/${widget.clientCode}',
-        queryParameters: {'vendedorCodes': widget.vendedorCodes},
+      final response = await ClientsService.getClientDetail(
+        clientCode: widget.clientCode,
+        vendedorCodes: widget.vendedorCodes,
       );
       setState(() {
         _clientData = response;
@@ -73,7 +73,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_clientData?['client']?['name'] ?? 'Detalle Cliente'),
+        title: Text((_clientData?['client']?['name'] as String?) ?? 'Detalle Cliente'),
         backgroundColor: AppTheme.surfaceColor,
         actions: [
           IconButton(
@@ -159,12 +159,12 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   }
 
   Widget _buildClientHeader(Map<String, dynamic> client, Map<String, dynamic> summary, Map<String, dynamic> payments) {
-    final name = client['name'] ?? 'Sin nombre';
-    final code = client['code'] ?? '';
-    final address = client['address'] ?? '';
-    final city = client['city'] ?? '';
-    final phone = client['phone'] ?? '';
-    final nif = client['nif'] ?? '';
+    final name = (client['name'] as String?) ?? 'Sin nombre';
+    final code = (client['code'] as String?) ?? '';
+    final address = (client['address'] as String?) ?? '';
+    final city = (client['city'] as String?) ?? '';
+    final phone = (client['phone'] as String?) ?? '';
+    final nif = (client['nif'] as String?) ?? '';
     final editableNotes = client['editableNotes'] as Map<String, dynamic>?;
     final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
 
@@ -303,6 +303,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   ),
                 ),
               ],
+            ),
           ],
           // Route and Days Section
           const SizedBox(height: 8),
@@ -313,10 +314,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   }
 
   Widget _buildRouteDaysRow(Map<String, dynamic> client) {
-    final route = client['route'] ?? '';
-    final routeDesc = client['routeDescription'] ?? '';
-    final visitDays = client['visitDaysShort'] ?? '';
-    final deliveryDays = client['deliveryDaysShort'] ?? '';
+    final route = (client['route'] as String?) ?? '';
+    final routeDesc = (client['routeDescription'] as String?) ?? '';
+    final visitDays = (client['visitDaysShort'] as String?) ?? '';
+    final deliveryDays = (client['deliveryDaysShort'] as String?) ?? '';
     
     if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
       return const SizedBox.shrink();
@@ -419,13 +420,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                await ApiClient.put(
-                  '${ApiConfig.clientDetail}/$clientCode/notes',
-                  body: {
-                    'notes': controller.text,
-                    'vendorCode': widget.vendedorCodes,
-                    'vendorName': widget.vendedorCodes, // Will be resolved by backend
-                  },
+                await ClientsService.updateClientNotes(
+                  clientCode: clientCode,
+                  notes: controller.text,
+                  vendorCode: widget.vendedorCodes,
                 );
                 _loadClientDetail(); // Refresh
               } catch (e) {
@@ -462,11 +460,11 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             const SizedBox(height: 12),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
-              title: Text(p['number'] ?? ''),
-              subtitle: Text(p['type'] ?? 'Teléfono'),
+              title: Text((p['number'] as String?) ?? ''),
+              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
               onTap: () {
                 Navigator.pop(ctx);
-                _openWhatsApp(p['number'] ?? '');
+                _openWhatsApp((p['number'] as String?) ?? '');
               },
             )).toList(),
             const SizedBox(height: 8),
@@ -509,7 +507,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
     final paid = (payments['paid'] as num?)?.toDouble() ?? 0;
     final pending = (payments['pending'] as num?)?.toDouble() ?? 0;
-    final pendingCount = payments['pendingCount'] ?? 0;
+    final pendingCount = (payments['pendingCount'] as num?)?.toInt() ?? 0;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -521,7 +519,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             children: [
               Expanded(child: _SummaryCard(
                 title: 'Ventas Totales',
-                value: _formatCurrency(totalSales),
+                value: CurrencyFormatter.formatWhole(totalSales),
                 icon: Icons.euro,
                 color: AppTheme.neonBlue,
               )),
@@ -529,7 +527,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               Expanded(child: _SummaryCard(
                 title: 'Margen',
                 value: '${marginPercent.toStringAsFixed(1)}%',
-                subtitle: _formatCurrency(totalMargin),
+                subtitle: CurrencyFormatter.formatWhole(totalMargin),
                 icon: Icons.trending_up,
                 color: AppTheme.success,
               )),
@@ -568,7 +566,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Pagado', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                          Text(_formatCurrency(paid), style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.bold, fontSize: 18)),
+                          Text(CurrencyFormatter.formatWhole(paid), style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.bold, fontSize: 18)),
                         ],
                       ),
                     ),
@@ -578,7 +576,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text('Pendiente ($pendingCount)', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                          Text(_formatCurrency(pending), style: TextStyle(color: pending > 0 ? AppTheme.warning : AppTheme.textSecondary, fontWeight: FontWeight.bold, fontSize: 18)),
+                          Text(CurrencyFormatter.formatWhole(pending), style: TextStyle(color: pending > 0 ? AppTheme.warning : AppTheme.textSecondary, fontWeight: FontWeight.bold, fontSize: 18)),
                         ],
                       ),
                     ),
@@ -665,7 +663,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
       itemCount: topProducts.length,
       itemBuilder: (context, index) {
         final product = topProducts[index];
-        final name = product['name'] ?? 'Producto desconocido';
+        final name = (product['name'] as String?) ?? 'Producto desconocido';
         final code = product['code'] ?? '';
         final totalSales = (product['totalSales'] as num?)?.toDouble() ?? 0;
         final totalBoxes = product['totalBoxes'] ?? 0;
@@ -688,7 +686,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             ),
             title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
             subtitle: Text('Cód: $code • $timesOrdered ped. • $totalBoxes cj', style: const TextStyle(fontSize: 11)),
-            trailing: Text(_formatCurrency(totalSales), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 13)),
+            trailing: Text(CurrencyFormatter.formatWhole(totalSales), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 13)),
           ),
         );
       },
@@ -697,7 +695,6 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
   Widget _buildHistoryTab() {
     return Column(
-      children: [
       children: [
         if (_salesSummary != null)
            SalesSummaryHeader(summary: _salesSummary!, showMargin: false, isJefeVentas: false),
@@ -737,8 +734,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 itemCount: history.length,
                 itemBuilder: (context, index) {
                   final sale = history[index];
-                  final date = sale['date'] ?? '';
-                  final productName = sale['productName'] ?? 'Producto';
+                  final date = (sale['date'] as String?) ?? '';
+                  final productName = (sale['productName'] as String?) ?? 'Producto';
                   final amount = (sale['amount'] as num?)?.toDouble() ?? 0;
                   final boxes = sale['boxes'] ?? 0;
 
@@ -758,7 +755,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                         children: [
                           Text('$boxes cj', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
                           const SizedBox(width: 8),
-                          Text(_formatCurrency(amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(CurrencyFormatter.formatWhole(amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         ],
                       ),
                     ),
@@ -774,12 +771,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
   Future<List<Map<String, dynamic>>> _loadSalesHistory() async {
     try {
-      final response = await ApiClient.get(
-        '${ApiConfig.clientDetail}/${widget.clientCode}/sales-history',
-        queryParameters: {'vendedorCodes': widget.vendedorCodes, 'limit': '50'},
+      return await ClientsService.getClientSalesHistory(
+        clientCode: widget.clientCode,
+        vendedorCodes: widget.vendedorCodes,
       );
-      final rawList = response['history'] ?? [];
-      return (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
     } catch (e) {
       debugPrint('Error loading history: $e');
       return [];
@@ -789,12 +784,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   Future<void> _loadSalesSummary() async {
       try {
         // Defaults to This Year if no dates provided, matching the History Page logic
-        final response = await ApiClient.get(
-          '/sales-history/summary',
-          queryParameters: {
-            'clientCode': widget.clientCode,
-            'vendedorCodes': widget.vendedorCodes
-          },
+        final response = await ClientsService.getSalesSummary(
+          clientCode: widget.clientCode,
+          vendedorCodes: widget.vendedorCodes,
         );
         if (mounted) {
            setState(() {
@@ -813,9 +805,6 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
   }
 
-  String _formatCurrency(double value) {
-    return NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 0).format(value);
-  }
 }
 
 class _SummaryCard extends StatelessWidget {

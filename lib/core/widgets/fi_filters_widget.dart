@@ -120,7 +120,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       if (response['success'] == true) {
         setState(() {
           _fi1Options = (response['filters'] as List)
-              .map((f) => FiOption.fromJson(f))
+              .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
               .toList();
         });
       }
@@ -146,7 +146,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       if (response['success'] == true) {
         setState(() {
           _fi2Options = (response['filters'] as List)
-              .map((f) => FiOption.fromJson(f))
+              .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
               .toList();
         });
       }
@@ -174,7 +174,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       if (response['success'] == true) {
         setState(() {
           _fi3Options = (response['filters'] as List)
-              .map((f) => FiOption.fromJson(f))
+              .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
               .toList();
         });
       }
@@ -198,7 +198,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       if (response['success'] == true) {
         setState(() {
           _fi4Options = (response['filters'] as List)
-              .map((f) => FiOption.fromJson(f))
+              .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
               .toList();
         });
       }
@@ -219,7 +219,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       if (response['success'] == true) {
         setState(() {
           _fi5Options = (response['filters'] as List)
-              .map((f) => FiOption.fromJson(f))
+              .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
               .toList();
         });
       }
@@ -684,7 +684,7 @@ class FiFilterOptions {
 
   static List<FiOption> _parseOptions(dynamic data) {
     if (data == null) return [];
-    return (data as List).map((f) => FiOption.fromJson(f)).toList();
+    return (data as List).map((f) => FiOption.fromJson(f as Map<String, dynamic>)).toList();
   }
 }
 
@@ -704,7 +704,7 @@ class FiOption {
     return FiOption(
       code: json['code']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
-      count: json['count'] is int ? json['count'] : int.tryParse(json['count']?.toString() ?? '0') ?? 0,
+      count: json['count'] is int ? (json['count'] as int) : int.tryParse(json['count']?.toString() ?? '0') ?? 0,
     );
   }
 

@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config/env';
 import { odbcPool } from '../config/database';
 import { logger } from '../utils/logger';
+import { toStr } from '../utils/db-helpers';
 
 // Constantes de seguridad
 const BCRYPT_ROUNDS = config.security.bcryptRounds;
@@ -125,12 +126,12 @@ class AuthService {
       [usuario]
     );
 
-    // Si no encuentra por código, buscar por nombre
+    // Si no encuentra por código, buscar por nombre (parameterized LIKE)
     if (!resultado || resultado.length === 0) {
       const searchPattern = `%${usuario.toUpperCase()}%`;
       resultado = await odbcPool.query<Record<string, unknown>[]>(
-        `SELECT 
-          CODIGOVENDEDOR, 
+        `SELECT
+          CODIGOVENDEDOR,
           TRIM(NOMBREVENDEDOR) as NOMBREVENDEDOR,
           TRIM(NIF) as NIF,
           TRIM(TELEFONO1) as TELEFONO,
@@ -138,8 +139,9 @@ class AuthService {
           TRIM(POBLACION) as POBLACION,
           TRIM(PROVINCIA) as PROVINCIA
          FROM DSEDAC.VDD
-         WHERE UPPER(TRIM(NOMBREVENDEDOR)) LIKE '${searchPattern}'
-         FETCH FIRST 1 ROWS ONLY`
+         WHERE UPPER(TRIM(NOMBREVENDEDOR)) LIKE ?
+         FETCH FIRST 1 ROWS ONLY`,
+        [searchPattern]
       );
     }
 
@@ -147,13 +149,13 @@ class AuthService {
 
     const row = resultado[0];
     return {
-      codigoVendedor: String(row.CODIGOVENDEDOR || '').trim(),
-      nombreVendedor: String(row.NOMBREVENDEDOR || '').trim(),
-      nif: String(row.NIF || '').trim(),
-      telefono: String(row.TELEFONO || '').trim(),
-      direccion: String(row.DIRECCION || '').trim(),
-      poblacion: String(row.POBLACION || '').trim(),
-      provincia: String(row.PROVINCIA || '').trim(),
+      codigoVendedor: toStr(row.CODIGOVENDEDOR),
+      nombreVendedor: toStr(row.NOMBREVENDEDOR),
+      nif: toStr(row.NIF),
+      telefono: toStr(row.TELEFONO),
+      direccion: toStr(row.DIRECCION),
+      poblacion: toStr(row.POBLACION),
+      provincia: toStr(row.PROVINCIA),
     };
   }
 
@@ -167,7 +169,7 @@ class AuthService {
     );
 
     if (!resultado || resultado.length === 0) return null;
-    return String(resultado[0].CODIGOPIN || '').trim();
+    return toStr(resultado[0].CODIGOPIN);
   }
 
   /**

@@ -43,8 +43,8 @@ class SalesHistoryService {
         cacheTTL: const Duration(minutes: 10),
       );
 
-      final List<dynamic> rowsJson = response['rows'] ?? [];
-      final items = rowsJson.map((json) => ProductHistoryItem.fromJson(json)).toList();
+      final List<dynamic> rowsJson = (response['rows'] as List?) ?? [];
+      final items = rowsJson.map((json) => ProductHistoryItem.fromJson(json as Map<String, dynamic>)).toList();
       final count = response['count'] as int? ?? 0;
       
       return {
