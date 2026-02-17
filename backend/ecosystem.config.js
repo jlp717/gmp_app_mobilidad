@@ -78,6 +78,40 @@ module.exports = {
 
         // ==================== OPTIMIZATION SCRIPTS ====================
         {
+            name: 'gmp-api-pre',
+            script: 'server.js',
+            cwd: __dirname,
+
+            // PRE: Single instance (fork) for testing
+            instances: 1,
+            exec_mode: 'fork',
+
+            // PRE environment: R1_T8CDVD logic + port 3001
+            env: {
+                NODE_ENV: 'production',
+                PORT: 3001,
+                USE_TS_ROUTES: 'false',
+                VENDOR_COLUMN: 'R1_T8CDVD',
+            },
+
+            max_memory_restart: '512M',
+            min_uptime: '10s',
+            max_restarts: 5,
+            restart_delay: 4000,
+
+            log_file: './logs/pre-combined.log',
+            out_file: './logs/pre-out.log',
+            error_file: './logs/pre-error.log',
+            log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+            merge_logs: true,
+
+            watch: false,
+            autorestart: true,
+            source_map_support: true,
+        },
+
+        // ==================== OPTIMIZATION SCRIPTS ====================
+        {
             name: 'gmp-cache-cleanup',
             script: 'scripts/cache-cleanup.js',
             cwd: __dirname,

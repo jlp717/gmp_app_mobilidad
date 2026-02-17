@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <application
-        android:label="GMP Movilidad"
+        android:label="GMP NEW BETA"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity

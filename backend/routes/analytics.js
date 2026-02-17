@@ -8,6 +8,7 @@ const {
     getCurrentDate,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    VENDOR_COLUMN,
     formatCurrency,
     MIN_YEAR,
     LAC_SALES_FILTER,
@@ -409,11 +410,11 @@ router.get('/sales-history/summary', async (req, res) => {
         // Build filters for LACLAE table
         const LACLAE_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z')`;
 
-        // Vendedor filter - adaptar para LACLAE (LCCDVD)
+        // Vendedor filter - uses VENDOR_COLUMN (LCCDVD or R1_T8CDVD)
         let vendedorFilter = '';
         if (vendedorCodes) {
             const codes = vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',');
-            vendedorFilter = `AND L.LCCDVD IN (${codes})`;
+            vendedorFilter = `AND L.${VENDOR_COLUMN} IN (${codes})`;
         }
 
         // Client filter - adaptar para LACLAE (LCCDCL)

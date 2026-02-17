@@ -15,18 +15,18 @@ class NetworkService {
   /// Lista de servidores ordenados por prioridad
   /// El sistema probará cada uno en orden hasta encontrar uno que funcione
   static final List<ServerConfig> _servers = [
-    // 1. Producción (Cloudflare Tunnel) - Máxima prioridad
+    // 1. Servidor LAN directo - PRE (port 3001, nueva lógica R1_T8CDVD)
     ServerConfig(
-      name: 'Producción (Cloudflare)',
-      baseUrl: 'https://retailers-oct-dale-shows.trycloudflare.com/api',
+      name: 'Servidor PRE (LAN)',
+      baseUrl: 'http://192.168.1.238:3001/api',
       priority: 1,
-      isSecure: true,
+      isSecure: false,
     ),
     
     // 2. Servidor LAN directo (para red local)
     ServerConfig(
       name: 'Servidor Local (LAN)',
-      baseUrl: 'http://192.168.1.238:3000/api',
+      baseUrl: 'http://192.168.1.238:3001/api',
       priority: 2,
       isSecure: false,
     ),
@@ -34,7 +34,7 @@ class NetworkService {
     // 3. Emulador Android Studio
     ServerConfig(
       name: 'Emulador Android',
-      baseUrl: 'http://10.0.2.2:3000/api',
+      baseUrl: 'http://10.0.2.2:3001/api',
       priority: 3,
       isSecure: false,
       isEmulatorOnly: true,
@@ -44,7 +44,7 @@ class NetworkService {
     // Nota: Esta IP puede variar, se detectará automáticamente
     ServerConfig(
       name: 'WSA (Windows)',
-      baseUrl: 'http://172.31.192.1:3000/api', // IP típica de vEthernet WSL
+      baseUrl: 'http://172.31.192.1:3001/api', // IP típica de vEthernet WSL
       priority: 4,
       isSecure: false,
       isWSAOnly: true,
@@ -53,7 +53,7 @@ class NetworkService {
     // 5. Localhost (desarrollo local)
     ServerConfig(
       name: 'Localhost',
-      baseUrl: 'http://127.0.0.1:3000/api',
+      baseUrl: 'http://127.0.0.1:3001/api',
       priority: 5,
       isSecure: false,
     ),

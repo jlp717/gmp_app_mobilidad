@@ -3,7 +3,7 @@ const router = express.Router();
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
+const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
 const { redisCache, TTL } = require('../services/redis-cache');
 
 
@@ -231,11 +231,11 @@ setTimeout(async () => {
 async function getVendorCurrentClients(vendorCode, currentYear) {
     const safeCode = vendorCode.replace(/[^a-zA-Z0-9]/g, '');
     const safeYear = parseInt(currentYear);
-    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
+    // Uses VENDOR_COLUMN (LCCDVD or R1_T8CDVD) based on env config
     const rows = await query(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.LCCDVD = '${safeCode}'
+        WHERE L.${VENDOR_COLUMN} = '${safeCode}'
           AND L.LCAADC = ${safeYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
@@ -245,7 +245,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
         const prevRows = await query(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.LCCDVD = '${safeCode}'
+            WHERE L.${VENDOR_COLUMN} = '${safeCode}'
               AND L.LCAADC = ${safeYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);
@@ -883,15 +883,14 @@ router.get('/summary', async (req, res) => {
                     return res.json({ success: true, ...cachedResult });
                 }
 
-                // FIX: Use LCCDVD (same column used by calculateVendorData for filtering)
-                // PERF: Removed TRIM from WHERE clause - use RTRIM only in SELECT
+                // Uses VENDOR_COLUMN for vendor discovery (LCCDVD or R1_T8CDVD)
                 const safeYr = parseInt(yr);
                 const vendorRows = await query(`
-                    SELECT DISTINCT RTRIM(L.LCCDVD) as VENDOR_CODE
+                    SELECT DISTINCT RTRIM(L.${VENDOR_COLUMN}) as VENDOR_CODE
                     FROM DSED.LACLAE L
                     WHERE L.LCAADC IN (${safeYr}, ${safeYr - 1})
-                      AND L.LCCDVD IS NOT NULL
-                      AND L.LCCDVD <> ''
+                      AND L.${VENDOR_COLUMN} IS NOT NULL
+                      AND L.${VENDOR_COLUMN} <> ''
                 `, false);
                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));

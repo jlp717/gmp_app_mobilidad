@@ -6,6 +6,7 @@ const {
     getCurrentDate,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    VENDOR_COLUMN,
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
@@ -34,11 +35,11 @@ const {
  * Get all clients currently managed by a vendor (from current year or most recent data)
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
-    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
+    // Uses VENDOR_COLUMN (LCCDVD or R1_T8CDVD) based on env config
     const rows = await query(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.LCCDVD = '${vendorCode}'
+        WHERE L.${VENDOR_COLUMN} = '${vendorCode}'
           AND L.LCAADC = ${currentYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
@@ -48,7 +49,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
         const prevRows = await query(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.LCCDVD = '${vendorCode}'
+            WHERE L.${VENDOR_COLUMN} = '${vendorCode}'
               AND L.LCAADC = ${currentYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);

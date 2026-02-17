@@ -32,8 +32,8 @@ const SALES_FILTERS = {
     yearColumn: 'LCAADC',
     // Column name for month
     monthColumn: 'LCMMDC',
-    // Column name for vendor
-    vendorColumn: 'LCCDVD',
+    // Column name for vendor (controlled by env VENDOR_COLUMN)
+    vendorColumn: process.env.VENDOR_COLUMN || 'LCCDVD',
     // Column name for client
     clientColumn: 'LCCDCL',
 };

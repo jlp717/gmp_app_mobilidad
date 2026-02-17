@@ -156,7 +156,7 @@ class _GMPSalesAnalyticsAppState extends State<GMPSalesAnalyticsApp> {
         ChangeNotifierProvider(create: (_) => FilterProvider()),
       ],
       child: MaterialApp.router(
-        title: 'GMP Sales Analytics',
+        title: 'GMP Movilidad - NEW BETA',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
         routerConfig: _router,

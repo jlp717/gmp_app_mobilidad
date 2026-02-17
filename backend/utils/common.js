@@ -7,6 +7,17 @@ const getCurrentYear = () => getCurrentDate().getFullYear();
 const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 
 // =============================================================================
+// VENDOR COLUMN FEATURE FLAG
+// =============================================================================
+// VENDOR_COLUMN controls which DB2 column is used for vendor filtering:
+//   LCCDVD    = "Quién vendió" (lógica actual de producción)
+//   R1_T8CDVD = "Quién tiene el cliente asignado" (nueva lógica 2026)
+//
+// Set via environment variable. Default: LCCDVD (backward compatible)
+const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'LCCDVD';
+logger.info(`[CONFIG] 🏷️  VENDOR_COLUMN = ${VENDOR_COLUMN}`);
+
+// =============================================================================
 // SALES FILTER CONSTANTS
 // =============================================================================
 // SALES FILTERS (GOLDEN DATA ALIGNMENT)
@@ -19,7 +30,8 @@ const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 // Column mapping: LACLAE (short) vs LAC (long)
 //   LCIMVT = Importe Venta (sin IVA) 
 //   LCIMCT = Importe Costo
-//   LCCDVD = Codigo Vendedor
+//   LCCDVD = Codigo Vendedor (original)
+//   R1_T8CDVD = Codigo Vendedor Asignado (nueva lógica)
 //   LCCDCL = Codigo Cliente
 //   LCAADC = Año Documento
 //   LCMMDC = Mes Documento
@@ -129,10 +141,12 @@ function buildDateFilter(yearParam, monthParam, tableAlias = '') {
     return { year, month, filter: `AND ${prefix}ANODOCUMENTO >= ${MIN_YEAR}` };
 }
 
-// Vendor filter for LACLAE table (uses short column name LCCDVD)
+// Vendor filter for LACLAE table
+// Uses VENDOR_COLUMN env var: LCCDVD (default) or R1_T8CDVD (new 2026 logic)
 function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
     if (!vendedorCodes || vendedorCodes === 'ALL') return '';
     const prefix = tableAlias ? `${tableAlias}.` : '';
+    const col = VENDOR_COLUMN; // LCCDVD or R1_T8CDVD
 
     const codeList = vendedorCodes.split(',').map(c => c.trim());
     const hasUnk = codeList.includes('UNK');
@@ -147,11 +161,10 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
     const conditions = [];
     if (validCodes.length > 0) {
         // PERF: Removed TRIM() - DB2 CHAR comparison handles trailing spaces automatically
-        // This allows DB2 to use indexes on LCCDVD column
-        conditions.push(`${prefix}LCCDVD IN (${validCodes})`);
+        conditions.push(`${prefix}${col} IN (${validCodes})`);
     }
     if (hasUnk) {
-        conditions.push(`(${prefix}LCCDVD IS NULL OR ${prefix}LCCDVD = '')`);
+        conditions.push(`(${prefix}${col} IS NULL OR ${prefix}${col} = '')`);
     }
 
     if (conditions.length === 0) return 'AND 1=0';
@@ -235,6 +248,7 @@ module.exports = {
     getCurrentDate,
     getCurrentYear,
     MIN_YEAR,
+    VENDOR_COLUMN,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     LAC_TIPOVENTA_FILTER,

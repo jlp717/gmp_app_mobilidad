@@ -41,7 +41,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.maripepa.gmp_mobilidad"
+        applicationId = "com.maripepa.gmp_mobilidad_pre"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
