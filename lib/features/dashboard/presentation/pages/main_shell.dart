@@ -24,6 +24,8 @@ import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_panel_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_clientes_page.dart';
 import '../../../facturas/presentation/pages/facturas_page.dart';
+import '../../../warehouse/presentation/pages/warehouse_dashboard_page.dart';
+import '../../../warehouse/presentation/pages/personnel_page.dart';
 import '../../../../core/models/user_model.dart';
 import 'dashboard_content.dart';
 
@@ -48,6 +50,7 @@ class _MainShellState extends State<MainShell> {
   
   // Toggle state
   bool _forceRepartidorMode = false;
+  bool _forceAlmacenMode = false;
 
   // Navigate from Clientes → Histórico with preselected client
   String? _pendingClientId;
@@ -105,6 +108,8 @@ class _MainShellState extends State<MainShell> {
      if (user?.isRepartidor == true) return true; // Always true for real drivers
      return _forceRepartidorMode; // Toggleable for Jefe
   }
+
+  bool get _isAlmacenEffective => _forceAlmacenMode;
 
   void _checkForUpdates() {
     final auth = context.read<AuthProvider>();
@@ -260,6 +265,31 @@ class _MainShellState extends State<MainShell> {
     final items = <_NavItem>[];
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
+
+    // ===============================================
+    // ALMACÉN MODE
+    // ===============================================
+    if (_isAlmacenEffective) {
+      items.add(_NavItem(
+        icon: Icons.warehouse_outlined,
+        selectedIcon: Icons.warehouse_rounded,
+        label: 'Expediciones',
+        color: AppTheme.neonBlue,
+      ));
+      items.add(_NavItem(
+        icon: Icons.groups_outlined,
+        selectedIcon: Icons.groups_rounded,
+        label: 'Personal',
+        color: AppTheme.neonPurple,
+      ));
+      items.add(_NavItem(
+        icon: Icons.smart_toy_outlined,
+        selectedIcon: Icons.smart_toy,
+        label: 'Chat IA',
+        color: AppTheme.neonPink,
+      ));
+      return items;
+    }
     
     // Check EFFECTIVE role
     final isRepartidor = _isRepartidorEffective;
@@ -420,49 +450,109 @@ class _MainShellState extends State<MainShell> {
                     const SizedBox(height: 16),
 
                     // MODE SWITCHER FOR JEFE
+                    // MODE SWITCHER FOR JEFE
                     if (isJefeVentas)
                          Padding(
                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                           child: InkWell(
-                             onTap: () {
-                               setState(() {
-                                 _forceRepartidorMode = !_forceRepartidorMode;
-                                 _currentIndex = 0; // Reset tab
-                               });
-                               // Ensure repartidores are loaded when switching to reparto mode
-                               if (_forceRepartidorMode && _repartidoresOptions.isEmpty) {
-                                 _fetchRepartidores();
-                               }
-                             },
-                             borderRadius: BorderRadius.circular(12),
-                             child: Container(
-                               padding: const EdgeInsets.symmetric(vertical: 8),
-                               decoration: BoxDecoration(
-                                 color: _forceRepartidorMode ? Colors.orange.withOpacity(0.2) : AppTheme.neonBlue.withOpacity(0.2),
+                           child: Container(
+                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                             decoration: BoxDecoration(
+                               color: _forceAlmacenMode
+                                  ? AppTheme.neonPink.withOpacity(0.15)
+                                  : _forceRepartidorMode 
+                                       ? Colors.orange.withOpacity(0.15) 
+                                       : AppTheme.neonBlue.withOpacity(0.15),
+                               borderRadius: BorderRadius.circular(12),
+                               border: Border.all(
+                                 color: _forceAlmacenMode
+                                    ? AppTheme.neonPink.withOpacity(0.5)
+                                    : _forceRepartidorMode 
+                                         ? Colors.orange.withOpacity(0.5) 
+                                         : AppTheme.neonBlue.withOpacity(0.5),
+                                 width: 1
+                               )
+                             ),
+                             child: PopupMenuButton<String>(
+                               tooltip: 'Cambiar Perfil',
+                               offset: const Offset(0, 40),
+                               color: AppTheme.surfaceColor,
+                               shape: RoundedRectangleBorder(
                                  borderRadius: BorderRadius.circular(12),
-                                 border: Border.all(
-                                   color: _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
-                                   width: 1
-                                 )
+                                 side: BorderSide(color: Colors.white.withOpacity(0.1))
                                ),
-                               child: Column(
+                               child: Row(
+                                 mainAxisAlignment: MainAxisAlignment.center,
                                  children: [
                                    Icon(
-                                     _forceRepartidorMode ? Icons.local_shipping : Icons.store,
-                                     color: _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                                     _forceAlmacenMode ? Icons.warehouse_rounded
+                                       : _forceRepartidorMode ? Icons.local_shipping : Icons.store,
+                                     color: _forceAlmacenMode ? AppTheme.neonPink
+                                       : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
                                      size: 20
                                    ),
-                                   const SizedBox(height: 4),
+                                   const SizedBox(width: 8),
                                    Text(
-                                     _forceRepartidorMode ? 'Reparto' : 'Ventas',
+                                     _forceAlmacenMode ? 'Almacén'
+                                       : _forceRepartidorMode ? 'Reparto' : 'Ventas',
                                      style: TextStyle(
-                                       fontSize: 9,
+                                       fontSize: 11,
                                        fontWeight: FontWeight.bold,
-                                       color: _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                                       color: _forceAlmacenMode ? AppTheme.neonPink
+                                         : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
                                      ),
-                                   )
+                                   ),
+                                   const Icon(Icons.arrow_drop_down, color: Colors.white54, size: 18),
                                  ],
                                ),
+                               itemBuilder: (context) => [
+                                 const PopupMenuItem(
+                                   value: 'VENTAS',
+                                   child: Row(
+                                     children: [
+                                       Icon(Icons.store, color: AppTheme.neonBlue, size: 18),
+                                       SizedBox(width: 12),
+                                       Text('Perfil Ventas', style: TextStyle(color: Colors.white)),
+                                     ],
+                                   ),
+                                 ),
+                                 const PopupMenuItem(
+                                   value: 'REPARTO',
+                                   child: Row(
+                                     children: [
+                                       Icon(Icons.local_shipping, color: Colors.orange, size: 18),
+                                       SizedBox(width: 12),
+                                       Text('Perfil Reparto', style: TextStyle(color: Colors.white)),
+                                     ],
+                                   ),
+                                 ),
+                                 const PopupMenuItem(
+                                   value: 'ALMACEN',
+                                   child: Row(
+                                     children: [
+                                       Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
+                                       SizedBox(width: 12),
+                                       Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
+                                     ],
+                                   ),
+                                 ),
+                               ],
+                               onSelected: (value) {
+                                 if (value == 'ALMACEN') {
+                                    setState(() {
+                                      _forceAlmacenMode = true;
+                                      _forceRepartidorMode = false;
+                                      _currentIndex = 0;
+                                    });
+                                    return;
+                                  }
+                                 
+                                 final bool newMode = value == 'REPARTO';
+                                 setState(() {
+                                    _forceAlmacenMode = false;
+                                    _forceRepartidorMode = newMode;
+                                    _currentIndex = 0;
+                                  });
+                               },
                              ),
                            ),
                          ),
@@ -827,6 +917,28 @@ class _MainShellState extends State<MainShell> {
     // Obtener el rol del usuario
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
+
+    // ===============================================
+    // ALMACÉN MODE
+    // ===============================================
+    if (_isAlmacenEffective) {
+      switch (_currentIndex) {
+        case 0:
+          return const WarehouseDashboardPage();
+        case 1:
+          return const PersonnelPage();
+        case 2:
+          return const ComingSoonPlaceholder(
+            title: 'Nexus AI — Asistente de Almacén',
+            subtitle: 'Tu asistente inteligente para\nconsultar cargas, rutas y expediciones.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          );
+        default:
+          return const Center(child: Text('Página no encontrada'));
+      }
+    }
+
     final isRepartidor = _isRepartidorEffective; 
     
     // ===============================================
