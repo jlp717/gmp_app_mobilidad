@@ -66,7 +66,7 @@ router.get('/dashboard', async (req, res) => {
                 lineCount: parseInt(t.NUM_LINEAS) || 0,
                 maxPayloadKg: parseFloat(t.CARGAMAXIMA) > 0
                     ? parseFloat(t.CARGAMAXIMA)
-                    : Math.round((parseFloat(t.CONTENEDORVOLUMEN) || 1) * 350),
+                    : Math.round((parseFloat(t.CONTENEDORVOLUMEN) || 1) * 300),
                 containerVolume: parseFloat(t.CONTENEDORVOLUMEN) || 0,
                 tolerancePct: parseFloat(t.TOLERANCIA) || 5,
             })),

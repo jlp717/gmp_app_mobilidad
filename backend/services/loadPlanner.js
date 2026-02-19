@@ -15,8 +15,8 @@ const logger = require('../middleware/logger');
 // ─────────────────────────────────────────────────────────────────────────────
 // DEFAULT DIMENSIONS — used when article hasn't been measured yet
 // ─────────────────────────────────────────────────────────────────────────────
-const DEFAULT_BOX = { largo: 40, ancho: 30, alto: 25 }; // cm
-const DEFAULT_WEIGHT_PER_BOX = 5.0; // kg
+const DEFAULT_BOX = { largo: 40, ancho: 30, alto: 20 }; // cm — typical meat/poultry crate
+const DEFAULT_WEIGHT_PER_BOX = 8.0; // kg
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA ACCESS
