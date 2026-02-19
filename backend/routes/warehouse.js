@@ -64,7 +64,7 @@ router.get('/dashboard', async (req, res) => {
                 driverName: (t.NOMBRE_REPARTIDOR || '').trim(),
                 orderCount: parseInt(t.NUM_ORDENES) || 0,
                 lineCount: parseInt(t.NUM_LINEAS) || 0,
-                maxPayloadKg: parseFloat(t.CARGAMAXIMA) || 0,
+                maxPayloadKg: parseFloat(t.CARGAMAXIMA) || 3000,
                 containerVolume: parseFloat(t.CONTENEDORVOLUMEN) || 0,
                 tolerancePct: parseFloat(t.TOLERANCIA) || 5,
             })),
@@ -266,24 +266,57 @@ router.put('/truck-config/:vehicleCode', async (req, res) => {
  */
 router.get('/personnel', async (req, res) => {
     try {
-        const rows = await query(`
+        // Get custom personnel from ALMACEN_PERSONAL
+        const customRows = await query(`
       SELECT ID, NOMBRE, CODIGO_VENDEDOR, ROL, ACTIVO, TELEFONO, EMAIL, CREATED_AT
       FROM JAVIER.ALMACEN_PERSONAL
       WHERE ACTIVO = 'S'
       ORDER BY NOMBRE
     `);
 
-        res.json({
-            personnel: rows.map(r => ({
-                id: r.ID,
-                name: (r.NOMBRE || '').trim(),
-                vendorCode: (r.CODIGO_VENDEDOR || '').trim(),
-                role: (r.ROL || 'PREPARADOR').trim(),
-                active: r.ACTIVO === 'S',
-                phone: (r.TELEFONO || '').trim(),
-                email: (r.EMAIL || '').trim(),
-            })),
-        });
+        // Also get all repartidores/vendedores from DSEDAC.VDD
+        const vddRows = await query(`
+      SELECT
+        TRIM(VDD.CODIGOVENDEDOR) AS CODIGO,
+        TRIM(VDD.NOMBREVENDEDOR) AS NOMBRE
+      FROM DSEDAC.VDD VDD
+      WHERE TRIM(VDD.NOMBREVENDEDOR) <> ''
+      ORDER BY VDD.NOMBREVENDEDOR
+    `);
+
+        // Merge: custom personnel + VDD entries not already in custom table
+        const customCodes = new Set(customRows.map(r => (r.CODIGO_VENDEDOR || '').trim()));
+
+        const personnel = customRows.map(r => ({
+            id: r.ID,
+            name: (r.NOMBRE || '').trim(),
+            vendorCode: (r.CODIGO_VENDEDOR || '').trim(),
+            role: (r.ROL || 'PREPARADOR').trim(),
+            active: true,
+            phone: (r.TELEFONO || '').trim(),
+            email: (r.EMAIL || '').trim(),
+            source: 'custom',
+        }));
+
+        for (const v of vddRows) {
+            const code = (v.CODIGO || '').trim();
+            if (code && !customCodes.has(code)) {
+                personnel.push({
+                    id: 'VDD-' + code,
+                    name: (v.NOMBRE || '').trim(),
+                    vendorCode: code,
+                    role: 'REPARTIDOR',
+                    active: true,
+                    phone: '',
+                    email: '',
+                    source: 'vdd',
+                });
+            }
+        }
+
+        personnel.sort((a, b) => a.name.localeCompare(b.name));
+
+        res.json({ personnel });
     } catch (error) {
         logger.error(`Personnel error: ${error.message}`);
         res.status(500).json({ error: 'Error obteniendo personal', details: error.message });
@@ -438,8 +471,7 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
         const day = parseInt(req.query.day) || now.getDate();
 
         const rows = await query(`
-      SELECT 
-        OPP.ID,
+      SELECT
         OPP.EJERCICIOORDENPREPARACION AS EJERCICIO,
         OPP.NUMEROORDENPREPARACION AS NUM_ORDEN,
         TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
@@ -473,7 +505,7 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
             date: { year, month, day },
             totalLines: rows.length,
             orders: rows.map(r => ({
-                id: r.ID,
+                id: r.EJERCICIO + '-' + r.NUM_ORDEN,
                 orderYear: r.EJERCICIO,
                 orderNumber: r.NUM_ORDEN,
                 clientCode: (r.CLIENTE || '').trim(),

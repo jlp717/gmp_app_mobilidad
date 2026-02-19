@@ -133,8 +133,7 @@ async function getArticleDimensions(articleCodes) {
  */
 async function getOrdersForVehicle(vehicleCode, year, month, day) {
     const rows = await query(`
-    SELECT 
-      OPP.ID,
+    SELECT
       OPP.EJERCICIOORDENPREPARACION AS EJERCICIO,
       OPP.NUMEROORDENPREPARACION AS NUM_ORDEN,
       TRIM(OPP.CODIGOREPARTIDOR) AS REPARTIDOR,
@@ -145,12 +144,12 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
       LAC.CANTIDADUNIDADES AS CANTIDAD,
       LAC.CANTIDADUNIDADESPEDIDAS AS UNIDADES
     FROM DSEDAC.OPP OPP
-    INNER JOIN DSEDAC.CPC CPC 
-      ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION 
+    INNER JOIN DSEDAC.CPC CPC
+      ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
       AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-    INNER JOIN DSEDAC.LAC LAC 
-      ON CPC.NUMEROALBARAN = LAC.NUMEROALBARAN 
-      AND CPC.EJERCICIOALBARAN = LAC.EJERCICIOALBARAN 
+    INNER JOIN DSEDAC.LAC LAC
+      ON CPC.NUMEROALBARAN = LAC.NUMEROALBARAN
+      AND CPC.EJERCICIOALBARAN = LAC.EJERCICIOALBARAN
       AND TRIM(CPC.SERIEALBARAN) = TRIM(LAC.SERIEALBARAN)
     WHERE TRIM(OPP.CODIGOVEHICULO) = '${vehicleCode.replace(/'/g, "''")}'
       AND OPP.ANOREPARTO = ${parseInt(year)}
@@ -160,7 +159,7 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
   `);
 
     return rows.map(r => ({
-        id: r.ID,
+        id: r.EJERCICIO + '-' + r.NUM_ORDEN,
         orderYear: r.EJERCICIO,
         orderNumber: r.NUM_ORDEN,
         driverCode: r.REPARTIDOR,

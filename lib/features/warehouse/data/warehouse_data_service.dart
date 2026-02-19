@@ -285,13 +285,14 @@ class TruckOrder {
 
 /// Personal de almacén
 class WarehousePerson {
-  final int id;
+  final String id;
   final String name;
   final String vendorCode;
   final String role;
   final bool active;
   final String phone;
   final String email;
+  final String source; // 'custom' or 'vdd'
 
   WarehousePerson({
     required this.id,
@@ -301,17 +302,19 @@ class WarehousePerson {
     required this.active,
     required this.phone,
     required this.email,
+    this.source = 'custom',
   });
 
   factory WarehousePerson.fromJson(Map<String, dynamic> json) =>
       WarehousePerson(
-        id: (json['id'] as int?) ?? 0,
+        id: json['id']?.toString() ?? '0',
         name: (json['name'] as String?) ?? '',
         vendorCode: (json['vendorCode'] as String?) ?? '',
         role: (json['role'] as String?) ?? 'PREPARADOR',
         active: (json['active'] as bool?) ?? true,
         phone: (json['phone'] as String?) ?? '',
         email: (json['email'] as String?) ?? '',
+        source: (json['source'] as String?) ?? 'custom',
       );
 }
 
