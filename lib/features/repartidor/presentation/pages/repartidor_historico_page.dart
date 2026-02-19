@@ -1194,30 +1194,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               },
             ),
             _buildActionTile(
-              icon: Icons.email_outlined,
-              label: 'Enviar por Email',
+              icon: Icons.share_outlined,
+              label: 'Compartir',
+              subtitle: 'WhatsApp, Email, Guardar...',
               color: AppTheme.neonPurple,
               onTap: () {
                 Navigator.pop(ctx);
-                _emailDocument(doc);
-              },
-            ),
-            _buildActionTile(
-              icon: Icons.chat,
-              label: 'WhatsApp',
-              color: const Color(0xFF25D366),
-              onTap: () {
-                Navigator.pop(ctx);
-                _whatsAppDocument(doc);
-              },
-            ),
-            _buildActionTile(
-              icon: Icons.download_rounded,
-              label: 'Descargar',
-              color: AppTheme.neonGreen,
-              onTap: () {
-                Navigator.pop(ctx);
-                _downloadDocument(doc);
+                _showShareOptions(doc);
               },
             ),
             if (hasAnySignature)
@@ -1235,6 +1218,91 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               ),
             const SizedBox(height: 20),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showShareOptions(_DocumentItem doc) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: AppTheme.darkSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Text(
+                  'Compartir Documento',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFF25D366),
+                  child: Icon(Icons.chat, color: Colors.white, size: 20),
+                ),
+                title: const Text('WhatsApp', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _whatsAppDocument(doc);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppTheme.neonBlue,
+                  child: Icon(Icons.email_outlined, color: Colors.white, size: 20),
+                ),
+                title: const Text('Email', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _emailDocument(doc);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppTheme.neonGreen,
+                  child: Icon(Icons.download_rounded, color: Colors.white, size: 20),
+                ),
+                title: const Text('Descargar / Guardar', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _downloadDocument(doc);
+                },
+              ),
+               ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.grey,
+                  child: Icon(Icons.share, color: Colors.white, size: 20),
+                ),
+                title: const Text('Más opciones...', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareSystemDocument(doc);
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -1312,7 +1380,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
       final pdfBytes = Uint8List.fromList(bytes);
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
-      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
+      // Use client name in filename if available, otherwise just number
+      final safeClientName = _selectedClientName?.replaceAll(RegExp(r'[^\w\s]+'), '') ?? 'Cliente';
+      final fileName = '${typeLabel}_${doc.number}_$safeClientName.pdf';
 
       Navigator.push(
         context,
@@ -1333,12 +1403,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         ),
       );
     } catch (e) {
-      modal.error('Error al visualizar: $e');
+      modal.error('Error al visualizar: $e', onRetry: () => _previewDocument(doc));
     }
   }
 
   Future<void> _downloadDocument(_DocumentItem doc) async {
-    final modal = AsyncOperationModal.show(context, text: 'Descargando...');
+    final modal = AsyncOperationModal.show(context, text: 'Preparando descarga...');
     try {
       final isFactura = doc.type == _DocType.factura;
       final bytes = await RepartidorDataService.downloadDocument(
@@ -1355,30 +1425,43 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
       );
+      modal.close();
 
-      final downloadsDir = Directory('/storage/emulated/0/Download');
-      if (!await downloadsDir.exists()) {
-        await downloadsDir.create(recursive: true);
-      }
+      final tempDir = await getTemporaryDirectory();
       
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
-      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
-      final file = File('${downloadsDir.path}/$fileName');
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = '${typeLabel}_${doc.number}_$timestamp.pdf';
+      
+      final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
-      modal.success('Guardado en Descargas');
+      if (!mounted) return;
+      
+      // Use Share to "Save to..."
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Guardar $typeLabel ${doc.number}',
+      );
+      
     } catch (e) {
-      modal.error('Error al descargar: $e');
+      modal.error('Error al descargar: $e', onRetry: () => _downloadDocument(doc));
     }
   }
 
   Future<void> _emailDocument(_DocumentItem doc) async {
     final isFactura = doc.type == _DocType.factura; 
     final typeLabel = isFactura ? 'Factura' : 'Albarán';
+    final clientName = _selectedClientName ?? 'Cliente';
+    
     final result = await EmailFormModal.show(
       context,
-      defaultSubject: '$typeLabel ${doc.number} - GMP',
-      defaultBody: 'Adjunto le remitimos el documento $typeLabel ${doc.number}.\n\nSaludos,\nGranja Mari Pepa',
+      defaultSubject: '$typeLabel ${doc.number} - $clientName',
+      defaultBody: 'Hola $clientName,\n\n'
+          'Adjunto le remitimos su documento $typeLabel ${doc.number}.\n\n'
+          'Gracias por confiar en nosotros.\n\n'
+          'Atentamente,\n'
+          'Granja Mari Pepa',
     );
 
     if (result == null || !mounted) return;
@@ -1402,19 +1485,21 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
       );
-      modal.success('Email enviado correctamente');
+      modal.success('✓ Email enviado correctamente');
     } catch (e) {
-      modal.error('Error enviando email: $e');
+      modal.error('Error enviando email: $e', onRetry: () => _emailDocument(doc));
     }
   }
 
   Future<void> _whatsAppDocument(_DocumentItem doc) async {
     final isFactura = doc.type == _DocType.factura;
     final typeLabel = isFactura ? 'Factura' : 'Albarán';
+    final clientName = _selectedClientName ?? 'Cliente';
     
     final result = await WhatsAppFormModal.show(
       context,
-      defaultMessage: 'Le adjunto el documento $typeLabel ${doc.number} - GMP',
+      defaultMessage: 'Hola $clientName, aquí tiene su documento $typeLabel ${doc.number}. 📄\n\n'
+          'Saludos - Granja Mari Pepa',
     );
 
     if (result == null || !mounted) return;
@@ -1438,7 +1523,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       modal.close();
 
       final tempDir = await getTemporaryDirectory();
-      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
+      final fileName = '${typeLabel}_${doc.number}.pdf';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
@@ -1449,7 +1534,45 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         text: result.message,
       );
     } catch (e) {
-      modal.error('Error preparando WhatsApp: $e');
+      modal.error('Error preparando WhatsApp: $e', onRetry: () => _whatsAppDocument(doc));
+    }
+  }
+
+  Future<void> _shareSystemDocument(_DocumentItem doc) async {
+    final modal = AsyncOperationModal.show(context, text: 'Preparando documento...');
+    try {
+      final isFactura = doc.type == _DocType.factura;
+      final bytes = await RepartidorDataService.downloadDocument(
+        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
+        serie: doc.serie,
+        number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
+        terminal: doc.terminal,
+        type: isFactura ? 'factura' : 'albaran',
+        facturaNumber: doc.facturaNumber,
+        serieFactura: doc.serieFactura,
+        ejercicioFactura: doc.ejercicioFactura,
+        albaranNumber: doc.albaranNumber ?? doc.number,
+        albaranSerie: doc.serie,
+        albaranTerminal: doc.terminal,
+        albaranYear: doc.ejercicio,
+      );
+      modal.close();
+
+      final tempDir = await getTemporaryDirectory();
+      final typeLabel = isFactura ? 'Factura' : 'Albaran';
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = '${typeLabel}_${doc.number}_$timestamp.pdf';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+
+      if (!mounted) return;
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: '$typeLabel ${doc.number} - GMP',
+      );
+    } catch (e) {
+      modal.error('Error al compartir: $e', onRetry: () => _shareSystemDocument(doc));
     }
   }
 

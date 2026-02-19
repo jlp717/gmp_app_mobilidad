@@ -31,9 +31,9 @@ const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('.
 const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
 
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
-    plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
-    commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
-    userActionsRoutes, facturasRoutes;
+  plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
+  commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
+  userActionsRoutes, facturasRoutes, warehouseRoutes;
 
 if (USE_TS_ROUTES) {
   // ==================== COMPILED TYPESCRIPT ROUTES ====================
@@ -89,6 +89,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   repartidorRoutes = require('./routes/repartidor');
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
+  warehouseRoutes = require('./routes/warehouse');
 }
 
 const app = express();
@@ -178,6 +179,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/repartidor', repartidorRoutes);
   app.use('/api/logs', userActionsRoutes);
   app.use('/api/facturas', facturasRoutes);
+  app.use('/api/warehouse', warehouseRoutes);
 }
 
 // Start server
@@ -189,7 +191,8 @@ async function startServer() {
   try {
     // Try a lightweight probe query on the table itself
     await query(`SELECT COUNT(*) as CNT FROM JAVIER.DELIVERY_STATUS`, false, false);
-    logger.info('✅ JAVIER.DELIVERY_STATUS table verified and ready.');    setDeliveryStatusAvailable(true);  } catch (probeErr) {
+    logger.info('✅ JAVIER.DELIVERY_STATUS table verified and ready.'); setDeliveryStatusAvailable(true);
+  } catch (probeErr) {
     // Table likely doesn't exist (SQL0204) — attempt to create it
     logger.warn(`⚠️ DELIVERY_STATUS probe failed (${probeErr.message}). Attempting to create table...`);
     try {

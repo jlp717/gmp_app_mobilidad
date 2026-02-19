@@ -876,10 +876,10 @@ router.get('/summary', async (req, res) => {
 
             if (safeVendorCode === 'ALL') {
                 // PERF: Check route-level cache first for ALL mode (most expensive)
-                const cacheKey = `comm:summary:ALL:${years.join(',')}`;
-                const cachedResult = await redisCache.get('route', cacheKey);
+                const allSummaryCacheKey = `comm:summary:ALL:${years.join(',')}`;
+                const cachedResult = await redisCache.get('route', allSummaryCacheKey);
                 if (cachedResult) {
-                    logger.info(`[COMMISSIONS] ⚡ Cache HIT for ALL summary (${cacheKey})`);
+                    logger.info(`[COMMISSIONS] ⚡ Cache HIT for ALL summary (${allSummaryCacheKey})`);
                     return res.json({ success: true, ...cachedResult });
                 }
 
@@ -949,8 +949,8 @@ router.get('/summary', async (req, res) => {
                 };
 
                 // PERF: Cache the ALL result for 5 minutes
-                await redisCache.set('route', cacheKey, yearResult, TTL.SHORT);
-                logger.info(`[COMMISSIONS] 💾 Cached ALL summary (${cacheKey})`);
+                await redisCache.set('route', allSummaryCacheKey, yearResult, TTL.SHORT);
+                logger.info(`[COMMISSIONS] 💾 Cached ALL summary (${allSummaryCacheKey})`);
 
             } else {
                 // Single Vendor

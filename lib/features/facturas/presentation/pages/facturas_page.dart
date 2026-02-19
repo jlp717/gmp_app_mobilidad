@@ -395,25 +395,10 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                         onTap: () => _previewFactura(factura),
                         isPrimary: false, 
                       ),
-                      const SizedBox(width: 6),
-                      _buildActionButton(
-                        icon: Icons.email_outlined,
-                        label: 'Email',
-                        onTap: () => _emailFactura(factura),
-                        isPrimary: false,
-                      ),
-                      const SizedBox(width: 6),
-                      _buildActionButton(
-                        icon: Icons.chat,
-                        label: 'WhatsApp',
-                        onTap: () => _whatsAppFactura(factura),
-                        isPrimary: false,
-                      ),
-                      const SizedBox(width: 6),
                       _buildActionButton(
                         icon: Icons.share_outlined,
                         label: 'Compartir',
-                        onTap: () => _shareFacturaPdf(factura),
+                        onTap: () => _showShareOptions(context, factura),
                         isPrimary: false,
                       ),
                       const SizedBox(width: 8),
@@ -641,17 +626,93 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   }
 
   // ============================================================================
-  // EMAIL & WHATSAPP ACTIONS
+  // SHARE ACTIONS MODAL
   // ============================================================================
+
+  void _showShareOptions(BuildContext context, Factura factura) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: AppTheme.darkSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Text(
+                  'Compartir Factura',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFF25D366),
+                  child: Icon(Icons.chat, color: Colors.white, size: 20),
+                ),
+                title: const Text('WhatsApp', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _whatsAppFactura(factura);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppTheme.neonBlue,
+                  child: Icon(Icons.email_outlined, color: Colors.white, size: 20),
+                ),
+                title: const Text('Email', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _emailFactura(factura);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.grey,
+                  child: Icon(Icons.share_outlined, color: Colors.white, size: 20),
+                ),
+                title: const Text('Sistema', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareFacturaPdf(factura);
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _emailFactura(Factura factura) async {
     final result = await EmailFormModal.show(
       context,
-      defaultSubject: 'Factura ${factura.numeroFormateado} - Granja Mari Pepa',
-      defaultBody: 'Estimado cliente,\n\nAdjunto le remitimos la factura '
-          '${factura.numeroFormateado} por importe de '
-          '${factura.total.toStringAsFixed(2)} €.\n\n'
-          'Gracias por su confianza.\nEquipo Granja Mari Pepa',
+      defaultSubject: 'Factura ${factura.numeroFormateado} - ${factura.clienteNombre}',
+      defaultBody: 'Hola ${factura.clienteNombre},\n\n'
+          'Adjunto le remitimos su factura ${factura.numeroFormateado} '
+          'por importe de ${factura.total.toStringAsFixed(2)} €.\n\n'
+          'Muchas gracias por su confianza.\n\n'
+          'Atentamente,\n'
+          'El equipo de Granja Mari Pepa',
     );
 
     if (result == null || !mounted) return;
@@ -676,8 +737,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   Future<void> _whatsAppFactura(Factura factura) async {
     final result = await WhatsAppFormModal.show(
       context,
-      defaultMessage: 'Le adjunto la factura ${factura.numeroFormateado} '
-          'por ${factura.total.toStringAsFixed(2)} € - Granja Mari Pepa',
+      defaultMessage: 'Hola ${factura.clienteNombre}, le adjunto su factura '
+          '${factura.numeroFormateado} (${factura.total.toStringAsFixed(2)} €). 📄\n\n'
+          'Gracias por su confianza - Granja Mari Pepa',
     );
 
     if (result == null || !mounted) return;
