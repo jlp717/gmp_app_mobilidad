@@ -59,6 +59,13 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
               'Gestión de Reparto',
               AppTheme.neonPurple
             ),
+            const SizedBox(height: 12),
+            _buildRoleOption(
+              'ALMACEN', 
+              Icons.inventory_2_outlined, 
+              'Gestión de Almacén',
+              AppTheme.neonPink
+            ),
             
             // VIEW AS SELECTOR MOVED TO DASHBOARD
 

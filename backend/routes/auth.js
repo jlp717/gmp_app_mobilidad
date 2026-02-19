@@ -263,7 +263,7 @@ router.post('/switch-role', authenticateToken, async (req, res) => {
         auditLogin(req, userId, null, newRole, true);
 
         // Validate role
-        if (!['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR'].includes(newRole)) {
+        if (!['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR', 'ALMACEN'].includes(newRole)) {
             return res.status(400).json({ error: 'Rol no válido' });
         }
 
