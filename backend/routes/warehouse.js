@@ -64,7 +64,9 @@ router.get('/dashboard', async (req, res) => {
                 driverName: (t.NOMBRE_REPARTIDOR || '').trim(),
                 orderCount: parseInt(t.NUM_ORDENES) || 0,
                 lineCount: parseInt(t.NUM_LINEAS) || 0,
-                maxPayloadKg: parseFloat(t.CARGAMAXIMA) || 0,
+                maxPayloadKg: parseFloat(t.CARGAMAXIMA) > 0
+                    ? parseFloat(t.CARGAMAXIMA)
+                    : Math.round((parseFloat(t.CONTENEDORVOLUMEN) || 1) * 350),
                 containerVolume: parseFloat(t.CONTENEDORVOLUMEN) || 0,
                 tolerancePct: parseFloat(t.TOLERANCIA) || 5,
             })),
@@ -518,7 +520,8 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
                 clientName: (r.NOMBRE_CLIENTE || '').trim(),
                 articleCode: (r.ARTICULO || '').trim(),
                 articleName: (r.NOMBRE_ARTICULO || '').trim(),
-                quantity: parseFloat(r.CANTIDAD) || parseFloat(r.CAJAS) || 0,
+                units: parseFloat(r.CANTIDAD) || 0,
+                boxes: parseFloat(r.CAJAS) || 0,
                 weightPerUnit: parseFloat(r.PESO_UD) || 0,
                 hasDimensions: r.LARGO_CM != null,
                 dimensions: {

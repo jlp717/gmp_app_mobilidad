@@ -55,12 +55,19 @@ async function getTruckConfig(vehicleCode) {
     if (!rows.length) return null;
 
     const r = rows[0];
+    const contVol = parseFloat(r.CONTENEDORVOLUMEN) || 1;
+    // CARGAMAXIMA is 0 for all vehicles in this DB — estimate from CONTENEDORVOLUMEN
+    // Typical food distribution: ~350 kg per m³ of truck volume
+    const estimatedPayload = parseFloat(r.CARGAMAXIMA) > 0
+        ? parseFloat(r.CARGAMAXIMA)
+        : Math.round(contVol * 350);
     return {
         code: r.CODE,
         description: (r.DESCRIPCION || '').trim(),
         matricula: (r.MATRICULA || '').trim(),
-        maxPayloadKg: parseFloat(r.CARGAMAXIMA) || 3000,
+        maxPayloadKg: estimatedPayload,
         tara: parseFloat(r.TARA) || 0,
+        containerVolumeM3: contVol,
         container: {
             lengthCm: parseFloat(r.LARGO_CM),
             widthCm: parseFloat(r.ANCHO_CM),
@@ -165,7 +172,8 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
         driverCode: r.REPARTIDOR,
         clientCode: (r.CLIENTE || '').trim(),
         articleCode: (r.ARTICULO || '').trim(),
-        quantity: parseFloat(r.CANTIDAD) || parseFloat(r.CAJAS) || 1,
+        units: parseFloat(r.CANTIDAD) || 0,      // individual units (e.g. 15 yogurts)
+        boxes: parseFloat(r.CAJAS) || 0,          // physical boxes/cases (e.g. 1 box)
     }));
 }
 
@@ -427,7 +435,9 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
     const articleCodes = [...new Set(orders.map(o => o.articleCode).filter(Boolean))];
     const dimensions = await getArticleDimensions(articleCodes);
 
-    // 4. Build box list from orders (each unit = 1 box)
+    // 4. Build box list from orders
+    // CANTIDADENVASES = physical boxes, CANTIDADUNIDADES = individual items
+    // Each physical box (envase) is one 3D box in the truck
     const boxes = [];
     let boxId = 0;
     for (const order of orders) {
@@ -436,17 +446,32 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
             anchoCm: DEFAULT_BOX.ancho,
             altoCm: DEFAULT_BOX.alto,
             weightKg: DEFAULT_WEIGHT_PER_BOX,
+            unitsPerBox: 1,
             name: 'Desconocido',
         };
 
-        const qty = Math.max(1, Math.round(order.quantity));
-        for (let i = 0; i < qty; i++) {
+        // Number of physical boxes: use CANTIDADENVASES (boxes) if > 0,
+        // otherwise estimate from units / unitsPerBox
+        let numBoxes;
+        if (order.boxes > 0) {
+            numBoxes = Math.round(order.boxes);
+        } else if (order.units > 0 && dim.unitsPerBox > 1) {
+            numBoxes = Math.max(1, Math.ceil(order.units / dim.unitsPerBox));
+        } else {
+            numBoxes = 1; // at least 1 box per order line
+        }
+
+        // Weight per box: total weight of units in this line / number of boxes
+        const totalLineWeight = order.units * (dim.weightKg || DEFAULT_WEIGHT_PER_BOX);
+        const weightPerBox = numBoxes > 0 ? totalLineWeight / numBoxes : dim.weightKg;
+
+        for (let i = 0; i < numBoxes; i++) {
             boxes.push({
                 id: boxId++,
                 w: dim.largoCm,
                 d: dim.anchoCm,
                 h: dim.altoCm,
-                weight: dim.weightKg,
+                weight: weightPerBox > 0 ? weightPerBox : DEFAULT_WEIGHT_PER_BOX,
                 label: dim.name,
                 orderNumber: order.orderNumber,
                 clientCode: order.clientCode,
