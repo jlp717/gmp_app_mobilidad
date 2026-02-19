@@ -1380,7 +1380,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
       final pdfBytes = Uint8List.fromList(bytes);
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
-      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
+      // Use client name in filename if available, otherwise just number
+      final safeClientName = _selectedClientName?.replaceAll(RegExp(r'[^\w\s]+'), '') ?? 'Cliente';
+      final fileName = '${typeLabel}_${doc.number}_$safeClientName.pdf';
 
       Navigator.push(
         context,
@@ -1401,7 +1403,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         ),
       );
     } catch (e) {
-      modal.error('Error al visualizar: $e');
+      modal.error('Error al visualizar: $e', onRetry: () => _previewDocument(doc));
     }
   }
 
@@ -1428,9 +1430,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       final tempDir = await getTemporaryDirectory();
       
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
-      // Use timestamp for uniqueness
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = '${typeLabel}_${doc.serie}_${doc.number}_$timestamp.pdf';
+      final fileName = '${typeLabel}_${doc.number}_$timestamp.pdf';
       
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
@@ -1444,17 +1445,23 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       );
       
     } catch (e) {
-      modal.error('Error al descargar: $e');
+      modal.error('Error al descargar: $e', onRetry: () => _downloadDocument(doc));
     }
   }
 
   Future<void> _emailDocument(_DocumentItem doc) async {
     final isFactura = doc.type == _DocType.factura; 
     final typeLabel = isFactura ? 'Factura' : 'Albarán';
+    final clientName = _selectedClientName ?? 'Cliente';
+    
     final result = await EmailFormModal.show(
       context,
-      defaultSubject: '$typeLabel ${doc.number} - GMP',
-      defaultBody: 'Adjunto le remitimos el documento $typeLabel ${doc.number}.\n\nSaludos,\nGranja Mari Pepa',
+      defaultSubject: '$typeLabel ${doc.number} - $clientName',
+      defaultBody: 'Hola $clientName,\n\n'
+          'Adjunto le remitimos su documento $typeLabel ${doc.number}.\n\n'
+          'Gracias por confiar en nosotros.\n\n'
+          'Atentamente,\n'
+          'Granja Mari Pepa',
     );
 
     if (result == null || !mounted) return;
@@ -1478,19 +1485,21 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
       );
-      modal.success('Email enviado correctamente');
+      modal.success('✓ Email enviado correctamente');
     } catch (e) {
-      modal.error('Error enviando email: $e');
+      modal.error('Error enviando email: $e', onRetry: () => _emailDocument(doc));
     }
   }
 
   Future<void> _whatsAppDocument(_DocumentItem doc) async {
     final isFactura = doc.type == _DocType.factura;
     final typeLabel = isFactura ? 'Factura' : 'Albarán';
+    final clientName = _selectedClientName ?? 'Cliente';
     
     final result = await WhatsAppFormModal.show(
       context,
-      defaultMessage: 'Le adjunto el documento $typeLabel ${doc.number} - GMP',
+      defaultMessage: 'Hola $clientName, aquí tiene su documento $typeLabel ${doc.number}. 📄\n\n'
+          'Saludos - Granja Mari Pepa',
     );
 
     if (result == null || !mounted) return;
@@ -1514,7 +1523,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       modal.close();
 
       final tempDir = await getTemporaryDirectory();
-      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
+      final fileName = '${typeLabel}_${doc.number}.pdf';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
@@ -1525,7 +1534,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         text: result.message,
       );
     } catch (e) {
-      modal.error('Error preparando WhatsApp: $e');
+      modal.error('Error preparando WhatsApp: $e', onRetry: () => _whatsAppDocument(doc));
     }
   }
 
@@ -1551,7 +1560,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
       final tempDir = await getTemporaryDirectory();
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
-      final fileName = '${typeLabel}_${doc.serie}_${doc.number}.pdf';
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = '${typeLabel}_${doc.number}_$timestamp.pdf';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
@@ -1562,7 +1572,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         text: '$typeLabel ${doc.number} - GMP',
       );
     } catch (e) {
-      modal.error('Error al compartir: $e');
+      modal.error('Error al compartir: $e', onRetry: () => _shareSystemDocument(doc));
     }
   }
 

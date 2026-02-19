@@ -706,11 +706,13 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   Future<void> _emailFactura(Factura factura) async {
     final result = await EmailFormModal.show(
       context,
-      defaultSubject: 'Factura ${factura.numeroFormateado} - Granja Mari Pepa',
-      defaultBody: 'Estimado cliente,\n\nAdjunto le remitimos la factura '
-          '${factura.numeroFormateado} por importe de '
-          '${factura.total.toStringAsFixed(2)} €.\n\n'
-          'Gracias por su confianza.\nEquipo Granja Mari Pepa',
+      defaultSubject: 'Factura ${factura.numeroFormateado} - ${factura.clienteNombre}',
+      defaultBody: 'Hola ${factura.clienteNombre},\n\n'
+          'Adjunto le remitimos su factura ${factura.numeroFormateado} '
+          'por importe de ${factura.total.toStringAsFixed(2)} €.\n\n'
+          'Muchas gracias por su confianza.\n\n'
+          'Atentamente,\n'
+          'El equipo de Granja Mari Pepa',
     );
 
     if (result == null || !mounted) return;
@@ -735,8 +737,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   Future<void> _whatsAppFactura(Factura factura) async {
     final result = await WhatsAppFormModal.show(
       context,
-      defaultMessage: 'Le adjunto la factura ${factura.numeroFormateado} '
-          'por ${factura.total.toStringAsFixed(2)} € - Granja Mari Pepa',
+      defaultMessage: 'Hola ${factura.clienteNombre}, le adjunto su factura '
+          '${factura.numeroFormateado} (${factura.total.toStringAsFixed(2)} €). 📄\n\n'
+          'Gracias por su confianza - Granja Mari Pepa',
     );
 
     if (result == null || !mounted) return;
