@@ -64,7 +64,7 @@ router.get('/dashboard', async (req, res) => {
                 driverName: (t.NOMBRE_REPARTIDOR || '').trim(),
                 orderCount: parseInt(t.NUM_ORDENES) || 0,
                 lineCount: parseInt(t.NUM_LINEAS) || 0,
-                maxPayloadKg: parseFloat(t.CARGAMAXIMA) || 3000,
+                maxPayloadKg: parseFloat(t.CARGAMAXIMA) || 0,
                 containerVolume: parseFloat(t.CONTENEDORVOLUMEN) || 0,
                 tolerancePct: parseFloat(t.TOLERANCIA) || 5,
             })),
@@ -275,14 +275,20 @@ router.get('/personnel', async (req, res) => {
     `);
 
         // Also get all repartidores/vendedores from DSEDAC.VDD
-        const vddRows = await query(`
-      SELECT
-        TRIM(VDD.CODIGOVENDEDOR) AS CODIGO,
-        TRIM(VDD.NOMBREVENDEDOR) AS NOMBRE
-      FROM DSEDAC.VDD VDD
-      WHERE TRIM(VDD.NOMBREVENDEDOR) <> ''
-      ORDER BY VDD.NOMBREVENDEDOR
-    `);
+        let vddRows = [];
+        try {
+            vddRows = await query(`
+          SELECT
+            TRIM(VDD.CODIGOVENDEDOR) AS CODIGO,
+            TRIM(VDD.NOMBREVENDEDOR) AS NOMBRE
+          FROM DSEDAC.VDD VDD
+          WHERE TRIM(VDD.NOMBREVENDEDOR) <> ''
+          ORDER BY VDD.NOMBREVENDEDOR
+        `);
+            logger.info(`Personnel: got ${vddRows.length} VDD entries`);
+        } catch (vddErr) {
+            logger.warn(`VDD query failed (will show only custom personnel): ${vddErr.message}`);
+        }
 
         // Merge: custom personnel + VDD entries not already in custom table
         const customCodes = new Set(customRows.map(r => (r.CODIGO_VENDEDOR || '').trim()));
@@ -479,7 +485,7 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
         TRIM(LAC.CODIGOARTICULO) AS ARTICULO,
         TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE_ARTICULO,
         LAC.CANTIDADUNIDADES AS CANTIDAD,
-        LAC.CANTIDADUNIDADESPEDIDAS AS UNIDADES,
+        LAC.CANTIDADENVASES AS CAJAS,
         COALESCE(A.PESO, 0) AS PESO_UD,
         D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM
       FROM DSEDAC.OPP OPP
@@ -512,7 +518,7 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
                 clientName: (r.NOMBRE_CLIENTE || '').trim(),
                 articleCode: (r.ARTICULO || '').trim(),
                 articleName: (r.NOMBRE_ARTICULO || '').trim(),
-                quantity: parseFloat(r.CANTIDAD) || parseFloat(r.UNIDADES) || 0,
+                quantity: parseFloat(r.CANTIDAD) || parseFloat(r.CAJAS) || 0,
                 weightPerUnit: parseFloat(r.PESO_UD) || 0,
                 hasDimensions: r.LARGO_CM != null,
                 dimensions: {

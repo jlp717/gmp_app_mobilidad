@@ -139,10 +139,10 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
       TRIM(OPP.CODIGOREPARTIDOR) AS REPARTIDOR,
       TRIM(OPP.CODIGOVEHICULO) AS VEHICULO,
       OPP.DIAREPARTO, OPP.MESREPARTO, OPP.ANOREPARTO,
-      TRIM(OPP.CODIGOCLIENTE) AS CLIENTE,
+      TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
       TRIM(LAC.CODIGOARTICULO) AS ARTICULO,
       LAC.CANTIDADUNIDADES AS CANTIDAD,
-      LAC.CANTIDADUNIDADESPEDIDAS AS UNIDADES
+      LAC.CANTIDADENVASES AS CAJAS
     FROM DSEDAC.OPP OPP
     INNER JOIN DSEDAC.CPC CPC
       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
@@ -165,7 +165,7 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
         driverCode: r.REPARTIDOR,
         clientCode: (r.CLIENTE || '').trim(),
         articleCode: (r.ARTICULO || '').trim(),
-        quantity: parseFloat(r.CANTIDAD) || parseFloat(r.UNIDADES) || 1,
+        quantity: parseFloat(r.CANTIDAD) || parseFloat(r.CAJAS) || 1,
     }));
 }
 
