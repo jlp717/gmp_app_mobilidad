@@ -610,9 +610,9 @@ class RepartidorDataService {
   }) async {
     try {
       final response = await ApiClient.post('/repartidor/document/send-email', {
-        'year': year,
+        'ejercicio': year,
         'serie': serie,
-        'number': number,
+        'numero': number,
         'type': type,
         'destinatario': destinatario,
         'terminal': terminal,

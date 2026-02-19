@@ -61,7 +61,10 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
   Future<void> _writeTempFile() async {
     try {
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/${widget.fileName}');
+      // Use timestamp to prevent file locking issues on repeated opens
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final uniqueName = '${widget.fileName.replaceAll('.pdf', '')}_$timestamp.pdf';
+      final file = File('${dir.path}/$uniqueName');
       await file.writeAsBytes(widget.pdfBytes);
       if (mounted) {
         setState(() => _tempPath = file.path);
@@ -74,43 +77,21 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
   }
 
   Future<void> _downloadPdf() async {
+    if (_tempPath == null) return;
+    
     try {
-      final downloadsDir = Directory('/storage/emulated/0/Download');
-      if (!await downloadsDir.exists()) {
-        await downloadsDir.create(recursive: true);
-      }
-
-      final savedFile = File('${downloadsDir.path}/${widget.fileName}');
-      await savedFile.writeAsBytes(widget.pdfBytes);
-
-      if (mounted) {
-        HapticFeedback.lightImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 20),
-                const SizedBox(width: 10),
-                Expanded(child: Text('✓ Guardado: ${widget.fileName}')),
-              ],
-            ),
-            backgroundColor: AppTheme.success,
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: 'ABRIR',
-              textColor: Colors.white,
-              onPressed: () async {
-                await Share.shareXFiles([XFile(savedFile.path)]);
-              },
-            ),
-          ),
-        );
-      }
+      // On modern Android (11+), we cannot write directly to /storage/emulated/0/Download
+      // The best practice is to "Share" the file, which allows the user to "Save to Files"
+      // or open it in a PDF viewer that can save it.
+      await Share.shareXFiles(
+        [XFile(_tempPath!)],
+        text: 'Guardar ${widget.fileName}',
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al descargar: $e'),
+            content: Text('Error al guardar: $e'),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -123,7 +104,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       if (_tempPath == null) return;
       await Share.shareXFiles(
         [XFile(_tempPath!)],
-        text: widget.title,
+        text: '${widget.title} - ${widget.fileName}',
       );
     } catch (e) {
       if (mounted) {
