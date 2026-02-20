@@ -13,10 +13,23 @@ const { query } = require('../config/db');
 const logger = require('../middleware/logger');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DEFAULT DIMENSIONS — used when article hasn't been measured yet
+// DIMENSION ESTIMATION — estimates box size from weight when no real dims
 // ─────────────────────────────────────────────────────────────────────────────
-const DEFAULT_BOX = { largo: 40, ancho: 30, alto: 20 }; // cm — typical meat/poultry crate
 const DEFAULT_WEIGHT_PER_BOX = 8.0; // kg
+
+/**
+ * Estima dimensiones de caja basándose en el peso.
+ * Productos más pesados → cajas más grandes (proporcional).
+ */
+function estimateBoxDimensions(pesoUnidad, unidadesCaja) {
+    const pesoCaja = (pesoUnidad || 0) * Math.max(unidadesCaja || 1, 1);
+    if (pesoCaja <= 2)  return { largo: 30, ancho: 20, alto: 12 };
+    if (pesoCaja <= 5)  return { largo: 35, ancho: 25, alto: 15 };
+    if (pesoCaja <= 10) return { largo: 40, ancho: 30, alto: 18 };
+    if (pesoCaja <= 20) return { largo: 50, ancho: 35, alto: 22 };
+    if (pesoCaja <= 35) return { largo: 55, ancho: 40, alto: 25 };
+    return                { largo: 60, ancho: 40, alto: 30 };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA ACCESS
@@ -118,28 +131,35 @@ async function getArticleDimensions(articleCodes) {
     const result = {};
     for (const r of rows) {
         const hasDimensions = r.LARGO_CM != null && r.ANCHO_CM != null && r.ALTO_CM != null;
-        const weight = parseFloat(r.PESO_CAJA_KG) || parseFloat(r.PESO) || DEFAULT_WEIGHT_PER_BOX;
+        const pesoUd = parseFloat(r.PESO) || 0;
+        const udsCaja = parseInt(r.UDS_CAJA) || 1;
+        const weight = parseFloat(r.PESO_CAJA_KG) || pesoUd || DEFAULT_WEIGHT_PER_BOX;
+
+        // Use real dimensions if available, otherwise estimate from weight
+        const estimated = estimateBoxDimensions(pesoUd, udsCaja);
 
         result[r.CODE] = {
             code: r.CODE,
             name: (r.NOMBRE || '').trim(),
-            largoCm: hasDimensions ? parseFloat(r.LARGO_CM) : DEFAULT_BOX.largo,
-            anchoCm: hasDimensions ? parseFloat(r.ANCHO_CM) : DEFAULT_BOX.ancho,
-            altoCm: hasDimensions ? parseFloat(r.ALTO_CM) : DEFAULT_BOX.alto,
+            largoCm: hasDimensions ? parseFloat(r.LARGO_CM) : estimated.largo,
+            anchoCm: hasDimensions ? parseFloat(r.ANCHO_CM) : estimated.ancho,
+            altoCm: hasDimensions ? parseFloat(r.ALTO_CM) : estimated.alto,
             weightKg: weight,
-            unitsPerBox: parseInt(r.UDS_CAJA) || 1,
+            unitsPerBox: udsCaja,
             estimated: !hasDimensions,
         };
     }
 
+    // Fallback for articles not found in ART table
+    const defaultDims = estimateBoxDimensions(DEFAULT_WEIGHT_PER_BOX, 1);
     for (const code of articleCodes) {
         if (!result[code]) {
             result[code] = {
                 code,
-                name: 'Artículo desconocido',
-                largoCm: DEFAULT_BOX.largo,
-                anchoCm: DEFAULT_BOX.ancho,
-                altoCm: DEFAULT_BOX.alto,
+                name: 'Desconocido',
+                largoCm: defaultDims.largo,
+                anchoCm: defaultDims.ancho,
+                altoCm: defaultDims.alto,
                 weightKg: DEFAULT_WEIGHT_PER_BOX,
                 unitsPerBox: 1,
                 estimated: true,
@@ -476,10 +496,11 @@ async function planLoadManual(vehicleCode, items, customTolerance) {
     const boxes = [];
     let boxId = 0;
     for (const item of items) {
+        const fallbackDims = estimateBoxDimensions(item.weightKg || DEFAULT_WEIGHT_PER_BOX, 1);
         const dim = dimensions[item.articleCode] || {
-            largoCm: item.largoCm || DEFAULT_BOX.largo,
-            anchoCm: item.anchoCm || DEFAULT_BOX.ancho,
-            altoCm: item.altoCm || DEFAULT_BOX.alto,
+            largoCm: item.largoCm || fallbackDims.largo,
+            anchoCm: item.anchoCm || fallbackDims.ancho,
+            altoCm: item.altoCm || fallbackDims.alto,
             weightKg: item.weightKg || DEFAULT_WEIGHT_PER_BOX,
             name: item.label || 'Manual',
         };
