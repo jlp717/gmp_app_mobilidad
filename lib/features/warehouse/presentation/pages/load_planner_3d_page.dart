@@ -703,7 +703,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             Text(
               '${order.quantity.toStringAsFixed(order.quantity == order.quantity.roundToDouble() ? 0 : 1)} uds',
               style: TextStyle(
-                color: excluded ? Colors.white20 : AppTheme.neonGreen,
+                color: excluded ? Colors.white.withValues(alpha: 0.2) : AppTheme.neonGreen,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
