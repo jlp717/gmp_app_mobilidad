@@ -53,6 +53,7 @@ class VehicleConfig {
   final String code;
   final String description;
   final String matricula;
+  final String vehicleType; // 'TRUCK' or 'VAN'
   final double maxPayloadKg;
   final double tara;
   final double volumeM3;
@@ -67,6 +68,7 @@ class VehicleConfig {
     required this.code,
     required this.description,
     required this.matricula,
+    this.vehicleType = 'TRUCK',
     required this.maxPayloadKg,
     required this.tara,
     required this.volumeM3,
@@ -82,6 +84,7 @@ class VehicleConfig {
     code: (json['code'] as String?) ?? '',
     description: (json['description'] as String?) ?? '',
     matricula: (json['matricula'] as String?) ?? '',
+    vehicleType: (json['vehicleType'] as String?) ?? 'TRUCK',
     maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
     tara: ((json['tara'] ?? 0) as num).toDouble(),
     volumeM3: ((json['volumeM3'] ?? 0) as num).toDouble(),
@@ -173,6 +176,9 @@ class LoadMetrics {
   final double overflowWeightKg;
   final double maxPayloadKg;
   final double weightOccupancyPct;
+  final double totalDemandVolumeCm3;
+  final double totalDemandWeightKg;
+  final double demandVsCapacityPct;
   final String status; // SEGURO, OPTIMO, EXCESO
 
   LoadMetrics({
@@ -186,6 +192,9 @@ class LoadMetrics {
     required this.overflowWeightKg,
     required this.maxPayloadKg,
     required this.weightOccupancyPct,
+    required this.totalDemandVolumeCm3,
+    required this.totalDemandWeightKg,
+    required this.demandVsCapacityPct,
     required this.status,
   });
 
@@ -200,6 +209,9 @@ class LoadMetrics {
     overflowWeightKg: ((json['overflowWeightKg'] ?? 0) as num).toDouble(),
     maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
     weightOccupancyPct: ((json['weightOccupancyPct'] ?? 0) as num).toDouble(),
+    totalDemandVolumeCm3: ((json['totalDemandVolumeCm3'] ?? 0) as num).toDouble(),
+    totalDemandWeightKg: ((json['totalDemandWeightKg'] ?? 0) as num).toDouble(),
+    demandVsCapacityPct: ((json['demandVsCapacityPct'] ?? 0) as num).toDouble(),
     status: (json['status'] as String?) ?? 'SEGURO',
   );
 }
@@ -377,6 +389,20 @@ class WarehouseDataService {
       if (tolerance != null) 'tolerance': tolerance,
     });
 
+    return LoadPlanResult.fromJson(response);
+  }
+
+  /// Simulación what-if con lista manual de items
+  static Future<LoadPlanResult> planLoadManual({
+    required String vehicleCode,
+    required List<Map<String, dynamic>> items,
+    double? tolerance,
+  }) async {
+    final response = await ApiClient.post('/warehouse/load-plan-manual', {
+      'vehicleCode': vehicleCode,
+      'items': items,
+      if (tolerance != null) 'tolerance': tolerance,
+    });
     return LoadPlanResult.fromJson(response);
   }
 

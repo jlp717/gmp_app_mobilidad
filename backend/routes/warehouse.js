@@ -276,7 +276,7 @@ router.get('/personnel', async (req, res) => {
       ORDER BY NOMBRE
     `);
 
-        // Also get all repartidores/vendedores from DSEDAC.VDD
+        // Get only repartidores/drivers from VDD (people with assigned vehicles or active delivery routes)
         let vddRows = [];
         try {
             vddRows = await query(`
@@ -285,11 +285,30 @@ router.get('/personnel', async (req, res) => {
             TRIM(VDD.NOMBREVENDEDOR) AS NOMBRE
           FROM DSEDAC.VDD VDD
           WHERE TRIM(VDD.NOMBREVENDEDOR) <> ''
+            AND (
+              EXISTS (
+                SELECT 1 FROM DSEDAC.VEH V
+                WHERE TRIM(V.CODIGOCONDUCTOR) = TRIM(VDD.CODIGOVENDEDOR)
+                  AND TRIM(V.CODIGOCONDUCTOR) <> '98'
+              )
+              OR TRIM(VDD.CODIGOVENDEDOR) IN (
+                SELECT TRIM(OPP.CODIGOREPARTIDOR)
+                FROM DSEDAC.OPP OPP
+                WHERE OPP.ANOREPARTO = YEAR(CURRENT_DATE)
+                GROUP BY TRIM(OPP.CODIGOREPARTIDOR)
+                HAVING COUNT(*) >= 50
+              )
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM DSEDAC.VDDX X
+              WHERE TRIM(X.CODIGOVENDEDOR) = TRIM(VDD.CODIGOVENDEDOR)
+                AND TRIM(X.JEFEVENTASSN) = 'S'
+            )
           ORDER BY VDD.NOMBREVENDEDOR
         `);
-            logger.info(`Personnel: got ${vddRows.length} VDD entries`);
+            logger.info(`Personnel: got ${vddRows.length} repartidores from VDD`);
         } catch (vddErr) {
-            logger.warn(`VDD query failed (will show only custom personnel): ${vddErr.message}`);
+            logger.warn(`VDD repartidor query failed (will show only custom personnel): ${vddErr.message}`);
         }
 
         // Merge: custom personnel + VDD entries not already in custom table

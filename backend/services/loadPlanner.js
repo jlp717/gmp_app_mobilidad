@@ -75,10 +75,16 @@ async function getTruckConfig(vehicleCode) {
         heightCm = Math.round(widthCm * 0.8);
     }
 
+    // Determine vehicle type from description
+    const desc = (r.DESCRIPCION || '').toUpperCase();
+    const vehicleType = desc.includes('FURGONETA') || desc.includes('FURGO')
+        ? 'VAN' : 'TRUCK';
+
     return {
         code: r.CODE,
         description: (r.DESCRIPCION || '').trim(),
         matricula: (r.MATRICULA || '').trim(),
+        vehicleType,
         maxPayloadKg: maxPayload,
         tara: parseFloat(r.TARA) || 0,
         containerVolumeM3: contVolM3,
@@ -320,7 +326,10 @@ function binPack3D(boxes, container, tolerancePct = 5) {
     const containerVolume = cW * cD * cH;
     const usedVolume = placed.reduce((sum, b) => sum + (b.w * b.d * b.h), 0);
     const totalWeight = placed.reduce((sum, b) => sum + b.weight, 0);
+    const overflowVolume = overflow.reduce((sum, b) => sum + (b.w * b.d * b.h), 0);
     const overflowWeight = overflow.reduce((sum, b) => sum + b.weight, 0);
+    const totalDemandVolume = usedVolume + overflowVolume;
+    const totalDemandWeight = totalWeight + overflowWeight;
 
     return {
         placed,
@@ -335,6 +344,11 @@ function binPack3D(boxes, container, tolerancePct = 5) {
                 ? Math.round((usedVolume / containerVolume) * 10000) / 100 : 0,
             totalWeightKg: Math.round(totalWeight * 100) / 100,
             overflowWeightKg: Math.round(overflowWeight * 100) / 100,
+            // Total demand (placed + overflow) vs capacity
+            totalDemandVolumeCm3: totalDemandVolume,
+            totalDemandWeightKg: Math.round(totalDemandWeight * 100) / 100,
+            demandVsCapacityPct: containerVolume > 0
+                ? Math.round((totalDemandVolume / containerVolume) * 10000) / 100 : 0,
         },
     };
 }
