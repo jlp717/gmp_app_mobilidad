@@ -81,6 +81,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
         children: [
           _buildHeader(),
           _buildDateSelector(),
+          if (!_loading && _error == null && _trucks.isNotEmpty) _buildKpiStrip(),
           Expanded(
             child: _loading
                 ? const Center(
@@ -469,6 +470,36 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
         ),
       ],
     );
+  }
+
+  Widget _buildKpiStrip() {
+    final totalPedidos = _trucks.fold(0, (s, t) => s + t.orderCount);
+    final totalLineas = _trucks.fold(0, (s, t) => s + t.lineCount);
+    final totalCamiones = _trucks.length;
+    final totalPeso = _trucks.fold(0.0, (s, t) => s + t.maxPayloadKg);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.neonBlue.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.1))),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+        _kpiItem('$totalPedidos', 'Pedidos', AppTheme.neonBlue),
+        _kpiItem('$totalLineas', 'Lineas', AppTheme.neonPurple),
+        _kpiItem('$totalCamiones', 'Vehiculos', AppTheme.neonGreen),
+        _kpiItem('${totalPeso.toStringAsFixed(0)}', 'kg cap.', Colors.amber),
+      ]),
+    );
+  }
+
+  Widget _kpiItem(String value, String label, Color color) {
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 2),
+      Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 9)),
+    ]);
   }
 
   Widget _buildError() {

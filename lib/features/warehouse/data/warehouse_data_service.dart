@@ -336,6 +336,92 @@ class WarehousePerson {
       );
 }
 
+/// Artículo con dimensiones (reales o estimadas)
+class ArticleDimension {
+  final String code;
+  final String name;
+  final double weight;
+  final int unitsPerBox;
+  final bool hasRealDimensions;
+  final double? largoCm, anchoCm, altoCm;
+  final double? pesoOverrideKg;
+  final String notas;
+
+  ArticleDimension({
+    required this.code,
+    required this.name,
+    required this.weight,
+    required this.unitsPerBox,
+    required this.hasRealDimensions,
+    this.largoCm,
+    this.anchoCm,
+    this.altoCm,
+    this.pesoOverrideKg,
+    this.notas = '',
+  });
+
+  factory ArticleDimension.fromJson(Map<String, dynamic> json) =>
+      ArticleDimension(
+        code: (json['code'] as String?) ?? '',
+        name: (json['name'] as String?) ?? '',
+        weight: ((json['weight'] ?? 0) as num).toDouble(),
+        unitsPerBox: (json['unitsPerBox'] as int?) ?? 1,
+        hasRealDimensions: (json['hasRealDimensions'] as bool?) ?? false,
+        largoCm: (json['largoCm'] as num?)?.toDouble(),
+        anchoCm: (json['anchoCm'] as num?)?.toDouble(),
+        altoCm: (json['altoCm'] as num?)?.toDouble(),
+        pesoOverrideKg: (json['pesoOverrideKg'] as num?)?.toDouble(),
+        notas: (json['notas'] as String?) ?? '',
+      );
+}
+
+/// Entrada del historial de cargas
+class LoadHistoryEntry {
+  final int id;
+  final String vehicleCode;
+  final String date;
+  final double weightKg;
+  final double volumeCm3;
+  final double volumePct;
+  final double weightPct;
+  final int orderCount;
+  final int boxCount;
+  final String status;
+  final String createdBy;
+  final String createdAt;
+
+  LoadHistoryEntry({
+    required this.id,
+    required this.vehicleCode,
+    required this.date,
+    required this.weightKg,
+    required this.volumeCm3,
+    required this.volumePct,
+    required this.weightPct,
+    required this.orderCount,
+    required this.boxCount,
+    required this.status,
+    required this.createdBy,
+    required this.createdAt,
+  });
+
+  factory LoadHistoryEntry.fromJson(Map<String, dynamic> json) =>
+      LoadHistoryEntry(
+        id: (json['id'] as int?) ?? 0,
+        vehicleCode: (json['vehicleCode'] as String?) ?? '',
+        date: (json['date'] as String?) ?? '',
+        weightKg: ((json['weightKg'] ?? 0) as num).toDouble(),
+        volumeCm3: ((json['volumeCm3'] ?? 0) as num).toDouble(),
+        volumePct: ((json['volumePct'] ?? 0) as num).toDouble(),
+        weightPct: ((json['weightPct'] ?? 0) as num).toDouble(),
+        orderCount: (json['orderCount'] as int?) ?? 0,
+        boxCount: (json['boxCount'] as int?) ?? 0,
+        status: (json['status'] as String?) ?? '',
+        createdBy: (json['createdBy'] as String?) ?? '',
+        createdAt: (json['createdAt'] as String?) ?? '',
+      );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // DATA SERVICE
 // ═══════════════════════════════════════════════════════════════════════════
@@ -465,6 +551,85 @@ class WarehouseDataService {
       if (telefono != null) 'telefono': telefono,
       if (email != null) 'email': email,
     });
+  }
+
+  /// Actualizar operario
+  static Future<void> updatePerson({
+    required String id,
+    String? nombre,
+    String? rol,
+    String? telefono,
+    String? email,
+    bool? activo,
+  }) async {
+    await ApiClient.put('/warehouse/personnel/$id', data: {
+      if (nombre != null) 'nombre': nombre,
+      if (rol != null) 'rol': rol,
+      if (telefono != null) 'telefono': telefono,
+      if (email != null) 'email': email,
+      if (activo != null) 'activo': activo,
+    });
+  }
+
+  /// Eliminar operario (soft delete)
+  static Future<void> deletePerson(String id) async {
+    await ApiClient.post('/warehouse/personnel/$id/delete', {});
+  }
+
+  /// Artículos con dimensiones (búsqueda)
+  static Future<List<ArticleDimension>> getArticles({
+    String? search,
+    bool? onlyWithDimensions,
+    int limit = 50,
+  }) async {
+    final qp = <String, String>{'limit': limit.toString()};
+    if (search != null && search.isNotEmpty) qp['search'] = search;
+    if (onlyWithDimensions == true) qp['onlyWithDimensions'] = 'true';
+
+    final response = await ApiClient.get(
+      '/warehouse/articles',
+      queryParameters: qp,
+    );
+
+    return ((response['articles'] as List?) ?? [])
+        .map((a) => ArticleDimension.fromJson(a as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Actualizar dimensiones de artículo
+  static Future<void> updateArticleDimensions({
+    required String code,
+    required double largoCm,
+    required double anchoCm,
+    required double altoCm,
+    double? pesoCajaKg,
+    String? notas,
+  }) async {
+    await ApiClient.put('/warehouse/article-dimensions/$code', data: {
+      'largoCm': largoCm,
+      'anchoCm': anchoCm,
+      'altoCm': altoCm,
+      if (pesoCajaKg != null) 'pesoCajaKg': pesoCajaKg,
+      if (notas != null) 'notas': notas,
+    });
+  }
+
+  /// Historial de cargas
+  static Future<List<LoadHistoryEntry>> getLoadHistory({
+    String? vehicleCode,
+    int limit = 30,
+  }) async {
+    final qp = <String, String>{'limit': limit.toString()};
+    if (vehicleCode != null) qp['vehicleCode'] = vehicleCode;
+
+    final response = await ApiClient.get(
+      '/warehouse/load-history',
+      queryParameters: qp,
+    );
+
+    return ((response['history'] as List?) ?? [])
+        .map((h) => LoadHistoryEntry.fromJson(h as Map<String, dynamic>))
+        .toList();
   }
 
   /// Actualizar config camión

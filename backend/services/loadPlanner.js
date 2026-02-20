@@ -416,10 +416,11 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
     const boxes = [];
     let boxId = 0;
     for (const order of orders) {
+        const fallbackDims = estimateBoxDimensions(order.weightPerUnit || DEFAULT_WEIGHT_PER_BOX, 1);
         const dim = dimensions[order.articleCode] || {
-            largoCm: DEFAULT_BOX.largo,
-            anchoCm: DEFAULT_BOX.ancho,
-            altoCm: DEFAULT_BOX.alto,
+            largoCm: fallbackDims.largo,
+            anchoCm: fallbackDims.ancho,
+            altoCm: fallbackDims.alto,
             weightKg: DEFAULT_WEIGHT_PER_BOX,
             unitsPerBox: 1,
             name: 'Desconocido',

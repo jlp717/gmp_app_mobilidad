@@ -25,6 +25,9 @@ import '../../../repartidor/presentation/pages/repartidor_panel_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_clientes_page.dart';
 import '../../../facturas/presentation/pages/facturas_page.dart';
 import '../../../warehouse/presentation/pages/warehouse_dashboard_page.dart';
+import '../../../warehouse/presentation/pages/vehicles_page.dart';
+import '../../../warehouse/presentation/pages/articles_page.dart';
+import '../../../warehouse/presentation/pages/load_history_page.dart';
 import '../../../warehouse/presentation/pages/personnel_page.dart';
 import '../../../../core/models/user_model.dart';
 import 'dashboard_content.dart';
@@ -277,16 +280,28 @@ class _MainShellState extends State<MainShell> {
         color: AppTheme.neonBlue,
       ));
       items.add(_NavItem(
+        icon: Icons.local_shipping_outlined,
+        selectedIcon: Icons.local_shipping_rounded,
+        label: 'Vehiculos',
+        color: AppTheme.neonPurple,
+      ));
+      items.add(_NavItem(
+        icon: Icons.inventory_2_outlined,
+        selectedIcon: Icons.inventory_2_rounded,
+        label: 'Articulos',
+        color: AppTheme.neonGreen,
+      ));
+      items.add(_NavItem(
+        icon: Icons.history_outlined,
+        selectedIcon: Icons.history_rounded,
+        label: 'Historial',
+        color: Colors.amber,
+      ));
+      items.add(_NavItem(
         icon: Icons.groups_outlined,
         selectedIcon: Icons.groups_rounded,
         label: 'Personal',
         color: AppTheme.neonPurple,
-      ));
-      items.add(_NavItem(
-        icon: Icons.smart_toy_outlined,
-        selectedIcon: Icons.smart_toy,
-        label: 'Chat IA',
-        color: AppTheme.neonPink,
       ));
       return items;
     }
@@ -926,14 +941,13 @@ class _MainShellState extends State<MainShell> {
         case 0:
           return const WarehouseDashboardPage();
         case 1:
-          return const PersonnelPage();
+          return const VehiclesPage();
         case 2:
-          return const ComingSoonPlaceholder(
-            title: 'Nexus AI — Asistente de Almacén',
-            subtitle: 'Tu asistente inteligente para\nconsultar cargas, rutas y expediciones.',
-            icon: Icons.smart_toy,
-            accentColor: AppTheme.neonPink,
-          );
+          return const ArticlesPage();
+        case 3:
+          return const LoadHistoryPage();
+        case 4:
+          return const PersonnelPage();
         default:
           return const Center(child: Text('Página no encontrada'));
       }

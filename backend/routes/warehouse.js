@@ -402,6 +402,68 @@ router.put('/personnel/:id', async (req, res) => {
     }
 });
 
+/**
+ * POST /warehouse/personnel/:id/delete — Soft delete (ACTIVO = 'N')
+ */
+router.post('/personnel/:id/delete', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        await query(`UPDATE JAVIER.ALMACEN_PERSONAL SET ACTIVO = 'N', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ${id}`);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error(`Delete personnel error: ${error.message}`);
+        res.status(500).json({ error: 'Error eliminando operario', details: error.message });
+    }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ARTÍCULOS — Lista con búsqueda
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /warehouse/articles?search=&onlyWithDimensions=true&limit=50
+ */
+router.get('/articles', async (req, res) => {
+    try {
+        const { search, onlyWithDimensions, limit = 50 } = req.query;
+        let where = "TRIM(A.CODIGOARTICULO) <> '' AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)";
+        if (search) {
+            const s = search.replace(/'/g, "''").trim().toUpperCase();
+            where += ` AND (UPPER(TRIM(A.CODIGOARTICULO)) LIKE '%${s}%' OR UPPER(A.DESCRIPCIONARTICULO) LIKE '%${s}%')`;
+        }
+        if (onlyWithDimensions === 'true') {
+            where += ' AND D.CODIGOARTICULO IS NOT NULL';
+        }
+        const rows = await query(`
+            SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
+                   COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA,
+                   D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS
+            FROM DSEDAC.ART A
+            LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
+            WHERE ${where}
+            ORDER BY A.CODIGOARTICULO
+            FETCH FIRST ${parseInt(limit)} ROWS ONLY
+        `);
+        res.json({
+            articles: rows.map(r => ({
+                code: (r.CODE || '').trim(),
+                name: (r.NOMBRE || '').trim(),
+                weight: parseFloat(r.PESO) || 0,
+                unitsPerBox: parseInt(r.UNIDADESCAJA) || 1,
+                hasRealDimensions: r.LARGO_CM != null,
+                largoCm: parseFloat(r.LARGO_CM) || null,
+                anchoCm: parseFloat(r.ANCHO_CM) || null,
+                altoCm: parseFloat(r.ALTO_CM) || null,
+                pesoOverrideKg: parseFloat(r.PESO_CAJA_KG) || null,
+                notas: (r.NOTAS || '').trim(),
+            })),
+        });
+    } catch (error) {
+        logger.error(`Articles list error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo artículos', details: error.message });
+    }
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 // DIMENSIONES DE ARTÍCULOS
 // ═════════════════════════════════════════════════════════════════════════════
