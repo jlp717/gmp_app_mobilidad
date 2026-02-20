@@ -53,14 +53,10 @@ class VehicleConfig {
   final String code;
   final String description;
   final String matricula;
-  final String vehicleType; // 'TRUCK' or 'VAN'
   final double maxPayloadKg;
   final double tara;
   final double volumeM3;
   final double containerVolumeM3;
-  final String type;
-  final bool isOwned;
-  final String defaultDriver;
   final TruckInterior interior;
   final double tolerancePct;
 
@@ -68,14 +64,10 @@ class VehicleConfig {
     required this.code,
     required this.description,
     required this.matricula,
-    this.vehicleType = 'TRUCK',
     required this.maxPayloadKg,
     required this.tara,
     required this.volumeM3,
     required this.containerVolumeM3,
-    required this.type,
-    required this.isOwned,
-    required this.defaultDriver,
     required this.interior,
     required this.tolerancePct,
   });
@@ -84,14 +76,10 @@ class VehicleConfig {
     code: (json['code'] as String?) ?? '',
     description: (json['description'] as String?) ?? '',
     matricula: (json['matricula'] as String?) ?? '',
-    vehicleType: (json['vehicleType'] as String?) ?? 'TRUCK',
     maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
     tara: ((json['tara'] ?? 0) as num).toDouble(),
     volumeM3: ((json['volumeM3'] ?? 0) as num).toDouble(),
     containerVolumeM3: ((json['containerVolumeM3'] ?? 0) as num).toDouble(),
-    type: (json['type'] as String?) ?? '',
-    isOwned: (json['isOwned'] as bool?) ?? false,
-    defaultDriver: (json['defaultDriver'] as String?) ?? '',
     interior: TruckInterior.fromJson(
         (json['interior'] as Map<String, dynamic>?) ?? {}),
     tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),

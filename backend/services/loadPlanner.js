@@ -63,26 +63,28 @@ async function getTruckConfig(vehicleCode) {
     if (!rows.length) return null;
 
     const r = rows[0];
-    const contVolM3 = parseFloat(r.CONTENEDORVOLUMEN) || 1;
+    const rawContVol = parseFloat(r.CONTENEDORVOLUMEN) || 0;
 
-    // Estimate payload: CARGAMAXIMA is 0 for all trucks in this DB
-    // Use CONTENEDORVOLUMEN * 300 kg/m³ as reasonable estimate
+    // CONTENEDORVOLUMEN en DB2 a veces es m³ reales, a veces litros/1000, a veces 0.
+    // Un camión de reparto real tiene entre 10-40 m³ de carga.
+    // Si el valor es < 3 m³, es irreal → usar default de camión estándar (20 m³).
+    const contVolM3 = rawContVol >= 3 ? rawContVol : 20;
+
+    // Estimate payload: CARGAMAXIMA is 0 for most trucks in this DB
+    // Use CONTENEDORVOLUMEN * 300 kg/m³ as reasonable estimate (mixed goods density)
     const maxPayload = parseFloat(r.CARGAMAXIMA) > 0
         ? parseFloat(r.CARGAMAXIMA)
         : Math.round(contVolM3 * 300);
 
     // Interior dimensions: if ALMACEN_CAMIONES_CONFIG has custom values use them,
-    // otherwise estimate from CONTENEDORVOLUMEN (m³) with typical truck proportions
+    // otherwise estimate from CONTENEDORVOLUMEN
     let lengthCm = parseFloat(r.LARGO_CM);
     let widthCm = parseFloat(r.ANCHO_CM);
     let heightCm = parseFloat(r.ALTO_CM);
 
-    const configVolM3 = (lengthCm * widthCm * heightCm) / 1e6;
-    // If config dimensions are defaults (600x240x220=31.68m³) and don't match
-    // the real CONTENEDORVOLUMEN, estimate from CONTENEDORVOLUMEN
-    if (configVolM3 > contVolM3 * 3 || lengthCm === 0) {
+    if (lengthCm === 0 || widthCm === 0 || heightCm === 0) {
         // Estimate dimensions from volume with typical truck ratios L:W:H ≈ 2.5:1:0.8
-        const w3 = (contVolM3 * 1e6) / (2.5 * 0.8); // W³ = V / (2.5 * 0.8)
+        const w3 = (contVolM3 * 1e6) / (2.5 * 0.8);
         widthCm = Math.round(Math.cbrt(w3));
         lengthCm = Math.round(widthCm * 2.5);
         heightCm = Math.round(widthCm * 0.8);

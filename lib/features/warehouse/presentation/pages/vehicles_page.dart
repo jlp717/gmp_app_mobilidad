@@ -84,8 +84,8 @@ class _VehiclesPageState extends State<VehiclesPage> {
   }
 
   Widget _vehicleCard(VehicleConfig v) {
-    final isVan = v.vehicleType == 'VAN';
-    final typeColor = isVan ? Colors.lightBlue : Colors.amber;
+    final hasCustomInterior = v.interior.lengthCm > 0 && v.interior.widthCm > 0;
+    final accentColor = hasCustomInterior ? AppTheme.neonGreen : Colors.amber;
     final interior = v.interior;
 
     return Container(
@@ -93,32 +93,22 @@ class _VehiclesPageState extends State<VehiclesPage> {
       decoration: BoxDecoration(
         color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: typeColor.withValues(alpha: 0.1))),
+        border: Border.all(color: accentColor.withValues(alpha: 0.1))),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => _showEditDialog(v),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(children: [
-            // Vehicle icon + type badge
-            Stack(children: [
-              Container(
-                width: 48, height: 48,
-                decoration: BoxDecoration(
-                  color: typeColor.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10)),
-                child: Icon(isVan ? Icons.airport_shuttle_rounded : Icons.local_shipping_rounded,
-                    color: typeColor, size: 26),
-              ),
-              Positioned(right: 0, bottom: 0, child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: typeColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4)),
-                child: Text(isVan ? 'VAN' : 'TRUCK',
-                    style: TextStyle(color: typeColor, fontSize: 7, fontWeight: FontWeight.w800)),
-              )),
-            ]),
+            // Vehicle icon
+            Container(
+              width: 48, height: 48,
+              decoration: BoxDecoration(
+                color: AppTheme.neonBlue.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.local_shipping_rounded,
+                  color: AppTheme.neonBlue, size: 26),
+            ),
             const SizedBox(width: 12),
             // Info
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

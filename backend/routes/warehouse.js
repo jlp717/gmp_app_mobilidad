@@ -66,8 +66,8 @@ router.get('/dashboard', async (req, res) => {
                 lineCount: parseInt(t.NUM_LINEAS) || 0,
                 maxPayloadKg: parseFloat(t.CARGAMAXIMA) > 0
                     ? parseFloat(t.CARGAMAXIMA)
-                    : Math.round((parseFloat(t.CONTENEDORVOLUMEN) || 1) * 300),
-                containerVolume: parseFloat(t.CONTENEDORVOLUMEN) || 0,
+                    : Math.round(((parseFloat(t.CONTENEDORVOLUMEN) || 0) >= 3 ? parseFloat(t.CONTENEDORVOLUMEN) : 20) * 300),
+                containerVolume: (parseFloat(t.CONTENEDORVOLUMEN) || 0) >= 3 ? parseFloat(t.CONTENEDORVOLUMEN) : 20,
                 tolerancePct: parseFloat(t.TOLERANCIA) || 5,
             })),
         });
@@ -161,18 +161,15 @@ router.post('/load-plan-manual', async (req, res) => {
 router.get('/vehicles', async (req, res) => {
     try {
         const vehicles = await query(`
-      SELECT 
+      SELECT
         TRIM(V.CODIGOVEHICULO) AS CODE,
         TRIM(V.DESCRIPCIONVEHICULO) AS DESCRIPCION,
         TRIM(V.MATRICULA) AS MATRICULA,
         V.CARGAMAXIMA, V.TARA, V.VOLUMEN, V.CONTENEDORVOLUMEN,
-        TRIM(V.CODIGOTIPOVEHICULO) AS TIPO,
-        V.VEHICULOPROPIOSN AS PROPIO,
-        TRIM(V.CODIGOREPARTIDOR) AS REPARTIDOR_DEF,
         C.LARGO_INTERIOR_CM, C.ANCHO_INTERIOR_CM, C.ALTO_INTERIOR_CM,
         C.TOLERANCIA_EXCESO
       FROM DSEDAC.VEH V
-      LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C 
+      LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C
         ON TRIM(V.CODIGOVEHICULO) = C.CODIGOVEHICULO
       ORDER BY V.CODIGOVEHICULO
     `);
@@ -182,17 +179,16 @@ router.get('/vehicles', async (req, res) => {
                 code: v.CODE,
                 description: (v.DESCRIPCION || '').trim(),
                 matricula: (v.MATRICULA || '').trim(),
-                maxPayloadKg: parseFloat(v.CARGAMAXIMA) || 0,
+                maxPayloadKg: parseFloat(v.CARGAMAXIMA) > 0
+                    ? parseFloat(v.CARGAMAXIMA)
+                    : Math.round(((parseFloat(v.CONTENEDORVOLUMEN) || 0) >= 3 ? parseFloat(v.CONTENEDORVOLUMEN) : 20) * 300),
                 tara: parseFloat(v.TARA) || 0,
                 volumeM3: parseFloat(v.VOLUMEN) || 0,
-                containerVolumeM3: parseFloat(v.CONTENEDORVOLUMEN) || 0,
-                type: (v.TIPO || '').trim(),
-                isOwned: v.PROPIO === 'S',
-                defaultDriver: (v.REPARTIDOR_DEF || '').trim(),
+                containerVolumeM3: (parseFloat(v.CONTENEDORVOLUMEN) || 0) >= 3 ? parseFloat(v.CONTENEDORVOLUMEN) : 20,
                 interior: {
-                    lengthCm: parseFloat(v.LARGO_INTERIOR_CM) || 600,
-                    widthCm: parseFloat(v.ANCHO_INTERIOR_CM) || 240,
-                    heightCm: parseFloat(v.ALTO_INTERIOR_CM) || 220,
+                    lengthCm: parseFloat(v.LARGO_INTERIOR_CM) || 0,
+                    widthCm: parseFloat(v.ANCHO_INTERIOR_CM) || 0,
+                    heightCm: parseFloat(v.ALTO_INTERIOR_CM) || 0,
                 },
                 tolerancePct: parseFloat(v.TOLERANCIA_EXCESO) || 5,
             })),

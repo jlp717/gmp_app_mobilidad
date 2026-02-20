@@ -8,10 +8,30 @@ import '../../../../core/theme/app_theme.dart';
 import '../../data/warehouse_data_service.dart';
 
 // ─── Color helpers ──────────────────────────────────────────────────────────
+
+/// Paleta profesional de colores distinguibles para clientes
+const _clientPalette = <Color>[
+  Color(0xFFD4915C), // Cartón natural
+  Color(0xFF8B6F47), // Cartón oscuro
+  Color(0xFFA0522D), // Sienna
+  Color(0xFFBC8F8F), // Rosewood
+  Color(0xFF6B8E23), // Olive
+  Color(0xFF2E8B57), // Sea green
+  Color(0xFF4682B4), // Steel blue
+  Color(0xFF5F6B80), // Slate
+  Color(0xFF8B7D6B), // Driftwood
+  Color(0xFFC4A35A), // Sand
+  Color(0xFF7B68AE), // Lavanda
+  Color(0xFFB07050), // Terracotta
+  Color(0xFF6A9B7B), // Sage
+  Color(0xFF9E8C6C), // Khaki
+  Color(0xFF7B9BAE), // Fog blue
+  Color(0xFFAB7E6B), // Adobe
+];
+
 Color _clientColor(String clientCode) {
-  final hash = clientCode.hashCode.abs();
-  final hue = (hash * 47) % 360;
-  return HSLColor.fromAHSL(1, hue.toDouble(), 0.65, 0.5).toColor();
+  final idx = clientCode.hashCode.abs() % _clientPalette.length;
+  return _clientPalette[idx];
 }
 
 String _sizeLabel(double weight) {
@@ -648,7 +668,7 @@ class _OverflowGroup {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CUSTOM PAINTER — Vehiculo 3D con iluminacion y sombras
+// CUSTOM PAINTER — Camión 3D realista con iluminación avanzada
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _TruckPainter extends CustomPainter {
@@ -663,8 +683,9 @@ class _TruckPainter extends CustomPainter {
     required this.zoom, this.selectedId, required this.glow, required this.statusColor,
   });
 
-  // Light direction (normalized) for shading
-  static const _lightX = 0.3, _lightY = -0.5, _lightZ = 0.8;
+  // Iluminación: dirección de luz principal + ambiente
+  static const _lx = 0.35, _ly = -0.45, _lz = 0.82;
+  static const _ambient = 0.35;
 
   Offset _p3d(double x, double y, double z, Size s) {
     final cY = math.cos(rotX), sY2 = math.sin(rotX);
@@ -677,10 +698,9 @@ class _TruckPainter extends CustomPainter {
     return Offset(s.width / 2 + rx * sc, s.height * 0.5 + fy * sc - fz * sc);
   }
 
-  double _faceLight(double nx, double ny, double nz) {
-    // Lambert diffuse
-    final dot = nx * _lightX + ny * _lightY + nz * _lightZ;
-    return 0.3 + 0.7 * dot.clamp(0, 1);
+  double _light(double nx, double ny, double nz) {
+    final dot = nx * _lx + ny * _ly + nz * _lz;
+    return (_ambient + (1 - _ambient) * dot.clamp(0, 1));
   }
 
   @override
@@ -689,173 +709,379 @@ class _TruckPainter extends CustomPainter {
     final t = result.truck!;
     final cW = t.interior.widthCm, cD = t.interior.lengthCm, cH = t.interior.heightCm;
     final ox = -cW / 2, oy = -cD / 2, oz = -cH / 2;
-    final isVan = t.vehicleType == 'VAN';
 
-    _drawBody(canvas, size, ox, oy, oz, cW, cD, cH, isVan);
-    _drawGrid(canvas, size, ox, oy, oz, cW, cD);
+    // --- Background glow ---
+    final glowPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [statusColor.withValues(alpha: 0.04 + glow * 0.02), Colors.transparent],
+      ).createShader(Rect.fromCenter(center: Offset(size.width / 2, size.height * 0.45), width: size.width, height: size.height));
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), glowPaint);
+
+    _drawGround(canvas, size, ox, oy, oz, cW, cD);
+    _drawCargoContainer(canvas, size, ox, oy, oz, cW, cD, cH);
+    _drawCab(canvas, size, ox, oy, oz, cW, cD, cH);
     _drawWheels(canvas, size, ox, oy, oz, cW, cD, cH);
+    _drawFloorGrid(canvas, size, ox, oy, oz, cW, cD);
 
-    // Sort boxes far to near
+    // Sort boxes far to near for painter's algorithm
     final sorted = List<PlacedBox>.from(result.placed)
       ..sort((a, b) => (a.x + a.y + a.z).compareTo(b.x + b.y + b.z));
 
-    // Draw shadows first
-    for (final b in sorted) { _drawShadow(canvas, size, b, ox, oy, oz); }
-    // Then boxes
-    for (final b in sorted) { _drawBox(canvas, size, b, ox, oy, oz); }
+    for (final b in sorted) { _drawBoxShadow(canvas, size, b, ox, oy, oz); }
+    for (final b in sorted) { _drawCargoBox(canvas, size, b, ox, oy, oz); }
 
     _drawLabel(canvas, size);
   }
 
-  // ─── Vehicle body ─────────────────────────────────────────────────────
+  // ─── Suelo / Ground plane ─────────────────────────────────────────────
 
-  void _drawBody(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d, double h, bool isVan) {
-    final a = 0.05 + glow * 0.03;
-    // Cargo walls
-    _face(canvas, size, [[ox,oy,oz],[ox+w,oy,oz],[ox+w,oy+d,oz],[ox,oy+d,oz]], statusColor.withValues(alpha: a + 0.02));
-    _face(canvas, size, [[ox,oy,oz],[ox+w,oy,oz],[ox+w,oy,oz+h],[ox,oy,oz+h]], statusColor.withValues(alpha: a));
-    _face(canvas, size, [[ox,oy,oz],[ox,oy+d,oz],[ox,oy+d,oz+h],[ox,oy,oz+h]], statusColor.withValues(alpha: a * 0.6));
-    _face(canvas, size, [[ox+w,oy,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox+w,oy,oz+h]], statusColor.withValues(alpha: a * 0.6));
-    _face(canvas, size, [[ox,oy,oz+h],[ox+w,oy,oz+h],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]], statusColor.withValues(alpha: a * 0.2));
-    _edges(canvas, size, ox, oy, oz, w, d, h, statusColor.withValues(alpha: 0.15 + glow * 0.08), 1.0);
+  void _drawGround(Canvas canvas, Size size, double ox, double oy, double oz,
+      double w, double d) {
+    // Sombra del camión en el suelo
+    final zFloor = oz - 2;
+    final ext = 30.0;
+    final pts = [
+      _p3d(ox - ext, oy - ext, zFloor, size),
+      _p3d(ox + w + ext, oy - ext, zFloor, size),
+      _p3d(ox + w + ext, oy + d * 1.4, zFloor, size),
+      _p3d(ox - ext, oy + d * 1.4, zFloor, size),
+    ];
+    canvas.drawPath(_pathOf(pts), Paint()..color = Colors.black.withValues(alpha: 0.12));
+  }
 
-    // Cab
-    final cabD = d * 0.22, cabOy = oy + d, cabH = isVan ? h : h * 0.85;
-    final sr = isVan ? 0.65 : 0.55;
-    final cc = Colors.blueGrey;
-    _face(canvas, size, [[ox,cabOy,oz],[ox+w,cabOy,oz],[ox+w,cabOy,oz+cabH],[ox,cabOy,oz+cabH]], cc.withValues(alpha: 0.1));
-    _face(canvas, size, [[ox,cabOy,oz],[ox,cabOy+cabD,oz],[ox,cabOy+cabD*sr,oz+cabH],[ox,cabOy,oz+cabH]], cc.withValues(alpha: 0.07));
-    _face(canvas, size, [[ox+w,cabOy,oz],[ox+w,cabOy+cabD,oz],[ox+w,cabOy+cabD*sr,oz+cabH],[ox+w,cabOy,oz+cabH]], cc.withValues(alpha: 0.07));
-    _face(canvas, size, [[ox,cabOy+cabD,oz],[ox+w,cabOy+cabD,oz],[ox+w,cabOy+cabD*sr,oz+cabH],[ox,cabOy+cabD*sr,oz+cabH]], Colors.lightBlue.withValues(alpha: 0.07));
-    _face(canvas, size, [[ox,cabOy,oz+cabH],[ox+w,cabOy,oz+cabH],[ox+w,cabOy+cabD*sr,oz+cabH],[ox,cabOy+cabD*sr,oz+cabH]], cc.withValues(alpha: 0.05));
+  // ─── Contenedor de carga (metálico, con paneles) ──────────────────────
 
-    // Cab edges
+  void _drawCargoContainer(Canvas canvas, Size size, double ox, double oy, double oz,
+      double w, double d, double h) {
+    // Colores metálicos del contenedor
+    const metalBase = Color(0xFF3A4555); // Azul grisáceo oscuro
+    const metalLight = Color(0xFF5A6A7F);
+    const metalDark = Color(0xFF252D38);
+
+    // Piso del contenedor
+    _fillFace(canvas, size, [[ox,oy,oz],[ox+w,oy,oz],[ox+w,oy+d,oz],[ox,oy+d,oz]],
+        metalDark, _light(0, 0, -1));
+
+    // Pared trasera (fondo)
+    _fillFace(canvas, size, [[ox,oy+d,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]],
+        metalBase, _light(0, 1, 0) * 0.7);
+
+    // Pared izquierda
+    _fillFace(canvas, size, [[ox,oy,oz],[ox,oy+d,oz],[ox,oy+d,oz+h],[ox,oy,oz+h]],
+        metalBase, _light(-1, 0, 0));
+
+    // Pared derecha
+    _fillFace(canvas, size, [[ox+w,oy,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox+w,oy,oz+h]],
+        metalLight, _light(1, 0, 0));
+
+    // Techo (semi-transparente para ver dentro)
+    _fillFace(canvas, size, [[ox,oy,oz+h],[ox+w,oy,oz+h],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]],
+        metalBase, _light(0, 0, 1) * 0.3);
+
+    // Panel delimitador frontal abierto (puertas) — solo borde
+    final doorEdge = Paint()
+      ..color = const Color(0xFF8899AA).withValues(alpha: 0.4)
+      ..strokeWidth = 1.5..style = PaintingStyle.stroke;
+    final doorPts = [_p3d(ox,oy,oz,size),_p3d(ox+w,oy,oz,size),
+        _p3d(ox+w,oy,oz+h,size),_p3d(ox,oy,oz+h,size)];
+    canvas.drawPath(_pathOf(doorPts), doorEdge);
+
+    // Bordes del contenedor con brillo metálico
+    _drawContainerEdges(canvas, size, ox, oy, oz, w, d, h);
+
+    // Paneles laterales decorativos (líneas horizontales en el metal)
+    _drawPanelLines(canvas, size, ox, oy, oz, w, d, h);
+
+    // Refuerzos esquineros del contenedor
+    _drawCornerReinforcements(canvas, size, ox, oy, oz, w, d, h);
+  }
+
+  void _fillFace(Canvas canvas, Size size, List<List<double>> pts, Color base, double light) {
+    final offsets = pts.map((p) => _p3d(p[0], p[1], p[2], size)).toList();
+    final l = light.clamp(0.15, 1.0);
+    final r = (base.r * l).round().clamp(0, 255);
+    final g = (base.g * l).round().clamp(0, 255);
+    final b2 = (base.b * l).round().clamp(0, 255);
+    canvas.drawPath(_pathOf(offsets), Paint()..color = Color.fromARGB(200, r, g, b2));
+  }
+
+  void _drawContainerEdges(Canvas canvas, Size size, double ox, double oy, double oz,
+      double w, double d, double h) {
+    final edgeColor = const Color(0xFF90A0B0).withValues(alpha: 0.35);
+    final p = Paint()..color = edgeColor..strokeWidth = 1.2..style = PaintingStyle.stroke;
+    final v = [
+      _p3d(ox,oy,oz,size),_p3d(ox+w,oy,oz,size),
+      _p3d(ox+w,oy+d,oz,size),_p3d(ox,oy+d,oz,size),
+      _p3d(ox,oy,oz+h,size),_p3d(ox+w,oy,oz+h,size),
+      _p3d(ox+w,oy+d,oz+h,size),_p3d(ox,oy+d,oz+h,size),
+    ];
+    for (final e in [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]) {
+      canvas.drawLine(v[e[0]], v[e[1]], p);
+    }
+    // Borde frontal más brillante (apertura)
+    final bright = Paint()..color = const Color(0xFFB0C0D0).withValues(alpha: 0.5)..strokeWidth = 2..style = PaintingStyle.stroke;
+    canvas.drawLine(v[0], v[4], bright);
+    canvas.drawLine(v[1], v[5], bright);
+  }
+
+  void _drawPanelLines(Canvas canvas, Size size, double ox, double oy, double oz,
+      double w, double d, double h) {
+    final p = Paint()..color = Colors.white.withValues(alpha: 0.04)..strokeWidth = 0.5;
+    // Líneas horizontales en pared derecha
+    for (int i = 1; i < 4; i++) {
+      final zh = oz + h * i / 4;
+      canvas.drawLine(_p3d(ox+w, oy, zh, size), _p3d(ox+w, oy+d, zh, size), p);
+    }
+    // Líneas horizontales en pared izquierda
+    for (int i = 1; i < 4; i++) {
+      final zh = oz + h * i / 4;
+      canvas.drawLine(_p3d(ox, oy, zh, size), _p3d(ox, oy+d, zh, size), p);
+    }
+  }
+
+  void _drawCornerReinforcements(Canvas canvas, Size size, double ox, double oy, double oz,
+      double w, double d, double h) {
+    final p = Paint()..color = const Color(0xFFAABBCC).withValues(alpha: 0.15)..strokeWidth = 3..style = PaintingStyle.stroke;
+    final cornerH = h * 0.15;
+    // Esquinas frontales - refuerzo L
+    canvas.drawLine(_p3d(ox, oy, oz, size), _p3d(ox, oy, oz + cornerH, size), p);
+    canvas.drawLine(_p3d(ox+w, oy, oz, size), _p3d(ox+w, oy, oz + cornerH, size), p);
+    canvas.drawLine(_p3d(ox, oy, oz+h-cornerH, size), _p3d(ox, oy, oz+h, size), p);
+    canvas.drawLine(_p3d(ox+w, oy, oz+h-cornerH, size), _p3d(ox+w, oy, oz+h, size), p);
+  }
+
+  // ─── Cabina realista ──────────────────────────────────────────────────
+
+  void _drawCab(Canvas canvas, Size size, double ox, double oy, double oz,
+      double w, double d, double h) {
+    final cabD = d * 0.22;
+    final cabOy = oy + d;
+    final cabH = h * 0.88;
+    final slopeR = 0.55; // Inclinación del parabrisas
+
+    const cabColor = Color(0xFF2D3A4A); // Azul oscuro cabina
+    const cabLight = Color(0xFF4A5A6A);
+    const windshieldColor = Color(0xFF3A6080); // Cristal azulado
+
+    // Pared trasera cabina (conecta con contenedor)
+    _fillFace(canvas, size,
+      [[ox,cabOy,oz],[ox+w,cabOy,oz],[ox+w,cabOy,oz+cabH],[ox,cabOy,oz+cabH]],
+      cabColor, _light(0, -1, 0));
+
+    // Laterales cabina
+    _fillFace(canvas, size,
+      [[ox,cabOy,oz],[ox,cabOy+cabD,oz],[ox,cabOy+cabD*slopeR,oz+cabH],[ox,cabOy,oz+cabH]],
+      cabLight, _light(-1, 0, 0) * 0.85);
+    _fillFace(canvas, size,
+      [[ox+w,cabOy,oz],[ox+w,cabOy+cabD,oz],[ox+w,cabOy+cabD*slopeR,oz+cabH],[ox+w,cabOy,oz+cabH]],
+      cabLight, _light(1, 0, 0));
+
+    // Parabrisas (inclinado, azul cristal)
+    _fillFace(canvas, size,
+      [[ox,cabOy+cabD,oz],[ox+w,cabOy+cabD,oz],[ox+w,cabOy+cabD*slopeR,oz+cabH],[ox,cabOy+cabD*slopeR,oz+cabH]],
+      windshieldColor, _light(0, 1, 0.3));
+
+    // Reflejo en parabrisas
+    final wMid = ox + w * 0.3;
+    final wMid2 = ox + w * 0.7;
+    final reflPts = [
+      _p3d(wMid, cabOy+cabD*0.9, oz+cabH*0.2, size),
+      _p3d(wMid2, cabOy+cabD*0.9, oz+cabH*0.2, size),
+      _p3d(wMid2, cabOy+cabD*slopeR*0.85, oz+cabH*0.8, size),
+      _p3d(wMid, cabOy+cabD*slopeR*0.85, oz+cabH*0.8, size),
+    ];
+    canvas.drawPath(_pathOf(reflPts),
+        Paint()..color = Colors.white.withValues(alpha: 0.06));
+
+    // Techo cabina
+    _fillFace(canvas, size,
+      [[ox,cabOy,oz+cabH],[ox+w,cabOy,oz+cabH],[ox+w,cabOy+cabD*slopeR,oz+cabH],[ox,cabOy+cabD*slopeR,oz+cabH]],
+      cabColor, _light(0, 0, 1) * 0.8);
+
+    // Bordes cabina
+    final ep = Paint()..color = const Color(0xFF667788).withValues(alpha: 0.3)..strokeWidth = 0.8..style = PaintingStyle.stroke;
     final cv = [
       _p3d(ox,cabOy,oz,size), _p3d(ox+w,cabOy,oz,size),
       _p3d(ox+w,cabOy+cabD,oz,size), _p3d(ox,cabOy+cabD,oz,size),
       _p3d(ox,cabOy,oz+cabH,size), _p3d(ox+w,cabOy,oz+cabH,size),
-      _p3d(ox+w,cabOy+cabD*sr,oz+cabH,size), _p3d(ox,cabOy+cabD*sr,oz+cabH,size),
+      _p3d(ox+w,cabOy+cabD*slopeR,oz+cabH,size), _p3d(ox,cabOy+cabD*slopeR,oz+cabH,size),
     ];
-    final ep = Paint()..color = Colors.white.withValues(alpha: 0.08)..strokeWidth = 0.7..style = PaintingStyle.stroke;
     for (final e in [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]) {
       canvas.drawLine(cv[e[0]], cv[e[1]], ep);
     }
-  }
 
-  void _edges(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d, double h, Color c, double sw) {
-    final p = Paint()..color = c..strokeWidth = sw..style = PaintingStyle.stroke;
-    final v = [_p3d(ox,oy,oz,size),_p3d(ox+w,oy,oz,size),_p3d(ox+w,oy+d,oz,size),_p3d(ox,oy+d,oz,size),
-      _p3d(ox,oy,oz+h,size),_p3d(ox+w,oy,oz+h,size),_p3d(ox+w,oy+d,oz+h,size),_p3d(ox,oy+d,oz+h,size)];
-    for (final e in [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]) {
-      canvas.drawLine(v[e[0]], v[e[1]], p);
+    // Parachoques delantero
+    final bumperH = h * 0.08;
+    final bumperD = cabD * 0.15;
+    _fillFace(canvas, size,
+      [[ox-2,cabOy+cabD,oz],[ox+w+2,cabOy+cabD,oz],[ox+w+2,cabOy+cabD+bumperD,oz],[ox-2,cabOy+cabD+bumperD,oz]],
+      const Color(0xFF555555), _light(0, 1, 0) * 0.7);
+    _fillFace(canvas, size,
+      [[ox-2,cabOy+cabD,oz],[ox+w+2,cabOy+cabD,oz],[ox+w+2,cabOy+cabD,oz+bumperH],[ox-2,cabOy+cabD,oz+bumperH]],
+      const Color(0xFF666666), _light(0, 1, 0));
+
+    // Faros
+    final headlightSize = w * 0.12;
+    for (final hx in [ox + headlightSize * 0.5, ox + w - headlightSize * 0.5]) {
+      final hlPts = [
+        _p3d(hx - headlightSize/2, cabOy+cabD+0.5, oz+bumperH*0.3, size),
+        _p3d(hx + headlightSize/2, cabOy+cabD+0.5, oz+bumperH*0.3, size),
+        _p3d(hx + headlightSize/2, cabOy+cabD+0.5, oz+bumperH*2.5, size),
+        _p3d(hx - headlightSize/2, cabOy+cabD+0.5, oz+bumperH*2.5, size),
+      ];
+      canvas.drawPath(_pathOf(hlPts),
+          Paint()..color = const Color(0xFFFFF8E0).withValues(alpha: 0.25));
+      canvas.drawPath(_pathOf(hlPts),
+          Paint()..color = const Color(0xFFFFF0B0).withValues(alpha: 0.15)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4));
     }
   }
 
-  // ─── Wheels ───────────────────────────────────────────────────────────
+  // ─── Ruedas realistas ─────────────────────────────────────────────────
 
   void _drawWheels(Canvas canvas, Size size, double ox, double oy, double oz,
       double w, double d, double h) {
-    final r = h * 0.15;
-    final f = Paint()..color = Colors.white.withValues(alpha: 0.08);
-    final s = Paint()..color = Colors.white.withValues(alpha: 0.15)..style = PaintingStyle.stroke..strokeWidth = 0.7;
-    for (final pos in [[ox-r*0.2,oy+d*0.1],[ox+w+r*0.2,oy+d*0.1],[ox-r*0.2,oy+d*1.15],[ox+w+r*0.2,oy+d*1.15]]) {
-      final pts = List.generate(13, (i) {
-        final a = (i / 12) * 2 * math.pi;
-        return _p3d(pos[0], pos[1] + math.cos(a) * r * 0.4, oz + math.sin(a) * r, size);
+    final r = h * 0.14;
+    final tireColor = const Color(0xFF1A1A1A);
+    final rimColor = const Color(0xFF888888);
+    final hubColor = const Color(0xFFAAAAAA);
+
+    // 4 ruedas: 2 traseras + 2 delanteras
+    final wheelPositions = [
+      [ox - r * 0.15, oy + d * 0.15],  // Trasera izquierda
+      [ox + w + r * 0.15, oy + d * 0.15], // Trasera derecha
+      [ox - r * 0.15, oy + d * 1.12], // Delantera izquierda
+      [ox + w + r * 0.15, oy + d * 1.12], // Delantera derecha
+    ];
+
+    for (final pos in wheelPositions) {
+      // Neumático (elipse en perspectiva)
+      final tirePts = List.generate(17, (i) {
+        final a = (i / 16) * 2 * math.pi;
+        return _p3d(pos[0], pos[1] + math.cos(a) * r * 0.35, oz + math.sin(a) * r, size);
       });
-      final path = Path()..moveTo(pts[0].dx, pts[0].dy);
-      for (final p in pts.skip(1)) { path.lineTo(p.dx, p.dy); }
-      path.close();
-      canvas.drawPath(path, f);
-      canvas.drawPath(path, s);
+      final tirePath = Path()..moveTo(tirePts[0].dx, tirePts[0].dy);
+      for (final p in tirePts.skip(1)) { tirePath.lineTo(p.dx, p.dy); }
+      tirePath.close();
+      canvas.drawPath(tirePath, Paint()..color = tireColor.withValues(alpha: 0.7));
+      canvas.drawPath(tirePath, Paint()..color = Colors.white.withValues(alpha: 0.08)..style = PaintingStyle.stroke..strokeWidth = 0.8);
+
+      // Llanta interior
+      final rimPts = List.generate(17, (i) {
+        final a = (i / 16) * 2 * math.pi;
+        return _p3d(pos[0], pos[1] + math.cos(a) * r * 0.2, oz + math.sin(a) * r * 0.6, size);
+      });
+      final rimPath = Path()..moveTo(rimPts[0].dx, rimPts[0].dy);
+      for (final p in rimPts.skip(1)) { rimPath.lineTo(p.dx, p.dy); }
+      rimPath.close();
+      canvas.drawPath(rimPath, Paint()..color = rimColor.withValues(alpha: 0.25));
+
+      // Centro (hub)
+      final hubPts = List.generate(9, (i) {
+        final a = (i / 8) * 2 * math.pi;
+        return _p3d(pos[0], pos[1] + math.cos(a) * r * 0.08, oz + math.sin(a) * r * 0.2, size);
+      });
+      final hubPath = Path()..moveTo(hubPts[0].dx, hubPts[0].dy);
+      for (final p in hubPts.skip(1)) { hubPath.lineTo(p.dx, p.dy); }
+      hubPath.close();
+      canvas.drawPath(hubPath, Paint()..color = hubColor.withValues(alpha: 0.3));
     }
   }
 
-  // ─── Floor grid ───────────────────────────────────────────────────────
+  // ─── Suelo interior con rejilla ───────────────────────────────────────
 
-  void _drawGrid(Canvas canvas, Size size, double ox, double oy, double oz, double w, double d) {
-    final p = Paint()..color = Colors.white.withValues(alpha: 0.03)..strokeWidth = 0.4;
-    final sp = math.max(w, d) / 5;
+  void _drawFloorGrid(Canvas canvas, Size size, double ox, double oy, double oz,
+      double w, double d) {
+    final p = Paint()..color = Colors.white.withValues(alpha: 0.025)..strokeWidth = 0.3;
+    final sp = 50.0; // 50cm spacing
     for (double x = 0; x <= w; x += sp) {
-      canvas.drawLine(_p3d(ox+x,oy,oz,size), _p3d(ox+x,oy+d,oz,size), p);
+      canvas.drawLine(_p3d(ox+x, oy, oz+0.5, size), _p3d(ox+x, oy+d, oz+0.5, size), p);
     }
     for (double y = 0; y <= d; y += sp) {
-      canvas.drawLine(_p3d(ox,oy+y,oz,size), _p3d(ox+w,oy+y,oz,size), p);
+      canvas.drawLine(_p3d(ox, oy+y, oz+0.5, size), _p3d(ox+w, oy+y, oz+0.5, size), p);
     }
   }
 
-  // ─── Box shadow ───────────────────────────────────────────────────────
+  // ─── Sombra de caja en el suelo ───────────────────────────────────────
 
-  void _drawShadow(Canvas canvas, Size size, PlacedBox b, double ox, double oy, double oz) {
-    // Project box footprint onto floor (z = oz)
+  void _drawBoxShadow(Canvas canvas, Size size, PlacedBox b, double ox, double oy, double oz) {
     final pts = [
-      _p3d(ox+b.x, oy+b.y, oz, size),
-      _p3d(ox+b.x+b.w, oy+b.y, oz, size),
-      _p3d(ox+b.x+b.w, oy+b.y+b.d, oz, size),
-      _p3d(ox+b.x, oy+b.y+b.d, oz, size),
+      _p3d(ox + b.x, oy + b.y, oz, size),
+      _p3d(ox + b.x + b.w, oy + b.y, oz, size),
+      _p3d(ox + b.x + b.w, oy + b.y + b.d, oz, size),
+      _p3d(ox + b.x, oy + b.y + b.d, oz, size),
     ];
-    final path = Path()..moveTo(pts[0].dx, pts[0].dy);
-    for (final p in pts.skip(1)) { path.lineTo(p.dx, p.dy); }
-    path.close();
-    canvas.drawPath(path, Paint()..color = Colors.black.withValues(alpha: 0.15));
+    canvas.drawPath(_pathOf(pts), Paint()..color = Colors.black.withValues(alpha: 0.08));
   }
 
-  // ─── Cargo box ────────────────────────────────────────────────────────
+  // ─── Caja de carga (aspecto cartón) ───────────────────────────────────
 
-  void _drawBox(Canvas canvas, Size size, PlacedBox b, double ox, double oy, double oz) {
+  void _drawCargoBox(Canvas canvas, Size size, PlacedBox b, double ox, double oy, double oz) {
     final bx = ox + b.x, by = oy + b.y, bz = oz + b.z;
     final cc = _clientColor(b.clientCode);
     final sel = b.id == selectedId;
 
-    // Top face (normal = 0,0,1)
-    final topL = _faceLight(0, 0, 1);
+    // Cara superior
     final topPts = [_p3d(bx,by,bz+b.h,size),_p3d(bx+b.w,by,bz+b.h,size),
         _p3d(bx+b.w,by+b.d,bz+b.h,size),_p3d(bx,by+b.d,bz+b.h,size)];
-    // Front face (normal = 0,-1,0)
-    final frontL = _faceLight(0, -1, 0);
+    // Cara frontal
     final frontPts = [_p3d(bx,by,bz,size),_p3d(bx+b.w,by,bz,size),
         _p3d(bx+b.w,by,bz+b.h,size),_p3d(bx,by,bz+b.h,size)];
-    // Right face (normal = 1,0,0)
-    final rightL = _faceLight(1, 0, 0);
+    // Cara derecha
     final rightPts = [_p3d(bx+b.w,by,bz,size),_p3d(bx+b.w,by+b.d,bz,size),
         _p3d(bx+b.w,by+b.d,bz+b.h,size),_p3d(bx+b.w,by,bz+b.h,size)];
 
-    // Draw filled faces with Lambert shading
-    _drawFaceLit(canvas, topPts, cc, topL, sel ? 0.9 : 0.7);
-    _drawFaceLit(canvas, frontPts, cc, frontL, sel ? 0.9 : 0.7);
-    _drawFaceLit(canvas, rightPts, cc, rightL, sel ? 0.9 : 0.7);
+    final alpha = sel ? 0.92 : 0.82;
 
-    // Edges
+    // Caras con shading
+    _drawShadedFace(canvas, topPts, cc, _light(0, 0, 1), alpha);
+    _drawShadedFace(canvas, frontPts, cc, _light(0, -1, 0), alpha);
+    _drawShadedFace(canvas, rightPts, cc, _light(1, 0, 0), alpha);
+
+    // Línea de cinta de embalaje (tape) en la cara superior
+    if (b.w > 15 && b.d > 15) {
+      final tapeW = b.w * 0.08;
+      final tapePts = [
+        _p3d(bx + b.w/2 - tapeW/2, by, bz+b.h+0.2, size),
+        _p3d(bx + b.w/2 + tapeW/2, by, bz+b.h+0.2, size),
+        _p3d(bx + b.w/2 + tapeW/2, by+b.d, bz+b.h+0.2, size),
+        _p3d(bx + b.w/2 - tapeW/2, by+b.d, bz+b.h+0.2, size),
+      ];
+      canvas.drawPath(_pathOf(tapePts), Paint()..color = Colors.white.withValues(alpha: 0.08));
+    }
+
+    // Bordes de la caja
+    final edgeAlpha = sel ? 0.6 : 0.18;
+    final edgeColor = sel ? AppTheme.neonBlue : Colors.white;
     final ep = Paint()
-      ..color = sel ? AppTheme.neonBlue.withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.12)
-      ..strokeWidth = sel ? 1.5 : 0.5..style = PaintingStyle.stroke;
+      ..color = edgeColor.withValues(alpha: edgeAlpha)
+      ..strokeWidth = sel ? 1.5 : 0.6..style = PaintingStyle.stroke;
     canvas.drawPath(_pathOf(topPts), ep);
     canvas.drawPath(_pathOf(frontPts), ep);
     canvas.drawPath(_pathOf(rightPts), ep);
 
+    // Glow de selección
     if (sel) {
       canvas.drawPath(_pathOf(topPts), Paint()
-        ..color = AppTheme.neonBlue.withValues(alpha: 0.3 * glow)
+        ..color = AppTheme.neonBlue.withValues(alpha: 0.25 * glow)
         ..strokeWidth = 3..style = PaintingStyle.stroke
-        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 6));
+        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 5));
+      canvas.drawPath(_pathOf(frontPts), Paint()
+        ..color = AppTheme.neonBlue.withValues(alpha: 0.15 * glow)
+        ..strokeWidth = 2..style = PaintingStyle.stroke
+        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4));
     }
   }
 
-  void _drawFaceLit(Canvas canvas, List<Offset> pts, Color base, double light, double alpha) {
-    final hsl = HSLColor.fromColor(base);
-    final lit = (hsl.lightness * light).clamp(0.1, 0.8);
-    final c = hsl.withLightness(lit).toColor().withValues(alpha: alpha);
-    canvas.drawPath(_pathOf(pts), Paint()..color = c);
+  void _drawShadedFace(Canvas canvas, List<Offset> pts, Color base, double light, double alpha) {
+    final l = light.clamp(0.2, 1.0);
+    final r = (base.r * l).round().clamp(0, 255);
+    final g = (base.g * l).round().clamp(0, 255);
+    final b2 = (base.b * l).round().clamp(0, 255);
+    canvas.drawPath(_pathOf(pts), Paint()..color = Color.fromARGB((alpha * 255).round(), r, g, b2));
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────
-
-  void _face(Canvas canvas, Size size, List<List<double>> pts, Color c) {
-    final offsets = pts.map((p) => _p3d(p[0], p[1], p[2], size)).toList();
-    canvas.drawPath(_pathOf(offsets), Paint()..color = c);
-  }
 
   Path _pathOf(List<Offset> pts) {
     final p = Path()..moveTo(pts[0].dx, pts[0].dy);
@@ -869,7 +1095,7 @@ class _TruckPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(text:
         '${m.placedCount} bultos · ${m.totalWeightKg.toStringAsFixed(0)}/${m.maxPayloadKg.toStringAsFixed(0)} kg · ${t.interior.lengthCm.toInt()}x${t.interior.widthCm.toInt()}x${t.interior.heightCm.toInt()} cm',
-        style: TextStyle(color: Colors.white.withValues(alpha: 0.2), fontSize: 9)),
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.25), fontSize: 9)),
       textDirection: TextDirection.ltr)..layout();
     tp.paint(canvas, Offset(8, size.height - 16));
   }
