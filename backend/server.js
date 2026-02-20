@@ -105,7 +105,7 @@ app.use(cors({
 }));
 app.use(helmet());
 app.use(compression());
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // ==================== OPTIMIZATION MIDDLEWARE ====================
 app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers

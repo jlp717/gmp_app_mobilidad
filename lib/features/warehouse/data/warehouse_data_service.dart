@@ -256,7 +256,8 @@ class TruckOrder {
   final String clientCode;
   final String clientName;
   final int orderNumber;
-  final double quantity;
+  final double units;
+  final double boxes;
   final double weightPerUnit;
   final bool hasDimensions;
   final double largoCm;
@@ -269,13 +270,17 @@ class TruckOrder {
     required this.clientCode,
     required this.clientName,
     required this.orderNumber,
-    required this.quantity,
+    required this.units,
+    required this.boxes,
     required this.weightPerUnit,
     required this.hasDimensions,
     required this.largoCm,
     required this.anchoCm,
     required this.altoCm,
   });
+
+  /// Display quantity: boxes if available, otherwise units
+  double get quantity => boxes > 0 ? boxes : units;
 
   factory TruckOrder.fromJson(Map<String, dynamic> json) {
     final dims = (json['dimensions'] as Map<String, dynamic>?) ?? {};
@@ -285,7 +290,8 @@ class TruckOrder {
       clientCode: (json['clientCode'] as String?) ?? '',
       clientName: (json['clientName'] as String?) ?? '',
       orderNumber: (json['orderNumber'] as int?) ?? 0,
-      quantity: ((json['quantity'] ?? 0) as num).toDouble(),
+      units: ((json['units'] ?? json['quantity'] ?? 0) as num).toDouble(),
+      boxes: ((json['boxes'] ?? 0) as num).toDouble(),
       weightPerUnit: ((json['weightPerUnit'] ?? 0) as num).toDouble(),
       hasDimensions: (json['hasDimensions'] as bool?) ?? false,
       largoCm: ((dims['largoCm'] ?? 30) as num).toDouble(),
