@@ -449,7 +449,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         subtitle: Text('${c.orders.length} lineas · ${c.totalBoxes} bultos · ${c.totalWeight.toStringAsFixed(0)} kg',
             style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 10)),
         iconColor: Colors.white30,
-        collapsedIconColor: Colors.white20,
+        collapsedIconColor: Colors.white.withValues(alpha: 0.2),
         children: c.orders.map((o) => Padding(
           padding: const EdgeInsets.only(bottom: 3),
           child: Row(children: [
@@ -510,7 +510,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               // Product info
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(o.articleName.isNotEmpty ? o.articleName : o.articleCode,
-                    style: TextStyle(color: excluded ? Colors.white20 : Colors.white, fontSize: 11,
+                    style: TextStyle(color: excluded ? Colors.white.withValues(alpha: 0.2) : Colors.white, fontSize: 11,
                         fontWeight: FontWeight.w500,
                         decoration: excluded ? TextDecoration.lineThrough : null),
                     maxLines: 1, overflow: TextOverflow.ellipsis),
