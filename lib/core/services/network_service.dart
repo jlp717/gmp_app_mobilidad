@@ -15,45 +15,44 @@ class NetworkService {
   /// Lista de servidores ordenados por prioridad
   /// El sistema probará cada uno en orden hasta encontrar uno que funcione
   static final List<ServerConfig> _servers = [
-    // 1. Producción (Cloudflare Tunnel) - Máxima prioridad
+    // 1. Producción (Cloudflare Named Tunnel — dominio fijo permanente)
     ServerConfig(
-      name: 'Producción (Cloudflare)',
-      baseUrl: 'https://retailers-oct-dale-shows.trycloudflare.com/api',
+      name: 'Producción (api.mari-pepa.com)',
+      baseUrl: 'https://api.mari-pepa.com/api',
       priority: 1,
       isSecure: true,
     ),
-    
+
     // 2. Servidor LAN directo (para red local)
     ServerConfig(
       name: 'Servidor Local (LAN)',
-      baseUrl: 'http://192.168.1.238:3000/api',
+      baseUrl: 'http://192.168.1.238:3334/api',
       priority: 2,
       isSecure: false,
     ),
-    
+
     // 3. Emulador Android Studio
     ServerConfig(
       name: 'Emulador Android',
-      baseUrl: 'http://10.0.2.2:3000/api',
+      baseUrl: 'http://10.0.2.2:3334/api',
       priority: 3,
       isSecure: false,
       isEmulatorOnly: true,
     ),
-    
+
     // 4. WSA (Windows Subsystem for Android) - IP especial Hyper-V
-    // Nota: Esta IP puede variar, se detectará automáticamente
     ServerConfig(
       name: 'WSA (Windows)',
-      baseUrl: 'http://172.31.192.1:3000/api', // IP típica de vEthernet WSL
+      baseUrl: 'http://172.31.192.1:3334/api',
       priority: 4,
       isSecure: false,
       isWSAOnly: true,
     ),
-    
+
     // 5. Localhost (desarrollo local)
     ServerConfig(
       name: 'Localhost',
-      baseUrl: 'http://127.0.0.1:3000/api',
+      baseUrl: 'http://127.0.0.1:3334/api',
       priority: 5,
       isSecure: false,
     ),

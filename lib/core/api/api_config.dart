@@ -16,11 +16,11 @@ class ApiConfig {
   // -----------------------------------------------------------------------------
   // 1. DESARROLLO (WiFi Local)
   static String _developmentIp = '127.0.0.1';
-  static const int _serverPort = 3000;
+  static const int _serverPort = 3334;
 
   // -----------------------------------------------------------------------------
-  // 2. PRODUCCION (Cloudflare Tunnel)
-  static String _productionUrl = 'https://retailers-oct-dale-shows.trycloudflare.com'; 
+  // 2. PRODUCCION (Cloudflare Named Tunnel — dominio fijo permanente)
+  static String _productionUrl = 'https://api.mari-pepa.com'; 
 
   // =============================================================================
 
@@ -78,8 +78,8 @@ class ApiConfig {
   }
   
   // Alternativas para referencia
-  static const String emulatorUrl = 'http://10.0.2.2:3000/api';
-  static const String wsaUrl = 'http://172.31.192.1:3000/api';
+  static const String emulatorUrl = 'http://10.0.2.2:3334/api';
+  static const String wsaUrl = 'http://172.31.192.1:3334/api';
 
 
   // Auth Endpoints
