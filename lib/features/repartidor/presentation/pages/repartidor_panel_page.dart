@@ -147,8 +147,8 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Panel de Reparto', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                Text('Resumen de entregas y cobros', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                Text('Panel de Reparto', style: TextStyle(fontSize: Responsive.isSmall(context) ? 16 : 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                Text('Resumen de entregas y cobros', style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 12, color: AppTheme.textSecondary)),
               ],
             ),
           ),
@@ -224,63 +224,64 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
   }
 
   Widget _buildKPICards() {
-    final total = (_deliverySummary['totalAlbaranes'] as int?) ?? 0;
-    final entregados = (_deliverySummary['entregados'] as int?) ?? 0;
-    final noEntregados = (_deliverySummary['noEntregados'] as int?) ?? 0;
-    final rawPendientes = (_deliverySummary['pendientes'] as int?) ?? 0;
-    final pendientes = rawPendientes < 0 ? 0 : rawPendientes;
-    final importe = ((_deliverySummary['importeTotal'] ?? 0) as num).toDouble();
-    final pctEntrega = total > 0 ? (entregados / total * 100).clamp(0.0, 100.0) : 0.0;
+    final total = _deliverySummary['totalAlbaranes'] ?? 0;
+    final entregados = _deliverySummary['entregados'] ?? 0;
+    final noEntregados = _deliverySummary['noEntregados'] ?? 0;
+    final pendientes = _deliverySummary['pendientes'] ?? 0;
+    final importe = (_deliverySummary['importeTotal'] as num?)?.toDouble() ?? 0.0;
+    final pctEntrega = (_deliverySummary['pctEntrega'] as num?)?.toDouble() ?? 0.0;
 
-    return Column(
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
       children: [
-        Row(
-          children: [
-            Expanded(child: _kpiCard('Total Albaranes', '$total', Icons.receipt_long, AppTheme.neonBlue)),
-            const SizedBox(width: 12),
-            Expanded(child: _kpiCard('Entregados', '$entregados', Icons.check_circle, AppTheme.neonGreen)),
-            const SizedBox(width: 12),
-            Expanded(child: _kpiCard('No Entregados', '$noEntregados', Icons.cancel, AppTheme.error)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _kpiCard('Pendientes', '$pendientes', Icons.pending, Colors.orange)),
-            const SizedBox(width: 12),
-            Expanded(child: _kpiCard('% Entrega', '${pctEntrega.toStringAsFixed(1)}%', Icons.pie_chart, AppTheme.neonPurple)),
-            const SizedBox(width: 12),
-            Expanded(child: _kpiCard('Importe Total', CurrencyFormatter.format(importe), Icons.euro, AppTheme.neonBlue)),
-          ],
-        ),
+        _kpiWidget('Total Albaranes', '$total', Icons.receipt_long, AppTheme.neonBlue),
+        _kpiWidget('Entregados', '$entregados', Icons.check_circle, AppTheme.neonGreen),
+        _kpiWidget('No Entregados', '$noEntregados', Icons.cancel, AppTheme.error),
+        _kpiWidget('Pendientes', '$pendientes', Icons.pending, Colors.orange),
+        _kpiWidget('% Entrega', '${pctEntrega.toStringAsFixed(1)}%', Icons.pie_chart, AppTheme.neonPurple),
+        _kpiWidget('Importe Total', CurrencyFormatter.format(importe), Icons.euro, AppTheme.neonBlue),
       ],
     );
   }
+  }
 
-  Widget _kpiCard(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _kpiWidget(String label, String value, IconData icon, Color color) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // En móviles pequeños, queremos 2 columnas (ancho ~ 150-180)
+        // En pantallas más anchas podemos dejarlo fluir
+        final width = (MediaQuery.of(context).size.width - 44) / 2; // - padding(32) - spacing(12)
+        
+        return Container(
+          width: width > 180 ? 180 : width,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: color, size: 18),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(label, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis),
+              Row(
+                children: [
+                  Icon(icon, color: color, size: 18),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(label, style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 11, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value, style: TextStyle(fontSize: Responsive.isSmall(context) ? 18 : 20, fontWeight: FontWeight.bold, color: color)),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -300,7 +301,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             children: [
               const Icon(Icons.euro, color: AppTheme.neonGreen, size: 20),
               const SizedBox(width: 8),
-              const Text('Cobros del Mes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+              Text('Cobros del Mes', style: TextStyle(fontSize: Responsive.isSmall(context) ? 13 : 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -348,9 +349,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
     return Expanded(
       child: Column(
         children: [
-          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+          Text(value, style: TextStyle(fontSize: Responsive.isSmall(context) ? 11 : 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+          Text(label, style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, color: AppTheme.textSecondary)),
         ],
       ),
     );
@@ -386,14 +387,14 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         children: [
           const Row(
             children: [
-              Icon(Icons.bar_chart, color: AppTheme.neonBlue, size: 20),
-              SizedBox(width: 8),
-              Text('Entregas Diarias', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+              const Icon(Icons.bar_chart, color: AppTheme.neonBlue, size: 20),
+              const SizedBox(width: 8),
+              Text('Entregas Diarias', style: TextStyle(fontSize: Responsive.isSmall(context) ? 13 : 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
             ],
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 140,
+            height: Responsive.clampHeight(context, 140),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: _dailyData.map((d) {
@@ -409,7 +410,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text('${total.toInt()}', style: const TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+                        FittedBox(
+                          child: Text('${total.toInt()}', style: const TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+                        ),
                         const SizedBox(height: 2),
                         Stack(
                           alignment: Alignment.bottomCenter,
@@ -431,7 +434,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text('${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+                        FittedBox(
+                          child: Text('${day.toString().padLeft(2, '0')}/${_selectedMonth.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 8, color: AppTheme.textSecondary)),
+                        ),
                       ],
                     ),
                   ),
@@ -472,9 +477,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Row(
               children: [
-                Icon(Icons.table_chart, color: AppTheme.neonPurple, size: 20),
-                SizedBox(width: 8),
-                Text('Detalle Diario', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                const Icon(Icons.table_chart, color: AppTheme.neonPurple, size: 20),
+                const SizedBox(width: 8),
+                Text('Detalle Diario', style: TextStyle(fontSize: Responsive.isSmall(context) ? 13 : 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
               ],
             ),
           ),

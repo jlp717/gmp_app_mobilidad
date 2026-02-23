@@ -482,7 +482,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                  const SizedBox(width: 8),
                   Text(
                    'Semana $_selectedWeek ($startDay - $endDay $monthName)', 
-                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
+                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: Responsive.isSmall(context) ? 12 : 13)
                  ),
                  const SizedBox(width: 8),
                  IconButton(
@@ -500,7 +500,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                  color: AppTheme.neonPink.withOpacity(0.2),
                  borderRadius: BorderRadius.circular(12),
                ),
-               child: Text('Total: $_totalUniqueClients', style: TextStyle(color: AppTheme.neonPink, fontSize: 11, fontWeight: FontWeight.bold)),
+               child: Text('Total: $_totalUniqueClients', style: TextStyle(color: AppTheme.neonPink, fontSize: Responsive.isSmall(context) ? 10 : 11, fontWeight: FontWeight.bold)),
              ),
           ],
         ),
@@ -1473,7 +1473,10 @@ class _ClientCard extends StatelessWidget {
                     // Client name - larger
                     Text(
                       name,
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: Responsive.isSmall(context) ? 15 : 17, 
+                        fontWeight: FontWeight.bold
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1529,12 +1532,12 @@ class _ClientCard extends StatelessWidget {
                                 color: AppTheme.neonBlue.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: Text('$selectedYear', style: TextStyle(fontSize: 10, color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
+                              child: Text('$selectedYear', style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 10, color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
                             ),
                             const SizedBox(width: 4),
                             Text(
                               formatCurrency(ytdSales),
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                              style: TextStyle(fontSize: Responsive.isSmall(context) ? 13 : 14, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(width: 12),
                             // Previous Year
@@ -1545,12 +1548,12 @@ class _ClientCard extends StatelessWidget {
                                   color: Colors.grey.shade700,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: Text('${selectedYear - 1}', style: TextStyle(fontSize: 10, color: Colors.grey.shade300, fontWeight: FontWeight.bold)),
+                                child: Text('${selectedYear - 1}', style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 10, color: Colors.grey.shade300, fontWeight: FontWeight.bold)),
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 formatCurrency(ytdPrevYear),
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                                style: TextStyle(fontSize: Responsive.isSmall(context) ? 11 : 12, color: Colors.grey.shade400),
                               ),
                             ] else if (selectedYear == DateTime.now().year && DateTime.now().day <= 7 && DateTime.now().month == 1) ...[
                                const SizedBox(width: 4),

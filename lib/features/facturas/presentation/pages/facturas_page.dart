@@ -24,6 +24,7 @@ import '../../data/facturas_service.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 
 class FacturasPage extends StatefulWidget {
   const FacturasPage({Key? key}) : super(key: key);
@@ -315,7 +316,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                             factura.clienteNombre,
                             style: TextStyle(
                               fontWeight: FontWeight.w900, // MAX weight
-                              fontSize: 19, 
+                              fontSize: Responsive.isSmall(context) ? 16 : 19, 
                               color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF0D47A1), // Lighter blue in dark mode, Deep blue in light
                               letterSpacing: 0.3,
                             ),
@@ -337,7 +338,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                                   style: TextStyle(
                                     color: isDark ? Colors.white : Colors.black87,
                                     fontWeight: FontWeight.w900, // Heavy
-                                    fontSize: 16,
+                                    fontSize: Responsive.isSmall(context) ? 14 : 16,
                                   ),
                                 ),
                               ),
@@ -346,7 +347,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                                 factura.fecha,
                                 style: TextStyle(
                                   color: isDark ? Colors.white70 : Colors.grey[800],
-                                  fontSize: 14,
+                                  fontSize: Responsive.isSmall(context) ? 12 : 14,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -364,14 +365,17 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(
-                            '${factura.total.toStringAsFixed(2)} €',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900, 
-                              fontSize: 22, 
-                              color: isDark ? AppTheme.neonGreen : const Color(0xFF2E7D32), // Green
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${factura.total.toStringAsFixed(2)} €',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900, 
+                                fontSize: Responsive.isSmall(context) ? 18 : 22, 
+                                color: isDark ? AppTheme.neonGreen : const Color(0xFF2E7D32), // Green
+                              ),
+                              textAlign: TextAlign.right,
                             ),
-                            textAlign: TextAlign.right,
                           ),
                         ],
                       ),
@@ -860,29 +864,37 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     
     return Container(
       padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          _buildSummaryItem(
-            icon: Icons.receipt_long,
-            label: 'Facturas',
-            value: '${_summary!.totalFacturas}',
-            color: Colors.blue,
-          ),
-          const SizedBox(width: 8),
-          _buildSummaryItem(
-            icon: Icons.euro,
-            label: 'Total',
-            value: '${_summary!.totalImporte.toStringAsFixed(2)}€',
-            color: Colors.green,
-          ),
-          const SizedBox(width: 8),
-          _buildSummaryItem(
-            icon: Icons.percent,
-            label: 'Impuestos',
-            value: '${_summary!.totalIva.toStringAsFixed(2)}€',
-            color: Colors.orange,
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final itemWidth = (constraints.maxWidth - 16) / 3;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildSummaryItem(
+                icon: Icons.receipt_long,
+                label: 'Facturas',
+                value: '${_summary!.totalFacturas}',
+                color: Colors.blue,
+                width: itemWidth,
+              ),
+              _buildSummaryItem(
+                icon: Icons.euro,
+                label: 'Total',
+                value: '${_summary!.totalImporte.toStringAsFixed(0)}€',
+                color: Colors.green,
+                width: itemWidth,
+              ),
+              _buildSummaryItem(
+                icon: Icons.percent,
+                label: 'IVA',
+                value: '${_summary!.totalIva.toStringAsFixed(0)}€',
+                color: Colors.orange,
+                width: itemWidth,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -892,57 +904,57 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     required String label,
     required String value,
     required Color color,
+    double? width,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final small = Responsive.isSmall(context);
     
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E2746) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-          border: Border.all(
-            color: isDark ? Colors.white10 : Colors.grey.shade100,
-          ),
+    return Container(
+      width: width,
+      padding: EdgeInsets.symmetric(vertical: small ? 8 : 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E2746) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade100,
         ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 20),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: EdgeInsets.all(small ? 6 : 8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(height: 8),
-            Text(
+            child: Icon(icon, color: color, size: small ? 16 : 20),
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: small ? 14 : 16,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isDark ? Colors.white.withOpacity(0.9) : Colors.grey.shade700,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isDark ? Colors.white.withOpacity(0.9) : Colors.grey.shade700,
+                fontSize: small ? 10 : 12,
+                fontWeight: FontWeight.w500,
               ),
-          ],
-        ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
       ),
     );
   }

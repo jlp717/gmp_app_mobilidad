@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/utils/responsive.dart';
 import '../widgets/matrix_data_table.dart';
 
 /// Advanced Sales Chart that adapts to hierarchy depth
@@ -102,7 +103,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
           ),
           const SizedBox(height: 24),
           SizedBox(
-            height: 200, // Reduced slightly to avoid excessively tall cards
+            height: Responsive.scale(context, 200),
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,

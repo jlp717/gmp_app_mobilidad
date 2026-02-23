@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/utils/responsive.dart';
 import 'advanced_sales_chart.dart'; // Reuse existing bar chart
 import 'matrix_data_table.dart'; // Required for MatrixNode
 
@@ -33,7 +34,7 @@ class DashboardChartFactory extends StatelessWidget {
 
     switch (type) {
       case ChartType.pie:
-        return _buildPieChart();
+        return _buildPieChart(context);
       case ChartType.line:
          // For now fallback to bar as Line requires time-series data which MatrixNode isn't perfectly suited for without "periods"
          return _buildHorizontalBarChart();
@@ -48,12 +49,12 @@ class DashboardChartFactory extends StatelessWidget {
     }
   }
 
-  Widget _buildPieChart() {
+  Widget _buildPieChart(BuildContext context) {
     final topItems = data.take(8).toList();
     final double total = topItems.fold(0, (sum, item) => sum + item.sales);
 
     return Container(
-      height: 300,
+      height: Responsive.scale(context, 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,

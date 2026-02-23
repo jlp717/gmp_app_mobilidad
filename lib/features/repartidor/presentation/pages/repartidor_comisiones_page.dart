@@ -211,16 +211,16 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Progreso hacia Umbral 30%',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: Responsive.isSmall(context) ? 11 : 12),
                   ),
                   Text(
                     '${overallPct.toStringAsFixed(1)}% cobrado',
                     style: TextStyle(
                       color: overallPct >= 30 ? AppTheme.success : Colors.orange,
                       fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                      fontSize: Responsive.isSmall(context) ? 11 : 12,
                     ),
                   ),
                 ],
@@ -259,30 +259,33 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
   Widget _buildSummaryCards() {
     return Container(
       padding: const EdgeInsets.all(12),
-      child: Row(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
           // Total Cobrable
-          Expanded(
+          SizedBox(
+            width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 32) / 2 : 120,
             child: _buildSummaryCard(
               icon: Icons.account_balance_wallet,
-              label: 'Total Cobrable',
+              label: 'Cobrable',
               value: CurrencyFormatter.format(_totalCollectable),
               color: AppTheme.neonBlue,
             ),
           ),
-          const SizedBox(width: 8),
           // Total Cobrado
-          Expanded(
+          SizedBox(
+            width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 32) / 2 : 120,
             child: _buildSummaryCard(
               icon: Icons.payments,
-              label: 'Total Cobrado',
+              label: 'Cobrado',
               value: CurrencyFormatter.format(_totalCollected),
               color: AppTheme.neonPurple,
             ),
           ),
-          const SizedBox(width: 8),
           // Comisión Ganada
-          Expanded(
+          SizedBox(
+            width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 24) : 150,
             child: _buildSummaryCard(
               icon: Icons.emoji_events,
               label: 'Comisión Ganada',
@@ -333,7 +336,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           Text(
             value,
             style: TextStyle(
-              fontSize: isHighlighted ? 18 : 16,
+              fontSize: isHighlighted ? (Responsive.isSmall(context) ? 16 : 18) : (Responsive.isSmall(context) ? 14 : 16),
               fontWeight: FontWeight.bold,
               color: color,
             ),

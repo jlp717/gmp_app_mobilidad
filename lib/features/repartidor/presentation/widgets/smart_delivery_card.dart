@@ -177,7 +177,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 style: TextStyle(
                   color: _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: Responsive.isSmall(context) ? 10 : 12,
                 ),
               ),
             ],
@@ -212,7 +212,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                   .format(widget.albaran.importeTotal),
               style: TextStyle(
                 color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
-                fontSize: 20,
+                fontSize: Responsive.isSmall(context) ? 17 : 20,
                 fontWeight: FontWeight.bold,
                 letterSpacing: -0.5,
               ),
@@ -285,10 +285,10 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             Expanded(
               child: Text(
                 widget.albaran.nombreCliente,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w600,
-                  fontSize: 15,
+                  fontSize: Responsive.isSmall(context) ? 13 : 15,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -333,7 +333,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 '${widget.albaran.direccion}, ${widget.albaran.poblacion}',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: 12,
+                  fontSize: Responsive.isSmall(context) ? 10 : 12,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

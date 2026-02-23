@@ -19,6 +19,7 @@ import '../../../../core/widgets/async_operation_modal.dart';
 import '../../../../core/widgets/pdf_preview_screen.dart';
 import '../../../../core/widgets/email_form_modal.dart';
 import '../../../../core/widgets/whatsapp_form_modal.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../data/repartidor_data_service.dart';
 
 class RepartidorHistoricoPage extends StatefulWidget {
@@ -272,12 +273,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     children: [
                       Text(
                         _selectedClientName ?? 'Cliente',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                        style: TextStyle(fontSize: Responsive.isSmall(context) ? 14 : 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         'Cód: $_selectedClientId',
-                        style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.8)),
+                        style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 11, color: AppTheme.textSecondary.withOpacity(0.8)),
                       ),
                     ],
                   ),
@@ -552,7 +553,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       child: Column(
         children: [
           // Row 1: Year selector + Document number search
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               // Year dropdown
               Container(
@@ -591,45 +594,46 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
               // Number search
-              Expanded(
-                child: SizedBox(
-                  height: 38,
-                  child: TextField(
-                    controller: _docSearchController,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'Buscar nº documento...',
-                      hintStyle: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.5)),
-                      prefixIcon: const Icon(Icons.tag, size: 16, color: AppTheme.textSecondary),
-                      suffixIcon: _docSearchController.text.isNotEmpty
-                          ? GestureDetector(
-                              onTap: () { _docSearchController.clear(); setState(() {}); },
-                              child: const Icon(Icons.clear, size: 16, color: AppTheme.textSecondary))
-                          : null,
-                      filled: true,
-                      fillColor: AppTheme.surfaceColor,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppTheme.neonPurple, width: 1),
-                      ),
+              SizedBox(
+                height: 38,
+                width: Responsive.isSmall(context) ? double.infinity : 200,
+                child: TextField(
+                  controller: _docSearchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar nº documento...',
+                    hintStyle: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.5)),
+                    prefixIcon: const Icon(Icons.tag, size: 16, color: AppTheme.textSecondary),
+                    suffixIcon: _docSearchController.text.isNotEmpty
+                        ? GestureDetector(
+                            onTap: () { _docSearchController.clear(); setState(() {}); },
+                            child: const Icon(Icons.clear, size: 16, color: AppTheme.textSecondary))
+                        : null,
+                    filled: true,
+                    fillColor: AppTheme.surfaceColor,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppTheme.neonPurple, width: 1),
                     ),
-                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
-                    keyboardType: TextInputType.number,
                   ),
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                  keyboardType: TextInputType.number,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           // Row 2: Dropdown filters (redesigned from chips)
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
               // Date range button
-              Expanded(
+              SizedBox(
+                width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 32) : 120,
                 child: _buildFilterDropdown(
                   icon: Icons.date_range,
                   label: _dateFrom != null || _dateTo != null ? _formatDateRange() : 'Fechas',
@@ -638,141 +642,136 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   onTap: _showDateRangePicker,
                 ),
               ),
-              const SizedBox(width: 6),
               // Doc type dropdown
-              Expanded(
-                child: Container(
-                  height: 38,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: _filterDocType != null ? AppTheme.neonPurple.withOpacity(0.1) : AppTheme.surfaceColor,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: _filterDocType != null ? AppTheme.neonPurple.withOpacity(0.5) : Colors.white.withOpacity(0.1),
-                    ),
+              Container(
+                height: 38,
+                width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 44) / 2 : 110,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: _filterDocType != null ? AppTheme.neonPurple.withOpacity(0.1) : AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _filterDocType != null ? AppTheme.neonPurple.withOpacity(0.5) : Colors.white.withOpacity(0.1),
                   ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<_DocType?>(
-                      value: _filterDocType,
-                      hint: Row(
-                        children: [
-                          Icon(Icons.description, size: 14, color: AppTheme.textSecondary.withOpacity(0.6)),
-                          const SizedBox(width: 4),
-                          Text('Tipo Doc', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6))),
-                        ],
-                      ),
-                      isDense: true,
-                      isExpanded: true,
-                      dropdownColor: AppTheme.surfaceColor,
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary),
-                      items: [
-                        DropdownMenuItem<_DocType?>(
-                          value: null,
-                          child: Row(children: [
-                            Icon(Icons.all_inclusive, size: 14, color: AppTheme.textSecondary),
-                            const SizedBox(width: 4),
-                            const Text('Todos', style: TextStyle(fontSize: 11)),
-                          ]),
-                        ),
-                        DropdownMenuItem<_DocType?>(
-                          value: _DocType.factura,
-                          child: Row(children: [
-                            const Icon(Icons.receipt, size: 14, color: AppTheme.neonPurple),
-                            const SizedBox(width: 4),
-                            const Text('Facturas', style: TextStyle(fontSize: 11)),
-                          ]),
-                        ),
-                        DropdownMenuItem<_DocType?>(
-                          value: _DocType.albaran,
-                          child: Row(children: [
-                            const Icon(Icons.description, size: 14, color: AppTheme.neonBlue),
-                            const SizedBox(width: 4),
-                            const Text('Albaranes', style: TextStyle(fontSize: 11)),
-                          ]),
-                        ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<_DocType?>(
+                    value: _filterDocType,
+                    hint: Row(
+                      children: [
+                        Icon(Icons.description, size: 14, color: AppTheme.textSecondary.withOpacity(0.6)),
+                        const SizedBox(width: 4),
+                        Text('Tipo', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6))),
                       ],
-                      onChanged: (val) => setState(() => _filterDocType = val),
                     ),
+                    isDense: true,
+                    isExpanded: true,
+                    dropdownColor: AppTheme.surfaceColor,
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary),
+                    items: [
+                      DropdownMenuItem<_DocType?>(
+                        value: null,
+                        child: Row(children: [
+                          Icon(Icons.all_inclusive, size: 14, color: AppTheme.textSecondary),
+                          const SizedBox(width: 4),
+                          const Text('Todos', style: TextStyle(fontSize: 11)),
+                        ]),
+                      ),
+                      DropdownMenuItem<_DocType?>(
+                        value: _DocType.factura,
+                        child: Row(children: [
+                          const Icon(Icons.receipt, size: 14, color: AppTheme.neonPurple),
+                          const SizedBox(width: 4),
+                          const Text('Fact.', style: TextStyle(fontSize: 11)),
+                        ]),
+                      ),
+                      DropdownMenuItem<_DocType?>(
+                        value: _DocType.albaran,
+                        child: Row(children: [
+                          const Icon(Icons.description, size: 14, color: AppTheme.neonBlue),
+                          const SizedBox(width: 4),
+                          const Text('Alb.', style: TextStyle(fontSize: 11)),
+                        ]),
+                      ),
+                    ],
+                    onChanged: (val) => setState(() => _filterDocType = val),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
               // Status dropdown
-              Expanded(
-                child: Container(
-                  height: 38,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: _filterStatus != null ? _statusColor(_filterStatus).withOpacity(0.1) : AppTheme.surfaceColor,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: _filterStatus != null ? _statusColor(_filterStatus).withOpacity(0.5) : Colors.white.withOpacity(0.1),
-                    ),
+              Container(
+                height: 38,
+                width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 44) / 2 : 110,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: _filterStatus != null ? _statusColor(_filterStatus).withOpacity(0.1) : AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _filterStatus != null ? _statusColor(_filterStatus).withOpacity(0.5) : Colors.white.withOpacity(0.1),
                   ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<_DeliveryStatus?>(
-                      value: _filterStatus,
-                      hint: Row(
-                        children: [
-                          Icon(Icons.local_shipping, size: 14, color: AppTheme.textSecondary.withOpacity(0.6)),
-                          const SizedBox(width: 4),
-                          Text('Estado', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6))),
-                        ],
-                      ),
-                      isDense: true,
-                      isExpanded: true,
-                      dropdownColor: AppTheme.surfaceColor,
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary),
-                      items: [
-                        DropdownMenuItem<_DeliveryStatus?>(
-                          value: null,
-                          child: Row(children: [
-                            Icon(Icons.all_inclusive, size: 14, color: AppTheme.textSecondary),
-                            const SizedBox(width: 4),
-                            const Text('Todos', style: TextStyle(fontSize: 11)),
-                          ]),
-                        ),
-                        DropdownMenuItem<_DeliveryStatus?>(
-                          value: _DeliveryStatus.delivered,
-                          child: Row(children: [
-                            const Icon(Icons.check_circle, size: 14, color: Color(0xFF4CAF50)),
-                            const SizedBox(width: 4),
-                            const Text('Entregado', style: TextStyle(fontSize: 11)),
-                          ]),
-                        ),
-                        DropdownMenuItem<_DeliveryStatus?>(
-                          value: _DeliveryStatus.enRuta,
-                          child: Row(children: [
-                            Icon(Icons.local_shipping, size: 14, color: AppTheme.neonBlue),
-                            const SizedBox(width: 4),
-                            const Text('En Ruta', style: TextStyle(fontSize: 11)),
-                          ]),
-                        ),
-                        DropdownMenuItem<_DeliveryStatus?>(
-                          value: _DeliveryStatus.partial,
-                          child: Row(children: [
-                            const Icon(Icons.pie_chart, size: 14, color: Colors.orange),
-                            const SizedBox(width: 4),
-                            const Text('Parcial', style: TextStyle(fontSize: 11)),
-                          ]),
-                        ),
-                        DropdownMenuItem<_DeliveryStatus?>(
-                          value: _DeliveryStatus.notDelivered,
-                          child: Row(children: [
-                            Icon(Icons.cancel, size: 14, color: AppTheme.error),
-                            const SizedBox(width: 4),
-                            const Text('Pendiente', style: TextStyle(fontSize: 11)),
-                          ]),
-                        ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<_DeliveryStatus?>(
+                    value: _filterStatus,
+                    hint: Row(
+                      children: [
+                        Icon(Icons.local_shipping, size: 14, color: AppTheme.textSecondary.withOpacity(0.6)),
+                        const SizedBox(width: 4),
+                        Text('Est.', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6))),
                       ],
-                      onChanged: (val) => setState(() => _filterStatus = val),
                     ),
+                    isDense: true,
+                    isExpanded: true,
+                    dropdownColor: AppTheme.surfaceColor,
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary),
+                    items: [
+                      DropdownMenuItem<_DeliveryStatus?>(
+                        value: null,
+                        child: Row(children: [
+                          Icon(Icons.all_inclusive, size: 14, color: AppTheme.textSecondary),
+                          const SizedBox(width: 4),
+                          const Text('Todos', style: TextStyle(fontSize: 11)),
+                        ]),
+                      ),
+                      DropdownMenuItem<_DeliveryStatus?>(
+                        value: _DeliveryStatus.delivered,
+                        child: Row(children: [
+                          const Icon(Icons.check_circle, size: 14, color: Color(0xFF4CAF50)),
+                          const SizedBox(width: 4),
+                          const Text('Entreg.', style: TextStyle(fontSize: 11)),
+                        ]),
+                      ),
+                      DropdownMenuItem<_DeliveryStatus?>(
+                        value: _DeliveryStatus.enRuta,
+                        child: Row(children: [
+                          Icon(Icons.local_shipping, size: 14, color: AppTheme.neonBlue),
+                          const SizedBox(width: 4),
+                          const Text('Ruta', style: TextStyle(fontSize: 11)),
+                        ]),
+                      ),
+                      DropdownMenuItem<_DeliveryStatus?>(
+                        value: _DeliveryStatus.partial,
+                        child: Row(children: [
+                          const Icon(Icons.pie_chart, size: 14, color: Colors.orange),
+                          const SizedBox(width: 4),
+                          const Text('Parcial', style: TextStyle(fontSize: 11)),
+                        ]),
+                      ),
+                      DropdownMenuItem<_DeliveryStatus?>(
+                        value: _DeliveryStatus.notDelivered,
+                        child: Row(children: [
+                          Icon(Icons.cancel, size: 14, color: AppTheme.error),
+                          const SizedBox(width: 4),
+                          const Text('Pend.', style: TextStyle(fontSize: 11)),
+                        ]),
+                      ),
+                    ],
+                    onChanged: (val) => setState(() => _filterStatus = val),
                   ),
                 ),
               ),
               // Clear button
-              if (_hasActiveFilters) ...[
-                const SizedBox(width: 6),
+              if (_hasActiveFilters)
                 InkWell(
                   onTap: () {
                     _clearFilters();
@@ -792,7 +791,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     child: Icon(Icons.filter_alt_off, size: 16, color: AppTheme.error),
                   ),
                 ),
-              ],
             ],
           ),
         ],
@@ -1884,7 +1882,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
         ],
       ),
       content: SizedBox(
-        width: 320, height: 280,
+        width: Responsive.clampWidth(context, 320), height: Responsive.clampHeight(context, 280),
         child: _loading
             ? const Center(child: CircularProgressIndicator(color: AppTheme.neonPurple))
             : _signatureBytes != null

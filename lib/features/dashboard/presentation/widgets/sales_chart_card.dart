@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// [SalesChartCard] - Tarjeta con gráfica de ventas y unidades
 ///
@@ -89,12 +90,12 @@ class SalesChartCard extends StatelessWidget {
             // Gráfica
             if (hasData) ...[
               SizedBox(
-                height: 200,
+                height: Responsive.scale(context, 200),
                 child: _buildChart(context),
               ),
             ] else ...[
               SizedBox(
-                height: 200,
+                height: Responsive.scale(context, 200),
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,

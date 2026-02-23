@@ -476,8 +476,8 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
             ],
           ),
           const SizedBox(height: 8),
-          Text(_formatCurrency(current), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
-          Text('Objetivo Mensual: ${_formatCurrency(target)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          Text(_formatCurrency(current), style: TextStyle(fontSize: Responsive.isSmall(context) ? 22 : 28, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text('Objetivo Mensual: ${_formatCurrency(target)}', style: TextStyle(color: Colors.grey, fontSize: Responsive.isSmall(context) ? 11 : 13)),
           
           const SizedBox(height: 16),
           
@@ -577,10 +577,10 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
           ),
           const SizedBox(height: 12),
           Text(isCurrency ? _formatCurrency(current) : current.toInt().toString(), 
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+              style: TextStyle(fontSize: Responsive.isSmall(context) ? 18 : 20, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 4),
           Text('Obj: ${isCurrency ? _formatCurrency(target) : target.toInt()}', 
-              style: const TextStyle(color: Colors.grey, fontSize: 11)),
+              style: TextStyle(color: Colors.grey, fontSize: Responsive.isSmall(context) ? 10 : 11)),
           
           const SizedBox(height: 12),
           ClipRRect(
@@ -1104,9 +1104,9 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
               children: [
                 // Dynamic label based on selection
                 Text('Acumulado $year (${_selectedMonths.length} meses)',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                    style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 11, fontWeight: FontWeight.w500)),
                 Text('${_formatCurrency(ytdSales)} de ${_formatCurrency(ytdObjective)}',
-                    style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                    style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 10, color: AppTheme.textSecondary)),
               ],
             ),
           ),
@@ -1421,16 +1421,16 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('VENDIDO', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
-                      Text(_formatCurrency(current), style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: progressColor)),
+                      Text('VENDIDO', style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 9, color: AppTheme.textSecondary)),
+                      Text(_formatCurrency(current), style: TextStyle(fontSize: Responsive.isSmall(context) ? 18 : 22, fontWeight: FontWeight.bold, color: progressColor)),
                     ],
                   ),
                   const Spacer(),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('${progress.toStringAsFixed(1)}%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: progressColor)),
-                      Text('cumplido', style: TextStyle(fontSize: 9, color: AppTheme.textSecondary)),
+                      Text('${progress.toStringAsFixed(1)}%', style: TextStyle(fontSize: Responsive.isSmall(context) ? 15 : 18, fontWeight: FontWeight.bold, color: progressColor)),
+                      Text('cumplido', style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 9, color: AppTheme.textSecondary)),
                     ],
                   ),
                 ],
@@ -2286,10 +2286,10 @@ class _ObjectiveCard extends StatelessWidget {
           ),
           SizedBox(height: compact ? 6 : 10),
           
-          Text(formatValue(current), style: TextStyle(fontSize: compact ? 18 : 24, fontWeight: FontWeight.bold)),
+          Text(formatValue(current), style: TextStyle(fontSize: compact ? (Responsive.isSmall(context) ? 16 : 18) : 24, fontWeight: FontWeight.bold)),
           
           const SizedBox(height: 2),
-          Text('Objetivo: ${formatValue(target)}', style: TextStyle(fontSize: compact ? 9 : 10, color: AppTheme.textSecondary)),
+          Text('Objetivo: ${formatValue(target)}', style: TextStyle(fontSize: compact ? (Responsive.isSmall(context) ? 8 : 9) : 10, color: AppTheme.textSecondary)),
           
           if (subtitle != null) ...[
             const SizedBox(height: 2),

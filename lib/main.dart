@@ -60,10 +60,12 @@ void main() async {
   // Initialize date formatting for Spanish
   await initializeDateFormatting('es', null);
 
-  // Force landscape orientation for tablet
+  // Allow all orientations so the app works on phones and tablets
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
   ]);
 
   // Catch unhandled async errors (Dart zone)

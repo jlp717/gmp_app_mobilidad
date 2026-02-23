@@ -176,7 +176,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Clientes de Reparto', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                Text('${_clients.length} clientes', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                Text('${_clients.length} clientes', style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 12, color: AppTheme.textSecondary)),
               ],
             ),
           ),
@@ -316,29 +316,27 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                   children: [
                     Text(
                       client.name,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                      style: TextStyle(fontSize: Responsive.isSmall(context) ? 13 : 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${client.id} · ${client.address}',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                      style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 11, color: AppTheme.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Row(
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
                       children: [
                         _clientStat(Icons.receipt, '${client.totalDocuments} docs', AppTheme.neonBlue),
-                        const SizedBox(width: 12),
                         _clientStat(Icons.euro, CurrencyFormatter.format(client.totalAmount), AppTheme.neonGreen),
-                        if (client.lastVisit != null) ...[
-                          const SizedBox(width: 12),
+                        if (client.lastVisit != null)
                           _clientStat(Icons.calendar_today, client.lastVisit!, AppTheme.textSecondary),
-                        ],
-                        if (widget.isJefeMode && client.repCode != null && client.repCode!.isNotEmpty) ...[
-                          const SizedBox(width: 12),
+                        if (widget.isJefeMode && client.repCode != null && client.repCode!.isNotEmpty)
                           _clientStat(
                             Icons.local_shipping,
                             client.repName != null && client.repName!.isNotEmpty
@@ -346,7 +344,6 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                                 : 'Rep ${client.repCode!}',
                             AppTheme.neonPurple,
                           ),
-                        ],
                       ],
                     ),
                   ],

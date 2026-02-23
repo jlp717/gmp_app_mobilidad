@@ -30,6 +30,7 @@ import '../../../warehouse/presentation/pages/articles_page.dart';
 import '../../../warehouse/presentation/pages/load_history_page.dart';
 import '../../../warehouse/presentation/pages/personnel_page.dart';
 import '../../../../core/models/user_model.dart';
+import '../../../../core/utils/responsive.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -450,7 +451,7 @@ class _MainShellState extends State<MainShell> {
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              width: _isNavExpanded ? 90 : 0, 
+              width: _isNavExpanded ? (Responsive.isSmall(context) ? 60 : 90) : 0,
               child: _isNavExpanded ? Container(
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceColor,
@@ -736,16 +737,13 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _buildNavItem({
-    required _NavItem item,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
+    final isSmall = Responsive.isSmall(context);
+    
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           color: isSelected 
@@ -761,18 +759,19 @@ class _MainShellState extends State<MainShell> {
             Icon(
               isSelected ? item.selectedIcon : item.icon,
               color: isSelected ? item.color : AppTheme.textSecondary,
-              size: 24,
+              size: isSmall ? 20 : 24,
             ),
             const SizedBox(height: 4),
             Text(
               item.label,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: isSmall ? 8 : 10,
                 color: isSelected ? item.color : AppTheme.textSecondary,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
               textAlign: TextAlign.center,
               maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

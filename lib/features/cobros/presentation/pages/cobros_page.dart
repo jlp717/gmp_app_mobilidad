@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../providers/cobros_provider.dart';
 import '../../data/models/cobros_models.dart';
 import '../widgets/albaran_card.dart';
@@ -401,7 +402,7 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
               const SizedBox(height: 32),
               // Buscador de cliente
               Container(
-                width: 400,
+                width: Responsive.clampWidth(context, 400),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceColor,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// 📧 EMAIL FORM MODAL
@@ -112,7 +113,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        width: 420,
+        width: Responsive.clampWidth(context, 420),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,

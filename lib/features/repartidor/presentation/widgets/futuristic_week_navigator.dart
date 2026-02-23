@@ -206,9 +206,9 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                           const SizedBox(width: 6),
                           Text(
                             'SEMANA $weekNum',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.neonBlue,
-                              fontSize: 12,
+                              fontSize: Responsive.isSmall(context) ? 10 : 12,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 1.2,
                             ),
@@ -223,7 +223,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   weekRange,
                   style: TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: 11,
+                    fontSize: Responsive.isSmall(context) ? 9 : 11,
                   ),
                 ),
               ],
@@ -308,10 +308,10 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
               const SizedBox(width: 6),
               Text(
                 '${widget.totalClients}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.neonBlue,
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: Responsive.isSmall(context) ? 11 : 13,
                 ),
               ),
             ],
@@ -423,7 +423,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                 Text(
                   dayLetter,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: Responsive.isSmall(context) ? 8 : 10,
                     fontWeight: FontWeight.bold,
                     color: isSelected ? AppTheme.darkBase : AppTheme.textSecondary,
                   ),
@@ -433,7 +433,9 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                 Text(
                   count > 0 ? '$count' : '-',
                   style: TextStyle(
-                    fontSize: isSelected ? 18 : 16,
+                    fontSize: isSelected
+                        ? (Responsive.isSmall(context) ? 14 : 18)
+                        : (Responsive.isSmall(context) ? 12 : 16),
                     fontWeight: FontWeight.w900,
                     color: isSelected
                         ? AppTheme.darkBase

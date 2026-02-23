@@ -6,6 +6,7 @@ import 'dart:math' as math;
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/utils/responsive.dart';
 import '../widgets/role_selection_dialog.dart';
 
 /// Página de login espectacular con diseño glassmorphism y feedback intuitivo
@@ -412,8 +413,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   Widget _buildLoginCard() {
     return Container(
-      width: 400,
-      padding: const EdgeInsets.all(36),
+      width: Responsive.clampWidth(context, 400),
+      padding: EdgeInsets.all(Responsive.isSmall(context) ? 24 : 36),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         color: Colors.white.withOpacity(0.03),

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/utils/responsive.dart';
 
 class RoleSelectionDialog extends StatefulWidget {
   const RoleSelectionDialog({super.key});
@@ -17,86 +18,97 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isSmall = Responsive.isSmall(context);
+    final dialogWidth = Responsive.clampWidth(context, 420);
+
     return Dialog(
       backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isSmall ? 16 : 40,
+        vertical: isSmall ? 12 : 24,
+      ),
       child: Container(
-        padding: const EdgeInsets.all(24),
+        width: dialogWidth,
+        padding: EdgeInsets.all(isSmall ? 16 : 24),
         decoration: BoxDecoration(
           color: AppTheme.darkCard,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.white10),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Selecciona tu Rol Activo',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Selecciona tu Rol Activo',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isSmall ? 17 : 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Como Jefe de Ventas, puedes operar como Comercial o gestionar Reparto.',
-              style: TextStyle(color: Colors.white60, fontSize: 13),
-            ),
-            const SizedBox(height: 24),
-            
-            // ROLE SELECTOR
-            _buildRoleOption(
-              'COMERCIAL', 
-              Icons.shopping_bag_outlined, 
-              'Gestión de Ventas',
-              AppTheme.neonBlue
-            ),
-            const SizedBox(height: 12),
-            _buildRoleOption(
-              'REPARTIDOR', 
-              Icons.local_shipping_outlined, 
-              'Gestión de Reparto',
-              AppTheme.neonPurple
-            ),
-            const SizedBox(height: 12),
-            _buildRoleOption(
-              'ALMACEN', 
-              Icons.inventory_2_outlined, 
-              'Gestión de Almacén',
-              AppTheme.neonPink
-            ),
-            
-            // VIEW AS SELECTOR MOVED TO DASHBOARD
+              const SizedBox(height: 8),
+              const Text(
+                'Como Jefe de Ventas, puedes operar como Comercial o gestionar Reparto.',
+                style: TextStyle(color: Colors.white60, fontSize: 13),
+              ),
+              SizedBox(height: isSmall ? 16 : 24),
 
-            const SizedBox(height: 24),
-            
-            // ACTIONS
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () {
-                     // Default to Comercial if cancelled? Or allow logout?
-                     // For now just continue as default
-                     Navigator.of(context).pop();
-                     context.go('/dashboard');
-                  },
-                  child: const Text('Cancelar', style: TextStyle(color: Colors.white38)),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonGreen,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              // ROLE SELECTOR
+              _buildRoleOption(
+                'COMERCIAL',
+                Icons.shopping_bag_outlined,
+                'Gestión de Ventas',
+                AppTheme.neonBlue
+              ),
+              const SizedBox(height: 12),
+              _buildRoleOption(
+                'REPARTIDOR',
+                Icons.local_shipping_outlined,
+                'Gestión de Reparto',
+                AppTheme.neonPurple
+              ),
+              const SizedBox(height: 12),
+              _buildRoleOption(
+                'ALMACEN',
+                Icons.inventory_2_outlined,
+                'Gestión de Almacén',
+                AppTheme.neonPink
+              ),
+
+              // VIEW AS SELECTOR MOVED TO DASHBOARD
+
+              SizedBox(height: isSmall ? 16 : 24),
+
+              // ACTIONS
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                       Navigator.of(context).pop();
+                       context.go('/dashboard');
+                    },
+                    child: const Text('Cancelar', style: TextStyle(color: Colors.white38)),
                   ),
-                  onPressed: _confirmRole,
-                  child: const Text('Confirmar', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.neonGreen,
+                      foregroundColor: Colors.black,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isSmall ? 16 : 24,
+                        vertical: isSmall ? 8 : 12,
+                      ),
+                    ),
+                    onPressed: _confirmRole,
+                    child: const Text('Confirmar', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
