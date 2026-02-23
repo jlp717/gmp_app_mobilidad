@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/error_state_widget.dart';
 import '../../data/repartidor_data_service.dart';
@@ -143,7 +144,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             child: const Icon(Icons.dashboard, color: Colors.orange, size: 24),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -243,7 +244,6 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         _kpiWidget('Importe Total', CurrencyFormatter.format(importe), Icons.euro, AppTheme.neonBlue),
       ],
     );
-  }
   }
 
   Widget _kpiWidget(String label, String value, IconData icon, Color color) {
@@ -371,9 +371,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       );
     }
 
-    final maxTotal = _dailyData.fold<double>(0, (max, d) {
+    final maxTotal = _dailyData.fold<double>(0.0, (double m, d) {
       final t = ((d['total'] ?? 0) as num).toDouble();
-      return t > max ? t : max;
+      return t > m ? t : m;
     });
 
     return Container(
@@ -385,7 +385,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               const Icon(Icons.bar_chart, color: AppTheme.neonBlue, size: 20),
               const SizedBox(width: 8),
@@ -473,8 +473,8 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Row(
               children: [
                 const Icon(Icons.table_chart, color: AppTheme.neonPurple, size: 20),

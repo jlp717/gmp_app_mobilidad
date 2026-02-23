@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/repartidor_data_service.dart';
 import 'repartidor_historico_page.dart';

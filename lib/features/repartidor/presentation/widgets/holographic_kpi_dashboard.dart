@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Holographic KPI Dashboard with futuristic design
 /// Features:
@@ -390,7 +391,12 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
 
 }
 
-/// Custom painter for holographic ring progress
+class _HoloRingPainter extends CustomPainter {
+  final double progress;
+  final double scannerAngle;
+  final Color backgroundColor;
+  final Color progressColor;
+  final Color glowColor;
   final double strokeWidth;
 
   _HoloRingPainter({

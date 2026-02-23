@@ -80,6 +80,18 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
+  bool get _isRepartidorEffective {
+    final auth = context.read<AuthProvider>();
+    if (_forceRepartidorMode) return true;
+    if (_forceAlmacenMode) return false;
+    return auth.currentUser?.isRepartidor ?? false;
+  }
+
+  bool get _isAlmacenEffective {
+     if (_forceAlmacenMode) return true;
+     return false; 
+  }
+
   void _onFilterChanged() {
     if (_dashboardProvider == null) return;
     final filterProvider = context.read<FilterProvider>();
@@ -105,15 +117,6 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
-  // Helper to determine effective mode
-  bool get _isRepartidorEffective {
-     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-     final user = authProvider.currentUser;
-     if (user?.isRepartidor == true) return true; // Always true for real drivers
-     return _forceRepartidorMode; // Toggleable for Jefe
-  }
-
-  bool get _isAlmacenEffective => _forceAlmacenMode;
 
   void _checkForUpdates() {
     final auth = context.read<AuthProvider>();
@@ -737,6 +740,11 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  Widget _buildNavItem({
+    required _NavItem item,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     final isSmall = Responsive.isSmall(context);
     
     return GestureDetector(
@@ -836,6 +844,7 @@ class _MainShellState extends State<MainShell> {
       ),
     );
   }
+
 
   Widget _buildCollapseButton() {
     return InkWell(

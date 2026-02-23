@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
@@ -1186,19 +1187,19 @@ class _CommissionsPageState extends State<CommissionsPage> {
                          gradient: LinearGradient(
                            colors: [AppTheme.neonGreen.withOpacity(0.2), AppTheme.success.withOpacity(0.1)],
                          ),
-                         borderRadius: BorderRadius.circular(12),
-                         border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
-                       ),
-                       child: Column(
-                         crossAxisAlignment: CrossAxisAlignment.start,
-                         children: [
-                           const Row(
-                             children: [
-                                Icon(Icons.trending_up, color: AppTheme.neonGreen, size: 16),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.trending_up, color: AppTheme.neonGreen, size: 16),
                                 const SizedBox(width: 6),
                                 Text('COMISIÓN PROV.', style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 11, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
-                             ],
-                           ),
+                              ],
+                            ),
                             const SizedBox(height: 8),
                             Text(CurrencyFormatter.format(totalProvisionalCommission),
                                 style: TextStyle(fontSize: Responsive.isSmall(context) ? 14 : 18, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),

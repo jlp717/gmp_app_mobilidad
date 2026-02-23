@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/error_state_widget.dart';
