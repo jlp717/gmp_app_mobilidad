@@ -237,6 +237,11 @@ async function startServer() {
     logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
     logger.info('═'.repeat(60));
 
+    // Signal PM2 that we are ready
+    if (process.send) {
+      process.send('ready');
+    }
+
     // Start System Preload (Cache Warmup)
     preloadCache(PORT).catch(err => logger.warn(`Preload error: ${err.message}`));
     loadMetadataCache().catch(err => logger.warn(`Metadata cache error: ${err.message}`));
