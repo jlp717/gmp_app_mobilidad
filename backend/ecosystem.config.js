@@ -19,17 +19,17 @@ module.exports = {
             // ==================== ENVIRONMENT ====================
             env: {
                 NODE_ENV: 'production',
-                PORT: 3001,
+                PORT: 3334,
                 USE_TS_ROUTES: 'false',
             },
             env_production: {
                 NODE_ENV: 'production',
-                PORT: 3001,
+                PORT: 3334,
                 USE_TS_ROUTES: 'false',
             },
             env_ts: {
                 NODE_ENV: 'production',
-                PORT: 3001,
+                PORT: 3334,
                 USE_TS_ROUTES: 'false', // Reverted TS routes for stability
             },
 

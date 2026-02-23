@@ -16,7 +16,7 @@ class ApiConfig {
   // -----------------------------------------------------------------------------
   // 1. DESARROLLO (WiFi Local)
   static String _developmentIp = '127.0.0.1';
-  static const int _serverPort = 3001;
+  static const int _serverPort = 3334;
 
   // -----------------------------------------------------------------------------
   // 2. PRODUCCION (Cloudflare Named Tunnel — dominio fijo permanente)
@@ -80,8 +80,8 @@ class ApiConfig {
   }
   
   // Alternativas para referencia
-  static const String emulatorUrl = 'http://10.0.2.2:3001/api';
-  static const String wsaUrl = 'http://172.31.192.1:3001/api';
+  static const String emulatorUrl = 'http://10.0.2.2:3334/api';
+  static const String wsaUrl = 'http://172.31.192.1:3334/api';
 
 
   // Auth Endpoints
