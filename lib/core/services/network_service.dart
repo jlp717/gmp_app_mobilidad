@@ -26,7 +26,7 @@ class NetworkService {
     // 2. Servidor LAN directo (para red local)
     ServerConfig(
       name: 'Servidor Local (LAN)',
-      baseUrl: 'http://192.168.1.238:3334/api',
+      baseUrl: 'http://192.168.1.238:3001/api',
       priority: 2,
       isSecure: false,
     ),
@@ -34,7 +34,7 @@ class NetworkService {
     // 3. Emulador Android Studio
     ServerConfig(
       name: 'Emulador Android',
-      baseUrl: 'http://10.0.2.2:3334/api',
+      baseUrl: 'http://10.0.2.2:3001/api',
       priority: 3,
       isSecure: false,
       isEmulatorOnly: true,
@@ -43,7 +43,7 @@ class NetworkService {
     // 4. WSA (Windows Subsystem for Android) - IP especial Hyper-V
     ServerConfig(
       name: 'WSA (Windows)',
-      baseUrl: 'http://172.31.192.1:3334/api',
+      baseUrl: 'http://172.31.192.1:3001/api',
       priority: 4,
       isSecure: false,
       isWSAOnly: true,
@@ -52,7 +52,7 @@ class NetworkService {
     // 5. Localhost (desarrollo local)
     ServerConfig(
       name: 'Localhost',
-      baseUrl: 'http://127.0.0.1:3334/api',
+      baseUrl: 'http://127.0.0.1:3001/api',
       priority: 5,
       isSecure: false,
     ),

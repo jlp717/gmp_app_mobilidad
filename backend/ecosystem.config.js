@@ -13,24 +13,24 @@ module.exports = {
             cwd: __dirname,
 
             // ==================== CLUSTERING ====================
-            instances: 'max', // Use all available CPU cores
-            exec_mode: 'cluster', // Enable cluster mode
+            instances: 1, // Fork mode for better stability
+            exec_mode: 'fork',
 
             // ==================== ENVIRONMENT ====================
             env: {
-                NODE_ENV: 'development',
-                PORT: 3334,
+                NODE_ENV: 'production',
+                PORT: 3001,
                 USE_TS_ROUTES: 'false',
             },
             env_production: {
                 NODE_ENV: 'production',
-                PORT: 3334,
+                PORT: 3001,
                 USE_TS_ROUTES: 'false',
             },
             env_ts: {
                 NODE_ENV: 'production',
-                PORT: 3334,
-                USE_TS_ROUTES: 'true',
+                PORT: 3001,
+                USE_TS_ROUTES: 'false', // Reverted TS routes for stability
             },
 
             // ==================== MEMORY & RESTART ====================

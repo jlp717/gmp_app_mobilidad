@@ -16,7 +16,7 @@ class ApiConfig {
   // -----------------------------------------------------------------------------
   // 1. DESARROLLO (WiFi Local)
   static String _developmentIp = '127.0.0.1';
-  static const int _serverPort = 3334;
+  static const int _serverPort = 3001;
 
   // -----------------------------------------------------------------------------
   // 2. PRODUCCION (Cloudflare Named Tunnel — dominio fijo permanente)
@@ -31,6 +31,8 @@ class ApiConfig {
   static Future<void> initialize() async {
     if (_currentEnvironment == ApiEnvironment.autoDetect) {
       await NetworkService.initialize();
+      // LOG CRÍTICO para ver qué servidor se detectó en la tablet
+      print('🚀 [ApiConfig] SERVIDOR DETECTADO: ${NetworkService.activeBaseUrl}');
     }
   }
 
@@ -78,8 +80,8 @@ class ApiConfig {
   }
   
   // Alternativas para referencia
-  static const String emulatorUrl = 'http://10.0.2.2:3334/api';
-  static const String wsaUrl = 'http://172.31.192.1:3334/api';
+  static const String emulatorUrl = 'http://10.0.2.2:3001/api';
+  static const String wsaUrl = 'http://172.31.192.1:3001/api';
 
 
   // Auth Endpoints
