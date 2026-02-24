@@ -89,7 +89,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   repartidorRoutes = require('./routes/repartidor');
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
-  warehouseRoutes = require('./routes/warehouse');
+  // warehouseRoutes = require('./routes/warehouse');
 }
 
 const app = express();
@@ -179,7 +179,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/repartidor', repartidorRoutes);
   app.use('/api/logs', userActionsRoutes);
   app.use('/api/facturas', facturasRoutes);
-  app.use('/api/warehouse', warehouseRoutes);
+  // app.use('/api/warehouse', warehouseRoutes);
 }
 
 // Start server
