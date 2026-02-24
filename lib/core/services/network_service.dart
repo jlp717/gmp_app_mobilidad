@@ -15,22 +15,22 @@ class NetworkService {
   /// Lista de servidores ordenados por prioridad
   /// El sistema probará cada uno en orden hasta encontrar uno que funcione
   static final List<ServerConfig> _servers = [
-    // 1. PRE via Cloudflare Tunnel (acceso desde cualquier red)
+    // 1. Producción (Cloudflare Named Tunnel — dominio fijo permanente)
     ServerConfig(
-      name: 'PRE (Cloudflare)',
-      baseUrl: 'https://delight-intersection-farm-assuming.trycloudflare.com/api',
+      name: 'Producción (api.mari-pepa.com)',
+      baseUrl: 'https://api.mari-pepa.com/api',
       priority: 1,
       isSecure: true,
     ),
 
-    // 2. Servidor LAN directo - PRE (port 3002, nueva lógica R1_T8CDVD)
+    // 2. Servidor LAN directo (para red local)
     ServerConfig(
-      name: 'Servidor PRE (LAN)',
-      baseUrl: 'http://192.168.1.230:3002/api',
+      name: 'Servidor Local (LAN)',
+      baseUrl: 'http://192.168.1.238:3002/api',
       priority: 2,
       isSecure: false,
     ),
-    
+
     // 3. Emulador Android Studio
     ServerConfig(
       name: 'Emulador Android',
@@ -39,7 +39,7 @@ class NetworkService {
       isSecure: false,
       isEmulatorOnly: true,
     ),
-    
+
     // 4. WSA (Windows Subsystem for Android) - IP especial Hyper-V
     ServerConfig(
       name: 'WSA (Windows)',
@@ -48,7 +48,7 @@ class NetworkService {
       isSecure: false,
       isWSAOnly: true,
     ),
-    
+
     // 5. Localhost (desarrollo local)
     ServerConfig(
       name: 'Localhost',

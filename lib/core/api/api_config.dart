@@ -18,8 +18,9 @@ class ApiConfig {
   static String _developmentIp = '127.0.0.1';
   static const int _serverPort = 3002;
 
-  // -----------------------------------------------------------------------------\n  // 2. PRE-PRODUCCION (Cloudflare Tunnel → port 3002, nueva lógica R1_T8CDVD)
-  static String _productionUrl = 'https://delight-intersection-farm-assuming.trycloudflare.com'; 
+  // -----------------------------------------------------------------------------
+  // 2. PRODUCCION (Cloudflare Named Tunnel — dominio fijo permanente)
+  static String _productionUrl = 'https://api.mari-pepa.com'; 
 
   // =============================================================================
 
@@ -30,6 +31,8 @@ class ApiConfig {
   static Future<void> initialize() async {
     if (_currentEnvironment == ApiEnvironment.autoDetect) {
       await NetworkService.initialize();
+      // LOG CRÍTICO para ver qué servidor se detectó en la tablet
+      print('🚀 [ApiConfig] SERVIDOR DETECTADO: ${NetworkService.activeBaseUrl}');
     }
   }
 

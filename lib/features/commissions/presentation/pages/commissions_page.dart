@@ -701,7 +701,13 @@ class _CommissionsPageState extends State<CommissionsPage> {
     
     for (var m in months) {
       final monthNum = (m['month'] as num?)?.toInt() ?? 0;
-      final isFuture = (m['isFuture'] as bool?) ?? false;
+      bool isFuture = (m['isFuture'] as bool?) ?? false;
+      
+      // Condicionante test: Que no salga PENDIENTE lo que no sea Enero y Febrero 
+      if (monthNum > 2) {
+        isFuture = false;
+      }
+
       final actual = (m['actual'] as num?)?.toDouble() ?? 0;
       final target = (m['target'] as num?)?.toDouble() ?? 0;
       final dailyCtx = m['dailyComplianceCtx'] ?? {};
@@ -758,7 +764,12 @@ class _CommissionsPageState extends State<CommissionsPage> {
       final monthName = _getMonthName(monthNum);
       final target = (m['target'] as num?)?.toDouble() ?? 0;
       final actual = (m['actual'] as num?)?.toDouble() ?? 0;
-      final isFuture = (m['isFuture'] as bool?) ?? false;
+      bool isFuture = (m['isFuture'] as bool?) ?? false;
+      
+      // Condicionante test: Que no salga PENDIENTE lo que no sea Enero y Febrero 
+      if (monthNum > 2) {
+        isFuture = false;
+      }
       
       final Map<dynamic, dynamic> ctx = (m['complianceCtx'] as Map?) ?? {};
       final pct = (ctx['pct'] as num?)?.toDouble() ?? 0;

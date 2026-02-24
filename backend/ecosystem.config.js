@@ -13,12 +13,12 @@ module.exports = {
             cwd: __dirname,
 
             // ==================== CLUSTERING ====================
-            instances: 'max', // Use all available CPU cores
-            exec_mode: 'cluster', // Enable cluster mode
+            instances: 1, // Fork mode for better stability
+            exec_mode: 'fork',
 
             // ==================== ENVIRONMENT ====================
             env: {
-                NODE_ENV: 'development',
+                NODE_ENV: 'production',
                 PORT: 3334,
                 USE_TS_ROUTES: 'false',
             },
@@ -30,7 +30,7 @@ module.exports = {
             env_ts: {
                 NODE_ENV: 'production',
                 PORT: 3334,
-                USE_TS_ROUTES: 'true',
+                USE_TS_ROUTES: 'false', // Reverted TS routes for stability
             },
 
             // ==================== MEMORY & RESTART ====================
@@ -74,40 +74,6 @@ module.exports = {
             // ==================== CRON RESTART ====================
             // Restart every day at 4 AM to clear memory
             cron_restart: '0 4 * * *',
-        },
-
-        // ==================== OPTIMIZATION SCRIPTS ====================
-        {
-            name: 'gmp-api-pre',
-            script: 'server.js',
-            cwd: __dirname,
-
-            // PRE: Single instance (fork) for testing
-            instances: 1,
-            exec_mode: 'fork',
-
-            // PRE environment: R1_T8CDVD logic + port 3002
-            env: {
-                NODE_ENV: 'production',
-                PORT: 3002,
-                USE_TS_ROUTES: 'false',
-                VENDOR_COLUMN: 'R1_T8CDVD',
-            },
-
-            max_memory_restart: '512M',
-            min_uptime: '10s',
-            max_restarts: 5,
-            restart_delay: 4000,
-
-            log_file: './logs/pre-combined.log',
-            out_file: './logs/pre-out.log',
-            error_file: './logs/pre-error.log',
-            log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-            merge_logs: true,
-
-            watch: false,
-            autorestart: true,
-            source_map_support: true,
         },
 
         // ==================== OPTIMIZATION SCRIPTS ====================
