@@ -84,9 +84,10 @@ class _GlobalVendorSelectorState extends State<GlobalVendorSelector> {
             _vendedores.any((v) => v['code'].toString() == selectedVendor);
             
         final currentValue = isValidSelection ? selectedVendor : null;
+        final bool isCompact = Responsive.isLandscapeCompact(context);
 
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: isCompact ? 2 : 8),
           color: AppTheme.surfaceColor,
           child: Row(
             children: [

@@ -45,18 +45,22 @@ class Responsive {
   // Landscape scaling multiplier
   // ---------------------------------------------------------------------------
 
+  /// True when device is in landscape orientation AND vertical space is very limited (< 500px).
+  /// This is used to aggressively hide or shrink non-essential UI elements to maximize list visibility.
+  static bool isLandscapeCompact(BuildContext ctx) {
+    if (!isLandscape(ctx)) return false;
+    return MediaQuery.of(ctx).size.height < 500;
+  }
+
   /// Returns a shrinking factor when a horizontal device has a very small height.
   /// Phones in landscape have little vertical space (< 500px), so we shrink everything.
   static double landscapeScale(BuildContext ctx) {
-    if (!isLandscape(ctx)) return 1.0;
+    if (!isLandscapeCompact(ctx)) return 1.0;
     
     final h = MediaQuery.of(ctx).size.height;
-    // If the height is comfortable (e.g. tablet landscape), no scaling
-    if (h >= 600) return 1.0;
-    
-    // For heights between 300 and 600, return a value between 0.6 and 1.0
+    // For heights between 250 and 500, return a value between 0.5 and 0.95
     // This aggressively shrinks fonts, paddings, and headers so users can see more data.
-    return (0.6 + ((h - 300) / 300) * 0.4).clamp(0.6, 1.0);
+    return (0.5 + ((h - 250) / 250) * 0.45).clamp(0.5, 0.95);
   }
 
   // ---------------------------------------------------------------------------

@@ -176,70 +176,73 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
         mainAxisSize: MainAxisSize.min,
         children: [
           // Editable Notes Banner (if exists)
-          if (editableNotes != null && editableNotes['text'] != null && (editableNotes['text'] as String).isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.warning.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning.withOpacity(0.5)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          editableNotes['text'] as String,
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
-                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 18, color: AppTheme.warning),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _showEditNotesDialog(code, editableNotes['text'] as String?),
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
-            // Show add notes button if no notes
-            InkWell(
-              onTap: () => _showEditNotesDialog(code, null),
-              child: Container(
+          // Editable Notes Banner (if exists and not compact landscape)
+          if (!Responsive.isLandscapeCompact(context)) ...[
+            if (editableNotes != null && editableNotes['text'] != null && (editableNotes['text'] as String).isNotEmpty) ...[
+              Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.1),
+                  color: AppTheme.warning.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                  border: Border.all(color: AppTheme.warning.withOpacity(0.5)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
-                    const SizedBox(width: 6),
-                    const Text('Añadir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                    const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            editableNotes['text'] as String,
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
+                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit, size: 18, color: AppTheme.warning),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _showEditNotesDialog(code, editableNotes['text'] as String?),
+                    ),
                   ],
                 ),
               ),
-            ),
+            ] else ...[
+              // Show add notes button if no notes
+              InkWell(
+                onTap: () => _showEditNotesDialog(code, null),
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonBlue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
+                      const SizedBox(width: 6),
+                      const Text('Añadir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
           
           Row(
@@ -264,10 +267,13 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                       overflow: TextOverflow.ellipsis
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      'Cód: $code ${nif.isNotEmpty ? ' • NIF: $nif' : ''}', 
-                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)
-                    ),
+                    if (!Responsive.isLandscapeCompact(context))
+                      Text(
+                        'Cód: $code ${nif.isNotEmpty ? ' • NIF: $nif' : ''}', 
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)
+                      )
+                    else
+                      Text('Cód: $code', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
@@ -290,7 +296,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 ),
             ],
           ),
-          if (address.isNotEmpty || city.isNotEmpty) ...[
+          if (!Responsive.isLandscapeCompact(context) && (address.isNotEmpty || city.isNotEmpty)) ...[
             const SizedBox(height: 4),
             Row(
               children: [

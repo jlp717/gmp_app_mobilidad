@@ -1123,7 +1123,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
              ),
            
            // === SUMMARY CARDS ===
-           if (!_isLoading && _error == null && !isInformative) ...[
+           if (!Responsive.isLandscapeCompact(context) && !_isLoading && _error == null && !isInformative) ...[
              Container(
                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                child: Row(

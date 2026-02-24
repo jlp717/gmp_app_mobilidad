@@ -275,20 +275,21 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
           padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
           child: Column(
             children: [
-              Row(
-                children: [
-                  Icon(Icons.people, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 22, desktop: 28)),
-                  const SizedBox(width: 12),
-                  Text('Clientes', style: Theme.of(context).textTheme.headlineMedium),
-                  const Spacer(),
-                  Text(
-                    '${_clients.length} clientes',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.textSecondary,
+              if (!Responsive.isLandscapeCompact(context))
+                Row(
+                  children: [
+                    Icon(Icons.people, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 22, desktop: 28)),
+                    const SizedBox(width: 12),
+                    Text('Clientes', style: Theme.of(context).textTheme.headlineMedium),
+                    const Spacer(),
+                    Text(
+                      '${_clients.length} clientes',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
               if (widget.isJefeVentas) ...[
                  const SizedBox(height: 12),
                  GlobalVendorSelector(

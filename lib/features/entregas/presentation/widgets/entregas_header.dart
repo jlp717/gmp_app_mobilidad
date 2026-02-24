@@ -92,68 +92,71 @@ class EntregasHeader extends StatelessWidget {
                 ],
               ),
               
-              SizedBox(height: 20 * Responsive.landscapeScale(context)),
-              
-              // Stats cards
-              Row(
-                children: [
-                  _buildStatCard(
-                    context,
-                    icon: Icons.pending_actions,
-                    label: 'Pendientes',
-                    value: '$pendientes',
-                    color: Colors.orange,
-                  ),
-                  const SizedBox(width: 12),
-                  _buildStatCard(
-                    context,
-                    icon: Icons.check_circle,
-                    label: 'Entregados',
-                    value: '$entregados',
-                    color: Colors.green,
-                  ),
-                  const SizedBox(width: 12),
-                  _buildStatCard(
-                    context,
-                    icon: Icons.euro,
-                    label: 'CTR',
-                    value: '${importeCTR.toStringAsFixed(0)}€',
-                    color: Colors.amber,
-                  ),
-                ],
-              ),
-              
-              SizedBox(height: 16 * Responsive.landscapeScale(context)),
-              
-              // Barra de progreso
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Progreso del día',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                      Text(
-                        '$entregados de $total completados',
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8 * Responsive.landscapeScale(context)),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(
-                      value: provider.progresoTotal,
-                      backgroundColor: Colors.white24,
-                      valueColor: const AlwaysStoppedAnimation(Colors.white),
-                      minHeight: 8,
+              // Muestra estadísticas y progreso solo si NO estamos en vista horizontal compacta
+              if (!Responsive.isLandscapeCompact(context)) ...[
+                SizedBox(height: 20 * Responsive.landscapeScale(context)),
+                
+                // Stats cards
+                Row(
+                  children: [
+                    _buildStatCard(
+                      context,
+                      icon: Icons.pending_actions,
+                      label: 'Pendientes',
+                      value: '$pendientes',
+                      color: Colors.orange,
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 12),
+                    _buildStatCard(
+                      context,
+                      icon: Icons.check_circle,
+                      label: 'Entregados',
+                      value: '$entregados',
+                      color: Colors.green,
+                    ),
+                    const SizedBox(width: 12),
+                    _buildStatCard(
+                      context,
+                      icon: Icons.euro,
+                      label: 'CTR',
+                      value: '${importeCTR.toStringAsFixed(0)}€',
+                      color: Colors.amber,
+                    ),
+                  ],
+                ),
+                
+                SizedBox(height: 16 * Responsive.landscapeScale(context)),
+                
+                // Barra de progreso
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Progreso del día',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                        Text(
+                          '$entregados de $total completados',
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8 * Responsive.landscapeScale(context)),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: provider.progresoTotal,
+                        backgroundColor: Colors.white24,
+                        valueColor: const AlwaysStoppedAnimation(Colors.white),
+                        minHeight: 8,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         );

@@ -1060,7 +1060,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildYTDBanner(), // YTD accumulated progress
+            if (!Responsive.isLandscapeCompact(context)) _buildYTDBanner(), // YTD accumulated progress
             const SizedBox(height: 12),
             _buildObjectiveCards(),
             const SizedBox(height: 16),

@@ -826,7 +826,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
           child: Column(
             children: [
               // Summary Cards
-              _buildSummaryCards(),
+              if (!Responsive.isLandscapeCompact(context))
+                _buildSummaryCards(),
               
               // Inputs & Filters
               _buildFilters(context),

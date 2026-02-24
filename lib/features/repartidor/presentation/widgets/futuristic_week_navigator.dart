@@ -154,7 +154,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
             _buildDayStrip(),
             
             // Progress bar
-            _buildProgressBar(progress),
+            if (!Responsive.isLandscapeCompact(context))
+              _buildProgressBar(progress),
           ],
         ),
       ),
@@ -165,7 +166,9 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: 16, 
-        vertical: 8 * Responsive.landscapeScale(context)
+        vertical: Responsive.isLandscapeCompact(context) 
+            ? 2 
+            : 8 * Responsive.landscapeScale(context)
       ),
       child: Row(
         children: [
@@ -223,13 +226,14 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  weekRange,
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: Responsive.isSmall(context) ? 9 : 11,
+                if (!Responsive.isLandscapeCompact(context))
+                  Text(
+                    weekRange,
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: Responsive.isSmall(context) ? 9 : 11,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -246,7 +250,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
           const SizedBox(width: 12),
           
           // Client count badge
-          _buildClientBadge(),
+          if (!Responsive.isLandscapeCompact(context))
+            _buildClientBadge(),
         ],
       ),
     );
@@ -343,8 +348,13 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     }
 
     return Container(
-      height: Responsive.value(context, phone: 55, desktop: 60),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      height: Responsive.isLandscapeCompact(context)
+          ? 32
+          : Responsive.value(context, phone: 55, desktop: 60),
+      padding: EdgeInsets.symmetric(
+          horizontal: 6, 
+          vertical: Responsive.isLandscapeCompact(context) ? 2 : 4
+      ),
       child: Row(
         children: widget.weekDays.asMap().entries.map((entry) {
           final index = entry.key;

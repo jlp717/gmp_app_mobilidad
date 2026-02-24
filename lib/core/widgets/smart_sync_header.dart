@@ -25,15 +25,17 @@ class SmartSyncHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isCompact = compact || Responsive.isLandscapeCompact(context);
     final factor = Responsive.landscapeScale(context);
-    final double vertPad = (compact ? 8 : 16) * factor;
-    final double iconSize = (compact ? 18 : 24) * factor;
-    final double iconPad = (compact ? 6 : 10) * factor;
-    final double titleSize = (compact ? 14 : 20) * factor;
-    final double subtitleSize = (compact ? 11 : 12) * factor;
+    // Extreme padding reduction in auto-compact mode
+    final double vertPad = (isCompact ? 2 : 16) * factor;
+    final double iconSize = (isCompact ? 18 : 24) * factor;
+    final double iconPad = (isCompact ? 6 : 10) * factor;
+    final double titleSize = (isCompact ? 14 : 20) * factor;
+    final double subtitleSize = (isCompact ? 11 : 12) * factor;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(compact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad, compact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad),
+      padding: EdgeInsets.fromLTRB(isCompact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad, isCompact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -77,32 +79,34 @@ class SmartSyncHeader extends StatelessWidget {
                     color: AppTheme.textPrimary,
                   ),
                 ),
-                if (onMonthTap != null)
-                  GestureDetector(
-                    onTap: onMonthTap,
-                    child: Row(
-                      children: [
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: subtitleSize,
-                            color: AppTheme.neonBlue,
-                            fontWeight: FontWeight.w600,
+                if (!isCompact) ...[
+                  if (onMonthTap != null)
+                    GestureDetector(
+                      onTap: onMonthTap,
+                      child: Row(
+                        children: [
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              fontSize: subtitleSize,
+                              color: AppTheme.neonBlue,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: compact ? 14 : 16),
-                      ],
+                          const SizedBox(width: 4),
+                          Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: isCompact ? 14 : 16),
+                        ],
+                      ),
+                    )
+                  else
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: subtitleSize,
+                        color: AppTheme.textSecondary.withOpacity(0.8),
+                      ),
                     ),
-                  )
-                else
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: subtitleSize,
-                      color: AppTheme.textSecondary.withOpacity(0.8),
-                    ),
-                  ),
+                ],
               ],
             ),
           ),
@@ -110,17 +114,17 @@ class SmartSyncHeader extends StatelessWidget {
           IconButton(
             onPressed: isLoading ? null : onSync,
             padding: EdgeInsets.zero,
-            constraints: BoxConstraints(minWidth: compact ? 32 : 40, minHeight: compact ? 32 : 40),
+            constraints: BoxConstraints(minWidth: isCompact ? 32 : 40, minHeight: isCompact ? 32 : 40),
             icon: isLoading
                 ? SizedBox(
-                    width: compact ? 18 : 24,
-                    height: compact ? 18 : 24,
+                    width: isCompact ? 18 : 24,
+                    height: isCompact ? 18 : 24,
                     child: const CircularProgressIndicator(
                       strokeWidth: 2,
                       color: AppTheme.neonBlue,
                     ),
                   )
-                : Icon(Icons.sync, color: AppTheme.neonBlue, size: compact ? 20 : 24),
+                : Icon(Icons.sync, color: AppTheme.neonBlue, size: isCompact ? 20 : 24),
           ),
         ],
       ),

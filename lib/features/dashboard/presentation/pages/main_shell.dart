@@ -657,19 +657,7 @@ class _MainShellState extends State<MainShell> {
             const SizedBox(height: 16),
             // Mode switcher in drawer for Jefe
             if (isJefeVentas) _buildModeSwitcher(),
-            const Divider(color: Colors.white10),
-            // Network settings (only for Jefe)
-            if (isJefeVentas)
-              ListTile(
-                leading: const Icon(Icons.wifi, color: AppTheme.neonPurple, size: 20),
-                title: const Text('Configuración de Red', style: TextStyle(color: Colors.white, fontSize: 13)),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(builder: (_) => const NetworkSettingsPage()),
-                  );
-                },
-              ),
+            // Network settings removed for user restriction
             const Spacer(),
             const Divider(color: Colors.white10),
             // Logout

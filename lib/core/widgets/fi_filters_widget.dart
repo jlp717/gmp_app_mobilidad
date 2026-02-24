@@ -371,49 +371,51 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        // Row 2: FI2 (Subcategoría) - Siempre visible pero disabled si no hay FI1
-        _buildDropdown(
-          label: 'Subcategoría',
-          value: _selectedFi2,
-          options: _fi2Options,
-          loading: _loadingFi2,
-          onChanged: widget.enabled ? _onFi2Changed : null,
-          icon: Icons.subdirectory_arrow_right,
-          enabled: _selectedFi1 != null,
-        ),
-        // Advanced filters (FI3, FI4) - Siempre visibles cuando showAdvanced=true
-        if (widget.showAdvanced) ...[
+        if (!Responsive.isLandscapeCompact(context)) ...[
           const SizedBox(height: 8),
-          Row(
-            children: [
-              // FI3 - Detalle
-              Expanded(
-                child: _buildDropdown(
-                  label: 'Detalle',
-                  value: _selectedFi3,
-                  options: _fi3Options,
-                  loading: _loadingFi3,
-                  onChanged: widget.enabled ? _onFi3Changed : null,
-                  icon: Icons.tune,
-                  enabled: _selectedFi1 != null && (_fi3Options.isNotEmpty || _loadingFi3),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // FI4 - Especial
-              Expanded(
-                child: _buildDropdown(
-                  label: 'Especial',
-                  value: _selectedFi4,
-                  options: _fi4Options,
-                  loading: _loadingFi4,
-                  onChanged: widget.enabled ? _onFi4Changed : null,
-                  icon: Icons.eco,
-                  enabled: _selectedFi1 != null && (_fi4Options.isNotEmpty || _loadingFi4),
-                ),
-              ),
-            ],
+          // Row 2: FI2 (Subcategoría) - Siempre visible pero disabled si no hay FI1
+          _buildDropdown(
+            label: 'Subcategoría',
+            value: _selectedFi2,
+            options: _fi2Options,
+            loading: _loadingFi2,
+            onChanged: widget.enabled ? _onFi2Changed : null,
+            icon: Icons.subdirectory_arrow_right,
+            enabled: _selectedFi1 != null,
           ),
+          // Advanced filters (FI3, FI4) - Siempre visibles cuando showAdvanced=true
+          if (widget.showAdvanced) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                // FI3 - Detalle
+                Expanded(
+                  child: _buildDropdown(
+                    label: 'Detalle',
+                    value: _selectedFi3,
+                    options: _fi3Options,
+                    loading: _loadingFi3,
+                    onChanged: widget.enabled ? _onFi3Changed : null,
+                    icon: Icons.tune,
+                    enabled: _selectedFi1 != null && (_fi3Options.isNotEmpty || _loadingFi3),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // FI4 - Especial
+                Expanded(
+                  child: _buildDropdown(
+                    label: 'Especial',
+                    value: _selectedFi4,
+                    options: _fi4Options,
+                    loading: _loadingFi4,
+                    onChanged: widget.enabled ? _onFi4Changed : null,
+                    icon: Icons.eco,
+                    enabled: _selectedFi1 != null && (_fi4Options.isNotEmpty || _loadingFi4),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
         // Clear button
         if (hasActiveFilters) ...[

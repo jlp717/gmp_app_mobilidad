@@ -57,8 +57,8 @@ class SalesSummaryHeader extends StatelessWidget {
           isNewClient,
         ),
         
-        // Breakdown Section (Only if > 1 year)
-        if ((summary['breakdown'] as List?)?.isNotEmpty ?? false) ...[
+        // Breakdown Section (Only if > 1 year and NOT landscape compact)
+        if (!Responsive.isLandscapeCompact(context) && ((summary['breakdown'] as List?)?.isNotEmpty ?? false)) ...[
           _buildBreakdownSection(context, summary['breakdown'] as List),
         ],
       ],
@@ -264,65 +264,68 @@ class SalesSummaryHeader extends StatelessWidget {
           // Header con VENTAS principal
           _buildMainSalesSection(context, sales, prevSales, salesGrowth, isNewClient),
           
-          // Separator
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            height: 1,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.transparent, Colors.white24, Colors.transparent],
+          // Separator y UDS muestran si no está en compacto
+          if (!Responsive.isLandscapeCompact(context)) ...[
+            // Separator
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.transparent, Colors.white24, Colors.transparent],
+                ),
               ),
             ),
-          ),
-          
-          // Secondary metrics row - MÁS COMPACTO
-          Padding(
-            padding: EdgeInsets.symmetric(
-                horizontal: 12, 
-                vertical: 10 * Responsive.landscapeScale(context)
-            ),
-            child: Row(
-              children: [
-                // UDS / CAJAS / KG
-                Expanded(
-                  child: _buildCompactMetricCard(context,
-                    icon: Icons.inventory_2_outlined,
-                    iconColor: AppTheme.neonBlue,
-                    label: 'UDS',
-                    value: _formatCompact(units),
-                    prevValue: prevUnits,
-                    growth: unitsGrowth,
-                    isNew: prevUnits < 0.01 && units > 0,
-                    isClientNew: isNewClient,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                
-                // PRODUCTOS
-                Expanded(
-                  child: _buildCompactMetricCard(context,
-                    icon: Icons.category_outlined,
-                    iconColor: AppTheme.warning,
-                    label: 'PRODS',
-                    value: productCount.toString(),
-                    prevValue: prevProductCount.toDouble(),
-                    growth: productGrowth,
-                    isNew: prevProductCount == 0 && productCount > 0,
-                    isInteger: true,
-                    isClientNew: isNewClient,
-                  ),
-                ),
-                
-                // MARGEN (solo jefe de ventas)
-                if (showMargin) ...[
-                  const SizedBox(width: 8),
+            
+            // Secondary metrics row - MÁS COMPACTO
+            Padding(
+              padding: EdgeInsets.symmetric(
+                  horizontal: 12, 
+                  vertical: 10 * Responsive.landscapeScale(context)
+              ),
+              child: Row(
+                children: [
+                  // UDS / CAJAS / KG
                   Expanded(
-                    child: _buildCompactMarginCard(context, margin, prevMargin, marginGrowth, isClientNew: isNewClient),
+                    child: _buildCompactMetricCard(context,
+                      icon: Icons.inventory_2_outlined,
+                      iconColor: AppTheme.neonBlue,
+                      label: 'UDS',
+                      value: _formatCompact(units),
+                      prevValue: prevUnits,
+                      growth: unitsGrowth,
+                      isNew: prevUnits < 0.01 && units > 0,
+                      isClientNew: isNewClient,
+                    ),
                   ),
+                  const SizedBox(width: 8),
+                  
+                  // PRODUCTOS
+                  Expanded(
+                    child: _buildCompactMetricCard(context,
+                      icon: Icons.category_outlined,
+                      iconColor: AppTheme.warning,
+                      label: 'PRODS',
+                      value: productCount.toString(),
+                      prevValue: prevProductCount.toDouble(),
+                      growth: productGrowth,
+                      isNew: prevProductCount == 0 && productCount > 0,
+                      isInteger: true,
+                      isClientNew: isNewClient,
+                    ),
+                  ),
+                  
+                  // MARGEN (solo jefe de ventas)
+                  if (showMargin) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildCompactMarginCard(context, margin, prevMargin, marginGrowth, isClientNew: isNewClient),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
