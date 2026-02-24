@@ -21,17 +21,21 @@ module.exports = {
                 NODE_ENV: 'production',
                 PORT: 3334,
                 USE_TS_ROUTES: 'false',
+                VENDOR_COLUMN: 'R1_T8CDVD', // Force new logic in PRE
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3334,
                 USE_TS_ROUTES: 'false',
+                VENDOR_COLUMN: 'R1_T8CDVD',
             },
             env_ts: {
                 NODE_ENV: 'production',
                 PORT: 3334,
                 USE_TS_ROUTES: 'false', // Reverted TS routes for stability
+                VENDOR_COLUMN: 'R1_T8CDVD',
             },
+
 
             // ==================== MEMORY & RESTART ====================
             max_memory_restart: '1G', // Restart if memory exceeds 1GB
