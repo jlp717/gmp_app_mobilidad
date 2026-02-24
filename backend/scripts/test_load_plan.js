@@ -38,7 +38,7 @@ async function main() {
     console.log(`  Description: ${result.truck.description}`);
     console.log(`  Max Payload: ${result.truck.maxPayloadKg} kg`);
     console.log(`  Container Vol: ${result.truck.containerVolumeM3} m³`);
-    console.log(`  Interior: ${result.truck.container.lengthCm}x${result.truck.container.widthCm}x${result.truck.container.heightCm} cm`);
+    console.log(`  Interior: ${result.truck.interior.lengthCm}x${result.truck.interior.widthCm}x${result.truck.interior.heightCm} cm`);
 
     console.log('\n=== METRICS ===');
     const m2 = result.metrics;
@@ -53,14 +53,14 @@ async function main() {
     if (result.placed.length > 0) {
       console.log('\n=== FIRST 5 PLACED BOXES ===');
       result.placed.slice(0, 5).forEach((b, i) => {
-        console.log(`  [${i+1}] ${b.label} | Order: ${b.orderNumber} | Client: ${b.clientCode} | ${b.w}x${b.d}x${b.h} cm | ${b.weight.toFixed(1)} kg | pos: (${b.x},${b.y},${b.z})`);
+        console.log(`  [${i + 1}] ${b.label} | Order: ${b.orderNumber} | Client: ${b.clientCode} | ${b.w}x${b.d}x${b.h} cm | ${b.weight.toFixed(1)} kg | pos: (${b.x},${b.y},${b.z})`);
       });
     }
 
     if (result.overflow.length > 0) {
       console.log(`\n=== OVERFLOW (first 3 of ${result.overflow.length}) ===`);
       result.overflow.slice(0, 3).forEach((b, i) => {
-        console.log(`  [${i+1}] ${b.label} | ${b.w}x${b.d}x${b.h} cm | ${b.weight.toFixed(1)} kg`);
+        console.log(`  [${i + 1}] ${b.label} | ${b.w}x${b.d}x${b.h} cm | ${b.weight.toFixed(1)} kg`);
       });
     }
 

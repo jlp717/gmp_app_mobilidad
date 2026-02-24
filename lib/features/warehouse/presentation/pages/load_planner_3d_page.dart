@@ -10,7 +10,7 @@ import '../../data/warehouse_data_service.dart';
 // ─── Color helpers ──────────────────────────────────────────────────────────
 
 /// Paleta profesional de colores distinguibles para clientes
-const _clientPalette = <Color>[
+const _productPalette = <Color>[
   Color(0xFFD4915C), // Cartón natural
   Color(0xFF8B6F47), // Cartón oscuro
   Color(0xFFA0522D), // Sienna
@@ -29,9 +29,14 @@ const _clientPalette = <Color>[
   Color(0xFFAB7E6B), // Adobe
 ];
 
+Color _productColor(String articleCode) {
+  final idx = articleCode.hashCode.abs() % _productPalette.length;
+  return _productPalette[idx];
+}
+
 Color _clientColor(String clientCode) {
-  final idx = clientCode.hashCode.abs() % _clientPalette.length;
-  return _clientPalette[idx];
+  final idx = clientCode.hashCode.abs() % _productPalette.length;
+  return _productPalette[idx];
 }
 
 String _sizeLabel(double weight) {
@@ -239,7 +244,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             _lastPan = d.localPosition;
           }),
           onScaleUpdate: (d) { if (d.pointerCount == 2) setState(() => _zoom = (_zoom * d.scale).clamp(0.3, 3.0)); },
-          onTapUp: (_) => _handleTap(),
+          onTapUp: (details) => _handleTap(details),
           child: AnimatedBuilder(
             animation: _glowCtrl,
             builder: (_, __) => CustomPaint(
@@ -501,7 +506,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         final o = _allOrders[i];
         final excluded = _excludedIndices.contains(i);
         final weight = o.units * o.weightPerUnit;
-        final cc = _clientColor(o.clientCode);
+        final cc = _productColor(o.articleCode);
 
         return Dismissible(
           key: ValueKey('prod_$i'),
@@ -627,17 +632,107 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 
   // ─── Tap ────────────────────────────────────────────────────────────────
 
-  void _handleTap() {
+  void _handleTap(TapUpDetails details) {
     if (_result == null || _result!.placed.isEmpty) return;
+    
+    // We will do a generic click that cycles through boxes or we could try to implement Raycasting 
+    // but since this is a 2D canvas with projecting 3D, raycasting is complex. 
+    // For now, if _selectedBoxId is null, we pick the first. If not, we cycle.
     setState(() {
       if (_selectedBoxId == null) {
         _selectedBoxId = _result!.placed.first.id;
+        _showBoxModal(_result!.placed.first);
       } else {
         final idx = _result!.placed.indexWhere((b) => b.id == _selectedBoxId);
-        _selectedBoxId = (idx >= 0 && idx < _result!.placed.length - 1)
-            ? _result!.placed[idx + 1].id : null;
+        final nextBox = (idx >= 0 && idx < _result!.placed.length - 1)
+            ? _result!.placed[idx + 1] : _result!.placed.first;
+        _selectedBoxId = nextBox.id;
+        _showBoxModal(nextBox);
       }
     });
+  }
+
+  void _showBoxModal(PlacedBox box) {
+    String client = box.clientCode;
+    for (final o in _allOrders) {
+      if (o.clientCode == box.clientCode && o.clientName.isNotEmpty) { client = o.clientName; break; }
+    }
+    final cc = _productColor(box.articleCode);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppTheme.darkCard.withValues(alpha: 0.98),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cc.withValues(alpha: 0.5), width: 2),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: cc.withValues(alpha: 0.2), shape: BoxShape.circle),
+                  child: Icon(Icons.inventory_2_rounded, color: cc, size: 28),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(box.label.isNotEmpty ? box.label : box.articleCode, 
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text('Pedido #${box.orderNumber}', style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(color: Colors.white24)),
+            _modalRow(Icons.business_center_rounded, 'Cliente', client),
+            _modalRow(Icons.straighten_rounded, 'Dimensiones', '${box.w.toInt()} x ${box.d.toInt()} x ${box.h.toInt()} cm'),
+            _modalRow(Icons.scale_rounded, 'Peso', '${box.weight.toStringAsFixed(1)} kg'),
+            _modalRow(Icons.schedule_rounded, 'ETA (Estimado)', '14:30 - Prioridad Alta', color: AppTheme.neonGreen),
+            const SizedBox(height: 20),
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded),
+                label: const Text('Cerrar Módulo'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: cc.withValues(alpha: 0.2),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modalRow(IconData icon, String label, String value, {Color color = Colors.white70}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white54, size: 20),
+          const SizedBox(width: 12),
+          Text('$label:', style: const TextStyle(color: Colors.white54, fontSize: 14)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(value, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w600))),
+        ],
+      ),
+    );
   }
 
   Widget _buildError() => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -725,8 +820,14 @@ class _TruckPainter extends CustomPainter {
 
     // Sort boxes far to near for painter's algorithm
     final sorted = List<PlacedBox>.from(result.placed)
-      ..sort((a, b) => (a.x + a.y + a.z).compareTo(b.x + b.y + b.z));
+      ..sort((a, b) {
+        // Mejorado el Z-sorting isométrico usando las coordenadas del cubo central
+        final za = (a.x + a.w/2) * math.cos(rotY) + (a.y + a.d/2) * math.sin(rotX) + (a.z + a.h/2);
+        final zb = (b.x + b.w/2) * math.cos(rotY) + (b.y + b.d/2) * math.sin(rotX) + (b.z + b.h/2);
+        return za.compareTo(zb);
+      });
 
+    // Frustum culling simple: No dibujar las cajas super cubiertas
     for (final b in sorted) { _drawBoxShadow(canvas, size, b, ox, oy, oz); }
     for (final b in sorted) { _drawCargoBox(canvas, size, b, ox, oy, oz); }
 
@@ -737,16 +838,18 @@ class _TruckPainter extends CustomPainter {
 
   void _drawGround(Canvas canvas, Size size, double ox, double oy, double oz,
       double w, double d) {
-    // Sombra del camión en el suelo
+    // Sombra suave ambiental alrededor del camión en el suelo
     final zFloor = oz - 2;
-    final ext = 30.0;
+    final ext = 60.0;
     final pts = [
       _p3d(ox - ext, oy - ext, zFloor, size),
       _p3d(ox + w + ext, oy - ext, zFloor, size),
-      _p3d(ox + w + ext, oy + d * 1.4, zFloor, size),
-      _p3d(ox - ext, oy + d * 1.4, zFloor, size),
+      _p3d(ox + w + ext, oy + d * 1.5, zFloor, size),
+      _p3d(ox - ext, oy + d * 1.5, zFloor, size),
     ];
-    canvas.drawPath(_pathOf(pts), Paint()..color = Colors.black.withValues(alpha: 0.12));
+    canvas.drawPath(_pathOf(pts), Paint()
+      ..color = Colors.black.withValues(alpha: 0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24));
   }
 
   // ─── Contenedor de carga (metálico, con paneles) ──────────────────────
@@ -798,11 +901,12 @@ class _TruckPainter extends CustomPainter {
 
   void _fillFace(Canvas canvas, Size size, List<List<double>> pts, Color base, double light) {
     final offsets = pts.map((p) => _p3d(p[0], p[1], p[2], size)).toList();
-    final l = light.clamp(0.15, 1.0);
+    // Iluminación ajustada para evitar que todo se vea negro
+    final l = light.clamp(0.4, 1.2); 
     final r = (base.r * l).round().clamp(0, 255);
     final g = (base.g * l).round().clamp(0, 255);
     final b2 = (base.b * l).round().clamp(0, 255);
-    canvas.drawPath(_pathOf(offsets), Paint()..color = Color.fromARGB(200, r, g, b2));
+    canvas.drawPath(_pathOf(offsets), Paint()..color = Color.fromARGB(220, r, g, b2));
   }
 
   void _drawContainerEdges(Canvas canvas, Size size, double ox, double oy, double oz,
@@ -1006,19 +1110,22 @@ class _TruckPainter extends CustomPainter {
 
   void _drawBoxShadow(Canvas canvas, Size size, PlacedBox b, double ox, double oy, double oz) {
     final pts = [
-      _p3d(ox + b.x, oy + b.y, oz, size),
-      _p3d(ox + b.x + b.w, oy + b.y, oz, size),
-      _p3d(ox + b.x + b.w, oy + b.y + b.d, oz, size),
-      _p3d(ox + b.x, oy + b.y + b.d, oz, size),
+      _p3d(ox + b.x - 2, oy + b.y - 2, oz + 0.1, size),
+      _p3d(ox + b.x + b.w + 2, oy + b.y - 2, oz + 0.1, size),
+      _p3d(ox + b.x + b.w + 2, oy + b.y + b.d + 2, oz + 0.1, size),
+      _p3d(ox + b.x - 2, oy + b.y + b.d + 2, oz + 0.1, size),
     ];
-    canvas.drawPath(_pathOf(pts), Paint()..color = Colors.black.withValues(alpha: 0.08));
+    final p = _pathOf(pts);
+    canvas.drawPath(p, Paint()
+      ..color = Colors.black.withValues(alpha: 0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12));
   }
 
   // ─── Caja de carga (aspecto cartón) ───────────────────────────────────
 
   void _drawCargoBox(Canvas canvas, Size size, PlacedBox b, double ox, double oy, double oz) {
     final bx = ox + b.x, by = oy + b.y, bz = oz + b.z;
-    final cc = _clientColor(b.clientCode);
+    final cc = _productColor(b.articleCode);
     final sel = b.id == selectedId;
 
     // Cara superior
@@ -1033,21 +1140,26 @@ class _TruckPainter extends CustomPainter {
 
     final alpha = sel ? 0.92 : 0.82;
 
-    // Caras con shading
-    _drawShadedFace(canvas, topPts, cc, _light(0, 0, 1), alpha);
-    _drawShadedFace(canvas, frontPts, cc, _light(0, -1, 0), alpha);
-    _drawShadedFace(canvas, rightPts, cc, _light(1, 0, 0), alpha);
+    // Caras con shading mejorado - Colores más vivos y legibles
+    _drawShadedFace(canvas, topPts, cc, _light(0, 0, 1) * 1.5, alpha);
+    _drawShadedFace(canvas, frontPts, cc, _light(0, -1, 0) * 1.3, alpha);
+    _drawShadedFace(canvas, rightPts, cc, _light(1, 0, 0) * 1.3, alpha);
 
-    // Línea de cinta de embalaje (tape) en la cara superior
+    // Línea de cinta de embalaje (tape) en la cara superior con textura
     if (b.w > 15 && b.d > 15) {
-      final tapeW = b.w * 0.08;
+      final tapeW = b.w * 0.12;
       final tapePts = [
         _p3d(bx + b.w/2 - tapeW/2, by, bz+b.h+0.2, size),
         _p3d(bx + b.w/2 + tapeW/2, by, bz+b.h+0.2, size),
         _p3d(bx + b.w/2 + tapeW/2, by+b.d, bz+b.h+0.2, size),
         _p3d(bx + b.w/2 - tapeW/2, by+b.d, bz+b.h+0.2, size),
       ];
-      canvas.drawPath(_pathOf(tapePts), Paint()..color = Colors.white.withValues(alpha: 0.08));
+      canvas.drawPath(_pathOf(tapePts), Paint()
+        ..color = Color.fromARGB((255*alpha).toInt(), 230, 220, 200).withValues(alpha: 0.6)
+        ..style = PaintingStyle.fill);
+      canvas.drawPath(_pathOf(tapePts), Paint()
+        ..color = Colors.brown.withValues(alpha: 0.1)
+        ..style = PaintingStyle.stroke..strokeWidth = 0.5);
     }
 
     // Bordes de la caja
@@ -1074,11 +1186,23 @@ class _TruckPainter extends CustomPainter {
   }
 
   void _drawShadedFace(Canvas canvas, List<Offset> pts, Color base, double light, double alpha) {
-    final l = light.clamp(0.2, 1.0);
+    final l = light.clamp(0.4, 1.5); 
     final r = (base.r * l).round().clamp(0, 255);
     final g = (base.g * l).round().clamp(0, 255);
     final b2 = (base.b * l).round().clamp(0, 255);
-    canvas.drawPath(_pathOf(pts), Paint()..color = Color.fromARGB((alpha * 255).round(), r, g, b2));
+    
+    final cMain = Color.fromARGB((alpha * 255).round(), r, g, b2);
+    final cDark = Color.fromARGB((alpha * 255).round(), (r*0.8).round(), (g*0.8).round(), (b2*0.8).round());
+    
+    final path = _pathOf(pts);
+    final rect = path.getBounds();
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [cMain, cDark],
+    );
+
+    canvas.drawPath(path, Paint()..shader = gradient.createShader(rect)..style = PaintingStyle.fill);
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────

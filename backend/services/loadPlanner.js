@@ -23,12 +23,12 @@ const DEFAULT_WEIGHT_PER_BOX = 8.0; // kg
  */
 function estimateBoxDimensions(pesoUnidad, unidadesCaja) {
     const pesoCaja = (pesoUnidad || 0) * Math.max(unidadesCaja || 1, 1);
-    if (pesoCaja <= 2)  return { largo: 30, ancho: 20, alto: 12 };
-    if (pesoCaja <= 5)  return { largo: 35, ancho: 25, alto: 15 };
+    if (pesoCaja <= 2) return { largo: 30, ancho: 20, alto: 12 };
+    if (pesoCaja <= 5) return { largo: 35, ancho: 25, alto: 15 };
     if (pesoCaja <= 10) return { largo: 40, ancho: 30, alto: 18 };
     if (pesoCaja <= 20) return { largo: 50, ancho: 35, alto: 22 };
     if (pesoCaja <= 35) return { largo: 55, ancho: 40, alto: 25 };
-    return                { largo: 60, ancho: 40, alto: 30 };
+    return { largo: 60, ancho: 40, alto: 30 };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ async function getTruckConfig(vehicleCode) {
         maxPayloadKg: maxPayload,
         tara: parseFloat(r.TARA) || 0,
         containerVolumeM3: contVolM3,
-        container: { lengthCm, widthCm, heightCm },
+        interior: { lengthCm, widthCm, heightCm },
         tolerancePct: parseFloat(r.TOLERANCIA),
         volumeM3: (lengthCm * widthCm * heightCm) / 1e6,
     };
@@ -224,14 +224,14 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
  * Mucho más robusto que LAFF para cajas de tamaño similar.
  *
  * @param {Array} boxes - [{id, w, d, h, weight, label, ...}]
- * @param {Object} container - {lengthCm, widthCm, heightCm}
+ * @param {Object} interior - {lengthCm, widthCm, heightCm}
  * @param {number} tolerancePct - % exceso permitido
  * @returns {Object} - {placed, overflow, metrics}
  */
-function binPack3D(boxes, container, tolerancePct = 5) {
-    const cW = container.widthCm;
-    const cD = container.lengthCm;
-    const cH = container.heightCm;
+function binPack3D(boxes, interior, tolerancePct = 5) {
+    const cW = interior.widthCm;
+    const cD = interior.lengthCm;
+    const cH = interior.heightCm;
 
     // Sort boxes: largest volume first
     const sorted = [...boxes].sort((a, b) => (b.w * b.d * b.h) - (a.w * a.d * a.h));
@@ -399,7 +399,7 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
             overflow: [],
             metrics: {
                 totalBoxes: 0, placedCount: 0, overflowCount: 0,
-                containerVolumeCm3: truck.container.lengthCm * truck.container.widthCm * truck.container.heightCm,
+                containerVolumeCm3: truck.interior.lengthCm * truck.interior.widthCm * truck.interior.heightCm,
                 usedVolumeCm3: 0, volumeOccupancyPct: 0,
                 totalWeightKg: 0, overflowWeightKg: 0,
                 maxPayloadKg: truck.maxPayloadKg, weightOccupancyPct: 0,
@@ -456,7 +456,7 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
 
     // 5. Run bin packing
     const tolerance = customTolerance ?? truck.tolerancePct;
-    const result = binPack3D(boxes, truck.container, tolerance);
+    const result = binPack3D(boxes, truck.interior, tolerance);
 
     // 6. Add weight capacity
     const weightCapacity = truck.maxPayloadKg;
@@ -523,7 +523,7 @@ async function planLoadManual(vehicleCode, items, customTolerance) {
     }
 
     const tolerance = customTolerance ?? truck.tolerancePct;
-    const result = binPack3D(boxes, truck.container, tolerance);
+    const result = binPack3D(boxes, truck.interior, tolerance);
 
     result.metrics.maxPayloadKg = truck.maxPayloadKg;
     result.metrics.weightOccupancyPct = truck.maxPayloadKg > 0
