@@ -1,0 +1,258 @@
+﻿diff --git a/backend/routes/analytics.js b/backend/routes/analytics.js
+index 3138b97..406eff1 100644
+--- a/backend/routes/analytics.js
++++ b/backend/routes/analytics.js
+@@ -8,6 +8,8 @@ const {
+     getCurrentDate,
+     buildVendedorFilter,
+     buildVendedorFilterLACLAE,
++    VENDOR_COLUMN,
++    getVendorColumn,
+     formatCurrency,
+     MIN_YEAR,
+     LAC_SALES_FILTER,
+@@ -409,11 +411,13 @@ router.get('/sales-history/summary', async (req, res) => {
+         // Build filters for LACLAE table
+         const LACLAE_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z')`;
+ 
+-        // Vendedor filter - adaptar para LACLAE (LCCDVD)
++        // Vendedor filter - uses getVendorColumn() for date-aware column
+         let vendedorFilter = '';
+         if (vendedorCodes) {
++            const now = getCurrentDate();
++            const col = getVendorColumn(now.getFullYear(), now.getMonth() + 1);
+             const codes = vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',');
+-            vendedorFilter = `AND L.LCCDVD IN (${codes})`;
++            vendedorFilter = `AND L.${col} IN (${codes})`;
+         }
+ 
+         // Client filter - adaptar para LACLAE (LCCDCL)
+diff --git a/backend/routes/commissions.js b/backend/routes/commissions.js
+index cbe6da8..710c091 100644
+--- a/backend/routes/commissions.js
++++ b/backend/routes/commissions.js
+@@ -3,7 +3,7 @@ const router = express.Router();
+ const { query, queryWithParams } = require('../config/db');
+ const logger = require('../middleware/logger');
+ const { getVendorActiveDaysFromCache } = require('../services/laclae');
+-const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
++const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
+ const { redisCache, TTL } = require('../services/redis-cache');
+ 
+ 
+@@ -231,21 +231,23 @@ setTimeout(async () => {
+ async function getVendorCurrentClients(vendorCode, currentYear) {
+     const safeCode = vendorCode.replace(/[^a-zA-Z0-9]/g, '');
+     const safeYear = parseInt(currentYear);
+-    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
++    // Uses getVendorColumn(year) for date-aware column (LCCDVD before March 2026, R1_T8CDVD after)
++    const col = getVendorColumn(safeYear);
+     const rows = await query(`
+         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
+         FROM DSED.LACLAE L
+-        WHERE L.LCCDVD = '${safeCode}'
++        WHERE L.${col} = '${safeCode}'
+           AND L.LCAADC = ${safeYear}
+           AND ${LACLAE_SALES_FILTER}
+     `, false);
+ 
+     // If no clients in current year, try previous year
+     if (rows.length === 0) {
++        const prevCol = getVendorColumn(safeYear - 1);
+         const prevRows = await query(`
+             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
+             FROM DSED.LACLAE L
+-            WHERE L.LCCDVD = '${safeCode}'
++            WHERE L.${prevCol} = '${safeCode}'
+               AND L.LCAADC = ${safeYear - 1}
+               AND ${LACLAE_SALES_FILTER}
+         `, false);
+@@ -883,15 +885,15 @@ router.get('/summary', async (req, res) => {
+                     return res.json({ success: true, ...cachedResult });
+                 }
+ 
+-                // FIX: Use LCCDVD (same column used by calculateVendorData for filtering)
+-                // PERF: Removed TRIM from WHERE clause - use RTRIM only in SELECT
++                // Uses getVendorColumn for date-aware vendor discovery
+                 const safeYr = parseInt(yr);
++                const col = getVendorColumn(safeYr);
+                 const vendorRows = await query(`
+-                    SELECT DISTINCT RTRIM(L.LCCDVD) as VENDOR_CODE
++                    SELECT DISTINCT RTRIM(L.${col}) as VENDOR_CODE
+                     FROM DSED.LACLAE L
+                     WHERE L.LCAADC IN (${safeYr}, ${safeYr - 1})
+-                      AND L.LCCDVD IS NOT NULL
+-                      AND L.LCCDVD <> ''
++                      AND L.${col} IS NOT NULL
++                      AND L.${col} <> ''
+                 `, false);
+                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
+                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
+diff --git a/backend/routes/objectives.js b/backend/routes/objectives.js
+index 76b3634..581ac0a 100644
+--- a/backend/routes/objectives.js
++++ b/backend/routes/objectives.js
+@@ -6,6 +6,8 @@ const {
+     getCurrentDate,
+     buildVendedorFilter,
+     buildVendedorFilterLACLAE,
++    VENDOR_COLUMN,
++    getVendorColumn,
+     MIN_YEAR,
+     LAC_SALES_FILTER,
+     LACLAE_SALES_FILTER,
+@@ -34,21 +36,23 @@ const {
+  * Get all clients currently managed by a vendor (from current year or most recent data)
+  */
+ async function getVendorCurrentClients(vendorCode, currentYear) {
+-    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
++    // Uses getVendorColumn(year) for date-aware column (LCCDVD before March 2026, R1_T8CDVD after)
++    const col = getVendorColumn(currentYear);
+     const rows = await query(`
+         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
+         FROM DSED.LACLAE L
+-        WHERE L.LCCDVD = '${vendorCode}'
++        WHERE L.${col} = '${vendorCode}'
+           AND L.LCAADC = ${currentYear}
+           AND ${LACLAE_SALES_FILTER}
+     `, false);
+ 
+     // If no clients in current year, try previous year
+     if (rows.length === 0) {
++        const prevCol = getVendorColumn(currentYear - 1);
+         const prevRows = await query(`
+             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
+             FROM DSED.LACLAE L
+-            WHERE L.LCCDVD = '${vendorCode}'
++            WHERE L.${prevCol} = '${vendorCode}'
+               AND L.LCAADC = ${currentYear - 1}
+               AND ${LACLAE_SALES_FILTER}
+         `, false);
+@@ -110,7 +114,7 @@ const MONTH_QUOTA_MAP = {
+  * Defaults to 10% if not configured
+  */
+ async function getVendorTargetConfig(vendorCode) {
+-    if (!vendorCode || vendorCode === 'ALL') return 10.0;
++    if (!vendorCode || vendorCode === 'ALL') return 0.0; // Default 0% (IPC Only)
+     try {
+         const code = vendorCode.split(',')[0].trim();
+         const rows = await query(`
+@@ -120,12 +124,12 @@ async function getVendorTargetConfig(vendorCode) {
+         `, false);
+ 
+         if (rows.length > 0) {
+-            return parseFloat(rows[0].TARGET_PERCENTAGE) || 10.0;
++            return parseFloat(rows[0].TARGET_PERCENTAGE) || 0.0;
+         }
+-        return 10.0;
++        return 0.0; // Default 0%
+     } catch (e) {
+         logger.warn(`Could not fetch OBJ_CONFIG: ${e.message}`);
+-        return 10.0;
++        return 0.0;
+     }
+ }
+ 
+diff --git a/backend/utils/common.js b/backend/utils/common.js
+index d8e9331..27cd575 100644
+--- a/backend/utils/common.js
++++ b/backend/utils/common.js
+@@ -6,6 +6,50 @@ const getCurrentDate = () => new Date();
+ const getCurrentYear = () => getCurrentDate().getFullYear();
+ const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
+ 
++// =============================================================================
++// VENDOR COLUMN FEATURE FLAG (with transition date logic)
++// =============================================================================
++// VENDOR_COLUMN controls which DB2 column is used for vendor filtering:
++//   LCCDVD    = "Qui├®n vendi├│" (l├│gica actual de producci├│n)
++//   R1_T8CDVD = "Qui├®n tiene el cliente asignado" (nueva l├│gica 2026)
++//
++// Set via environment variable. Default: LCCDVD (backward compatible)
++//
++// TRANSITION: For PRE (VENDOR_COLUMN=R1_T8CDVD), Jan/Feb 2026 keep using
++// LCCDVD so objectives match production. From March 2026, use R1_T8CDVD.
++const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'LCCDVD';
++const TRANSITION_YEAR = 2026;
++const TRANSITION_MONTH = 3; // March
++
++/**
++ * Get the vendor column to use based on the target date.
++ * - Production (LCCDVD env or default): always returns LCCDVD
++ * - PRE (R1_T8CDVD env): returns LCCDVD for dates before March 2026,
++ *   R1_T8CDVD from March 2026 onwards.
++ * @param {number} [year] - Target year (defaults to current)
++ * @param {number} [month] - Target month 1-12 (defaults to current)
++ * @returns {string} 'LCCDVD' or 'R1_T8CDVD'
++ */
++function getVendorColumn(year, month) {
++    // Production: always LCCDVD, no transition needed
++    if (VENDOR_COLUMN === 'LCCDVD') return 'LCCDVD';
++
++    // PRE: date-based transition
++    const now = getCurrentDate();
++    const y = parseInt(year) || now.getFullYear();
++    const m = parseInt(month) || (now.getMonth() + 1);
++
++    // Before transition date ÔåÆ old column (same as production)
++    if (y < TRANSITION_YEAR || (y === TRANSITION_YEAR && m < TRANSITION_MONTH)) {
++        return 'LCCDVD';
++    }
++
++    // March 2026+ ÔåÆ new column
++    return VENDOR_COLUMN; // R1_T8CDVD
++}
++
++logger.info(`[CONFIG] ­ƒÅÀ´©Å  VENDOR_COLUMN = ${VENDOR_COLUMN} (transition: ${TRANSITION_MONTH}/${TRANSITION_YEAR})`);
++
+ // =============================================================================
+ // SALES FILTER CONSTANTS
+ // =============================================================================
+@@ -19,7 +63,8 @@ const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
+ // Column mapping: LACLAE (short) vs LAC (long)
+ //   LCIMVT = Importe Venta (sin IVA) 
+ //   LCIMCT = Importe Costo
+-//   LCCDVD = Codigo Vendedor
++//   LCCDVD = Codigo Vendedor (original)
++//   R1_T8CDVD = Codigo Vendedor Asignado (nueva l├│gica)
+ //   LCCDCL = Codigo Cliente
+ //   LCAADC = A├▒o Documento
+ //   LCMMDC = Mes Documento
+@@ -129,10 +174,12 @@ function buildDateFilter(yearParam, monthParam, tableAlias = '') {
+     return { year, month, filter: `AND ${prefix}ANODOCUMENTO >= ${MIN_YEAR}` };
+ }
+ 
+-// Vendor filter for LACLAE table (uses short column name LCCDVD)
+-function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
++// Vendor filter for LACLAE table
++// Uses getVendorColumn(year, month) for date-aware column selection
++function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L', year, month) {
+     if (!vendedorCodes || vendedorCodes === 'ALL') return '';
+     const prefix = tableAlias ? `${tableAlias}.` : '';
++    const col = getVendorColumn(year, month); // Date-aware: LCCDVD or R1_T8CDVD
+ 
+     const codeList = vendedorCodes.split(',').map(c => c.trim());
+     const hasUnk = codeList.includes('UNK');
+@@ -147,11 +194,10 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
+     const conditions = [];
+     if (validCodes.length > 0) {
+         // PERF: Removed TRIM() - DB2 CHAR comparison handles trailing spaces automatically
+-        // This allows DB2 to use indexes on LCCDVD column
+-        conditions.push(`${prefix}LCCDVD IN (${validCodes})`);
++        conditions.push(`${prefix}${col} IN (${validCodes})`);
+     }
+     if (hasUnk) {
+-        conditions.push(`(${prefix}LCCDVD IS NULL OR ${prefix}LCCDVD = '')`);
++        conditions.push(`(${prefix}${col} IS NULL OR ${prefix}${col} = '')`);
+     }
+ 
+     if (conditions.length === 0) return 'AND 1=0';
+@@ -235,6 +281,8 @@ module.exports = {
+     getCurrentDate,
+     getCurrentYear,
+     MIN_YEAR,
++    VENDOR_COLUMN,
++    getVendorColumn,
+     LAC_SALES_FILTER,
+     LACLAE_SALES_FILTER,
+     LAC_TIPOVENTA_FILTER,

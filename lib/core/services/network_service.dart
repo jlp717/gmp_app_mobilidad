@@ -17,8 +17,8 @@ class NetworkService {
   static final List<ServerConfig> _servers = [
     // 1. Producción (Cloudflare Named Tunnel — dominio fijo permanente)
     ServerConfig(
-      name: 'Producción (api.mari-pepa.com)',
-      baseUrl: 'https://api.mari-pepa.com/api',
+      name: 'Producción (PRE Tunnel)',
+      baseUrl: 'https://anonymous-grill-firefox-old.trycloudflare.com/api',
       priority: 1,
       isSecure: true,
     ),

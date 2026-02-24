@@ -1,0 +1,234 @@
+﻿diff --git a/backend/ecosystem.config.js b/backend/ecosystem.config.js
+index f921c86..f239b1c 100644
+--- a/backend/ecosystem.config.js
++++ b/backend/ecosystem.config.js
+@@ -13,12 +13,12 @@ module.exports = {
+             cwd: __dirname,
+ 
+             // ==================== CLUSTERING ====================
+-            instances: 'max', // Use all available CPU cores
+-            exec_mode: 'cluster', // Enable cluster mode
++            instances: 1, // Fork mode for better stability
++            exec_mode: 'fork',
+ 
+             // ==================== ENVIRONMENT ====================
+             env: {
+-                NODE_ENV: 'development',
++                NODE_ENV: 'production',
+                 PORT: 3334,
+                 USE_TS_ROUTES: 'false',
+             },
+@@ -30,7 +30,7 @@ module.exports = {
+             env_ts: {
+                 NODE_ENV: 'production',
+                 PORT: 3334,
+-                USE_TS_ROUTES: 'true',
++                USE_TS_ROUTES: 'false', // Reverted TS routes for stability
+             },
+ 
+             // ==================== MEMORY & RESTART ====================
+@@ -76,40 +76,6 @@ module.exports = {
+             cron_restart: '0 4 * * *',
+         },
+ 
+-        // ==================== OPTIMIZATION SCRIPTS ====================
+-        {
+-            name: 'gmp-api-pre',
+-            script: 'server.js',
+-            cwd: __dirname,
+-
+-            // PRE: Single instance (fork) for testing
+-            instances: 1,
+-            exec_mode: 'fork',
+-
+-            // PRE environment: R1_T8CDVD logic + port 3002
+-            env: {
+-                NODE_ENV: 'production',
+-                PORT: 3002,
+-                USE_TS_ROUTES: 'false',
+-                VENDOR_COLUMN: 'R1_T8CDVD',
+-            },
+-
+-            max_memory_restart: '512M',
+-            min_uptime: '10s',
+-            max_restarts: 5,
+-            restart_delay: 4000,
+-
+-            log_file: './logs/pre-combined.log',
+-            out_file: './logs/pre-out.log',
+-            error_file: './logs/pre-error.log',
+-            log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+-            merge_logs: true,
+-
+-            watch: false,
+-            autorestart: true,
+-            source_map_support: true,
+-        },
+-
+         // ==================== OPTIMIZATION SCRIPTS ====================
+         {
+             name: 'gmp-cache-cleanup',
+diff --git a/backend/server.js b/backend/server.js
+index 99c4bf1..0a90c00 100644
+--- a/backend/server.js
++++ b/backend/server.js
+@@ -31,9 +31,9 @@ const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('.
+ const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
+ 
+ let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
+-    plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
+-    commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
+-    userActionsRoutes, facturasRoutes;
++  plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
++  commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
++  userActionsRoutes, facturasRoutes, warehouseRoutes;
+ 
+ if (USE_TS_ROUTES) {
+   // ==================== COMPILED TYPESCRIPT ROUTES ====================
+@@ -89,6 +89,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
+   repartidorRoutes = require('./routes/repartidor');
+   userActionsRoutes = require('./routes/user-actions');
+   facturasRoutes = require('./routes/facturas');
++  warehouseRoutes = require('./routes/warehouse');
+ }
+ 
+ const app = express();
+@@ -104,7 +105,7 @@ app.use(cors({
+ }));
+ app.use(helmet());
+ app.use(compression());
+-app.use(express.json({ limit: '10kb' }));
++app.use(express.json({ limit: '2mb' }));
+ 
+ // ==================== OPTIMIZATION MIDDLEWARE ====================
+ app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers
+@@ -178,6 +179,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
+   app.use('/api/repartidor', repartidorRoutes);
+   app.use('/api/logs', userActionsRoutes);
+   app.use('/api/facturas', facturasRoutes);
++  app.use('/api/warehouse', warehouseRoutes);
+ }
+ 
+ // Start server
+@@ -189,7 +191,8 @@ async function startServer() {
+   try {
+     // Try a lightweight probe query on the table itself
+     await query(`SELECT COUNT(*) as CNT FROM JAVIER.DELIVERY_STATUS`, false, false);
+-    logger.info('Ô£à JAVIER.DELIVERY_STATUS table verified and ready.');    setDeliveryStatusAvailable(true);  } catch (probeErr) {
++    logger.info('Ô£à JAVIER.DELIVERY_STATUS table verified and ready.'); setDeliveryStatusAvailable(true);
++  } catch (probeErr) {
+     // Table likely doesn't exist (SQL0204) ÔÇö attempt to create it
+     logger.warn(`ÔÜá´©Å DELIVERY_STATUS probe failed (${probeErr.message}). Attempting to create table...`);
+     try {
+@@ -234,6 +237,11 @@ async function startServer() {
+     logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
+     logger.info('ÔòÉ'.repeat(60));
+ 
++    // Signal PM2 that we are ready
++    if (process.send) {
++      process.send('ready');
++    }
++
+     // Start System Preload (Cache Warmup)
+     preloadCache(PORT).catch(err => logger.warn(`Preload error: ${err.message}`));
+     loadMetadataCache().catch(err => logger.warn(`Metadata cache error: ${err.message}`));
+diff --git a/lib/core/api/api_config.dart b/lib/core/api/api_config.dart
+index 79ae467..1bf2f3c 100644
+--- a/lib/core/api/api_config.dart
++++ b/lib/core/api/api_config.dart
+@@ -16,10 +16,11 @@ class ApiConfig {
+   // -----------------------------------------------------------------------------
+   // 1. DESARROLLO (WiFi Local)
+   static String _developmentIp = '127.0.0.1';
+-  static const int _serverPort = 3002;
++  static const int _serverPort = 3334;
+ 
+-  // -----------------------------------------------------------------------------\n  // 2. PRE-PRODUCCION (Cloudflare Tunnel ÔåÆ port 3002, nueva l├│gica R1_T8CDVD)
+-  static String _productionUrl = 'https://delight-intersection-farm-assuming.trycloudflare.com'; 
++  // -----------------------------------------------------------------------------
++  // 2. PRODUCCION (Cloudflare Named Tunnel ÔÇö dominio fijo permanente)
++  static String _productionUrl = 'https://api.mari-pepa.com'; 
+ 
+   // =============================================================================
+ 
+@@ -30,6 +31,8 @@ class ApiConfig {
+   static Future<void> initialize() async {
+     if (_currentEnvironment == ApiEnvironment.autoDetect) {
+       await NetworkService.initialize();
++      // LOG CR├ìTICO para ver qu├® servidor se detect├│ en la tablet
++      print('­ƒÜÇ [ApiConfig] SERVIDOR DETECTADO: ${NetworkService.activeBaseUrl}');
+     }
+   }
+ 
+@@ -77,8 +80,8 @@ class ApiConfig {
+   }
+   
+   // Alternativas para referencia
+-  static const String emulatorUrl = 'http://10.0.2.2:3002/api';
+-  static const String wsaUrl = 'http://172.31.192.1:3002/api';
++  static const String emulatorUrl = 'http://10.0.2.2:3334/api';
++  static const String wsaUrl = 'http://172.31.192.1:3334/api';
+ 
+ 
+   // Auth Endpoints
+diff --git a/lib/core/services/network_service.dart b/lib/core/services/network_service.dart
+index 4fe631f..7c70585 100644
+--- a/lib/core/services/network_service.dart
++++ b/lib/core/services/network_service.dart
+@@ -15,44 +15,44 @@ class NetworkService {
+   /// Lista de servidores ordenados por prioridad
+   /// El sistema probar├í cada uno en orden hasta encontrar uno que funcione
+   static final List<ServerConfig> _servers = [
+-    // 1. PRE via Cloudflare Tunnel (acceso desde cualquier red)
++    // 1. Producci├│n (Cloudflare Named Tunnel ÔÇö dominio fijo permanente)
+     ServerConfig(
+-      name: 'PRE (Cloudflare)',
+-      baseUrl: 'https://delight-intersection-farm-assuming.trycloudflare.com/api',
++      name: 'Producci├│n (api.mari-pepa.com)',
++      baseUrl: 'https://api.mari-pepa.com/api',
+       priority: 1,
+       isSecure: true,
+     ),
+ 
+-    // 2. Servidor LAN directo - PRE (port 3002, nueva l├│gica R1_T8CDVD)
++    // 2. Servidor LAN directo (para red local)
+     ServerConfig(
+-      name: 'Servidor PRE (LAN)',
+-      baseUrl: 'http://192.168.1.230:3002/api',
++      name: 'Servidor Local (LAN)',
++      baseUrl: 'http://192.168.1.238:3334/api',
+       priority: 2,
+       isSecure: false,
+     ),
+-    
++
+     // 3. Emulador Android Studio
+     ServerConfig(
+       name: 'Emulador Android',
+-      baseUrl: 'http://10.0.2.2:3002/api',
++      baseUrl: 'http://10.0.2.2:3334/api',
+       priority: 3,
+       isSecure: false,
+       isEmulatorOnly: true,
+     ),
+-    
++
+     // 4. WSA (Windows Subsystem for Android) - IP especial Hyper-V
+     ServerConfig(
+       name: 'WSA (Windows)',
+-      baseUrl: 'http://172.31.192.1:3002/api',
++      baseUrl: 'http://172.31.192.1:3334/api',
+       priority: 4,
+       isSecure: false,
+       isWSAOnly: true,
+     ),
+-    
++
+     // 5. Localhost (desarrollo local)
+     ServerConfig(
+       name: 'Localhost',
+-      baseUrl: 'http://127.0.0.1:3002/api',
++      baseUrl: 'http://127.0.0.1:3334/api',
+       priority: 5,
+       isSecure: false,
+     ),

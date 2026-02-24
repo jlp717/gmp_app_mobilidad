@@ -20,7 +20,7 @@ class ApiConfig {
 
   // -----------------------------------------------------------------------------
   // 2. PRODUCCION (Cloudflare Named Tunnel — dominio fijo permanente)
-  static String _productionUrl = 'https://api.mari-pepa.com'; 
+  static String _productionUrl = 'https://anonymous-grill-firefox-old.trycloudflare.com'; 
 
   // =============================================================================
 
