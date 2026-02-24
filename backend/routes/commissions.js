@@ -603,8 +603,14 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
         const workingDays = calculateWorkingDays(selectedYear, m, activeDays);
 
         // Determine if this is a future month first
-        const isFuture = (selectedYear > now.getFullYear()) || (selectedYear === now.getFullYear() && m > now.getMonth() + 1);
-        const isCurrentMonth = (selectedYear === now.getFullYear() && m === (now.getMonth() + 1));
+        let isFuture = (selectedYear > now.getFullYear()) || (selectedYear === now.getFullYear() && m > now.getMonth() + 1);
+        let isCurrentMonth = (selectedYear === now.getFullYear() && m === (now.getMonth() + 1));
+
+        // BETA OVERRIDE: Unlock all months in PRE for testing the new logic
+        if (process.env.VENDOR_COLUMN === 'R1_T8CDVD') {
+            isFuture = false;
+            isCurrentMonth = false;
+        }
 
         // Calculate days passed for current month
         let daysPassed = 0;
