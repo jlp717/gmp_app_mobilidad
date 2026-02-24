@@ -325,7 +325,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   Widget _buildDayStrip() {
     if (widget.weekDays.isEmpty) {
       return Container(
-        height: 55,
+        height: Responsive.value(context, phone: 48, desktop: 55),
         alignment: Alignment.center,
         child: widget.isLoading
             ? const CircularProgressIndicator(

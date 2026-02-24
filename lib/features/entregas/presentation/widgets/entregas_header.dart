@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/entregas_provider.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Header con resumen de entregas del día
 class EntregasHeader extends StatelessWidget {
@@ -16,7 +17,7 @@ class EntregasHeader extends StatelessWidget {
         final importeCTR = provider.importeTotalCTR;
 
         return Container(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -32,8 +33,8 @@ class EntregasHeader extends StatelessWidget {
               // Título con Selector de Fecha
               Row(
                 children: [
-                  const Icon(Icons.local_shipping, 
-                             color: Colors.white, size: 28),
+                  Icon(Icons.local_shipping, 
+                             color: Colors.white, size: Responsive.iconSize(context, phone: 24, desktop: 28)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

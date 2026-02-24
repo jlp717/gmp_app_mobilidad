@@ -173,7 +173,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           // Content
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -201,7 +201,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
 
   Widget _buildCommissionProgress(double overallPct, double thresholdProgress) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 20), vertical: 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
@@ -214,14 +214,14 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
                 children: [
                   Text(
                     'Progreso hacia Umbral 30%',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: Responsive.isSmall(context) ? 11 : 12),
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: Responsive.fontSize(context, small: 10, large: 12)),
                   ),
                   Text(
                     '${overallPct.toStringAsFixed(1)}% cobrado',
                     style: TextStyle(
                       color: overallPct >= 30 ? AppTheme.success : Colors.orange,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.isSmall(context) ? 11 : 12,
+                      fontSize: Responsive.fontSize(context, small: 10, large: 12),
                     ),
                   ),
                 ],
@@ -266,7 +266,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
         children: [
           // Total Cobrable
           SizedBox(
-            width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 32) / 2 : 120,
+            width: Responsive.isPhone(context) ? (MediaQuery.of(context).size.width - 32) / 2 : 120,
             child: _buildSummaryCard(
               icon: Icons.account_balance_wallet,
               label: 'Cobrable',
@@ -276,7 +276,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           ),
           // Total Cobrado
           SizedBox(
-            width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 32) / 2 : 120,
+            width: Responsive.isPhone(context) ? (MediaQuery.of(context).size.width - 32) / 2 : 120,
             child: _buildSummaryCard(
               icon: Icons.payments,
               label: 'Cobrado',
@@ -286,7 +286,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           ),
           // Comisión Ganada
           SizedBox(
-            width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 24) : 150,
+            width: Responsive.isPhone(context) ? (MediaQuery.of(context).size.width - 24) : 150,
             child: _buildSummaryCard(
               icon: Icons.emoji_events,
               label: 'Comisión Ganada',
@@ -308,7 +308,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
     bool isHighlighted = false,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
       decoration: BoxDecoration(
         gradient: isHighlighted
             ? LinearGradient(colors: [color.withOpacity(0.2), color.withOpacity(0.1)])
@@ -337,7 +337,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           Text(
             value,
             style: TextStyle(
-              fontSize: isHighlighted ? (Responsive.isSmall(context) ? 16 : 18) : (Responsive.isSmall(context) ? 14 : 16),
+              fontSize: isHighlighted ? Responsive.fontSize(context, small: 14, large: 18) : Responsive.fontSize(context, small: 12, large: 16),
               fontWeight: FontWeight.bold,
               color: color,
             ),
@@ -443,7 +443,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),

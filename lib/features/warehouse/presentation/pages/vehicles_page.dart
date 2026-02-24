@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../data/warehouse_data_service.dart';
 
 class VehiclesPage extends StatefulWidget {
@@ -63,19 +64,19 @@ class _VehiclesPageState extends State<VehiclesPage> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 16), 12, Responsive.padding(context, small: 12, large: 16), 8),
       child: Row(children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 6, large: 8)),
           decoration: BoxDecoration(
             color: AppTheme.neonPurple.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.local_shipping_rounded, color: AppTheme.neonPurple, size: 22),
+          child: Icon(Icons.local_shipping_rounded, color: AppTheme.neonPurple, size: Responsive.iconSize(context, phone: 18, desktop: 22)),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('FLOTA DE VEHICULOS', style: TextStyle(
-              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 1)),
+          Text('FLOTA DE VEHICULOS', style: TextStyle(
+              color: Colors.white, fontSize: Responsive.fontSize(context, small: 13, large: 16), fontWeight: FontWeight.w800, letterSpacing: 1)),
           Text('${_vehicles.length} vehiculos registrados',
               style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
         ])),
@@ -98,11 +99,11 @@ class _VehiclesPageState extends State<VehiclesPage> {
         borderRadius: BorderRadius.circular(12),
         onTap: () => _showEditDialog(v),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
           child: Row(children: [
             // Vehicle icon
             Container(
-              width: 48, height: 48,
+              width: Responsive.value(context, phone: 40, desktop: 48), height: Responsive.value(context, phone: 40, desktop: 48),
               decoration: BoxDecoration(
                 color: AppTheme.neonBlue.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10)),
@@ -157,13 +158,13 @@ class _VehiclesPageState extends State<VehiclesPage> {
       backgroundColor: AppTheme.darkCard,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
+        padding: EdgeInsets.fromLTRB(Responsive.padding(ctx, small: 14, large: 20), 16, Responsive.padding(ctx, small: 14, large: 20), MediaQuery.of(ctx).viewInsets.bottom + 20),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(width: 40, height: 4, decoration: BoxDecoration(
               color: Colors.white24, borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 16),
-          Text('Configurar ${v.code}', style: const TextStyle(
-              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('Configurar ${v.code}', style: TextStyle(
+              color: Colors.white, fontSize: Responsive.fontSize(ctx, small: 14, large: 16), fontWeight: FontWeight.w700)),
           Text(v.description, style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
           const SizedBox(height: 20),
           Row(children: [

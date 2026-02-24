@@ -11,6 +11,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/widgets/async_operation_modal.dart';
 import '../../../../core/widgets/pdf_preview_screen.dart';
@@ -180,7 +181,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         curve: Curves.easeOutCubic,
       )),
       child: Container(
-        height: MediaQuery.of(context).size.height * (_isCompleted ? 0.70 : 0.92),
+        // Responsive: use more height in landscape where screen is shorter
+        height: Responsive.modalHeight(
+          context,
+          portraitFraction: _isCompleted ? 0.70 : 0.92,
+          landscapeFraction: _isCompleted ? 0.80 : 0.95,
+        ),
         decoration: BoxDecoration(
           color: AppTheme.darkBase,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -382,8 +388,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       children: [
         Icon(icon, size: 18, color: AppTheme.textTertiary),
         const SizedBox(width: 10),
+        // Responsive label width
         SizedBox(
-          width: 80,
+          width: Responsive.value(context, phone: 60, desktop: 80),
           child: Text(label, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
         ),
         Expanded(
@@ -1091,7 +1098,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       .format(widget.albaran.importeTotal),
                   style: TextStyle(
                     color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
-                    fontSize: 42,
+                    // Responsive: scale down large amount on small screens
+                    fontSize: Responsive.fontSize(context, small: 28, large: 42),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1434,7 +1442,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         color: AppTheme.darkCard,
                         child: SizedBox(
                           height: 200.0,
-                          width: MediaQuery.of(context).size.width - 80, // Adjust width
+                          // Responsive: less margin on phones
+                          width: MediaQuery.of(context).size.width - Responsive.value(context, phone: 40, desktop: 80), // Adjust width
                           child: ListView.builder(
                             padding: const EdgeInsets.all(8.0),
                             itemCount: options.length,
@@ -1502,7 +1511,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         color: AppTheme.darkCard,
                         child: SizedBox(
                           height: 200.0,
-                          width: MediaQuery.of(context).size.width - 80,
+                          // Responsive: less margin on phones
+                          width: MediaQuery.of(context).size.width - Responsive.value(context, phone: 40, desktop: 80),
                           child: ListView.builder(
                             padding: const EdgeInsets.all(8.0),
                             itemCount: options.length,
@@ -1578,8 +1588,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ],
           ),
           const SizedBox(height: 8),
+          // Responsive signature canvas: shorter in landscape, scales on phones
           Container(
-            height: 160,
+            height: Responsive.isLandscape(context)
+                ? 120.0
+                : Responsive.value(context, phone: 120, desktop: 160),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),

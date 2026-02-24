@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../data/warehouse_data_service.dart';
 import 'load_planner_3d_page.dart';
 
@@ -100,7 +101,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 14, large: 20), 12, Responsive.padding(context, small: 14, large: 20), 8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -121,19 +122,19 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
               border: Border.all(
                   color: AppTheme.neonBlue.withValues(alpha: 0.3)),
             ),
-            child: const Icon(Icons.warehouse_rounded,
-                color: AppTheme.neonBlue, size: 28),
+            child: Icon(Icons.warehouse_rounded,
+                color: AppTheme.neonBlue, size: Responsive.iconSize(context, phone: 22, desktop: 28)),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'CENTRO DE EXPEDICIONES',
                   style: TextStyle(
                     color: AppTheme.neonBlue,
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 14, large: 18),
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.5,
                   ),
@@ -256,7 +257,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
       child: GridView.builder(
         padding: const EdgeInsets.all(12),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: MediaQuery.of(context).size.width > 900 ? 3 : 2,
+          crossAxisCount: MediaQuery.of(context).size.width > 900 ? 3 : MediaQuery.of(context).size.width < 400 ? 1 : 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: 1.15,
@@ -282,7 +283,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
         animation: _pulseController,
         builder: (ctx, child) {
           return Container(
-            padding: const EdgeInsets.all(14),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
             decoration: BoxDecoration(
               color: AppTheme.darkCard,
               borderRadius: BorderRadius.circular(16),
@@ -496,7 +497,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
 
   Widget _kpiItem(String value, String label, Color color) {
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800)),
+      Text(value, style: TextStyle(color: color, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.w800)),
       const SizedBox(height: 2),
       Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 9)),
     ]);

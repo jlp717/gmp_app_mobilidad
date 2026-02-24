@@ -427,7 +427,7 @@ class _HoloRingPainter extends CustomPainter {
       ..shader = SweepGradient(
         startAngle: -math.pi / 2,
         endAngle: 3 * math.pi / 2,
-        colors: [progressColor, glowColor, progressColor],
+        colors: [this.progressColor, this.glowColor, this.progressColor],
         stops: const [0.0, 0.5, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius))
       ..style = PaintingStyle.stroke
@@ -437,7 +437,7 @@ class _HoloRingPainter extends CustomPainter {
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -math.pi / 2,
-      2 * math.pi * progress.clamp(0.0, 1.0),
+      2 * math.pi * this.progress.clamp(0.0, 1.0),
       false,
       progressPaint,
     );
@@ -445,11 +445,11 @@ class _HoloRingPainter extends CustomPainter {
     // Scanner effect (rotating highlight)
     final scannerPaint = Paint()
       ..shader = SweepGradient(
-        startAngle: scannerAngle - 0.3,
-        endAngle: scannerAngle + 0.3,
+        startAngle: this.scannerAngle - 0.3,
+        endAngle: this.scannerAngle + 0.3,
         colors: [
           Colors.transparent,
-          glowColor.withOpacity(0.6),
+          this.glowColor.withOpacity(0.6),
           Colors.transparent,
         ],
         stops: const [0.0, 0.5, 1.0],
@@ -462,7 +462,7 @@ class _HoloRingPainter extends CustomPainter {
     
     // Outer glow
     final glowPaint = Paint()
-      ..color = progressColor.withOpacity(0.2)
+      ..color = this.progressColor.withOpacity(0.2)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4);
@@ -472,7 +472,7 @@ class _HoloRingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _HoloRingPainter oldDelegate) {
-    return progress != oldDelegate.progress ||
-        scannerAngle != oldDelegate.scannerAngle;
+    return this.progress != oldDelegate.progress ||
+        this.scannerAngle != oldDelegate.scannerAngle;
   }
 }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 import '../../../../core/api/api_client.dart';
@@ -364,89 +365,99 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          // Clients Filter
-          Container(
-            width: 140,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppTheme.darkCard,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.borderColor),
+          // Clients Filter (responsive - flex instead of fixed width)
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 100,
+              maxWidth: Responsive.value(context, phone: 130, desktop: 160),
             ),
-            child: Row(
-              children: [
-                const SizedBox(width: 8),
-                const Icon(Icons.person_outline, size: 14, color: AppTheme.textSecondary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: TextField(
-                    controller: _searchClientController,
-                    style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
-                    decoration: const InputDecoration(
-                      hintText: 'Cliente...',
-                      hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
+            child: Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.darkCard,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 8),
+                  const Icon(Icons.person_outline, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchClientController,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        hintText: 'Cliente...',
+                        hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (v) => entregas.setSearchClient(v),
                     ),
-                    onChanged: (v) => entregas.setSearchClient(v),
                   ),
-                ),
-                if (_searchClientController.text.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.clear, size: 14),
-                    onPressed: () {
-                      _searchClientController.clear();
-                      entregas.setSearchClient('');
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-              ],
+                  if (_searchClientController.text.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 14),
+                      onPressed: () {
+                        _searchClientController.clear();
+                        entregas.setSearchClient('');
+                      },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
+              ),
             ),
           ),
-          
+
           const SizedBox(width: 6),
 
-          // Albaranes Filter
-          Container(
-            width: 110,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppTheme.darkCard,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.borderColor),
+          // Albaranes Filter (responsive - flex instead of fixed width)
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 90,
+              maxWidth: Responsive.value(context, phone: 110, desktop: 130),
             ),
-            child: Row(
-              children: [
-                const SizedBox(width: 8),
-                const Icon(Icons.description_outlined, size: 14, color: AppTheme.textSecondary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: TextField(
-                    controller: _searchAlbaranController,
-                    style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
-                    decoration: const InputDecoration(
-                      hintText: 'Nº Alb/Fac...',
-                      hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
+            child: Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.darkCard,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 8),
+                  const Icon(Icons.description_outlined, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchAlbaranController,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        hintText: 'Nº Alb/Fac...',
+                        hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (v) => entregas.setSearchAlbaran(v),
                     ),
-                    onChanged: (v) => entregas.setSearchAlbaran(v),
                   ),
-                ),
-                if (_searchAlbaranController.text.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.clear, size: 14),
-                    onPressed: () {
-                      _searchAlbaranController.clear();
-                      entregas.setSearchAlbaran('');
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-              ],
+                  if (_searchAlbaranController.text.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 14),
+                      onPressed: () {
+                        _searchAlbaranController.clear();
+                        entregas.setSearchAlbaran('');
+                      },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
+              ),
             ),
           ),
           
@@ -629,7 +640,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               backgroundColor: AppTheme.surfaceColor,
               child: ListView.builder(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.only(top: 4, bottom: 100),
+                // Responsive: less bottom padding on phones with bottom nav
+                padding: EdgeInsets.only(
+                  top: 4,
+                  bottom: Responsive.useBottomNav(context) ? 16 : 100,
+                ),
                 itemCount: provider.albaranes.length,
                 itemBuilder: (context, index) {
                   final albaran = provider.albaranes[index];

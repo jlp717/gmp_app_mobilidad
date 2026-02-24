@@ -446,15 +446,268 @@ class _MainShellState extends State<MainShell> {
     final navItems = _getNavItems(isJefeVentas, authProvider.vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
 
+    // Responsive: phones use bottom nav, tablets use sidebar
+    final useBottomNav = Responsive.useBottomNav(context);
+
+    if (useBottomNav) {
+      return _buildPhoneLayout(navItems, safeIndex, authProvider, user, isJefeVentas);
+    }
+    return _buildTabletLayout(navItems, safeIndex, authProvider, user, isJefeVentas);
+  }
+
+  // ---------------------------------------------------------------------------
+  // PHONE LAYOUT: Bottom navigation + drawer for avatar/settings
+  // ---------------------------------------------------------------------------
+  Widget _buildPhoneLayout(
+    List<_NavItem> navItems,
+    int safeIndex,
+    AuthProvider authProvider,
+    UserModel user,
+    bool isJefeVentas,
+  ) {
+    // Max 5 items in bottom nav; if more, last slot becomes "More"
+    final maxBottomItems = 5;
+    final hasOverflow = navItems.length > maxBottomItems;
+    final bottomItems = hasOverflow ? navItems.sublist(0, maxBottomItems - 1) : navItems;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      // Drawer for user profile, mode switcher, settings, logout
+      drawer: _buildPhoneDrawer(user, isJefeVentas, authProvider),
+      body: SafeArea(
+        child: _buildCurrentPage(authProvider.vendedorCodes, isJefeVentas),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                // Hamburger/avatar button to open drawer
+                _buildBottomNavDrawerButton(user),
+                // Nav items
+                ...bottomItems.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  return Expanded(
+                    child: _buildBottomNavItem(
+                      item: entry.value,
+                      isSelected: safeIndex == idx,
+                      onTap: () => setState(() => _currentIndex = idx),
+                    ),
+                  );
+                }),
+                // "More" overflow button
+                if (hasOverflow)
+                  Expanded(
+                    child: _buildBottomNavItem(
+                      item: _NavItem(
+                        icon: Icons.more_horiz,
+                        selectedIcon: Icons.more_horiz,
+                        label: 'Más',
+                        color: AppTheme.textSecondary,
+                      ),
+                      isSelected: safeIndex >= maxBottomItems - 1,
+                      onTap: () => _showOverflowMenu(navItems, maxBottomItems - 1),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Bottom nav item for phone layout
+  Widget _buildBottomNavItem({
+    required _NavItem item,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isSelected ? item.selectedIcon : item.icon,
+              color: isSelected ? item.color : AppTheme.textSecondary,
+              size: 22,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              item.label,
+              style: TextStyle(
+                fontSize: 9,
+                color: isSelected ? item.color : AppTheme.textSecondary,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Small avatar button at the left of the bottom nav to open drawer
+  Widget _buildBottomNavDrawerButton(UserModel user) {
+    return Builder(
+      builder: (ctx) => GestureDetector(
+        onTap: () => Scaffold.of(ctx).openDrawer(),
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 48,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [AppTheme.neonBlue, AppTheme.neonPurple],
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Icon(Icons.menu, color: AppTheme.textSecondary, size: 10),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Overflow bottom sheet for nav items that don't fit in bottom bar
+  void _showOverflowMenu(List<_NavItem> navItems, int startIndex) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 12),
+              width: 32, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ...navItems.sublist(startIndex).asMap().entries.map((entry) {
+              final actualIndex = startIndex + entry.key;
+              final item = entry.value;
+              final isSelected = _currentIndex == actualIndex;
+              return ListTile(
+                leading: Icon(
+                  isSelected ? item.selectedIcon : item.icon,
+                  color: isSelected ? item.color : AppTheme.textSecondary,
+                ),
+                title: Text(
+                  item.label,
+                  style: TextStyle(
+                    color: isSelected ? item.color : Colors.white,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() => _currentIndex = actualIndex);
+                },
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Drawer for phone layout with user info, mode switcher, and actions
+  Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas, AuthProvider authProvider) {
+    return Drawer(
+      backgroundColor: AppTheme.surfaceColor,
+      width: MediaQuery.of(context).size.width * 0.72,
+      child: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            _buildUserAvatar(user, isJefeVentas),
+            const SizedBox(height: 16),
+            // Mode switcher in drawer for Jefe
+            if (isJefeVentas) _buildModeSwitcher(),
+            const Divider(color: Colors.white10),
+            // Network settings
+            ListTile(
+              leading: const Icon(Icons.wifi, color: AppTheme.neonPurple, size: 20),
+              title: const Text('Configuración de Red', style: TextStyle(color: Colors.white, fontSize: 13)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(builder: (_) => const NetworkSettingsPage()),
+                );
+              },
+            ),
+            const Spacer(),
+            const Divider(color: Colors.white10),
+            // Logout
+            ListTile(
+              leading: const Icon(Icons.logout_rounded, color: AppTheme.error, size: 20),
+              title: const Text('Cerrar Sesión', style: TextStyle(color: AppTheme.error, fontSize: 13)),
+              onTap: () {
+                Navigator.pop(context);
+                _showLogoutConfirmation(authProvider);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // TABLET LAYOUT: Sidebar (original design, identical on large screens)
+  // ---------------------------------------------------------------------------
+  Widget _buildTabletLayout(
+    List<_NavItem> navItems,
+    int safeIndex,
+    AuthProvider authProvider,
+    UserModel user,
+    bool isJefeVentas,
+  ) {
+    final sidebarW = Responsive.sidebarWidth(context);
+
     return Scaffold(
       body: SafeArea(
         child: Row(
           children: [
-            // Custom Sidebar Navigation
+            // Sidebar Navigation
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              width: _isNavExpanded ? (Responsive.isSmall(context) ? 60 : 90) : 0,
+              width: _isNavExpanded ? sidebarW : 0,
               child: _isNavExpanded ? Container(
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceColor,
@@ -468,116 +721,11 @@ class _MainShellState extends State<MainShell> {
                     _buildUserAvatar(user, isJefeVentas),
                     const SizedBox(height: 16),
 
-                    // MODE SWITCHER FOR JEFE
-                    // MODE SWITCHER FOR JEFE
-                    if (isJefeVentas)
-                         Padding(
-                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                           child: Container(
-                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                             decoration: BoxDecoration(
-                               color: _forceAlmacenMode
-                                  ? AppTheme.neonPink.withOpacity(0.15)
-                                  : _forceRepartidorMode 
-                                       ? Colors.orange.withOpacity(0.15) 
-                                       : AppTheme.neonBlue.withOpacity(0.15),
-                               borderRadius: BorderRadius.circular(12),
-                               border: Border.all(
-                                 color: _forceAlmacenMode
-                                    ? AppTheme.neonPink.withOpacity(0.5)
-                                    : _forceRepartidorMode 
-                                         ? Colors.orange.withOpacity(0.5) 
-                                         : AppTheme.neonBlue.withOpacity(0.5),
-                                 width: 1
-                               )
-                             ),
-                             child: PopupMenuButton<String>(
-                               tooltip: 'Cambiar Perfil',
-                               offset: const Offset(0, 40),
-                               color: AppTheme.surfaceColor,
-                               shape: RoundedRectangleBorder(
-                                 borderRadius: BorderRadius.circular(12),
-                                 side: BorderSide(color: Colors.white.withOpacity(0.1))
-                               ),
-                               child: Row(
-                                 mainAxisAlignment: MainAxisAlignment.center,
-                                 children: [
-                                   Icon(
-                                     _forceAlmacenMode ? Icons.warehouse_rounded
-                                       : _forceRepartidorMode ? Icons.local_shipping : Icons.store,
-                                     color: _forceAlmacenMode ? AppTheme.neonPink
-                                       : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
-                                     size: 20
-                                   ),
-                                   const SizedBox(width: 8),
-                                   Text(
-                                     _forceAlmacenMode ? 'Almacén'
-                                       : _forceRepartidorMode ? 'Reparto' : 'Ventas',
-                                     style: TextStyle(
-                                       fontSize: 11,
-                                       fontWeight: FontWeight.bold,
-                                       color: _forceAlmacenMode ? AppTheme.neonPink
-                                         : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
-                                     ),
-                                   ),
-                                   const Icon(Icons.arrow_drop_down, color: Colors.white54, size: 18),
-                                 ],
-                               ),
-                               itemBuilder: (context) => [
-                                 const PopupMenuItem(
-                                   value: 'VENTAS',
-                                   child: Row(
-                                     children: [
-                                       Icon(Icons.store, color: AppTheme.neonBlue, size: 18),
-                                       SizedBox(width: 12),
-                                       Text('Perfil Ventas', style: TextStyle(color: Colors.white)),
-                                     ],
-                                   ),
-                                 ),
-                                 const PopupMenuItem(
-                                   value: 'REPARTO',
-                                   child: Row(
-                                     children: [
-                                       Icon(Icons.local_shipping, color: Colors.orange, size: 18),
-                                       SizedBox(width: 12),
-                                       Text('Perfil Reparto', style: TextStyle(color: Colors.white)),
-                                     ],
-                                   ),
-                                 ),
-                                 const PopupMenuItem(
-                                   value: 'ALMACEN',
-                                   child: Row(
-                                     children: [
-                                       Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
-                                       SizedBox(width: 12),
-                                       Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
-                                     ],
-                                   ),
-                                 ),
-                               ],
-                               onSelected: (value) {
-                                 if (value == 'ALMACEN') {
-                                    setState(() {
-                                      _forceAlmacenMode = true;
-                                      _forceRepartidorMode = false;
-                                      _currentIndex = 0;
-                                    });
-                                    return;
-                                  }
-                                 
-                                 final bool newMode = value == 'REPARTO';
-                                 setState(() {
-                                    _forceAlmacenMode = false;
-                                    _forceRepartidorMode = newMode;
-                                    _currentIndex = 0;
-                                  });
-                               },
-                             ),
-                           ),
-                         ),
-                    
+                    // Mode switcher for Jefe
+                    if (isJefeVentas) _buildModeSwitcher(),
+
                     const SizedBox(height: 16),
-                    
+
                     Expanded(
                       child: ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -594,7 +742,7 @@ class _MainShellState extends State<MainShell> {
                         },
                       ),
                     ),
-                    
+
                     const Divider(height: 1, color: Colors.white10),
                     Padding(
                       padding: const EdgeInsets.all(12),
@@ -610,8 +758,8 @@ class _MainShellState extends State<MainShell> {
                 ),
               ) : null,
             ),
-            
-            // Expand button
+
+            // Expand button when sidebar is collapsed
             if (!_isNavExpanded)
               GestureDetector(
                 onTap: () => setState(() => _isNavExpanded = true),
@@ -633,12 +781,122 @@ class _MainShellState extends State<MainShell> {
                   ),
                 ),
               ),
-            
+
             // Main Content
             Expanded(
               child: _buildCurrentPage(authProvider.vendedorCodes, isJefeVentas),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Mode switcher widget (used in both sidebar and drawer)
+  Widget _buildModeSwitcher() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: _forceAlmacenMode
+             ? AppTheme.neonPink.withOpacity(0.15)
+             : _forceRepartidorMode
+                  ? Colors.orange.withOpacity(0.15)
+                  : AppTheme.neonBlue.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _forceAlmacenMode
+               ? AppTheme.neonPink.withOpacity(0.5)
+               : _forceRepartidorMode
+                    ? Colors.orange.withOpacity(0.5)
+                    : AppTheme.neonBlue.withOpacity(0.5),
+            width: 1,
+          ),
+        ),
+        child: PopupMenuButton<String>(
+          tooltip: 'Cambiar Perfil',
+          offset: const Offset(0, 40),
+          color: AppTheme.surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _forceAlmacenMode ? Icons.warehouse_rounded
+                  : _forceRepartidorMode ? Icons.local_shipping : Icons.store,
+                color: _forceAlmacenMode ? AppTheme.neonPink
+                  : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  _forceAlmacenMode ? 'Almacén'
+                    : _forceRepartidorMode ? 'Reparto' : 'Ventas',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: _forceAlmacenMode ? AppTheme.neonPink
+                      : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(Icons.arrow_drop_down, color: Colors.white54, size: 18),
+            ],
+          ),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'VENTAS',
+              child: Row(
+                children: [
+                  Icon(Icons.store, color: AppTheme.neonBlue, size: 18),
+                  SizedBox(width: 12),
+                  Text('Perfil Ventas', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'REPARTO',
+              child: Row(
+                children: [
+                  Icon(Icons.local_shipping, color: Colors.orange, size: 18),
+                  SizedBox(width: 12),
+                  Text('Perfil Reparto', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'ALMACEN',
+              child: Row(
+                children: [
+                  Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
+                  SizedBox(width: 12),
+                  Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+          ],
+          onSelected: (value) {
+            if (value == 'ALMACEN') {
+              setState(() {
+                _forceAlmacenMode = true;
+                _forceRepartidorMode = false;
+                _currentIndex = 0;
+              });
+              return;
+            }
+            final bool newMode = value == 'REPARTO';
+            setState(() {
+              _forceAlmacenMode = false;
+              _forceRepartidorMode = newMode;
+              _currentIndex = 0;
+            });
+          },
         ),
       ),
     );
@@ -1170,11 +1428,17 @@ class _LogoutConfirmationDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Responsive dialog sizing
+    final dw = Responsive.dialogWidth(context, 340);
+    final dp = Responsive.padding(context, small: 20, large: 28);
+    final iconDim = Responsive.value(context, phone: 52, desktop: 72);
+    final titleFs = Responsive.fontSize(context, small: 18, large: 22);
+
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        width: 340,
-        padding: const EdgeInsets.all(28),
+        width: dw,
+        padding: EdgeInsets.all(dp),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           gradient: LinearGradient(
@@ -1205,10 +1469,10 @@ class _LogoutConfirmationDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon with glow effect
+            // Icon with glow effect (responsive)
             Container(
-              width: 72,
-              height: 72,
+              width: iconDim,
+              height: iconDim,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppTheme.error.withOpacity(0.15),
@@ -1220,20 +1484,20 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                   ),
                 ],
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.logout_rounded,
                 color: AppTheme.error,
-                size: 32,
+                size: iconDim * 0.44,
               ),
             ),
             
             const SizedBox(height: 24),
             
-            // Title
-            const Text(
+            // Title (responsive)
+            Text(
               '¿Cerrar Sesión?',
               style: TextStyle(
-                fontSize: 22,
+                fontSize: titleFs,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textPrimary,
               ),

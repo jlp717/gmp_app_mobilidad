@@ -106,7 +106,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                     : RefreshIndicator(
                         onRefresh: _loadAllData,
                         child: ListView(
-                          padding: const EdgeInsets.all(16),
+                          padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
                           children: [
                             _buildKPICards(),
                             const SizedBox(height: 16),
@@ -128,7 +128,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 20), 16, Responsive.padding(context, small: 12, large: 20), 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
@@ -136,20 +136,20 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 8, large: 10)),
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: [Colors.orange.withOpacity(0.3), Colors.deepOrange.withOpacity(0.2)]),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.dashboard, color: Colors.orange, size: 24),
+            child: Icon(Icons.dashboard, color: Colors.orange, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Panel de Reparto', style: TextStyle(fontSize: Responsive.isSmall(context) ? 16 : 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                Text('Resumen de entregas y cobros', style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 12, color: AppTheme.textSecondary)),
+                Text('Panel de Reparto', style: TextStyle(fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                Text('Resumen de entregas y cobros', style: TextStyle(fontSize: Responsive.fontSize(context, small: 10, large: 12), color: AppTheme.textSecondary)),
               ],
             ),
           ),
@@ -255,7 +255,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         
         return Container(
           width: width > 180 ? 180 : width,
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
           decoration: BoxDecoration(
             color: AppTheme.surfaceColor,
             borderRadius: BorderRadius.circular(14),
@@ -269,14 +269,14 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                   Icon(icon, color: color, size: 18),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text(label, style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 11, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis),
+                    child: Text(label, style: TextStyle(fontSize: Responsive.fontSize(context, small: 9, large: 11), color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(value, style: TextStyle(fontSize: Responsive.isSmall(context) ? 18 : 20, fontWeight: FontWeight.bold, color: color)),
+                child: Text(value, style: TextStyle(fontSize: Responsive.fontSize(context, small: 16, large: 20), fontWeight: FontWeight.bold, color: color)),
               ),
             ],
           ),
@@ -288,7 +288,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
   Widget _buildCollectionsCard() {
     final cs = _collectionsSummary!;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(14),
@@ -299,9 +299,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.euro, color: AppTheme.neonGreen, size: 20),
+              Icon(Icons.euro, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 18, desktop: 20)),
               const SizedBox(width: 8),
-              Text('Cobros del Mes', style: TextStyle(fontSize: Responsive.isSmall(context) ? 13 : 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+              Text('Cobros del Mes', style: TextStyle(fontSize: Responsive.fontSize(context, small: 12, large: 15), fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -349,9 +349,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
     return Expanded(
       child: Column(
         children: [
-          Text(value, style: TextStyle(fontSize: Responsive.isSmall(context) ? 11 : 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+          Text(value, style: TextStyle(fontSize: Responsive.fontSize(context, small: 10, large: 13), fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, color: AppTheme.textSecondary)),
+          Text(label, style: TextStyle(fontSize: Responsive.fontSize(context, small: 8, large: 10), color: AppTheme.textSecondary)),
         ],
       ),
     );
@@ -377,7 +377,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
     });
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(14),
@@ -387,9 +387,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.bar_chart, color: AppTheme.neonBlue, size: 20),
+              Icon(Icons.bar_chart, color: AppTheme.neonBlue, size: Responsive.iconSize(context, phone: 18, desktop: 20)),
               const SizedBox(width: 8),
-              Text('Entregas Diarias', style: TextStyle(fontSize: Responsive.isSmall(context) ? 13 : 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+              Text('Entregas Diarias', style: TextStyle(fontSize: Responsive.fontSize(context, small: 12, large: 15), fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
             ],
           ),
           const SizedBox(height: 16),
@@ -477,9 +477,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Row(
               children: [
-                const Icon(Icons.table_chart, color: AppTheme.neonPurple, size: 20),
+                Icon(Icons.table_chart, color: AppTheme.neonPurple, size: Responsive.iconSize(context, phone: 18, desktop: 20)),
                 const SizedBox(width: 8),
-                Text('Detalle Diario', style: TextStyle(fontSize: Responsive.isSmall(context) ? 13 : 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                Text('Detalle Diario', style: TextStyle(fontSize: Responsive.fontSize(context, small: 12, large: 15), fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
               ],
             ),
           ),

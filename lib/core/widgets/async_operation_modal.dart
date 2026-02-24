@@ -151,7 +151,8 @@ class AsyncOperationModal extends StatelessWidget {
     return Container(
       key: ValueKey(state),
       width: Responsive.clampWidth(context, 320),
-      padding: const EdgeInsets.all(28),
+      // Responsive padding
+      padding: EdgeInsets.all(Responsive.padding(context, small: 20, large: 28)),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(20),

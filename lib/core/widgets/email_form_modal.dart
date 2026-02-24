@@ -114,7 +114,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
       backgroundColor: Colors.transparent,
       child: Container(
         width: Responsive.clampWidth(context, 420),
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,
           borderRadius: BorderRadius.circular(20),
@@ -145,12 +145,12 @@ class _EmailFormModalState extends State<EmailFormModal> {
                     child: const Icon(Icons.email_rounded, color: AppTheme.neonBlue, size: 22),
                   ),
                   const SizedBox(width: 14),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Enviar por Email',
                       style: TextStyle(
                         color: AppTheme.textPrimary,
-                        fontSize: 18,
+                        fontSize: Responsive.fontSize(context, small: 16, large: 20),
                         fontWeight: FontWeight.w600,
                       ),
                     ),

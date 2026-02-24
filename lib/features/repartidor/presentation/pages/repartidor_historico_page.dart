@@ -254,7 +254,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Widget _buildHeader() {
     if (_selectedClientId != null) {
       return Container(
-        padding: const EdgeInsets.fromLTRB(8, 12, 16, 8),
+        padding: EdgeInsets.fromLTRB(8, 12, Responsive.padding(context, small: 10, large: 16), 8),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           border: Border(bottom: BorderSide(color: AppTheme.neonPurple.withOpacity(0.2), width: 1)),
@@ -273,12 +273,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     children: [
                       Text(
                         _selectedClientName ?? 'Cliente',
-                        style: TextStyle(fontSize: Responsive.isSmall(context) ? 14 : 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                        style: TextStyle(fontSize: Responsive.fontSize(context, small: 13, large: 16), fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         'Cód: $_selectedClientId',
-                        style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 11, color: AppTheme.textSecondary.withOpacity(0.8)),
+                        style: TextStyle(fontSize: Responsive.fontSize(context, small: 9, large: 11), color: AppTheme.textSecondary.withOpacity(0.8)),
                       ),
                     ],
                   ),
@@ -454,7 +454,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       onTap: () => _loadClientDocuments(client.id, client.name),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(12),
@@ -464,7 +464,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           children: [
             // Avatar
             Container(
-              width: 44, height: 44,
+              width: Responsive.value(context, phone: 36, desktop: 44), height: Responsive.value(context, phone: 36, desktop: 44),
               decoration: BoxDecoration(
                 color: AppTheme.neonPurple.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
@@ -472,7 +472,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               child: Center(
                 child: Text(
                   client.name.isNotEmpty ? client.name[0] : '?',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.neonPurple),
+                  style: TextStyle(fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold, color: AppTheme.neonPurple),
                 ),
               ),
             ),
@@ -597,7 +597,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               // Number search
               SizedBox(
                 height: 38,
-                width: Responsive.isSmall(context) ? double.infinity : 200,
+                width: Responsive.isPhone(context) ? double.infinity : 200,
                 child: TextField(
                   controller: _docSearchController,
                   onChanged: (_) => setState(() {}),
@@ -633,7 +633,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             children: [
               // Date range button
               SizedBox(
-                width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 32) : 120,
+                width: Responsive.isPhone(context) ? (MediaQuery.of(context).size.width - 32) : 120,
                 child: _buildFilterDropdown(
                   icon: Icons.date_range,
                   label: _dateFrom != null || _dateTo != null ? _formatDateRange() : 'Fechas',
@@ -645,7 +645,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               // Doc type dropdown
               Container(
                 height: 38,
-                width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 44) / 2 : 110,
+                width: Responsive.isPhone(context) ? (MediaQuery.of(context).size.width - 44) / 2 : 110,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
                   color: _filterDocType != null ? AppTheme.neonPurple.withOpacity(0.1) : AppTheme.surfaceColor,
@@ -701,7 +701,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               // Status dropdown
               Container(
                 height: 38,
-                width: Responsive.isSmall(context) ? (MediaQuery.of(context).size.width - 44) / 2 : 110,
+                width: Responsive.isPhone(context) ? (MediaQuery.of(context).size.width - 44) / 2 : 110,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
                   color: _filterStatus != null ? _statusColor(_filterStatus).withOpacity(0.1) : AppTheme.surfaceColor,
@@ -832,8 +832,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   Widget _buildStatItem(String label, String value, Color color) {
     return Column(
       children: [
-        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: TextStyle(fontSize: 9, color: AppTheme.textSecondary.withOpacity(0.7))),
+        Text(value, style: TextStyle(fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: TextStyle(fontSize: Responsive.fontSize(context, small: 8, large: 9), color: AppTheme.textSecondary.withOpacity(0.7))),
       ],
     );
   }
@@ -1004,7 +1004,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       onTap: () => _showDocumentActions(doc),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(12),

@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/clients_service.dart';
@@ -169,7 +170,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16), vertical: Responsive.padding(context, small: 6, large: 8)),
       color: AppTheme.surfaceColor,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -244,11 +245,11 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           Row(
             children: [
               CircleAvatar(
-                radius: 20,
+                radius: Responsive.value(context, phone: 16, desktop: 20),
                 backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                  style: const TextStyle(color: AppTheme.neonGreen, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppTheme.neonGreen, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 12),
@@ -273,7 +274,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               // WhatsApp Button
               if (phones.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.chat, size: 20, color: Color(0xFF25D366)), // WhatsApp green
+                  icon: Icon(Icons.chat, size: Responsive.iconSize(context, phone: 18, desktop: 20), color: const Color(0xFF25D366)), // WhatsApp green
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _showWhatsAppDialog(phones),
@@ -282,7 +283,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               const SizedBox(width: 8),
               if (phone.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.phone, size: 20, color: AppTheme.success),
+                  icon: Icon(Icons.phone, size: Responsive.iconSize(context, phone: 18, desktop: 20), color: AppTheme.success),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _launchPhone(phone),
@@ -325,7 +326,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     
     return Row(
       children: [
-        const SizedBox(width: 52), // Align with avatar
+        SizedBox(width: Responsive.value(context, phone: 44, desktop: 52)), // Align with avatar
         // Route Badge
         if (route.isNotEmpty) ...[
           Container(
@@ -510,7 +511,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final pendingCount = (payments['pendingCount'] as num?)?.toInt() ?? 0;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -545,7 +546,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
           // Payment Status
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
             decoration: AppTheme.glassMorphism(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -555,7 +556,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   children: [
                     Text('Estado de Pagos', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                     Icon(pendingCount > 0 ? Icons.warning_amber : Icons.check_circle, 
-                         color: pendingCount > 0 ? AppTheme.warning : AppTheme.success),
+                         color: pendingCount > 0 ? AppTheme.warning : AppTheme.success,
+                         size: Responsive.iconSize(context, phone: 20, desktop: 24)),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -592,8 +594,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             Text('Evolución Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Container(
-              height: 200,
-              padding: const EdgeInsets.all(16),
+              height: Responsive.value(context, phone: 150, desktop: 200),
+              padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
               decoration: AppTheme.glassMorphism(),
               child: _buildTrendChart(monthlyTrend),
             ),
@@ -659,7 +661,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       itemCount: topProducts.length,
       itemBuilder: (context, index) {
         final product = topProducts[index];

@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../data/warehouse_data_service.dart';
 
 class ArticlesPage extends StatefulWidget {
@@ -78,19 +79,19 @@ class _ArticlesPageState extends State<ArticlesPage> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 16), 12, Responsive.padding(context, small: 12, large: 16), 4),
       child: Row(children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 6, large: 8)),
           decoration: BoxDecoration(
             color: AppTheme.neonGreen.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.inventory_2_rounded, color: AppTheme.neonGreen, size: 22),
+          child: Icon(Icons.inventory_2_rounded, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 18, desktop: 22)),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('DIMENSIONES ARTICULOS', style: TextStyle(
-              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 1)),
+          Text('DIMENSIONES ARTICULOS', style: TextStyle(
+              color: Colors.white, fontSize: Responsive.fontSize(context, small: 13, large: 16), fontWeight: FontWeight.w800, letterSpacing: 1)),
           Text('Configura tamaños reales para el planificador 3D',
               style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10)),
         ])),
@@ -202,7 +203,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
       backgroundColor: AppTheme.darkCard,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
+        padding: EdgeInsets.fromLTRB(Responsive.padding(ctx, small: 14, large: 20), 16, Responsive.padding(ctx, small: 14, large: 20), MediaQuery.of(ctx).viewInsets.bottom + 20),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(width: 40, height: 4, decoration: BoxDecoration(
               color: Colors.white24, borderRadius: BorderRadius.circular(2))),

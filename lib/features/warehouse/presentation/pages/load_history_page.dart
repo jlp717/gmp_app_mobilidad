@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../data/warehouse_data_service.dart';
 
 class LoadHistoryPage extends StatefulWidget {
@@ -91,19 +92,19 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 16), 12, Responsive.padding(context, small: 12, large: 16), 4),
       child: Row(children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 6, large: 8)),
           decoration: BoxDecoration(
             color: AppTheme.neonBlue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.history_rounded, color: AppTheme.neonBlue, size: 22),
+          child: Icon(Icons.history_rounded, color: AppTheme.neonBlue, size: Responsive.iconSize(context, phone: 18, desktop: 22)),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('HISTORIAL DE CARGAS', style: TextStyle(
-              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 1)),
+          Text('HISTORIAL DE CARGAS', style: TextStyle(
+              color: Colors.white, fontSize: Responsive.fontSize(context, small: 13, large: 16), fontWeight: FontWeight.w800, letterSpacing: 1)),
           Text('${_entries.length} planificaciones registradas',
               style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
         ])),

@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../data/warehouse_data_service.dart';
 
 class PersonnelPage extends StatefulWidget {
@@ -153,27 +154,27 @@ class _PersonnelPageState extends State<PersonnelPage> {
         children: [
           // Header
           Container(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+            padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 14, large: 20), 12, Responsive.padding(context, small: 14, large: 20), 10),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: EdgeInsets.all(Responsive.padding(context, small: 8, large: 10)),
                   decoration: BoxDecoration(
                     color: AppTheme.neonPurple.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
                   ),
-                  child: const Icon(Icons.groups_rounded, color: AppTheme.neonPurple, size: 24),
+                  child: Icon(Icons.groups_rounded, color: AppTheme.neonPurple, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('PERSONAL DE ALMACÉN',
+                      Text('PERSONAL DE ALMACÉN',
                           style: TextStyle(
                               color: AppTheme.neonPurple,
-                              fontSize: 16,
+                              fontSize: Responsive.fontSize(context, small: 13, large: 16),
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1.2)),
                       Text('${_personnel.length} operarios activos',
@@ -232,7 +233,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
       onLongPress: isCustom ? () => _showPersonActions(person) : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
         decoration: BoxDecoration(
           color: AppTheme.darkCard,
           borderRadius: BorderRadius.circular(14),
@@ -241,11 +242,11 @@ class _PersonnelPageState extends State<PersonnelPage> {
         child: Row(
           children: [
             CircleAvatar(
-              radius: 22,
+              radius: Responsive.value(context, phone: 18, desktop: 22),
               backgroundColor: roleColor.withValues(alpha: 0.15),
               child: Text(
                 person.name.isNotEmpty ? person.name[0].toUpperCase() : '?',
-                style: TextStyle(color: roleColor, fontWeight: FontWeight.w700, fontSize: 18),
+                style: TextStyle(color: roleColor, fontWeight: FontWeight.w700, fontSize: Responsive.fontSize(context, small: 14, large: 18)),
               ),
             ),
             const SizedBox(width: 12),

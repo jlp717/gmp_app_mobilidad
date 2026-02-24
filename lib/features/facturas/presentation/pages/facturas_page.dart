@@ -866,7 +866,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       padding: const EdgeInsets.all(16),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final itemWidth = (constraints.maxWidth - 16) / 3;
+          // Responsive: 2 columns on very narrow screens, 3 on wider
+          final columns = constraints.maxWidth < 400 ? 2 : 3;
+          final itemWidth = (constraints.maxWidth - (columns - 1) * 8) / columns;
           return Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1118,8 +1120,10 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Responsive search field height
+    final fieldH = Responsive.value(context, phone: 40, desktop: 48);
     return Container(
-      height: 48,
+      height: fieldH,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
@@ -1139,7 +1143,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       ),
     );
   }
-  
+
   Widget _buildDropdown<T>({
     required T? value,
     required List<DropdownMenuItem<T>> items,
@@ -1149,8 +1153,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Responsive dropdown height
     return Container(
-      height: 48,
+      height: Responsive.value(context, phone: 40, desktop: 48),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,

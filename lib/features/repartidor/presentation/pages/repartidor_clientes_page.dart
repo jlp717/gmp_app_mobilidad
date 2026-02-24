@@ -156,7 +156,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 20), 16, Responsive.padding(context, small: 12, large: 20), 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
@@ -164,20 +164,20 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 8, large: 10)),
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: [AppTheme.neonGreen.withOpacity(0.3), AppTheme.neonBlue.withOpacity(0.2)]),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.people, color: AppTheme.neonGreen, size: 24),
+            child: Icon(Icons.people, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Clientes de Reparto', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                Text('${_clients.length} clientes', style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 12, color: AppTheme.textSecondary)),
+                Text('Clientes de Reparto', style: TextStyle(fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                Text('${_clients.length} clientes', style: TextStyle(fontSize: Responsive.fontSize(context, small: 10, large: 12), color: AppTheme.textSecondary)),
               ],
             ),
           ),
@@ -289,13 +289,13 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         onTap: () => _navigateToHistory(client),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
           child: Row(
             children: [
               // Avatar
               Container(
-                width: 44,
-                height: 44,
+                width: Responsive.value(context, phone: 36, desktop: 44),
+                height: Responsive.value(context, phone: 36, desktop: 44),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   gradient: LinearGradient(
@@ -305,7 +305,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                 child: Center(
                   child: Text(
                     client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
-                    style: const TextStyle(color: AppTheme.neonGreen, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: AppTheme.neonGreen, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -317,14 +317,14 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                   children: [
                     Text(
                       client.name,
-                      style: TextStyle(fontSize: Responsive.isSmall(context) ? 13 : 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                      style: TextStyle(fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${client.id} · ${client.address}',
-                      style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 11, color: AppTheme.textSecondary),
+                      style: TextStyle(fontSize: Responsive.fontSize(context, small: 9, large: 11), color: AppTheme.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

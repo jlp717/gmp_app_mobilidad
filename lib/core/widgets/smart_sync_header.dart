@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 class SmartSyncHeader extends StatelessWidget {
   final String title;
@@ -31,7 +32,7 @@ class SmartSyncHeader extends StatelessWidget {
     final double subtitleSize = compact ? 11 : 12;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(compact ? 12 : 20, vertPad, compact ? 12 : 20, vertPad),
+      padding: EdgeInsets.fromLTRB(compact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad, compact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,

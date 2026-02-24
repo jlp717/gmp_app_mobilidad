@@ -83,7 +83,13 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
     return Consumer<CobrosProvider>(
       builder: (context, provider, _) {
         return Container(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+          // Responsive header padding
+          padding: EdgeInsets.fromLTRB(
+            Responsive.padding(context, small: 12, large: 24),
+            Responsive.padding(context, small: 12, large: 20),
+            Responsive.padding(context, small: 12, large: 24),
+            Responsive.padding(context, small: 10, large: 16),
+          ),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -100,86 +106,96 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
               ),
             ),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Título con icono animado
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.neonBlue.withOpacity(0.2),
-                      AppTheme.neonPurple.withOpacity(0.2),
-                    ],
+              Row(
+                children: [
+                  // Título con icono
+                  Container(
+                    padding: EdgeInsets.all(Responsive.value(context, phone: 8, desktop: 12)),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.neonBlue.withOpacity(0.2),
+                          AppTheme.neonPurple.withOpacity(0.2),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.neonBlue.withOpacity(0.2),
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.receipt_long,
+                      color: AppTheme.neonBlue,
+                      size: Responsive.iconSize(context, phone: 22, desktop: 28),
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.neonBlue.withOpacity(0.2),
-                      blurRadius: 12,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Cobros & Entregas',
+                          style: TextStyle(
+                            fontSize: Responsive.fontSize(context, small: 18, large: 24),
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          DateFormat('EEEE, d MMMM yyyy', 'es').format(DateTime.now()),
+                          style: TextStyle(
+                            fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                            color: AppTheme.textSecondary.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.receipt_long,
-                  color: AppTheme.neonBlue,
-                  size: 28,
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 16),
-              
-              // Título y subtítulo
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 10),
+              // Responsive: stats wrap on small screens
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
-                    const Text(
-                      'Cobros & Entregas',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
+                    _buildQuickStat(
+                      icon: Icons.local_shipping,
+                      label: 'Pendientes',
+                      value: '${provider.totalEntregasPendientes}',
+                      color: Colors.orange,
                     ),
-                    Text(
-                      DateFormat('EEEE, d MMMM yyyy', 'es').format(DateTime.now()),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary.withOpacity(0.8),
-                      ),
+                    const SizedBox(width: 8),
+                    _buildQuickStat(
+                      icon: Icons.check_circle,
+                      label: 'Completadas',
+                      value: '${provider.totalEntregasCompletadas}',
+                      color: Colors.green,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildQuickStat(
+                      icon: Icons.warning_amber,
+                      label: 'CTR',
+                      value: '${provider.totalCTRPendientes}',
+                      color: Colors.red,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildQuickStat(
+                      icon: Icons.euro,
+                      label: 'Total Pendiente',
+                      value: _currencyFormat.format(provider.totalImportePendiente),
+                      color: AppTheme.neonBlue,
+                      isLarge: true,
                     ),
                   ],
                 ),
-              ),
-              
-              // Estadísticas rápidas
-              _buildQuickStat(
-                icon: Icons.local_shipping,
-                label: 'Pendientes',
-                value: '${provider.totalEntregasPendientes}',
-                color: Colors.orange,
-              ),
-              const SizedBox(width: 16),
-              _buildQuickStat(
-                icon: Icons.check_circle,
-                label: 'Completadas',
-                value: '${provider.totalEntregasCompletadas}',
-                color: Colors.green,
-              ),
-              const SizedBox(width: 16),
-              _buildQuickStat(
-                icon: Icons.warning_amber,
-                label: 'CTR',
-                value: '${provider.totalCTRPendientes}',
-                color: Colors.red,
-              ),
-              const SizedBox(width: 16),
-              _buildQuickStat(
-                icon: Icons.euro,
-                label: 'Total Pendiente',
-                value: _currencyFormat.format(provider.totalImportePendiente),
-                color: AppTheme.neonBlue,
-                isLarge: true,
               ),
             ],
           ),
@@ -308,56 +324,84 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
 
         final albaranes = provider.albaranesFiltrados;
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Panel izquierdo: Filtros y resumen
-            Container(
-              width: 280,
-              margin: const EdgeInsets.all(16),
-              child: Column(
+        // Responsive: side-by-side on tablets, stacked on phones
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 700;
+
+            final filtersWidget = Column(
+              children: [
+                CobrosFilters(
+                  onEstadoChanged: provider.setFiltroEstado,
+                  onClienteChanged: provider.setFiltroCliente,
+                  estadoActual: provider.filtroEstado,
+                ),
+                const SizedBox(height: 16),
+                CobrosSummaryCard(
+                  totalPendientes: provider.totalEntregasPendientes,
+                  totalCompletadas: provider.totalEntregasCompletadas,
+                  totalCTR: provider.totalCTRPendientes,
+                  importeTotal: provider.totalImportePendiente,
+                ),
+              ],
+            );
+
+            final listWidget = albaranes.isEmpty
+                ? _buildEmptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: albaranes.length,
+                    itemBuilder: (context, index) {
+                      final albaran = albaranes[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: AlbaranCard(
+                          albaran: albaran,
+                          onTap: () => _showEntregaDetail(albaran),
+                          onQuickComplete: () => _completarEntrega(albaran),
+                        ),
+                      );
+                    },
+                  );
+
+            if (isWide) {
+              // Tablet: side-by-side layout (original)
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Filtros
-                  CobrosFilters(
-                    onEstadoChanged: provider.setFiltroEstado,
-                    onClienteChanged: provider.setFiltroCliente,
-                    estadoActual: provider.filtroEstado,
+                  Container(
+                    width: Responsive.value(context, phone: 220, desktop: 280),
+                    margin: const EdgeInsets.all(16),
+                    child: filtersWidget,
                   ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Resumen del día
-                  CobrosSummaryCard(
-                    totalPendientes: provider.totalEntregasPendientes,
-                    totalCompletadas: provider.totalEntregasCompletadas,
-                    totalCTR: provider.totalCTRPendientes,
-                    importeTotal: provider.totalImportePendiente,
-                  ),
+                  Expanded(child: listWidget),
                 ],
-              ),
-            ),
-            
-            // Panel derecho: Lista de albaranes
-            Expanded(
-              child: albaranes.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: albaranes.length,
-                      itemBuilder: (context, index) {
-                        final albaran = albaranes[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: AlbaranCard(
-                            albaran: albaran,
-                            onTap: () => _showEntregaDetail(albaran),
-                            onQuickComplete: () => _completarEntrega(albaran),
-                          ),
-                        );
-                      },
+              );
+            }
+
+            // Phone: filters collapsible at top, list below
+            return Column(
+              children: [
+                // Collapsible filters
+                ExpansionTile(
+                  title: const Text(
+                    'Filtros y Resumen',
+                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                  ),
+                  iconColor: AppTheme.neonBlue,
+                  collapsedIconColor: AppTheme.textSecondary,
+                  initiallyExpanded: false,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: filtersWidget,
                     ),
-            ),
-          ],
+                  ],
+                ),
+                Expanded(child: listWidget),
+              ],
+            );
+          },
         );
       },
     );

@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 
 class CobrosFilters extends StatefulWidget {
   final Function(String) onEstadoChanged;
@@ -41,7 +42,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(16),

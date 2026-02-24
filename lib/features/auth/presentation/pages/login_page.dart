@@ -261,7 +261,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         Expanded(
           child: _buildBranding().animate().fadeIn(duration: 800.ms).slideX(begin: -0.2),
         ),
-        const SizedBox(width: 80),
+        // Responsive gap between branding and login card
+        SizedBox(width: Responsive.value(context, phone: 32, desktop: 80)),
         // Right: Login card
         _buildLoginCard().animate().fadeIn(delay: 200.ms, duration: 800.ms).slideY(begin: 0.1),
       ],
@@ -315,13 +316,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
         const SizedBox(height: 40),
-        // Features
-        Row(
+        // Features (responsive: wrap on narrow screens)
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
           children: [
             _buildFeatureChip(Icons.bolt_rounded, 'Tiempo Real'),
-            const SizedBox(width: 12),
             _buildFeatureChip(Icons.insights_rounded, 'Analytics'),
-            const SizedBox(width: 12),
             _buildFeatureChip(Icons.security_rounded, 'Seguro'),
           ],
         ),

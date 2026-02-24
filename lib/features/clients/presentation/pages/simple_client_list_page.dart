@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Simple Clients List Page with debounced search
 class SimpleClientListPage extends StatefulWidget {
@@ -271,12 +272,12 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
 
         // Header & Filters
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
           child: Column(
             children: [
               Row(
                 children: [
-                  const Icon(Icons.people, color: AppTheme.neonGreen, size: 28),
+                  Icon(Icons.people, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 22, desktop: 28)),
                   const SizedBox(width: 12),
                   Text('Clientes', style: Theme.of(context).textTheme.headlineMedium),
                   const Spacer(),
@@ -304,7 +305,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
 
         // Search Bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16)),
           child: TextField(
             decoration: InputDecoration(
               hintText: 'Buscar cliente, NIF, Ciudad, Código...',
@@ -334,7 +335,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   Widget _buildContent() {
     if (_isLoading) {
       return Padding(
-        padding: const EdgeInsets.all(40.0),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 24, large: 40)),
         child: ModernLoading(message: 'Cargando cartera de clientes...'),
       );
     }
@@ -378,7 +379,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
     return RefreshIndicator(
       onRefresh: () => _loadClients(query: _searchQuery),
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16)),
         itemCount: _clients.length,
         itemBuilder: (context, index) {
           final client = _clients[index];
@@ -413,6 +414,10 @@ class _ClientCard extends StatelessWidget {
     final numOrders = (client['numOrders'] as int?) ?? 0;
     final lastPurchase = (client['lastPurchase'] as String?) ?? '';
 
+    final avatarRadius = Responsive.value(context, phone: 20, desktop: 28);
+    final avatarFontSize = Responsive.fontSize(context, small: 15, large: 20);
+    final cardPadding = Responsive.padding(context, small: 12, large: 16);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       color: AppTheme.surfaceColor,
@@ -420,7 +425,7 @@ class _ClientCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(cardPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -429,14 +434,14 @@ class _ClientCard extends StatelessWidget {
                 children: [
                   // Avatar
                   CircleAvatar(
-                    radius: 28,
+                    radius: avatarRadius,
                     backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.neonGreen,
                         fontWeight: FontWeight.bold,
-                        fontSize: 20,
+                        fontSize: avatarFontSize,
                       ),
                     ),
                   ),
