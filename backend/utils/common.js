@@ -232,9 +232,24 @@ function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L')
         return `AND ${prefix}LCCDVD IN (${validCodes})`;
     }
 
-    // PRE Logic: R1_T8CDVD is active. We need to split by date.
-    const oldFilter = `(${prefix}LCCDVD IN (${validCodes}) AND ${prefix}LCAADC < ${TRANSITION_YEAR})`;
-    const newFilter = `(${prefix}R1_T8CDVD IN (${validCodes}) AND ${prefix}LCAADC >= ${TRANSITION_YEAR})`;
+    // Check if any of the requested years involve the transition or the base year for the transition
+    const involvesTransition = (!Array.isArray(years) || years.length === 0) ? true : years.some(y => y >= (TRANSITION_YEAR - 1));
+
+    if (!involvesTransition) {
+        // Historical years purely use the old column
+        return `AND ${prefix}LCCDVD IN (${validCodes})`;
+    }
+
+    // Dynamic month-based transition logic
+    // This perfectly aligns the comparison year (e.g. 2025) with the current year (2026) Month by Month.
+    // So Jan 2025 uses LCCDVD (to compare with Jan 2026 LCCDVD), while Mar 2025 uses R1_T8CDVD (to compare with Mar 2026).
+    if (TRANSITION_MONTH <= 1) {
+        // If transition is January (like in PRE), just use the new column for everything
+        return `AND ${prefix}${VENDOR_COLUMN} IN (${validCodes})`;
+    }
+
+    const oldFilter = `(${prefix}LCMMDC < ${TRANSITION_MONTH} AND ${prefix}LCCDVD IN (${validCodes}))`;
+    const newFilter = `(${prefix}LCMMDC >= ${TRANSITION_MONTH} AND ${prefix}${VENDOR_COLUMN} IN (${validCodes}))`;
 
     return `AND (${oldFilter} OR ${newFilter})`;
 }
