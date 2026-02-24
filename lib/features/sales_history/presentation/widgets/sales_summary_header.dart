@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/responsive.dart';
 
 class SalesSummaryHeader extends StatelessWidget {
   final Map<String, dynamic> summary;
@@ -48,7 +49,7 @@ class SalesSummaryHeader extends StatelessWidget {
     
     return Column(
       children: [
-        _buildPremiumSummary(
+        _buildPremiumSummary(context,
           currSales, prevSales, saleGrowth, 
           currUnits, prevUnits, unitGrowth,
           currMargin, prevMargin, marginGrowth,
@@ -58,13 +59,13 @@ class SalesSummaryHeader extends StatelessWidget {
         
         // Breakdown Section (Only if > 1 year)
         if ((summary['breakdown'] as List?)?.isNotEmpty ?? false) ...[
-          _buildBreakdownSection(summary['breakdown'] as List),
+          _buildBreakdownSection(context, summary['breakdown'] as List),
         ],
       ],
     );
   }
 
-  Widget _buildBreakdownSection(List breakdownJson) {
+  Widget _buildBreakdownSection(BuildContext context, List breakdownJson) {
     // Check if we have monthly breakdown in the parent summary map?
     // The 'breakdownJson' passed here is usually summary['breakdown'].
     // We need to check if 'summary' has 'monthlyBreakdown'.
@@ -80,7 +81,10 @@ class SalesSummaryHeader extends StatelessWidget {
     final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 0);
     
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(
+          horizontal: 16, 
+          vertical: 8 * Responsive.landscapeScale(context)
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -228,7 +232,7 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildPremiumSummary(
+  Widget _buildPremiumSummary(BuildContext context,
     double sales, double prevSales, double salesGrowth, 
     double units, double prevUnits, double unitsGrowth,
     double margin, double prevMargin, double marginGrowth,
@@ -236,7 +240,10 @@ class SalesSummaryHeader extends StatelessWidget {
     bool isNewClient,
   ) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: EdgeInsets.symmetric(
+          horizontal: 12, 
+          vertical: 8 * Responsive.landscapeScale(context)
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -255,7 +262,7 @@ class SalesSummaryHeader extends StatelessWidget {
       child: Column(
         children: [
           // Header con VENTAS principal
-          _buildMainSalesSection(sales, prevSales, salesGrowth, isNewClient),
+          _buildMainSalesSection(context, sales, prevSales, salesGrowth, isNewClient),
           
           // Separator
           Container(
@@ -270,12 +277,15 @@ class SalesSummaryHeader extends StatelessWidget {
           
           // Secondary metrics row - MÁS COMPACTO
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: EdgeInsets.symmetric(
+                horizontal: 12, 
+                vertical: 10 * Responsive.landscapeScale(context)
+            ),
             child: Row(
               children: [
                 // UDS / CAJAS / KG
                 Expanded(
-                  child: _buildCompactMetricCard(
+                  child: _buildCompactMetricCard(context,
                     icon: Icons.inventory_2_outlined,
                     iconColor: AppTheme.neonBlue,
                     label: 'UDS',
@@ -290,7 +300,7 @@ class SalesSummaryHeader extends StatelessWidget {
                 
                 // PRODUCTOS
                 Expanded(
-                  child: _buildCompactMetricCard(
+                  child: _buildCompactMetricCard(context,
                     icon: Icons.category_outlined,
                     iconColor: AppTheme.warning,
                     label: 'PRODS',
@@ -307,7 +317,7 @@ class SalesSummaryHeader extends StatelessWidget {
                 if (showMargin) ...[
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _buildCompactMarginCard(margin, prevMargin, marginGrowth, isClientNew: isNewClient),
+                    child: _buildCompactMarginCard(context, margin, prevMargin, marginGrowth, isClientNew: isNewClient),
                   ),
                 ],
               ],
@@ -318,11 +328,14 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildMainSalesSection(double sales, double prevSales, double salesGrowth, bool isNewClient) {
+  Widget _buildMainSalesSection(BuildContext context, double sales, double prevSales, double salesGrowth, bool isNewClient) {
     final isPositive = salesGrowth >= 0;
     
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(
+          horizontal: 16, 
+          vertical: 12 * Responsive.landscapeScale(context)
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -481,7 +494,7 @@ class SalesSummaryHeader extends StatelessWidget {
   }
 
   // === VERSIONES COMPACTAS ===
-  Widget _buildCompactMetricCard({
+  Widget _buildCompactMetricCard(BuildContext context, {
     required IconData icon,
     required Color iconColor,
     required String label,
@@ -499,8 +512,8 @@ class SalesSummaryHeader extends StatelessWidget {
     final showNuevo = isClientNew || isNew;
     
     return Container(
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minHeight: 70), // Altura mínima uniforme
+      padding: EdgeInsets.all(8 * Responsive.landscapeScale(context)),
+      constraints: BoxConstraints(minHeight: 70 * Responsive.landscapeScale(context)), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(10),
@@ -536,13 +549,13 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildCompactMarginCard(double margin, double prevMargin, double marginGrowth, {bool isClientNew = false}) {
+  Widget _buildCompactMarginCard(BuildContext context, double margin, double prevMargin, double marginGrowth, {bool isClientNew = false}) {
     final isPositive = marginGrowth >= 0;
     final marginColor = margin >= 15 ? AppTheme.success : (margin >= 10 ? AppTheme.warning : AppTheme.error);
     
     return Container(
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minHeight: 70), // Altura mínima uniforme
+      padding: EdgeInsets.all(8 * Responsive.landscapeScale(context)),
+      constraints: BoxConstraints(minHeight: 70 * Responsive.landscapeScale(context)), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(10),

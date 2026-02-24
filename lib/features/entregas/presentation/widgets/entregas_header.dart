@@ -92,12 +92,13 @@ class EntregasHeader extends StatelessWidget {
                 ],
               ),
               
-              const SizedBox(height: 20),
+              SizedBox(height: 20 * Responsive.landscapeScale(context)),
               
               // Stats cards
               Row(
                 children: [
                   _buildStatCard(
+                    context,
                     icon: Icons.pending_actions,
                     label: 'Pendientes',
                     value: '$pendientes',
@@ -105,6 +106,7 @@ class EntregasHeader extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   _buildStatCard(
+                    context,
                     icon: Icons.check_circle,
                     label: 'Entregados',
                     value: '$entregados',
@@ -112,6 +114,7 @@ class EntregasHeader extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   _buildStatCard(
+                    context,
                     icon: Icons.euro,
                     label: 'CTR',
                     value: '${importeCTR.toStringAsFixed(0)}€',
@@ -120,7 +123,7 @@ class EntregasHeader extends StatelessWidget {
                 ],
               ),
               
-              const SizedBox(height: 16),
+              SizedBox(height: 16 * Responsive.landscapeScale(context)),
               
               // Barra de progreso
               Column(
@@ -139,7 +142,7 @@ class EntregasHeader extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8 * Responsive.landscapeScale(context)),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: LinearProgressIndicator(
@@ -158,7 +161,7 @@ class EntregasHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard({
+  Widget _buildStatCard(BuildContext context, {
     required IconData icon,
     required String label,
     required String value,
@@ -166,7 +169,10 @@ class EntregasHeader extends StatelessWidget {
   }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        padding: EdgeInsets.symmetric(
+            vertical: 12 * Responsive.landscapeScale(context), 
+            horizontal: 8 * Responsive.landscapeScale(context)
+        ),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.15),
           borderRadius: BorderRadius.circular(12),

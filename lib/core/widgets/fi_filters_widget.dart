@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Widget reutilizable para filtros jerárquicos FI1-FI5
 /// 
@@ -538,7 +539,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     }
     
     return SizedBox(
-      height: 36,
+      height: 36 * Responsive.landscapeScale(context),
       child: DropdownButtonFormField<String?>(
         value: value,
         decoration: InputDecoration(

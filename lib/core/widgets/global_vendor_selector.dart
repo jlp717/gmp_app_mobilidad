@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/filter_provider.dart';
 import '../api/api_client.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 class GlobalVendorSelector extends StatefulWidget {
   final bool isJefeVentas;
@@ -98,7 +99,7 @@ class _GlobalVendorSelectorState extends State<GlobalVendorSelector> {
               const SizedBox(width: 8),
               Expanded(
                 child: Container(
-                  height: 36, // Fixed height for consistency
+                  height: 36 * Responsive.landscapeScale(context), // Fixed height for consistency
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
                     color: AppTheme.darkSurface,

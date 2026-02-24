@@ -163,7 +163,10 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
 
   Widget _buildWeekHeader(int weekNum, String weekRange) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: 16, 
+        vertical: 8 * Responsive.landscapeScale(context)
+      ),
       child: Row(
         children: [
           // Previous week button
@@ -340,7 +343,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     }
 
     return Container(
-      height: 55,
+      height: Responsive.value(context, phone: 55, desktop: 60),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: Row(
         children: widget.weekDays.asMap().entries.map((entry) {

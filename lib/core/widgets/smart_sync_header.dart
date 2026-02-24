@@ -25,11 +25,12 @@ class SmartSyncHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double vertPad = compact ? 8 : 16;
-    final double iconSize = compact ? 18 : 24;
-    final double iconPad = compact ? 6 : 10;
-    final double titleSize = compact ? 14 : 20;
-    final double subtitleSize = compact ? 11 : 12;
+    final factor = Responsive.landscapeScale(context);
+    final double vertPad = (compact ? 8 : 16) * factor;
+    final double iconSize = (compact ? 18 : 24) * factor;
+    final double iconPad = (compact ? 6 : 10) * factor;
+    final double titleSize = (compact ? 14 : 20) * factor;
+    final double subtitleSize = (compact ? 11 : 12) * factor;
 
     return Container(
       padding: EdgeInsets.fromLTRB(compact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad, compact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad),
