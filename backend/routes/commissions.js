@@ -3,7 +3,7 @@ const router = express.Router();
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
+const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
 const { redisCache, TTL } = require('../services/redis-cache');
 
 
@@ -475,7 +475,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     }
 
     // D. Fetch Sales Data (Using LACLAE with LCIMVT = sin IVA)
-    const vendedorFilter = buildVendedorFilterLACLAE(vendedorCode, 'L');
+    const vendedorFilter = buildColumnaVendedorFilter(vendedorCode, [selectedYear, prevYear], 'L');
     const salesQuery = `
         SELECT 
             L.LCAADC as YEAR,

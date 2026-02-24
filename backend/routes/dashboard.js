@@ -8,9 +8,9 @@ const {
     getCurrentDate,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
-    formatCurrency,
+    buildColumnaVendedorFilter,
+    getVendorColumn,
     MIN_YEAR,
-    LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     getBSales
 } = require('../utils/common');
@@ -27,9 +27,8 @@ router.get('/metrics', async (req, res) => {
         const cacheKey = `dashboard:metrics:${currentYear}:${currentMonth || 'all'}:${vendedorCodes}`;
 
         // -- FETCH FROM REDIS CACHE (L2) --
-        // Logic wrapped directly in route to use parallel queries
-
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        // Determine Filter Column based on transition
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, [currentYear, currentYear - 1], 'L');
 
         const currentDataSql = `
           SELECT 
@@ -435,7 +434,7 @@ router.get('/sales-evolution', async (req, res) => {
 router.get('/recent-sales', async (req, res) => {
     try {
         const { vendedorCodes, limit = 20 } = req.query;
-        const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, [MIN_YEAR, new Date().getFullYear()], 'L');
         const cacheKey = `dashboard:recent_sales:${vendedorCodes}:${limit}`;
 
         const sql = `

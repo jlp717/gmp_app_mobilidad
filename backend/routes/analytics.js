@@ -9,11 +9,13 @@ const {
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
     VENDOR_COLUMN,
+    buildColumnaVendedorFilter,
     getVendorColumn,
     formatCurrency,
     MIN_YEAR,
     LAC_SALES_FILTER,
-    LACLAE_SALES_FILTER
+    LACLAE_SALES_FILTER,
+    getBSales
 } = require('../utils/common');
 
 
@@ -24,7 +26,10 @@ router.get('/yoy-comparison', async (req, res) => {
     try {
         const { vendedorCodes, year, month } = req.query;
         const currentYear = parseInt(year) || getCurrentDate().getFullYear();
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        const prevYear = currentYear - 1;
+
+        // Use Date-Aware filter
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, [currentYear, prevYear], 'L');
 
         // Optional month filter
         const monthFilter = month ? `AND L.LCMMDC = ${month}` : '';

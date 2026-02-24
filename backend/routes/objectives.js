@@ -6,6 +6,7 @@ const {
     getCurrentDate,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    buildColumnaVendedorFilter,
     VENDOR_COLUMN,
     getVendorColumn,
     MIN_YEAR,
@@ -360,8 +361,8 @@ router.get('/evolution', async (req, res) => {
         const uniqueYears = [...new Set(allYears)];
         const yearsFilter = uniqueYears.join(',');
 
-        // Use LACLAE-specific vendor filter (uses LCCDVD column)
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        // Use Date-Aware filter (handles LCCDVD for <2026 and R1_T8CDVD for >=2026)
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, uniqueYears, 'L');
 
         // Get Active Days for calculating pace 
         // Logic: if multiple vendors selected, we might average or select first? 
@@ -774,7 +775,8 @@ router.get('/matrix', async (req, res) => {
       WHERE L.LCCDCL = '${clientCode}'
         AND L.LCAADC IN(${yearsFilter})
         AND L.LCMMDC BETWEEN ${monthStart} AND ${monthEnd}
-        -- FILTERS to match LACLAE logic
+        // FILTERS to match LACLAE logic
+        ${buildColumnaVendedorFilter(clientCode ? 'ALL' : vendedorCodes, allYearsToFetch, 'L')}
         AND ${LACLAE_SALES_FILTER}
         ${filterConditions}
       GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA

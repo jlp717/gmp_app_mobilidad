@@ -19,7 +19,7 @@ const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 // LCCDVD so objectives match production. From March 2026, use R1_T8CDVD.
 const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'LCCDVD';
 const TRANSITION_YEAR = 2026;
-const TRANSITION_MONTH = 3; // March
+const TRANSITION_MONTH = VENDOR_COLUMN === 'R1_T8CDVD' ? 1 : 3; // In PRE (BETA), start from Jan 2026. In PROD, start from March 1st.
 
 /**
  * Get the vendor column to use based on the target date.
@@ -205,6 +205,40 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L', year, month)
     return `AND (${conditions.join(' OR ')})`;
 }
 
+/**
+ * Enhanced Date-Aware Vendor Filter for SQL Queries.
+ * Generates an OR block that handles column transition month-by-month.
+ * Use this for evolution/matrix queries that span multiple years/months.
+ * 
+ * @param {string} vendedorCodes - Comma separated vendor codes (or 'ALL')
+ * @param {Array<number>} years - Array of years to filter
+ * @param {string} tableAlias - SQL table alias (default 'L')
+ * @returns {string} SQL snippet e.g. "AND ((Column='LCCDVD' AND Year<2026) OR (Column='R1_T8CDVD' AND Year>=2026))"
+ */
+function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L') {
+    if (!vendedorCodes || vendedorCodes === 'ALL') return '';
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+
+    const codeList = vendedorCodes.split(',').map(c => c.trim());
+    const validCodes = codeList
+        .filter(c => /^[a-zA-Z0-9]+$/.test(c))
+        .map(c => `'${c}'`)
+        .join(',');
+
+    if (validCodes.length === 0) return 'AND 1=0';
+
+    // If we only have LCCDVD mode, keep it simple
+    if (VENDOR_COLUMN === 'LCCDVD') {
+        return `AND ${prefix}LCCDVD IN (${validCodes})`;
+    }
+
+    // PRE Logic: R1_T8CDVD is active. We need to split by date.
+    const oldFilter = `(${prefix}LCCDVD IN (${validCodes}) AND ${prefix}LCAADC < ${TRANSITION_YEAR})`;
+    const newFilter = `(${prefix}R1_T8CDVD IN (${validCodes}) AND ${prefix}LCAADC >= ${TRANSITION_YEAR})`;
+
+    return `AND (${oldFilter} OR ${newFilter})`;
+}
+
 const { query } = require('../config/db');
 
 // ... (previous helper functions)
@@ -290,6 +324,7 @@ module.exports = {
     formatCurrency,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    buildColumnaVendedorFilter,
     buildDateFilter,
     getVendorName, // Added Export
     getBSales, // Shared B-sales lookup
