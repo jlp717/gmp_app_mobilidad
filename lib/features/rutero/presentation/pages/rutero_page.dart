@@ -707,7 +707,15 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
         filteredClients.sort((a, b) {
           final orderA = (a['order'] as int?) ?? 9999;
           final orderB = (b['order'] as int?) ?? 9999;
-          return orderA.compareTo(orderB);
+          
+          if (orderA != orderB) {
+            return orderA.compareTo(orderB);
+          }
+          
+          // Secondary tie-breaker by Name (to match planner.js fix)
+          final nameA = (a['name'] as String?) ?? '';
+          final nameB = (b['name'] as String?) ?? '';
+          return nameA.compareTo(nameB);
         });
         break;
     }
@@ -747,6 +755,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
         itemBuilder: (context, index) {
           final client = filteredClients[index];
           return _ClientCard(
+            index: index + 1, // Pass 1-based index
             client: client,
             formatCurrency: _formatCurrency,
             formatVariation: _formatVariation,
@@ -1249,6 +1258,7 @@ class _ClientCard extends StatelessWidget {
   final int selectedYear;
   final int completedWeeks;
   final String periodLabel; // NEW: "1 Ene - 12 Ene"
+  final int index; // NEW: Index to show position
 
   const _ClientCard({
     required this.client,
@@ -1263,6 +1273,7 @@ class _ClientCard extends StatelessWidget {
     required this.selectedYear,
     this.completedWeeks = 0,
     this.periodLabel = '',
+    required this.index,
   });
 
   @override
@@ -1471,15 +1482,46 @@ class _ClientCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Client name - larger
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: Responsive.isSmall(context) ? 15 : 17, 
-                        fontWeight: FontWeight.bold
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    // Client name and order index header
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Order Number Badge
+                        Container(
+                          margin: const EdgeInsets.only(right: 8, top: 2),
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.neonPink,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.neonPink.withOpacity(0.4),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            '$index',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: Responsive.isSmall(context) ? 15 : 17, 
+                              fontWeight: FontWeight.bold
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     // Code badge
