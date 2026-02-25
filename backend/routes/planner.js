@@ -588,13 +588,23 @@ router.post('/rutero/config', async (req, res) => {
             // SMART MERGE FIX PART 2: THE "GHOST" CLIENTS
             // If the user removed a client from their route (e.g. by dragging them to another day or skipping them),
             // the Dart array won't include them. We MUST save an ORDEN = -1 to permanently hide them from their AS400 natural day.
-            for (const oldClient of Object.keys(previousPositions)) {
-                if (!incomingClients.has(oldClient) && previousPositions[oldClient] >= 0) {
-                    logger.info(`🚫 Smart Merge disabled client ${oldClient} from day ${dia} (was removed from route UI)`);
-                    await conn.query(`
-                        INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
-                        VALUES ('${vendedor}', '${dia}', '${oldClient}', -1)
-                    `);
+
+            // Get the list of NATURAL (Original) clients for this day to identify who was removed
+            const naturalClients = getClientsForDayService(vendedor, dia, 'comercial', true) || [];
+            const clientsInConfig = Object.keys(previousPositions);
+            const allPotentialClients = new Set([...naturalClients, ...clientsInConfig]);
+
+            for (const clientCode of allPotentialClients) {
+                if (!incomingClients.has(clientCode)) {
+                    // This client is in the natural route or had a previous override, but is MISSING in the new payload.
+                    // We only insert a block (-1) if it's NOT already blocked.
+                    if (previousPositions[clientCode] !== -1) {
+                        logger.info(`🚫 Smart Merge blocking natural/previous client ${clientCode} on day ${dia} (removed from UI)`);
+                        await conn.query(`
+                            INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
+                            VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)
+                        `);
+                    }
                 }
             }
         }
@@ -718,8 +728,10 @@ router.get('/rutero/config', async (req, res) => {
 // =============================================================================
 router.get('/rutero/counts', async (req, res) => {
     try {
-        const { vendedorCodes, role } = req.query;
-        const counts = getWeekCountsFromCache(vendedorCodes, role || 'comercial');
+        const { vendedorCodes, role, ignoreOverrides } = req.query;
+        const shouldIgnore = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
+
+        const counts = getWeekCountsFromCache(vendedorCodes, role || 'comercial', shouldIgnore);
 
         if (!counts) {
             return res.json({
