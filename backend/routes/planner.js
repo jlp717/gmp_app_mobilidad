@@ -261,7 +261,7 @@ router.get('/rutero/vendedores', async (req, res) => {
         let sql;
 
         // Definitive whitelist of active commercial codes (matches comisiones)
-        const ACTIVE_COMERCIALES = ['01','02','03','05','10','13','15','16','33','35','72','73','80','81','83','92','93','95','97','98'];
+        const ACTIVE_COMERCIALES = ['01', '02', '03', '05', '10', '13', '15', '16', '33', '35', '72', '73', '80', '81', '83', '92', '93', '95', '97', '98'];
 
         if (role === 'repartidor') {
             sql = `
@@ -505,6 +505,15 @@ router.post('/rutero/config', async (req, res) => {
         conn = await pool.connect();
         await conn.beginTransaction();
 
+        // 🎯 FIX: Clear Redis cache for the day endpoint before doing DB transactions
+        // Ensures that if the request hits another worker, it won't mistakenly use stale data
+        try {
+            await deleteCachePattern(`rutero:config:v2:${vendedor}:*`);
+            await deleteCachePattern(`rutero:details:v3:*`);
+        } catch (e) {
+            logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
+        }
+
         let previousPositions = {};
         try {
             const prevRows = await conn.query(`
@@ -518,10 +527,21 @@ router.post('/rutero/config', async (req, res) => {
             logger.warn(`Could not fetch previous positions: ${e.message}`);
         }
 
-        // Only delete POSITIVE entries for this day (preserve blocking entries with ORDEN = -1)
+        // Delete POSITIVE entries ONLY if they match exactly the client we are inserting
+        // Wait, if we want to replace the whole day's sorting list:
+        // We delete ALL POSITIVE overrides for this day, so the new `orden` array becomes the absolute truth
+        // BUT we MUST preserve blocking entries (ORDEN = -1)!
+        // BUT what if `orden` array CONTAINS a client that PREVIOUSLY had a blocking entry?
+        // We must ALSO delete the blocking entry for the clients that are in the `orden` payload!
         await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND ORDEN >= 0`);
 
         if (orden.length > 0) {
+            // Also explicitly delete any existing blocking entries for the clients we are trying to insert
+            const updatingClients = orden.filter(o => o.cliente).map(o => `'${o.cliente.trim()}'`).join(',');
+            if (updatingClients) {
+                await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND TRIM(CLIENTE) IN (${updatingClients})`);
+            }
+
             // REMOVED: Cross-day deletion that was destroying move operations
             // Previously: DELETE ... WHERE CLIENTE IN (...) across ALL days - this wiped out moves!
 
@@ -541,6 +561,7 @@ router.post('/rutero/config', async (req, res) => {
         try {
             const cachePattern = `rutero:config:v2:${vendedor}:*`;
             await deleteCachePattern(cachePattern);
+            await deleteCachePattern(`rutero:details:v3:*`);
             logger.info(`♻️ Cache invalidated for pattern: ${cachePattern}`);
         } catch (cacheErr) {
             logger.warn(`Cache invalidation failed: ${cacheErr.message}`);

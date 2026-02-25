@@ -27,8 +27,8 @@ async function main() {
     if (!pool) {
         // Try to initialize
         console.log('Inicializando pool de BD...');
-        const { initializePool } = require('../config/db');
-        await initializePool();
+        const { initDb } = require('../config/db');
+        await initDb();
     }
 
     let conn;
@@ -158,11 +158,11 @@ async function main() {
     } catch (e) {
         console.error(`\n❌ ERROR: ${e.message}\n${e.stack}\n`);
         if (conn) {
-            try { await conn.rollback(); } catch (re) {}
+            try { await conn.rollback(); } catch (re) { }
         }
     } finally {
         if (conn) {
-            try { await conn.close(); } catch (e) {}
+            try { await conn.close(); } catch (e) { }
         }
     }
 
