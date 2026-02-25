@@ -561,10 +561,22 @@ router.post('/rutero/config', async (req, res) => {
             // Previously: DELETE ... WHERE CLIENTE IN (...) across ALL days - this wiped out moves!
 
             for (const item of orden) {
-                if (item.cliente) {
+                if (!item.cliente) continue;
+
+                // SMART MERGE FIX:
+                // Only save explicit overrides if the user actually shifted this specific client,
+                // OR if the client ALREADY had an override (to avoid deleting past work).
+                // Clients that are just sitting in their natural position remain unconfigured!
+                const posNueva = parseInt(item.posicion) || 0;
+                let posAnterior = item.posicionOriginal !== undefined ? parseInt(item.posicionOriginal) : posNueva;
+                const hadPreviousOverride = previousPositions[item.cliente.trim()] !== undefined;
+
+                const hayCambio = posAnterior !== posNueva;
+
+                if (hayCambio || hadPreviousOverride) {
                     await conn.query(`
                       INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
-                      VALUES ('${vendedor}', '${dia}', '${item.cliente}', ${parseInt(item.posicion) || 0})
+                      VALUES ('${vendedor}', '${dia}', '${item.cliente}', ${posNueva})
                     `);
                 }
             }
