@@ -1098,7 +1098,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
            ),
            
            // FASE 2: Inline exclusion banner instead of full screen block
-           if ((_data?['isExcluded'] as bool?) ?? false)
+           if (((_data?['isExcluded'] as bool?) ?? false) || isInformative)
              Container(
                width: double.infinity,
                margin: const EdgeInsets.all(12),
