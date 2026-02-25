@@ -409,7 +409,12 @@ router.post('/rutero/move_clients', async (req, res) => {
                     FROM JAVIER.RUTERO_CONFIG
                     WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= 0
                 `);
-                targetOrder = (maxOrderRes[0]?.MAX_ORD || 0) + 10;
+
+                // Si movemos al final, y no hay overrides (MAX_ORD is null), debemos ponerlo después de los naturales.
+                // Los naturales asumen orden 0 si no tienen, pero en realidad el frontend los ordena por código/nombre.
+                // Para asegurarnos de que quede al final de todo, usamos un número muy alto si no se pasa posición.
+                const currentMax = maxOrderRes[0]?.MAX_ORD || 0;
+                targetOrder = Math.max(currentMax + 10, 99990); // 99990 garantiza que va al fondo de los naturales (que no tienen ORDEN)
             }
 
             await conn.query(`
