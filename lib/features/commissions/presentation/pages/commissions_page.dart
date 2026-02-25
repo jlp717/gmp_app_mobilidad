@@ -1291,7 +1291,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
              : _error != null ? Center(child: Text('Error: $_error', style: const TextStyle(color: AppTheme.error)))
              : isAllMode
                ? _buildAllVendorsTable(breakdown)  // Show ALL vendors table
-             : totalTarget <= 0 && !isInformative // ZERO TARGET WARNING
+             : totalTarget <= 0 && !isInformative && !((_data?['isExcluded'] as bool?) ?? false) // ZERO TARGET WARNING (but NOT if excluded)
                ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(32),
