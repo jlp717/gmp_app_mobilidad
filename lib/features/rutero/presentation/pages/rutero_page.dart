@@ -612,8 +612,9 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
                       
                       // If we are switching TO or FROM 'route' (Original), we need to fetch fresh data
                       // because the backend returns different datasets (ignored vs respected overrides).
+                      // We use _loadWeekData instead of _loadDayClients to ensure counters refresh too.
                       if (value == 'route' || oldMode == 'route') {
-                        _loadDayClients();
+                        _loadWeekData();
                       }
                     }
                   },
