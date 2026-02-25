@@ -538,5 +538,6 @@ module.exports = {
     reloadRuteroConfig,
     getClientCurrentDay,
     getClientDays,
-    getNaturalOrder
+    getNaturalOrder,
+    ruteroConfigCache
 };

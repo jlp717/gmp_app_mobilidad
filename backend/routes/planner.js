@@ -859,6 +859,18 @@ router.get('/rutero/day/:day', async (req, res) => {
             return res.json({ clients: [], count: 0, day, cacheStatus: 'loading' });
         }
 
+        // --- DEBUG LOG FOR TESTS ---
+        if (day === 'miercoles' || day === 'jueves') {
+            logger.info(`[TEST-DEBUG] /rutero/day/${day} requested. dayClientCodes.length = ${dayClientCodes.length}`);
+            const testClient = '4300008971'; // Client from test output
+            const { ruteroConfigCache } = require('../services/laclae');
+            const cacheForVendor = ruteroConfigCache[vendedorCodes] || {};
+            const cacheForClient = cacheForVendor[testClient] || {};
+            logger.info(`[TEST-DEBUG] ruteroConfigCache for ${testClient}: ${JSON.stringify(cacheForClient)}`);
+            logger.info(`[TEST-DEBUG] is testClient in dayClientCodes? ${dayClientCodes.includes(testClient)}`);
+        }
+        // ---------------------------
+
         if (dayClientCodes.length === 0) {
             return res.json({
                 clients: [], count: 0, day, year: currentYear, compareYear: previousYear
