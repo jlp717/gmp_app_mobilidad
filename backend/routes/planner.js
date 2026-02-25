@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const logger = require('../middleware/logger');
 const { getPool, query } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
@@ -425,7 +426,16 @@ router.post('/rutero/move_clients', async (req, res) => {
                 newPosition: targetOrder
             });
         }
-        // Removed commit to rely on auto-commit
+        // 🎯 FIX: Clear Redis cache for the day endpoint before doing DB transactions
+        try {
+            await deleteCachePattern(`rutero:config:v2:${vendedor}:*`);
+            await deleteCachePattern(`query:rutero:details:v3:*`);
+            await deleteCachePattern(`query:rutero:sales:*`);
+            await deleteCachePattern(`query:rutero:gps:*`);
+        } catch (e) {
+            logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
+        }
+
         try {
             for (const moved of movedClientsInfo) {
                 await conn.query(`
@@ -507,7 +517,9 @@ router.post('/rutero/config', async (req, res) => {
         // Ensures that if the request hits another worker, it won't mistakenly use stale data
         try {
             await deleteCachePattern(`rutero:config:v2:${vendedor}:*`);
-            await deleteCachePattern(`rutero:details:v3:*`);
+            await deleteCachePattern(`query:rutero:details:v3:*`);
+            await deleteCachePattern(`query:rutero:sales:*`);
+            await deleteCachePattern(`query:rutero:gps:*`);
         } catch (e) {
             logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
         }
@@ -558,8 +570,10 @@ router.post('/rutero/config', async (req, res) => {
         try {
             const cachePattern = `rutero:config:v2:${vendedor}:*`;
             await deleteCachePattern(cachePattern);
-            await deleteCachePattern(`rutero:details:v3:*`);
-            logger.info(`♻️ Cache invalidated for pattern: ${cachePattern}`);
+            await deleteCachePattern(`query:rutero:details:v3:*`);
+            await deleteCachePattern(`query:rutero:sales:*`);
+            await deleteCachePattern(`query:rutero:gps:*`);
+            logger.info(`♻️ Cache invalidated for pattern: ${cachePattern} and query caches`);
         } catch (cacheErr) {
             logger.warn(`Cache invalidation failed: ${cacheErr.message}`);
         }
@@ -882,7 +896,7 @@ router.get('/rutero/day/:day', async (req, res) => {
         // --- 2. Heavy Queries with Caching ---
 
         // Cache Key Components
-        const clientsHash = safeClientFilter.length > 50 ? safeClientFilter.substring(0, 50) + clientBatch.length : safeClientFilter;
+        const clientsHash = crypto.createHash('md5').update(safeClientFilter).digest('hex');
         const cacheTTL = TTL.MEDIUM; // 5 minutes
 
         // A. Client Details
