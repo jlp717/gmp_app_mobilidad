@@ -411,10 +411,10 @@ router.post('/rutero/move_clients', async (req, res) => {
                 `);
 
                 // Si movemos al final, y no hay overrides (MAX_ORD is null), debemos ponerlo después de los naturales.
-                // Los naturales asumen orden 0 si no tienen, pero en realidad el frontend los ordena por código/nombre.
+                // Los naturales asumen orden 20000+natOrder o 99999 si no tienen.
                 // Para asegurarnos de que quede al final de todo, usamos un número muy alto si no se pasa posición.
                 const currentMax = maxOrderRes[0]?.MAX_ORD || 0;
-                targetOrder = Math.max(currentMax + 10, 99990); // 99990 garantiza que va al fondo de los naturales (que no tienen ORDEN)
+                targetOrder = Math.max(currentMax + 10, 199990); // 199990 garantiza que va al fondo de los naturales (que llegan a 99999)
             }
 
             await conn.query(`
@@ -1093,6 +1093,12 @@ router.get('/rutero/day/:day', async (req, res) => {
                 // "Custom" Mode: Use Config Order
                 if (orderMap.has(code)) {
                     clientOrder = orderMap.get(code);
+                } else {
+                    // FALLBACK: Preserve AS400 Natural Route behavior for unconfigured clients!
+                    // Shifted by 20000 to place them strictly below custom-sorted ones, 
+                    // while retaining their exact relative AS400 order.
+                    const natOrder = getNaturalOrder(primaryVendor, code, day);
+                    clientOrder = natOrder > 0 ? (20000 + natOrder) : 99999;
                 }
             }
 
