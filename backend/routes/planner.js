@@ -113,11 +113,12 @@ router.get('/rutero/week', async (req, res) => {
         const now = getCurrentDate();
         const todayName = DAY_NAMES[now.getDay()];
         const currentRole = role || 'comercial';
+        const ignoreOverridesBool = req.query.ignoreOverrides === 'true';
 
-        logger.info(`[RUTERO WEEK] vendedorCodes: "${vendedorCodes}", role: "${currentRole}"`);
+        logger.info(`[RUTERO WEEK] vendedorCodes: "${vendedorCodes}", role: "${currentRole}", ignoreOverrides: ${ignoreOverridesBool}`);
 
         // Try to use cache first (instant response)
-        const cachedCounts = getWeekCountsFromCache(vendedorCodes, currentRole);
+        const cachedCounts = getWeekCountsFromCache(vendedorCodes, currentRole, ignoreOverridesBool);
 
         if (cachedCounts) {
             // Calculate total unique clients from cache
@@ -560,8 +561,11 @@ router.post('/rutero/config', async (req, res) => {
             // REMOVED: Cross-day deletion that was destroying move operations
             // Previously: DELETE ... WHERE CLIENTE IN (...) across ALL days - this wiped out moves!
 
+            const incomingClients = new Set();
+
             for (const item of orden) {
                 if (!item.cliente) continue;
+                incomingClients.add(item.cliente.trim());
 
                 // SMART MERGE FIX:
                 // Only save explicit overrides if the user actually shifted this specific client,
@@ -577,6 +581,19 @@ router.post('/rutero/config', async (req, res) => {
                     await conn.query(`
                       INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
                       VALUES ('${vendedor}', '${dia}', '${item.cliente}', ${posNueva})
+                    `);
+                }
+            }
+
+            // SMART MERGE FIX PART 2: THE "GHOST" CLIENTS
+            // If the user removed a client from their route (e.g. by dragging them to another day or skipping them),
+            // the Dart array won't include them. We MUST save an ORDEN = -1 to permanently hide them from their AS400 natural day.
+            for (const oldClient of Object.keys(previousPositions)) {
+                if (!incomingClients.has(oldClient) && previousPositions[oldClient] >= 0) {
+                    logger.info(`🚫 Smart Merge disabled client ${oldClient} from day ${dia} (was removed from route UI)`);
+                    await conn.query(`
+                        INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
+                        VALUES ('${vendedor}', '${dia}', '${oldClient}', -1)
                     `);
                 }
             }

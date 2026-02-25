@@ -273,8 +273,8 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
     return Array.from(finalClients);
 }
 
-// Get week counts from cache - FIXED: Respects blocking entries (ORDEN = -1)
-function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
+// Get week counts from cache - FIXED: Respects blocking entries (ORDEN = -1) and ignoreOverrides flag
+function getWeekCountsFromCache(vendedorCodes, role = 'comercial', ignoreOverrides = false) {
     if (!laclaeCacheReady) return null; // Use fallback
 
     const isDelivery = role === 'repartidor';
@@ -289,31 +289,43 @@ function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
 
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
             const days = isDelivery ? data.deliveryDays : data.visitDays;
-            const clientOverrides = configClients[clientCode] || {};
 
-            // 1. Add POSITIVE overrides (order >= 0)
-            Object.entries(clientOverrides).forEach(([day, cfg]) => {
-                if (cfg.order >= 0 && counts.hasOwnProperty(day)) {
-                    clientsSet[day].add(clientCode);
-                }
-            });
+            if (!ignoreOverrides) {
+                const clientOverrides = configClients[clientCode] || {};
 
-            // 2. Add Natural Days (if no override exists for that day)
-            days.forEach(day => {
-                if (counts.hasOwnProperty(day) && !clientOverrides[day]) {
-                    clientsSet[day].add(clientCode);
-                }
-            });
+                // 1. Add POSITIVE overrides (order >= 0)
+                Object.entries(clientOverrides).forEach(([day, cfg]) => {
+                    if (cfg.order >= 0 && counts.hasOwnProperty(day)) {
+                        clientsSet[day].add(clientCode);
+                    }
+                });
+
+                // 2. Add Natural Days (if no override exists for that day)
+                days.forEach(day => {
+                    if (counts.hasOwnProperty(day) && !clientOverrides[day]) {
+                        clientsSet[day].add(clientCode);
+                    }
+                });
+            } else {
+                // Ignore overrides - purely natural counts from AS400
+                days.forEach(day => {
+                    if (counts.hasOwnProperty(day)) {
+                        clientsSet[day].add(clientCode);
+                    }
+                });
+            }
         });
 
         // Also add orphan overrides (clients only in RuteroConfig, not in LACLAE)
-        Object.entries(configClients).forEach(([clientCode, overrides]) => {
-            Object.entries(overrides).forEach(([day, cfg]) => {
-                if (cfg.order >= 0 && counts.hasOwnProperty(day)) {
-                    clientsSet[day].add(clientCode);
-                }
+        if (!ignoreOverrides) {
+            Object.entries(configClients).forEach(([clientCode, overrides]) => {
+                Object.entries(overrides).forEach(([day, cfg]) => {
+                    if (cfg.order >= 0 && counts.hasOwnProperty(day)) {
+                        clientsSet[day].add(clientCode);
+                    }
+                });
             });
-        });
+        }
     });
 
     Object.keys(counts).forEach(day => {
