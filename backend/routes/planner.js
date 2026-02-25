@@ -345,60 +345,74 @@ router.post('/rutero/move_clients', async (req, res) => {
         const movedClientsInfo = [];
 
         for (const move of moves) {
-            const { client, toDay, position } = move;
+            const { client, toDay, position, fromDay } = move;
             if (!client || !toDay) continue;
 
             const dayLower = toDay.toLowerCase();
             const clientTrimmed = client.trim();
 
-            let previousDay = getClientCurrentDay(vendedor, clientTrimmed);
+            // Determine source day: prefer explicit fromDay, then RUTERO_CONFIG, then natural
+            let previousDay = fromDay ? fromDay.toLowerCase() : getClientCurrentDay(vendedor, clientTrimmed);
             let previousOrder = null;
 
             try {
                 const prevRes = await conn.query(`
-                    SELECT TRIM(DIA) as DIA, ORDEN FROM JAVIER.RUTERO_CONFIG 
+                    SELECT TRIM(DIA) as DIA, ORDEN FROM JAVIER.RUTERO_CONFIG
                     WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'
+                    AND ORDEN >= 0
+                    ORDER BY ORDEN ASC
+                    FETCH FIRST 1 ROWS ONLY
                 `);
                 if (prevRes && prevRes.length > 0) {
-                    previousDay = prevRes[0].DIA?.trim() || previousDay;
+                    if (!fromDay) previousDay = prevRes[0].DIA?.trim() || previousDay;
                     previousOrder = prevRes[0].ORDEN;
                 }
             } catch (e) {
                 logger.warn(`Could not get previous config: ${e.message}`);
             }
 
-            logger.info(`📋 Move: Cliente ${clientTrimmed} estaba en día "${previousDay || 'ninguno'}"`);
+            logger.info(`📋 Move: Cliente ${clientTrimmed} de "${previousDay || 'ninguno'}" a "${dayLower}"`);
 
+            // Delete ALL existing entries for this client (positives + blocks)
             await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'`);
+
+            // Insert BLOCKING entry for source day (ORDEN = -1) so client no longer appears there
+            if (previousDay && previousDay !== dayLower) {
+                await conn.query(`
+                    INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
+                    VALUES ('${vendedor}', '${previousDay}', '${clientTrimmed}', -1)
+                `);
+                logger.info(`🚫 Block entry created: ${clientTrimmed} blocked from ${previousDay}`);
+            }
 
             let targetOrder;
             const effectivePosition = position ?? targetPosition ?? 'end';
 
             if (effectivePosition === 'start' || effectivePosition === 0) {
                 await conn.query(`
-                    UPDATE JAVIER.RUTERO_CONFIG 
-                    SET ORDEN = ORDEN + 10 
-                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}'
+                    UPDATE JAVIER.RUTERO_CONFIG
+                    SET ORDEN = ORDEN + 10
+                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= 0
                 `);
                 targetOrder = 0;
             } else if (typeof effectivePosition === 'number' && effectivePosition > 0) {
                 targetOrder = effectivePosition * 10;
                 await conn.query(`
-                    UPDATE JAVIER.RUTERO_CONFIG 
-                    SET ORDEN = ORDEN + 10 
+                    UPDATE JAVIER.RUTERO_CONFIG
+                    SET ORDEN = ORDEN + 10
                     WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= ${targetOrder}
                 `);
             } else {
                 const maxOrderRes = await conn.query(`
-                    SELECT MAX(ORDEN) as MAX_ORD 
-                    FROM JAVIER.RUTERO_CONFIG 
-                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}'
+                    SELECT MAX(ORDEN) as MAX_ORD
+                    FROM JAVIER.RUTERO_CONFIG
+                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= 0
                 `);
                 targetOrder = (maxOrderRes[0]?.MAX_ORD || 0) + 10;
             }
 
             await conn.query(`
-                INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
+                INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
                 VALUES ('${vendedor}', '${dayLower}', '${clientTrimmed}', ${targetOrder})
             `);
 
@@ -436,8 +450,8 @@ router.post('/rutero/move_clients', async (req, res) => {
 
         for (const day of affectedDays) {
             const countRes = await conn.query(`
-                SELECT COUNT(*) as CNT FROM JAVIER.RUTERO_CONFIG 
-                WHERE VENDEDOR = '${vendedor}' AND DIA = '${day}'
+                SELECT COUNT(*) as CNT FROM JAVIER.RUTERO_CONFIG
+                WHERE VENDEDOR = '${vendedor}' AND DIA = '${day}' AND ORDEN >= 0
             `);
             updatedCounts[day] = countRes[0]?.CNT || 0;
         }
@@ -504,11 +518,12 @@ router.post('/rutero/config', async (req, res) => {
             logger.warn(`Could not fetch previous positions: ${e.message}`);
         }
 
-        await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}'`);
+        // Only delete POSITIVE entries for this day (preserve blocking entries with ORDEN = -1)
+        await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND ORDEN >= 0`);
 
         if (orden.length > 0) {
-            const clientCodes = orden.map(o => `'${o.cliente}'`).join(',');
-            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND CLIENTE IN (${clientCodes})`);
+            // REMOVED: Cross-day deletion that was destroying move operations
+            // Previously: DELETE ... WHERE CLIENTE IN (...) across ALL days - this wiped out moves!
 
             for (const item of orden) {
                 if (item.cliente) {
@@ -619,9 +634,9 @@ router.get('/rutero/config', async (req, res) => {
         if (!vendedor || !dia) return res.status(400).json({ error: 'Vendedor y dia requeridos' });
 
         const rows = await query(`
-      SELECT CLIENTE, ORDEN 
-      FROM JAVIER.RUTERO_CONFIG 
-      WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' 
+      SELECT CLIENTE, ORDEN
+      FROM JAVIER.RUTERO_CONFIG
+      WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND ORDEN >= 0
       ORDER BY ORDEN ASC
     `);
 
@@ -985,7 +1000,12 @@ router.get('/rutero/day/:day', async (req, res) => {
                 WHERE VENDEDOR = '${primaryVendor}' AND DIA = '${day.toLowerCase()}'
              `, false); // false = no debug log clutter
 
-            configRows.forEach(r => orderMap.set(r.CLIENTE.trim(), r.ORDEN));
+            configRows.forEach(r => {
+                // Only include POSITIVE overrides (order >= 0), skip blocking entries (-1)
+                if (r.ORDEN >= 0) {
+                    orderMap.set(r.CLIENTE.trim(), r.ORDEN);
+                }
+            });
             logger.info(`[RUTERO SORT] Loaded ${configRows.length} overrides for ${primaryVendor}/${day}`);
         }
 

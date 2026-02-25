@@ -1806,6 +1806,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
           {
             'client': (client['code'] as String?) ?? '',
             'toDay': toDay.toLowerCase(),
+            'fromDay': widget.currentDay.toLowerCase(),
             'clientName': (client['name'] as String?) ?? '',
             'position': targetPosition,
           }
