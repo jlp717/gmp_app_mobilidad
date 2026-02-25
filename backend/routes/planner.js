@@ -340,7 +340,7 @@ router.post('/rutero/move_clients', async (req, res) => {
         if (!pool) throw new Error("Database pool not initialized");
 
         conn = await pool.connect();
-        await conn.beginTransaction();
+        // Removed beginTransaction to avoid DB2 Journaling silent failure
 
         const movedClientsInfo = [];
 
@@ -425,9 +425,7 @@ router.post('/rutero/move_clients', async (req, res) => {
                 newPosition: targetOrder
             });
         }
-
-        await conn.commit();
-
+        // Removed commit to rely on auto-commit
         try {
             for (const moved of movedClientsInfo) {
                 await conn.query(`
@@ -503,7 +501,7 @@ router.post('/rutero/config', async (req, res) => {
         if (!pool) throw new Error("Database pool not initialized");
 
         conn = await pool.connect();
-        await conn.beginTransaction();
+        // Removed beginTransaction to avoid DB2 Journaling silent failure
 
         // 🎯 FIX: Clear Redis cache for the day endpoint before doing DB transactions
         // Ensures that if the request hits another worker, it won't mistakenly use stale data
@@ -554,8 +552,7 @@ router.post('/rutero/config', async (req, res) => {
                 }
             }
         }
-
-        await conn.commit();
+        // Removed commit to rely on auto-commit
 
         // Invalidate cache for this vendor's config to ensure immediate updates
         try {
@@ -638,7 +635,7 @@ router.post('/rutero/config', async (req, res) => {
 
     } catch (error) {
         if (conn) {
-            try { await conn.rollback(); } catch (e) { logger.warn(`Rollback failed: ${e.message}`); }
+            // Ignore rollback as auto-commit is used
         }
         logger.error(`Rutero config save error: ${error.message}`);
         res.status(500).json({ error: 'Error guardando orden', details: error.message });
