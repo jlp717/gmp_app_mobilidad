@@ -277,9 +277,9 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: sc.withValues(alpha: 0.2))),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          _miniProgressBar('Volumen', volPct, sc),
+          _miniProgressBar('Volumen', volPct.toDouble(), sc),
           const SizedBox(height: 4),
-          _miniProgressBar('Peso', wgtPct, sc),
+          _miniProgressBar('Peso', wgtPct.toDouble(), sc),
           const SizedBox(height: 4),
           Text('${m.placedCount}/${m.totalBoxes} bultos',
             style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 9)),
