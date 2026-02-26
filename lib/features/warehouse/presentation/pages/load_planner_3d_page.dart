@@ -230,43 +230,182 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   Widget _buildContent() {
     final r = _result!;
     final sc = _statusColor(r.metrics.status);
+    final m = r.metrics;
+    final isWide = MediaQuery.of(context).size.width > 600;
 
-    return Column(children: [
-      _buildStatusBar(r, sc),
-      // 3D + selected box info
-      Expanded(flex: 5, child: Stack(children: [
-        Positioned.fill(child: GestureDetector(
-          onPanStart: (d) => _lastPan = d.localPosition,
-          onPanUpdate: (d) => setState(() {
-            final delta = d.localPosition - _lastPan;
-            _rotY += delta.dx * 0.008;
-            _rotX = (_rotX + delta.dy * 0.008).clamp(-1.2, 0.2);
-            _lastPan = d.localPosition;
-          }),
-          onScaleUpdate: (d) { if (d.pointerCount == 2) setState(() => _zoom = (_zoom * d.scale).clamp(0.3, 3.0)); },
-          onTapUp: (details) => _handleTap(details),
-          child: AnimatedBuilder(
-            animation: _glowCtrl,
-            builder: (_, __) => CustomPaint(
-              painter: _TruckPainter(
-                result: r, rotX: _rotX, rotY: _rotY, zoom: _zoom,
-                selectedId: _selectedBoxId, glow: _glowCtrl.value, statusColor: sc),
-              size: Size.infinite)),
-        )),
-        if (_recomputing) Positioned(top: 8, right: 8, child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(color: AppTheme.darkCard.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(8)),
-          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-            SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)),
-            SizedBox(width: 6),
-            Text('Recalculando...', style: TextStyle(color: Colors.white54, fontSize: 10)),
-          ]))),
-        if (_selectedBoxId != null) Positioned(left: 8, right: 8, bottom: 8,
-            child: _buildSelectedBox()),
-      ])),
-      // Panel inferior con tabs
-      Expanded(flex: 4, child: _buildPanel(r)),
+    // Animated progress values
+    final volPct = m.containerVolumeCm3 > 0 ? (m.usedVolumeCm3 / m.containerVolumeCm3 * 100).clamp(0, 100) : 0.0;
+    final wgtPct = m.maxPayloadKg > 0 ? (m.totalWeightKg / m.maxPayloadKg * 100).clamp(0, 100) : 0.0;
+
+    // 3D Canvas widget
+    final canvas3D = Stack(children: [
+      Positioned.fill(child: GestureDetector(
+        onPanStart: (d) => _lastPan = d.localPosition,
+        onPanUpdate: (d) => setState(() {
+          final delta = d.localPosition - _lastPan;
+          _rotY += delta.dx * 0.008;
+          _rotX = (_rotX + delta.dy * 0.008).clamp(-1.2, 0.2);
+          _lastPan = d.localPosition;
+        }),
+        onScaleUpdate: (d) { if (d.pointerCount == 2) setState(() => _zoom = (_zoom * d.scale).clamp(0.3, 3.0)); },
+        onTapUp: (details) => _handleTap(details),
+        child: AnimatedBuilder(
+          animation: _glowCtrl,
+          builder: (_, __) => CustomPaint(
+            painter: _TruckPainter(
+              result: r, rotX: _rotX, rotY: _rotY, zoom: _zoom,
+              selectedId: _selectedBoxId, glow: _glowCtrl.value, statusColor: sc),
+            size: Size.infinite)),
+      )),
+      // Recalculating overlay
+      if (_recomputing) Positioned(top: 8, right: 8, child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(color: AppTheme.darkCard.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(8)),
+        child: const Row(mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)),
+          SizedBox(width: 6),
+          Text('Recalculando...', style: TextStyle(color: Colors.white54, fontSize: 10)),
+        ]))),
+      // Selected box info overlay
+      if (_selectedBoxId != null) Positioned(left: 8, right: 8, bottom: 8,
+          child: _buildSelectedBox()),
+      // Live metrics overlay (top-left)
+      Positioned(left: 8, top: 8, child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppTheme.darkCard.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: sc.withValues(alpha: 0.2))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          _miniProgressBar('Volumen', volPct, sc),
+          const SizedBox(height: 4),
+          _miniProgressBar('Peso', wgtPct, sc),
+          const SizedBox(height: 4),
+          Text('${m.placedCount}/${m.totalBoxes} bultos',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 9)),
+        ]),
+      )),
     ]);
+
+    // Interactive order panel
+    final orderPanel = Container(
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        border: Border(left: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.15)))),
+      child: Column(children: [
+        // Panel header with metrics
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [
+              AppTheme.neonBlue.withValues(alpha: 0.08),
+              Colors.transparent,
+            ])),
+          child: Column(children: [
+            Row(children: [
+              Icon(Icons.inventory_2_rounded, color: AppTheme.neonBlue, size: 16),
+              const SizedBox(width: 6),
+              Text('PEDIDOS DEL DÍA', style: TextStyle(
+                color: AppTheme.neonBlue, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+              const Spacer(),
+              Text('${_allOrders.length - _excludedIndices.length}/${_allOrders.length}',
+                style: TextStyle(color: AppTheme.neonGreen, fontSize: 11, fontWeight: FontWeight.w700)),
+            ]),
+            const SizedBox(height: 8),
+            // Action buttons
+            Row(children: [
+              Expanded(child: _actionBtn('Añadir Todo', Icons.add_circle_outline, AppTheme.neonGreen, () {
+                setState(() { _excludedIndices.clear(); _isManualMode = false; });
+                _loadPlan();
+              })),
+              const SizedBox(width: 4),
+              Expanded(child: _actionBtn('Quitar Todo', Icons.remove_circle_outline, Colors.redAccent, () {
+                setState(() {
+                  _excludedIndices = Set.from(List.generate(_allOrders.length, (i) => i));
+                  _isManualMode = true;
+                });
+                _rerunPacking();
+              })),
+              const SizedBox(width: 4),
+              _actionBtn('Reset', Icons.restart_alt_rounded, Colors.amber, _resetOrders),
+            ]),
+            const SizedBox(height: 6),
+            // Progress bars
+            _progressBar('Peso', m.totalWeightKg, m.maxPayloadKg, 'kg', sc),
+            const SizedBox(height: 4),
+            _progressBar('Vol.', m.usedVolumeCm3 / 1e6, m.containerVolumeCm3 / 1e6, 'm³', sc),
+          ]),
+        ),
+        const Divider(color: Colors.white10, height: 1),
+        // Status banner
+        _buildStatusBar(r, sc),
+        // Order list
+        Expanded(child: _buildProductos()),
+      ]),
+    );
+
+    if (isWide) {
+      // Landscape/tablet: side-by-side
+      return Row(children: [
+        Expanded(flex: 6, child: canvas3D),
+        SizedBox(width: isWide ? 280 : 220, child: orderPanel),
+      ]);
+    } else {
+      // Portrait: stacked
+      return Column(children: [
+        Expanded(flex: 5, child: canvas3D),
+        Expanded(flex: 4, child: orderPanel),
+      ]);
+    }
+  }
+
+  Widget _miniProgressBar(String label, double pct, Color color) {
+    final c = pct > 90 ? Colors.redAccent : pct > 70 ? Colors.amber : color;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      SizedBox(width: 32, child: Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 8))),
+      SizedBox(width: 60, height: 4, child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: LinearProgressIndicator(value: pct / 100, backgroundColor: Colors.white10, color: c))),
+      const SizedBox(width: 4),
+      Text('${pct.toStringAsFixed(0)}%', style: TextStyle(color: c, fontSize: 8, fontWeight: FontWeight.w700)),
+    ]);
+  }
+
+  Widget _progressBar(String label, double used, double max, String unit, Color sc) {
+    final pct = max > 0 ? (used / max).clamp(0.0, 1.0) : 0.0;
+    final c = pct > 0.9 ? Colors.redAccent : pct > 0.7 ? Colors.amber : AppTheme.neonGreen;
+    return Row(children: [
+      SizedBox(width: 28, child: Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 9))),
+      Expanded(child: ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: SizedBox(height: 6, child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: pct),
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeOutCubic,
+          builder: (_, v, __) => LinearProgressIndicator(value: v, backgroundColor: Colors.white10, color: c))))),
+      const SizedBox(width: 6),
+      Text('${used.toStringAsFixed(1)}/${max.toStringAsFixed(1)} $unit',
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 8)),
+    ]);
+  }
+
+  Widget _actionBtn(String label, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.2))),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 3),
+          Flexible(child: Text(label, style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.w700),
+            maxLines: 1, overflow: TextOverflow.ellipsis)),
+        ]),
+      ),
+    );
   }
 
   // ─── Status Bar ─────────────────────────────────────────────────────────
@@ -500,66 +639,60 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 
   Widget _buildProductos() {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       itemCount: _allOrders.length,
       itemBuilder: (_, i) {
         final o = _allOrders[i];
         final excluded = _excludedIndices.contains(i);
         final weight = o.units * o.weightPerUnit;
-        final cc = _productColor(o.articleCode);
+        final cc = _clientColor(o.clientCode);
 
-        return Dismissible(
-          key: ValueKey('prod_$i'),
-          direction: excluded ? DismissDirection.none : DismissDirection.endToStart,
-          background: Container(
-            alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 16),
-            color: Colors.redAccent.withValues(alpha: 0.15),
-            child: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 18)),
-          onDismissed: (_) => _removeOrder(i),
-          child: Container(
+        return AnimatedOpacity(
+          opacity: excluded ? 0.4 : 1.0,
+          duration: const Duration(milliseconds: 300),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
             margin: const EdgeInsets.only(bottom: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
             decoration: BoxDecoration(
-              color: excluded ? Colors.transparent : cc.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(6)),
+              color: excluded ? Colors.transparent : cc.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: excluded ? Colors.white10 : cc.withValues(alpha: 0.15))),
             child: Row(children: [
-              // Size badge
-              Container(width: 24, height: 24,
-                decoration: BoxDecoration(
-                  color: excluded ? Colors.white.withValues(alpha: 0.03) : _sizeColor(weight).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(5)),
-                child: Center(child: Text(_sizeLabel(weight),
-                    style: TextStyle(color: excluded ? Colors.white12 : _sizeColor(weight),
-                        fontSize: 9, fontWeight: FontWeight.w800)))),
-              const SizedBox(width: 8),
+              // Client color dot
+              Container(width: 6, height: 6,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: cc)),
+              const SizedBox(width: 6),
               // Product info
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(o.articleName.isNotEmpty ? o.articleName : o.articleCode,
-                    style: TextStyle(color: excluded ? Colors.white.withValues(alpha: 0.2) : Colors.white, fontSize: 11,
+                    style: TextStyle(color: excluded ? Colors.white30 : Colors.white, fontSize: 10,
                         fontWeight: FontWeight.w500,
                         decoration: excluded ? TextDecoration.lineThrough : null),
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 Text('${o.clientName.isNotEmpty ? o.clientName : o.clientCode} · #${o.orderNumber}',
-                    style: TextStyle(color: excluded ? Colors.white10 : Colors.white.withValues(alpha: 0.3), fontSize: 9)),
+                    style: TextStyle(color: excluded ? Colors.white10 : Colors.white24, fontSize: 8)),
               ])),
-              // Quantity
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(o.boxes > 0 ? '${o.boxes.toStringAsFixed(0)} cajas' : '${o.units.toStringAsFixed(0)} uds',
+              // Weight + boxes
+              Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+                Text(o.boxes > 0 ? '${o.boxes.toStringAsFixed(0)}cj' : '${o.units.toStringAsFixed(0)}u',
                     style: TextStyle(color: excluded ? Colors.white12 : AppTheme.neonGreen,
-                        fontSize: 10, fontWeight: FontWeight.w600)),
-                if (weight > 0) Text('${weight.toStringAsFixed(1)} kg',
-                    style: TextStyle(color: excluded ? Colors.white10 : Colors.white.withValues(alpha: 0.25), fontSize: 9)),
+                        fontSize: 9, fontWeight: FontWeight.w600)),
+                if (weight > 0) Text('${weight.toStringAsFixed(1)}kg',
+                    style: TextStyle(color: Colors.white.withValues(alpha: excluded ? 0.08 : 0.2), fontSize: 8)),
               ]),
-              const SizedBox(width: 6),
-              // Action button
-              if (excluded)
-                GestureDetector(onTap: () => _restoreOrder(i),
-                    child: Container(padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(color: AppTheme.neonGreen.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(5)),
-                        child: const Icon(Icons.add_rounded, color: AppTheme.neonGreen, size: 14)))
-              else
-                GestureDetector(onTap: () => _removeOrder(i),
-                    child: Icon(Icons.remove_circle_outline, color: Colors.white.withValues(alpha: 0.12), size: 16)),
+              const SizedBox(width: 4),
+              // Toggle switch
+              SizedBox(width: 34, height: 20, child: Switch(
+                value: !excluded,
+                onChanged: (v) => v ? _restoreOrder(i) : _removeOrder(i),
+                activeColor: AppTheme.neonGreen,
+                activeTrackColor: AppTheme.neonGreen.withValues(alpha: 0.3),
+                inactiveThumbColor: Colors.white24,
+                inactiveTrackColor: Colors.white10,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              )),
             ]),
           ),
         );
@@ -862,9 +995,10 @@ class _TruckPainter extends CustomPainter {
   void _fillFace(Canvas canvas, Size size, List<List<double>> pts, Color base, double light) {
     final offsets = pts.map((p) => _p3d(p[0], p[1], p[2], size)).toList();
     final l = light.clamp(0.4, 1.2); 
-    final r = (base.r * l).round().clamp(0, 255);
-    final g = (base.g * l).round().clamp(0, 255);
-    final b = (base.b * l).round().clamp(0, 255);
+    // GOD MODE V4: Usar .red/.green/.blue (int 0-255) en vez de .r/.g/.b (double 0.0-1.0)
+    final r = (base.red * l).round().clamp(0, 255);
+    final g = (base.green * l).round().clamp(0, 255);
+    final b = (base.blue * l).round().clamp(0, 255);
     canvas.drawPath(_pathOf(offsets), Paint()..color = Color.fromARGB(255, r, g, b)..style = PaintingStyle.fill);
   }
 
@@ -883,22 +1017,87 @@ class _TruckPainter extends CustomPainter {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28));
   }
 
-  // --- CONTENEDOR DE CARGA ---
+  // --- CONTENEDOR DE CARGA (GOD MODE V5 PREMIUM) ---
   void _drawCargoContainer(Canvas canvas, Size size, double ox, double oy, double oz, double w, double d, double h, bool isVan) {
-    final colorRight = const Color(0xFFE2E8F0); // Blanco moderno/plata
-    final colorLeft  = const Color(0xFFCBD5E1);
-    final colorBack  = const Color(0xFF94A3B8);
-    final colorFloor = const Color(0xFF1E293B); // Dark slate
-    final colorRoof  = const Color(0xFFF1F5F9).withValues(alpha: 0.15); // Transparente para ver la carga
+    final colorFloor = const Color(0xFF3B4252); // Nordic dark
+    final colorWallInner = const Color(0xFFC8D6E5); // Inner wall light grey  
+    final colorWallAlpha = 0.5; // Semi-transparent walls
+    final colorRoof  = const Color(0xFFDFE6ED).withValues(alpha: 0.12);
+    final colorDoor  = const Color(0xFFD5DDE5); // Puertas
 
+    // FLOOR with grid pattern
     _fillFace(canvas, size, [[ox,oy,oz],[ox+w,oy,oz],[ox+w,oy+d,oz],[ox,oy+d,oz]], colorFloor, _light(0, 0, -1));
-    _fillFace(canvas, size, [[ox,oy+d,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]], colorBack, _light(0, 1, 0) * 0.8);
-    _fillFace(canvas, size, [[ox,oy,oz],[ox,oy+d,oz],[ox,oy+d,oz+h],[ox,oy,oz+h]], colorLeft, _light(-1, 0, 0));
-    _fillFace(canvas, size, [[ox+w,oy,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox+w,oy,oz+h]], colorRight, _light(1, 0, 0));
+    // Floor grid lines for depth
+    final gridPaint = Paint()..color = const Color(0xFF4C566A).withValues(alpha: 0.5)..strokeWidth = 0.3;
+    for (double gx = 0; gx <= w; gx += 40) {
+      canvas.drawLine(_p3d(ox + gx, oy, oz + 0.5, size), _p3d(ox + gx, oy + d, oz + 0.5, size), gridPaint);
+    }
+    for (double gy = 0; gy <= d; gy += 40) {
+      canvas.drawLine(_p3d(ox, oy + gy, oz + 0.5, size), _p3d(ox + w, oy + gy, oz + 0.5, size), gridPaint);
+    }
+
+    // BACK WALL (visible through open doors)
+    _fillFace(canvas, size, [[ox,oy+d,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]], 
+      colorWallInner.withValues(alpha: 0.6), _light(0, 1, 0) * 0.7);
+
+    // LEFT WALL (semi-transparent to see cargo)
+    final leftPts = [[ox,oy,oz],[ox,oy+d,oz],[ox,oy+d,oz+h],[ox,oy,oz+h]];
+    final leftOffsets = leftPts.map((p) => _p3d(p[0], p[1], p[2], size)).toList();
+    canvas.drawPath(_pathOf(leftOffsets), Paint()
+      ..color = colorWallInner.withValues(alpha: colorWallAlpha)
+      ..style = PaintingStyle.fill);
+    // Wall reinforcement bars
+    for (double gz = h * 0.25; gz < h; gz += h * 0.25) {
+      canvas.drawLine(_p3d(ox, oy, oz + gz, size), _p3d(ox, oy + d, oz + gz, size),
+        Paint()..color = const Color(0xFF94A3B8).withValues(alpha: 0.4)..strokeWidth = 1.5);
+    }
+
+    // RIGHT WALL (semi-transparent)
+    final rightPts = [[ox+w,oy,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox+w,oy,oz+h]];
+    final rightOffsets = rightPts.map((p) => _p3d(p[0], p[1], p[2], size)).toList();
+    canvas.drawPath(_pathOf(rightOffsets), Paint()
+      ..color = colorWallInner.withValues(alpha: colorWallAlpha)
+      ..style = PaintingStyle.fill);
+    for (double gz = h * 0.25; gz < h; gz += h * 0.25) {
+      canvas.drawLine(_p3d(ox + w, oy, oz + gz, size), _p3d(ox + w, oy + d, oz + gz, size),
+        Paint()..color = const Color(0xFF94A3B8).withValues(alpha: 0.4)..strokeWidth = 1.5);
+    }
+
+    // ROOF (very transparent to see cargo from above)
     _fillFace(canvas, size, [[ox,oy,oz+h],[ox+w,oy,oz+h],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]], colorRoof, _light(0, 0, 1));
 
-    // Bordes estéticos industriales paramétricos
-    final border = Paint()..color = const Color(0xFF64748B).withValues(alpha: 0.45)..strokeWidth = 1..style = PaintingStyle.stroke;
+    // OPEN REAR DOORS (rotated outward ~120°)
+    final doorW = w * 0.48;
+    final doorThick = 3.0;
+    final doorOpen = d * 0.35; // How far doors swing open
+    
+    // Left door (open outward-left)
+    _fillFace(canvas, size, [
+      [ox, oy, oz], [ox, oy - doorOpen, oz], [ox, oy - doorOpen, oz + h * 0.95], [ox, oy, oz + h * 0.95]
+    ], colorDoor, _light(-1, -0.5, 0));
+    // Door thickness
+    _fillFace(canvas, size, [
+      [ox, oy - doorOpen, oz], [ox + doorThick, oy - doorOpen, oz], [ox + doorThick, oy - doorOpen, oz + h * 0.95], [ox, oy - doorOpen, oz + h * 0.95]
+    ], colorDoor.withValues(alpha: 0.7), _light(0, -1, 0));
+    // Door handle left
+    canvas.drawLine(_p3d(ox + doorThick * 0.5, oy - doorOpen * 0.3, oz + h * 0.45, size),
+      _p3d(ox + doorThick * 0.5, oy - doorOpen * 0.3, oz + h * 0.55, size),
+      Paint()..color = const Color(0xFF475569)..strokeWidth = 2..strokeCap = StrokeCap.round);
+
+    // Right door (open outward-right)
+    _fillFace(canvas, size, [
+      [ox + w, oy, oz], [ox + w, oy - doorOpen, oz], [ox + w, oy - doorOpen, oz + h * 0.95], [ox + w, oy, oz + h * 0.95]
+    ], colorDoor, _light(1, -0.5, 0));
+    _fillFace(canvas, size, [
+      [ox + w - doorThick, oy - doorOpen, oz], [ox + w, oy - doorOpen, oz], [ox + w, oy - doorOpen, oz + h * 0.95], [ox + w - doorThick, oy - doorOpen, oz + h * 0.95]
+    ], colorDoor.withValues(alpha: 0.7), _light(0, -1, 0));
+    // Door handle right
+    canvas.drawLine(_p3d(ox + w - doorThick * 0.5, oy - doorOpen * 0.3, oz + h * 0.45, size),
+      _p3d(ox + w - doorThick * 0.5, oy - doorOpen * 0.3, oz + h * 0.55, size),
+      Paint()..color = const Color(0xFF475569)..strokeWidth = 2..strokeCap = StrokeCap.round);
+
+    // Wireframe edges
+    final border = Paint()..color = const Color(0xFF64748B).withValues(alpha: 0.35)..strokeWidth = 0.8..style = PaintingStyle.stroke;
     final v = [
       _p3d(ox,oy,oz,size), _p3d(ox+w,oy,oz,size), _p3d(ox+w,oy+d,oz,size), _p3d(ox,oy+d,oz,size),
       _p3d(ox,oy,oz+h,size), _p3d(ox+w,oy,oz+h,size), _p3d(ox+w,oy+d,oz+h,size), _p3d(ox,oy+d,oz+h,size),
@@ -907,11 +1106,17 @@ class _TruckPainter extends CustomPainter {
       canvas.drawLine(v[e[0]], v[e[1]], border);
     }
 
+    // Reflective safety strips on back wall
+    final stripPaint = Paint()..color = const Color(0xFFFFCA28).withValues(alpha: 0.5)..strokeWidth = 3;
+    canvas.drawLine(_p3d(ox + 5, oy + d - 1, oz + h * 0.02, size), _p3d(ox + w - 5, oy + d - 1, oz + h * 0.02, size), stripPaint);
+    canvas.drawLine(_p3d(ox + 5, oy + d - 1, oz + h * 0.06, size), _p3d(ox + w - 5, oy + d - 1, oz + h * 0.06, size), 
+      Paint()..color = Colors.redAccent.withValues(alpha: 0.4)..strokeWidth = 3);
+
     if (!isVan) {
-      // Líneas decorativas tipo camión corrugado pesado para distinguir visulamente
-      for (double x = 30; x < w; x+= 40) {
+      // Corrugated panel lines on outside walls
+      for (double x = 30; x < w; x += 40) {
         canvas.drawLine(_p3d(ox+x, oy+d, oz, size), _p3d(ox+x, oy+d, oz+h, size), 
-          Paint()..color = Colors.black12..strokeWidth = 0.5);
+          Paint()..color = const Color(0xFF94A3B8).withValues(alpha: 0.15)..strokeWidth = 0.5);
       }
     }
   }
@@ -979,12 +1184,14 @@ class _TruckPainter extends CustomPainter {
     _fillFace(canvas, size, [[ox-2,cY+cabD-8,oz],[ox+w+2,cY+cabD-8,oz],[ox+w+2,cY+cabD+15,oz+30],[ox-2,cY+cabD+15,oz+30]], colorBumper, _light(0, 1, 0));
   }
 
-  // --- RUEDAS ESPECÍFICAS DE VEHÍCULO (Ejes paramétricos) ---
+  // --- RUEDAS 3D PREMIUM (GOD MODE V5) ---
   void _drawWheels(Canvas canvas, Size size, double ox, double oy, double oz, double w, double d, double h, bool isVan) {
-    // Si es furgoneta, las ruedas son proporcionales a su altura compacta y van integradas en las esquinas más pegadas.
     final r = math.min(100.0, h * (isVan ? 0.22 : 0.16)); 
-    final tireColor = const Color(0xFF020617); // Slate black asfalto
-    final rimColor = const Color(0xFF94A3B8);  // Chrome metal
+    final tireColor = const Color(0xFF0F172A); // Deep tire black
+    final sidewallColor = const Color(0xFF1E293B); // Tire sidewall
+    final rimColor = const Color(0xFFCBD5E1);  // Chrome silver
+    final hubColor = const Color(0xFF94A3B8);   // Hub center
+    final brakeColor = const Color(0xFF64748B);  // Brake disc
 
     final rearY = oy + (isVan ? d * 0.15 : d * 0.20);
     final frontY = oy + d + (isVan ? d * 0.22 : 60.0);
@@ -994,29 +1201,56 @@ class _TruckPainter extends CustomPainter {
       [ox - r*0.2, frontY], [ox + w + r*0.2, frontY],
     ];
 
-    // Si es un camión pesado muy largo (>6m reales), inyectamos un eje trasero adicional
+    // Extra rear axle for heavy trucks (>6m)
     if (!isVan && d > 600) { 
       wheelPositions.insert(0, [ox - r*0.2, rearY + r * 2.8]);
       wheelPositions.insert(1, [ox + w + r*0.2, rearY + r * 2.8]);
     }
 
-    // Dibujo hiper-optimizado vectorial
     for (final pos in wheelPositions) {
+      // Outer tire (full radius)
       final tirePath = Path();
-      for (int i=0; i<=14; i++) { // Optimizado loops radiales para FPS (14 vertices)
-        final a = (i/14)*math.pi*2;
-        final pt = _p3d(pos[0], pos[1] + math.cos(a)*r*0.4, oz + r*0.3 + math.sin(a)*r, size);
-        i==0 ? tirePath.moveTo(pt.dx, pt.dy) : tirePath.lineTo(pt.dx, pt.dy);
+      for (int i = 0; i <= 18; i++) {
+        final a = (i / 18) * math.pi * 2;
+        final pt = _p3d(pos[0], pos[1] + math.cos(a) * r * 0.4, oz + r * 0.3 + math.sin(a) * r, size);
+        i == 0 ? tirePath.moveTo(pt.dx, pt.dy) : tirePath.lineTo(pt.dx, pt.dy);
       }
       canvas.drawPath(tirePath, Paint()..color = tireColor);
 
+      // Sidewall ring (slightly smaller)
+      final sideWallPath = Path();
+      for (int i = 0; i <= 16; i++) {
+        final a = (i / 16) * math.pi * 2;
+        final pt = _p3d(pos[0], pos[1] + math.cos(a) * r * 0.35, oz + r * 0.3 + math.sin(a) * r * 0.85, size);
+        i == 0 ? sideWallPath.moveTo(pt.dx, pt.dy) : sideWallPath.lineTo(pt.dx, pt.dy);
+      }
+      canvas.drawPath(sideWallPath, Paint()..color = sidewallColor);
+
+      // Rim (metallic, smaller)
       final rimPath = Path();
-      for (int i=0; i<=10; i++) { // Rin interior rápido 10 vertices
-        final a = (i/10)*math.pi*2;
-        final pt = _p3d(pos[0], pos[1] + math.cos(a)*r*0.22, oz + r*0.3 + math.sin(a)*r*0.65, size);
-        i==0 ? rimPath.moveTo(pt.dx, pt.dy) : rimPath.lineTo(pt.dx, pt.dy);
+      for (int i = 0; i <= 14; i++) {
+        final a = (i / 14) * math.pi * 2;
+        final pt = _p3d(pos[0], pos[1] + math.cos(a) * r * 0.26, oz + r * 0.3 + math.sin(a) * r * 0.65, size);
+        i == 0 ? rimPath.moveTo(pt.dx, pt.dy) : rimPath.lineTo(pt.dx, pt.dy);
       }
       canvas.drawPath(rimPath, Paint()..color = rimColor);
+
+      // Hub cap center
+      final hubPath = Path();
+      for (int i = 0; i <= 10; i++) {
+        final a = (i / 10) * math.pi * 2;
+        final pt = _p3d(pos[0], pos[1] + math.cos(a) * r * 0.12, oz + r * 0.3 + math.sin(a) * r * 0.3, size);
+        i == 0 ? hubPath.moveTo(pt.dx, pt.dy) : hubPath.lineTo(pt.dx, pt.dy);
+      }
+      canvas.drawPath(hubPath, Paint()..color = hubColor);
+
+      // Spoke lines (5 spokes)
+      final center = _p3d(pos[0], pos[1], oz + r * 0.3, size);
+      for (int s = 0; s < 5; s++) {
+        final a = (s / 5) * math.pi * 2;
+        final spokeEnd = _p3d(pos[0], pos[1] + math.cos(a) * r * 0.24, oz + r * 0.3 + math.sin(a) * r * 0.6, size);
+        canvas.drawLine(center, spokeEnd, Paint()..color = brakeColor..strokeWidth = 1);
+      }
     }
   }
 

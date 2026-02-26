@@ -37,6 +37,7 @@ router.get('/dashboard', async (req, res) => {
         COUNT(*) AS NUM_LINEAS,
         V.CARGAMAXIMA,
         V.CONTENEDORVOLUMEN,
+        COALESCE(V.NUMEROCONTENEDORES, 0) AS NUM_PALETS,
         COALESCE(C.TOLERANCIA_EXCESO, 5) AS TOLERANCIA
       FROM DSEDAC.OPP OPP
       LEFT JOIN DSEDAC.VEH V ON TRIM(V.CODIGOVEHICULO) = TRIM(OPP.CODIGOVEHICULO)
@@ -49,6 +50,7 @@ router.get('/dashboard', async (req, res) => {
       GROUP BY TRIM(OPP.CODIGOVEHICULO), TRIM(V.DESCRIPCIONVEHICULO),
                TRIM(V.MATRICULA), TRIM(OPP.CODIGOREPARTIDOR),
                TRIM(VDD.NOMBREVENDEDOR), V.CARGAMAXIMA, V.CONTENEDORVOLUMEN,
+               COALESCE(V.NUMEROCONTENEDORES, 0),
                COALESCE(C.TOLERANCIA_EXCESO, 5)
       ORDER BY TRIM(OPP.CODIGOVEHICULO)
     `);
@@ -56,18 +58,30 @@ router.get('/dashboard', async (req, res) => {
         res.json({
             date: { year, month, day },
             totalTrucks: trucks.length,
-            trucks: trucks.map(t => ({
-                vehicleCode: (t.VEHICULO || '').trim(),
-                description: (t.DESCRIPCION || '').trim(),
-                matricula: (t.MATRICULA || '').trim(),
-                driverCode: (t.REPARTIDOR || '').trim(),
-                driverName: (t.NOMBRE_REPARTIDOR || '').trim(),
-                orderCount: parseInt(t.NUM_ORDENES) || 0,
-                lineCount: parseInt(t.NUM_LINEAS) || 0,
-                maxPayloadKg: parseFloat(t.CARGAMAXIMA) || 0,
-                containerVolume: parseFloat(t.CONTENEDORVOLUMEN) || 0,
-                tolerancePct: parseFloat(t.TOLERANCIA) || 5,
-            })),
+            trucks: trucks.map(t => {
+                let payload = parseFloat(t.CARGAMAXIMA) || 0;
+                const numPalets = parseInt(t.NUM_PALETS, 10) || 0;
+
+                // GOD MODE: Si CARGAMAXIMA=0 y hay palets, derivar peso
+                if (payload === 0 && numPalets > 0) {
+                    payload = numPalets * 500;
+                } else if (payload === 0) {
+                    payload = 6000;
+                }
+
+                return {
+                    vehicleCode: (t.VEHICULO || '').trim(),
+                    description: (t.DESCRIPCION || '').trim(),
+                    matricula: (t.MATRICULA || '').trim(),
+                    driverCode: (t.REPARTIDOR || '').trim(),
+                    driverName: (t.NOMBRE_REPARTIDOR || '').trim(),
+                    orderCount: parseInt(t.NUM_ORDENES) || 0,
+                    lineCount: parseInt(t.NUM_LINEAS) || 0,
+                    maxPayloadKg: payload,
+                    containerVolume: parseFloat(t.CONTENEDORVOLUMEN) || 0,
+                    tolerancePct: parseFloat(t.TOLERANCIA) || 5,
+                };
+            }),
         });
     } catch (error) {
         logger.error(`Warehouse dashboard error: ${error.message}`);
@@ -447,14 +461,27 @@ router.post('/personnel/:id/delete', async (req, res) => {
  */
 router.get('/articles', async (req, res) => {
     try {
-        const { search, onlyWithDimensions, limit = 200 } = req.query;
+        const { search, onlyWithDimensions, limit = 2000 } = req.query;
         let where = "TRIM(A.CODIGOARTICULO) <> '' AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)";
 
-        // GOD MODE: Extended garbage filtering requested by user
-        const garbageKeywords = ['PRUEBA', 'TEST', 'DESCUENTO', 'ESTIMADO', 'CT CT', 'URGENTE', 'REPARTIR', 'ENVIAR A', 'ULTIMA HORA', 'GASTOS ESTABLECIMIENTO'];
+        // GOD MODE V4: Filtro nuclear de artículos basura.
+        // La BD tiene 6182 articles, 3177 activos, pero cientos son instrucciones internas del AS400
+        // (códigos 0000-0099, K, D001, etc.) que aparecen como PESO=1 genérico.
+        const garbageKeywords = [
+            'PRUEBA', 'TEST', 'DESCUENTO', 'ESTIMADO', 'CT CT', 'CTR ', 'URGENTE',
+            'REPARTIR', 'ENVIAR', 'ULTIMA HORA', 'GASTOS ESTABLECIMIENTO', 'COLABORACION GASTOS',
+            'MODELO TARIFA', 'TARIFAS PACK', 'REVISTA', 'AVERIADO', 'PANAMAR',
+            'ANULACION', 'RECOGER PAGARE', 'PEDIR C.I.F', 'DEJAR MERCANCIA',
+            'SERVIR EN', 'SERVIR,', 'KIOSCO', 'CAFETERIA', 'TERRAZA DE',
+            'ENTREGAR MERCANCIA', 'AGENDA RESTAURACION', 'INCOBRABLE',
+            'ALMACENADOR DE', 'P E D I R'
+        ];
         for (const kw of garbageKeywords) {
             where += ` AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%${kw}%'`;
         }
+        // Exclude articles with internal codes (numeric codes < 100 that are notes/instructions)
+        where += " AND NOT (LENGTH(TRIM(A.CODIGOARTICULO)) = 1)";
+        where += " AND TRIM(A.CODIGOARTICULO) NOT IN ('0000','0006','0022','0043','0045','0046','0047','0051','0053','0054','0056','0058','0061','0070','0071','D001','K')";
 
         if (search) {
             const s = search.replace(/'/g, "''").trim().toUpperCase();
