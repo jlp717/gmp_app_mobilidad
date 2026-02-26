@@ -1069,10 +1069,14 @@ class _TruckPainter extends CustomPainter {
 
   void _fillFaceSolid(Canvas canvas, List<Offset> pts, Color base, double light, double alpha) {
     final l = light.clamp(0.4, 1.8); 
-    final r = (base.r * l).round().clamp(0, 255);
-    final g = (base.g * l).round().clamp(0, 255);
-    final b = (base.b * l).round().clamp(0, 255);
-    canvas.drawPath(_pathOf(pts), Paint()..color = Color.fromARGB((alpha * 255).round(), r, g, b)..style = PaintingStyle.fill);
+    // Bug GOD MODE solucionado: .r en Flutter 3+ devuelve un double (0.0 a 1.0).
+    // Si lo multiplicabamos por light (ej 1.2), quedaba 0.96. Al hacer round(), valía 1.
+    // Eso provocaba Color.fromARGB(255, 1, 1, 1), que es casi un NEGRO absoluto (Black Box Wireframe Bug).
+    // Solución: Usar la propiedad de entero .red, .green, .blue (0 a 255).
+    final int r = (base.red * l).round().clamp(0, 255);
+    final int g = (base.green * l).round().clamp(0, 255);
+    final int bl = (base.blue * l).round().clamp(0, 255);
+    canvas.drawPath(_pathOf(pts), Paint()..color = Color.fromARGB((alpha * 255).round(), r, g, bl)..style = PaintingStyle.fill);
   }
 
   void _drawLabel(Canvas canvas, Size size, TruckInterior interior) {

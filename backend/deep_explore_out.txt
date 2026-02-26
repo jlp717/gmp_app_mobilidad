@@ -1,0 +1,1046 @@
+--- POTENTIAL COLUMNS FOR TRUCK DIMENSIONS ---
+[
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEH_35",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEH_35",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEH_35",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL2",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL3",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "GIOVA",
+    "TABLE_NAME": "V_DIM_VEHICULO",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "GIOVA",
+    "TABLE_NAME": "V_DIM_VEHICULO",
+    "COLUMN_NAME": "VOLUMEN_M3",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "GIOVA",
+    "TABLE_NAME": "V_DIM_VEHICULO",
+    "COLUMN_NAME": "CONTENEDOR_VOLUMEN_M3",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "ALMACEN_CAMIONES_CONFIG",
+    "COLUMN_NAME": "LARGO_INTERIOR_CM",
+    "DATA_TYPE": "DECIMAL",
+    "COLUMN_TEXT": null
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "ALMACEN_CAMIONES_CONFIG",
+    "COLUMN_NAME": "ANCHO_INTERIOR_CM",
+    "DATA_TYPE": "DECIMAL",
+    "COLUMN_TEXT": null
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "ALMACEN_CAMIONES_CONFIG",
+    "COLUMN_NAME": "ALTO_INTERIOR_CM",
+    "DATA_TYPE": "DECIMAL",
+    "COLUMN_TEXT": null
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "V_DIM_VEHICULO",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "V_DIM_VEHICULO",
+    "COLUMN_NAME": "VOLUMEN_M3",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "V_DIM_VEHICULO",
+    "COLUMN_NAME": "CONTENEDOR_VOLUMEN_M3",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD02",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD02",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD02",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD02",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD02",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD02",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "VEH",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CARGAMAXIMA",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "CargaMaxima                                 VHCAMA"
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "VOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "Volumen                                     VHVOLU"
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "VEHL1",
+    "COLUMN_NAME": "CONTENEDORVOLUMEN",
+    "DATA_TYPE": "NUMERIC",
+    "COLUMN_TEXT": "ContenedorVolumen                           VHCOVO"
+  }
+]
+
+--- ALL VEHICLE RELATED TABLES ---
+[
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "CCVEH",
+    "TABLE_TEXT": "Centros de coste - Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "CCVEHL1",
+    "TABLE_TEXT": "Centros de coste - Vehículos: Sbe+Cod+Veh"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "CCVEH",
+    "TABLE_TEXT": "Centros de coste - Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "CCVEHL1",
+    "TABLE_TEXT": "Centros de coste - Vehículos: Sbe+Cod+Veh"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL2",
+    "TABLE_TEXT": "Vehículos: Mat + Cod"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL3",
+    "TABLE_TEXT": "Vehículos: Vdd + Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM02",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL2",
+    "TABLE_TEXT": "Vehículos: Mat + Cod"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL3",
+    "TABLE_TEXT": "Vehículos: Vdd + Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSTM09",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DIEGO",
+    "TABLE_NAME": "CAMIONES",
+    "TABLE_TEXT": "STOCK CAMIONES"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL2",
+    "TABLE_TEXT": "Vehículos: Mat + Cod"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL3",
+    "TABLE_TEXT": "Vehículos: Vdd + Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEH_35",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL2_35",
+    "TABLE_TEXT": "Vehículos: Mat + Cod"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL3_35",
+    "TABLE_TEXT": "Vehículos: Vdd + Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL1_35",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEH_351",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL2_351",
+    "TABLE_TEXT": "Vehículos: Mat + Cod"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL3_351",
+    "TABLE_TEXT": "Vehículos: Vdd + Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSTF",
+    "TABLE_NAME": "VEHL1_351",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD02",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD02",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSEMOVIL",
+    "TABLE_NAME": "STOCKVEHIC",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "CCVEH",
+    "TABLE_TEXT": "Centros de coste - Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "CCVEHL1",
+    "TABLE_TEXT": "Centros de coste - Vehículos: Sbe+Cod+Veh"
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "WTAF",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "GIOVA",
+    "TABLE_NAME": "V_DIM_TIPO_VEHICULO",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "GIOVA",
+    "TABLE_NAME": "V_DIM_VEHICULO",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "GIOVA",
+    "TABLE_NAME": "V_VEHICULO_COMBUSTIBLE",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "ALMACEN_CAMIONES_CONFIG",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "CCVEH",
+    "TABLE_TEXT": "Centros de coste - Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "CCVEHL1",
+    "TABLE_TEXT": "Centros de coste - Vehículos: Sbe+Cod+Veh"
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSEF",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "V_DIM_TIPO_VEHICULO",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "V_DIM_VEHICULO",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "V_VEHICULO_COMBUSTIBLE",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "CCVEH",
+    "TABLE_TEXT": "Centros de coste - Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "CCVEHL1",
+    "TABLE_TEXT": "Centros de coste - Vehículos: Sbe+Cod+Veh"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "TESTMO_BK2",
+    "TABLE_NAME": "STOCKVEHIC",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "TESTMO_BK2",
+    "TABLE_NAME": "TRANSPORTI",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CCVEH",
+    "TABLE_TEXT": "Centros de coste - Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CCVEHL1",
+    "TABLE_TEXT": "Centros de coste - Vehículos: Sbe+Cod+Veh"
+  },
+  {
+    "TABLE_SCHEMA": "TESTMOVIL",
+    "TABLE_NAME": "STOCKVEHIC",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEH",
+    "TABLE_TEXT": "Vehículos"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL1",
+    "TABLE_TEXT": "Vehículos: Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL2",
+    "TABLE_TEXT": "Vehículos: Mat + Cod"
+  },
+  {
+    "TABLE_SCHEMA": "DSTMXX",
+    "TABLE_NAME": "VEHL3",
+    "TABLE_TEXT": "Vehículos: Vdd + Cód"
+  },
+  {
+    "TABLE_SCHEMA": "DSEMOVIL",
+    "TABLE_NAME": "TRANSPORTI",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "DSTMOVIL",
+    "TABLE_NAME": "TRANSPORTI",
+    "TABLE_TEXT": ""
+  },
+  {
+    "TABLE_SCHEMA": "TESTMOVIL",
+    "TABLE_NAME": "TRANSPORTI",
+    "TABLE_TEXT": ""
+  }
+]

@@ -1,0 +1,80 @@
+
+--- VEHICLES FROM DSEDAC.VEH ---
+[
+  {
+    "CODIGOVEHICULO": "02        ",
+    "DESCRIPCIONVEHICULO": "84 IVECO SILVA CAMION CARRO ALTO        ",
+    "CARGAMAXIMA": 0,
+    "TARA": 0,
+    "VOLUMEN": 0,
+    "CONTENEDORVOLUMEN": 0.68
+  },
+  {
+    "CODIGOVEHICULO": "04        ",
+    "DESCRIPCIONVEHICULO": "41 MITSUBISHI FUSO CAMION POLLOS ALFONS ",
+    "CARGAMAXIMA": 0,
+    "TARA": 0,
+    "VOLUMEN": 0,
+    "CONTENEDORVOLUMEN": 1.44
+  },
+  {
+    "CODIGOVEHICULO": "05        ",
+    "DESCRIPCIONVEHICULO": "39 MERCEDES 20 T CAMION TIRO FORZADO    ",
+    "CARGAMAXIMA": 0,
+    "TARA": 0,
+    "VOLUMEN": 0,
+    "CONTENEDORVOLUMEN": 1.4
+  },
+  {
+    "CODIGOVEHICULO": "06        ",
+    "DESCRIPCIONVEHICULO": "48 MERCEDES R.PIERN CAMION PLACAS       ",
+    "CARGAMAXIMA": 0,
+    "TARA": 0,
+    "VOLUMEN": 0,
+    "CONTENEDORVOLUMEN": 1.45
+  }
+]
+
+--- CAMIONES CONFIG FROM JAVIER.ALMACEN_CAMIONES_CONFIG ---
+[
+  {
+    "CODIGOVEHICULO": "02",
+    "LARGO_INTERIOR_CM": null,
+    "ANCHO_INTERIOR_CM": null,
+    "ALTO_INTERIOR_CM": null,
+    "TOLERANCIA_EXCESO": 5,
+    "NOTAS": null,
+    "UPDATED_AT": null,
+    "UPDATED_BY": null
+  },
+  {
+    "CODIGOVEHICULO": "04",
+    "LARGO_INTERIOR_CM": null,
+    "ANCHO_INTERIOR_CM": null,
+    "ALTO_INTERIOR_CM": null,
+    "TOLERANCIA_EXCESO": 5,
+    "NOTAS": null,
+    "UPDATED_AT": null,
+    "UPDATED_BY": null
+  },
+  {
+    "CODIGOVEHICULO": "05",
+    "LARGO_INTERIOR_CM": null,
+    "ANCHO_INTERIOR_CM": null,
+    "ALTO_INTERIOR_CM": null,
+    "TOLERANCIA_EXCESO": 5,
+    "NOTAS": null,
+    "UPDATED_AT": null,
+    "UPDATED_BY": null
+  },
+  {
+    "CODIGOVEHICULO": "06",
+    "LARGO_INTERIOR_CM": null,
+    "ANCHO_INTERIOR_CM": null,
+    "ALTO_INTERIOR_CM": null,
+    "TOLERANCIA_EXCESO": 5,
+    "NOTAS": null,
+    "UPDATED_AT": null,
+    "UPDATED_BY": null
+  }
+]

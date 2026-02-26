@@ -50,6 +50,7 @@ async function getTruckConfig(vehicleCode) {
       V.TARA,
       V.VOLUMEN AS VOLUMEN_VEH,
       V.CONTENEDORVOLUMEN,
+      COALESCE(V.NUMEROCONTENEDORES, 0) AS NUM_PALETS,
       COALESCE(C.LARGO_INTERIOR_CM, 0) AS LARGO_CM,
       COALESCE(C.ANCHO_INTERIOR_CM, 0) AS ANCHO_CM,
       COALESCE(C.ALTO_INTERIOR_CM, 0) AS ALTO_CM,
@@ -66,16 +67,44 @@ async function getTruckConfig(vehicleCode) {
     const rawContVol = parseFloat(r.CONTENEDORVOLUMEN) || 0;
     const contVolM3 = rawContVol;
 
-    // Estimate payload ONLY if zero
-    const maxPayload = parseFloat(r.CARGAMAXIMA) || 0;
+    // Determinar payload 
+    let maxPayload = parseFloat(r.CARGAMAXIMA) || 0;
 
     let lengthCm = parseFloat(r.LARGO_CM) || 0;
     let widthCm = parseFloat(r.ANCHO_CM) || 0;
     let heightCm = parseFloat(r.ALTO_CM) || 0;
 
+    const numPalets = parseInt(r.NUM_PALETS, 10) || 0;
+
+    // GOD MODE: Algoritmo Palet-Europeo. El AS400 no almacena Largo/Ancho/Alto.
+    // Si la BD de configuración manual está en 0 y tenemos el número de palets, creamos la estructura.
+    if ((lengthCm === 0 || widthCm === 0 || heightCm === 0) && numPalets > 0) {
+        // En 240cm de ancho caben exactamente 2 pales europeos por el lado de 120cm
+        // Por tanto, la profundidad ocupa filas de 80cm cada una.
+        const filas = Math.ceil(numPalets / 2);
+        lengthCm = filas * 80;
+        widthCm = 240;
+        heightCm = 220; // Altura estándar util
+
+        // Cada palé asume 500kg de peso estandar
+        if (maxPayload === 0) {
+            maxPayload = numPalets * 500;
+        }
+    } else if (lengthCm === 0 || widthCm === 0 || heightCm === 0) {
+        // Fallback básico si todo falla y no hay palets configurados tampoco
+        lengthCm = 600;
+        widthCm = 240;
+        heightCm = 220;
+    }
+
+    if (maxPayload === 0) {
+        maxPayload = 6000;
+    }
+    const finalVolM3 = (lengthCm * widthCm * heightCm) / 1e6;
+
     // Determine vehicle type from description
     const desc = (r.DESCRIPCION || '').toUpperCase();
-    const vehicleType = desc.includes('FURGONETA') || desc.includes('FURGO')
+    const vehicleType = desc.includes('FURGONETA') || desc.includes('FURGO') || lengthCm < 400
         ? 'VAN' : 'TRUCK';
 
     return {
@@ -85,10 +114,10 @@ async function getTruckConfig(vehicleCode) {
         vehicleType,
         maxPayloadKg: maxPayload,
         tara: parseFloat(r.TARA) || 0,
-        containerVolumeM3: contVolM3,
+        containerVolumeM3: contVolM3 > 0 ? contVolM3 : finalVolM3,
         interior: { lengthCm, widthCm, heightCm },
-        tolerancePct: parseFloat(r.TOLERANCIA),
-        volumeM3: (lengthCm * widthCm * heightCm) / 1e6,
+        tolerancePct: parseFloat(r.TOLERANCIA) || 5,
+        volumeM3: finalVolM3,
     };
 }
 

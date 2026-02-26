@@ -164,6 +164,7 @@ router.get('/vehicles', async (req, res) => {
         TRIM(V.DESCRIPCIONVEHICULO) AS DESCRIPCION,
         TRIM(V.MATRICULA) AS MATRICULA,
         V.CARGAMAXIMA, V.TARA, V.VOLUMEN, V.CONTENEDORVOLUMEN,
+        COALESCE(V.NUMEROCONTENEDORES, 0) AS NUM_PALETS,
         C.LARGO_INTERIOR_CM, C.ANCHO_INTERIOR_CM, C.ALTO_INTERIOR_CM,
         C.TOLERANCIA_EXCESO
       FROM DSEDAC.VEH V
@@ -173,21 +174,50 @@ router.get('/vehicles', async (req, res) => {
     `);
 
         res.json({
-            vehicles: vehicles.map(v => ({
-                code: v.CODE,
-                description: (v.DESCRIPCION || '').trim(),
-                matricula: (v.MATRICULA || '').trim(),
-                maxPayloadKg: parseFloat(v.CARGAMAXIMA) || 0,
-                tara: parseFloat(v.TARA) || 0,
-                volumeM3: parseFloat(v.VOLUMEN) || 0,
-                containerVolumeM3: parseFloat(v.CONTENEDORVOLUMEN) || 0,
-                interior: {
-                    lengthCm: parseFloat(v.LARGO_INTERIOR_CM) || 0,
-                    widthCm: parseFloat(v.ANCHO_INTERIOR_CM) || 0,
-                    heightCm: parseFloat(v.ALTO_INTERIOR_CM) || 0,
-                },
-                tolerancePct: parseFloat(v.TOLERANCIA_EXCESO) || 5,
-            })),
+            vehicles: vehicles.map(v => {
+                const l = parseFloat(v.LARGO_INTERIOR_CM) || 0;
+                const w = parseFloat(v.ANCHO_INTERIOR_CM) || 0;
+                const h = parseFloat(v.ALTO_INTERIOR_CM) || 0;
+                let payload = parseFloat(v.CARGAMAXIMA) || 0;
+                let vol = parseFloat(v.CONTENEDORVOLUMEN) || 0;
+                const numPalets = parseInt(v.NUM_PALETS, 10) || 0;
+
+                let finalL = l;
+                let finalW = w;
+                let finalH = h;
+
+                // God Mode Math: Si todo es 0 pero hay palets, derivar en vivo
+                if ((finalL === 0 || finalW === 0 || finalH === 0) && numPalets > 0) {
+                    const filas = Math.ceil(numPalets / 2);
+                    finalL = filas * 80;
+                    finalW = 240;
+                    finalH = 220;
+                    if (payload === 0) payload = numPalets * 500;
+                } else if (finalL === 0 || finalW === 0 || finalH === 0) {
+                    finalL = 600;
+                    finalW = 240;
+                    finalH = 220;
+                }
+
+                if (payload === 0) payload = 6000;
+                if (vol === 0 || vol < 2) vol = (finalL * finalW * finalH) / 1000000;
+
+                return {
+                    code: v.CODE,
+                    description: (v.DESCRIPCION || '').trim(),
+                    matricula: (v.MATRICULA || '').trim(),
+                    maxPayloadKg: payload,
+                    tara: parseFloat(v.TARA) || 0,
+                    volumeM3: parseFloat(v.VOLUMEN) || 0,
+                    containerVolumeM3: vol,
+                    interior: {
+                        lengthCm: finalL,
+                        widthCm: finalW,
+                        heightCm: finalH,
+                    },
+                    tolerancePct: parseFloat(v.TOLERANCIA_EXCESO) || 5,
+                };
+            }),
         });
     } catch (error) {
         logger.error(`Vehicles error: ${error.message}`);
@@ -419,7 +449,13 @@ router.get('/articles', async (req, res) => {
     try {
         const { search, onlyWithDimensions, limit = 200 } = req.query;
         let where = "TRIM(A.CODIGOARTICULO) <> '' AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)";
-        where += " AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%PRUEBA%' AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%TEST%' AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%DESCUENTO%'";
+
+        // GOD MODE: Extended garbage filtering requested by user
+        const garbageKeywords = ['PRUEBA', 'TEST', 'DESCUENTO', 'ESTIMADO', 'CT CT', 'URGENTE', 'REPARTIR', 'ENVIAR A', 'ULTIMA HORA', 'GASTOS ESTABLECIMIENTO'];
+        for (const kw of garbageKeywords) {
+            where += ` AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%${kw}%'`;
+        }
+
         if (search) {
             const s = search.replace(/'/g, "''").trim().toUpperCase();
             where += ` AND (UPPER(TRIM(A.CODIGOARTICULO)) LIKE '%${s}%' OR UPPER(A.DESCRIPCIONARTICULO) LIKE '%${s}%')`;

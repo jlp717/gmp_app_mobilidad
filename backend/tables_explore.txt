@@ -1,0 +1,457 @@
+
+--- GIOVA.V_DIM_VEHICULO ---
+[
+  {
+    "VEHICULO_ID": "02        ",
+    "MATRICULA": "4811HDG             ",
+    "DESCRIPCIONVEHICULO": "84 IVECO SILVA CAMION CARRO ALTO        ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "84",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 10,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 0.68,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  },
+  {
+    "VEHICULO_ID": "86        ",
+    "MATRICULA": "2120HJT             ",
+    "DESCRIPCIONVEHICULO": "85 IVECO RAMON REQUENA CAMION CARRO ALT ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "85",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 10,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 0.56,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  },
+  {
+    "VEHICULO_ID": "16        ",
+    "MATRICULA": "6862KTC             ",
+    "DESCRIPCIONVEHICULO": "IVECO DAILY 6862KTC IVECO DAILY         ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "98",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 6,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 1,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  },
+  {
+    "VEHICULO_ID": "78        ",
+    "MATRICULA": "9797HKN             ",
+    "DESCRIPCIONVEHICULO": "IVECO PLATAFORMA CAMION CARRO ALTO PLAT ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "98",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 10,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 0.56,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  },
+  {
+    "VEHICULO_ID": "05        ",
+    "MATRICULA": "8878JXX             ",
+    "DESCRIPCIONVEHICULO": "39 MERCEDES 20 T CAMION TIRO FORZADO    ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "39",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 14,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 1.4,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  }
+]
+--- JAVIER.V_DIM_VEHICULO ---
+[
+  {
+    "VEHICULO_ID": "02        ",
+    "MATRICULA": "4811HDG             ",
+    "DESCRIPCIONVEHICULO": "84 IVECO SILVA CAMION CARRO ALTO        ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "84",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 10,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 0.68,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  },
+  {
+    "VEHICULO_ID": "86        ",
+    "MATRICULA": "2120HJT             ",
+    "DESCRIPCIONVEHICULO": "85 IVECO RAMON REQUENA CAMION CARRO ALT ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "85",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 10,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 0.56,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  },
+  {
+    "VEHICULO_ID": "16        ",
+    "MATRICULA": "6862KTC             ",
+    "DESCRIPCIONVEHICULO": "IVECO DAILY 6862KTC IVECO DAILY         ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "98",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 6,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 1,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  },
+  {
+    "VEHICULO_ID": "78        ",
+    "MATRICULA": "9797HKN             ",
+    "DESCRIPCIONVEHICULO": "IVECO PLATAFORMA CAMION CARRO ALTO PLAT ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "98",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 10,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 0.56,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  },
+  {
+    "VEHICULO_ID": "05        ",
+    "MATRICULA": "8878JXX             ",
+    "DESCRIPCIONVEHICULO": "39 MERCEDES 20 T CAMION TIRO FORZADO    ",
+    "TIPO_VEHICULO_ID": "          ",
+    "VENDEDOR_ID": "39",
+    "TONELADAS": 0,
+    "CARGAMAXIMA": 0,
+    "NUMEROSACOS": 0,
+    "NUMEROCONTENEDORES": 14,
+    "VOLUMEN_M3": 0,
+    "CONTENEDOR_VOLUMEN_M3": 1.4,
+    "DIACADUCIDADITV": 0,
+    "MESCADUCIDADITV": 0,
+    "ANOCADUCIDADITV": 0,
+    "DIACADUCIDADSEGURO": 0,
+    "MESCADUCIDADSEGURO": 0,
+    "ANOCADUCIDADSEGURO": 0
+  }
+]
+--- DSEMOVIL.STOCKVEHIC ---
+[
+  {
+    "ARTICULO": "4051      ",
+    "ARTICULONOMBRE": "PALET EUR MARRON........................",
+    "ARTICULOUNIDADESENVASES": 1,
+    "ARTICULOMEDIDAOBLIGATORIA": "",
+    "VENDEDOR": "03",
+    "LOTE": "                              ",
+    "ENVASES": -1200,
+    "UNIDADES": -1200,
+    "ALMACEN": "03"
+  },
+  {
+    "ARTICULO": "4051      ",
+    "ARTICULONOMBRE": "PALET EUR MARRON........................",
+    "ARTICULOUNIDADESENVASES": 1,
+    "ARTICULOMEDIDAOBLIGATORIA": "",
+    "VENDEDOR": "02",
+    "LOTE": "                              ",
+    "ENVASES": -1200,
+    "UNIDADES": -1200,
+    "ALMACEN": "02"
+  },
+  {
+    "ARTICULO": "4051      ",
+    "ARTICULONOMBRE": "PALET EUR MARRON........................",
+    "ARTICULOUNIDADESENVASES": 1,
+    "ARTICULOMEDIDAOBLIGATORIA": "",
+    "VENDEDOR": "21",
+    "LOTE": "                              ",
+    "ENVASES": -1200,
+    "UNIDADES": -1200,
+    "ALMACEN": "21"
+  },
+  {
+    "ARTICULO": "4051      ",
+    "ARTICULONOMBRE": "PALET EUR MARRON........................",
+    "ARTICULOUNIDADESENVASES": 1,
+    "ARTICULOMEDIDAOBLIGATORIA": "",
+    "VENDEDOR": "05",
+    "LOTE": "                              ",
+    "ENVASES": -1200,
+    "UNIDADES": -1200,
+    "ALMACEN": "05"
+  },
+  {
+    "ARTICULO": "4051      ",
+    "ARTICULONOMBRE": "PALET EUR MARRON........................",
+    "ARTICULOUNIDADESENVASES": 1,
+    "ARTICULOMEDIDAOBLIGATORIA": "",
+    "VENDEDOR": "94",
+    "LOTE": "                              ",
+    "ENVASES": -1200,
+    "UNIDADES": -1200,
+    "ALMACEN": "94"
+  }
+]
+--- DIEGO.CAMIONES ---
+[
+  {
+    "EVCDVD": "02",
+    "EVCDRF": "1062      ",
+    "ARDESC": "ALISTADO N-1 G MANUEL NORES.............",
+    "EVCTUD": 17.81
+  },
+  {
+    "EVCDVD": "05",
+    "EVCDRF": "1399      ",
+    "ARDESC": "ANILLAS CALAMAR EXTRA B/KILO 6X1........",
+    "EVCTUD": 1
+  },
+  {
+    "EVCDVD": "16",
+    "EVCDRF": "3322      ",
+    "ARDESC": "BA�ERA 4,5L SORBETE DE LIMON (1)........",
+    "EVCTUD": 1
+  },
+  {
+    "EVCDVD": "02",
+    "EVCDRF": "3254      ",
+    "ARDESC": "BANQUETE CORAZON FRAMBUESA 36UD.........",
+    "EVCTUD": 1
+  },
+  {
+    "EVCDVD": "17",
+    "EVCDRF": "3735      ",
+    "ARDESC": "BLOQUE STRACCIATELLA 1L (6).............",
+    "EVCTUD": 6
+  }
+]
+--- TESTMOVIL.STOCKVEHIC ---
+[
+  {
+    "ALMACEN": "02",
+    "ARTICULO": "0025      ",
+    "LOTE": "0025      ",
+    "ENVASES": 45,
+    "UNIDADES": 45,
+    "FECHACADUCIDAD": "31-12-2999"
+  },
+  {
+    "ALMACEN": "02",
+    "ARTICULO": "0025      ",
+    "LOTE": "0025      ",
+    "ENVASES": 45,
+    "UNIDADES": 45,
+    "FECHACADUCIDAD": "13-02-2020"
+  },
+  {
+    "ALMACEN": "03",
+    "ARTICULO": "0025      ",
+    "LOTE": "0025      ",
+    "ENVASES": 30,
+    "UNIDADES": 30,
+    "FECHACADUCIDAD": "31-12-2999"
+  },
+  {
+    "ALMACEN": "03",
+    "ARTICULO": "0025      ",
+    "LOTE": "0025      ",
+    "ENVASES": 30,
+    "UNIDADES": 30,
+    "FECHACADUCIDAD": "13-02-2020"
+  },
+  {
+    "ALMACEN": "05",
+    "ARTICULO": "0025      ",
+    "LOTE": "0025      ",
+    "ENVASES": 30,
+    "UNIDADES": 30,
+    "FECHACADUCIDAD": "31-12-2999"
+  }
+]
+--- DSTMOVIL.TRANSPORTI ---
+[
+  {
+    "CODIGO": "  ",
+    "NOMBRE": ""
+  },
+  {
+    "CODIGO": "41",
+    "NOMBRE": "41 ALFONSO LOPEZ RUBIO                  "
+  },
+  {
+    "CODIGO": "53",
+    "NOMBRE": "53 JUAN JOSE MARIN MARTINEZ             "
+  },
+  {
+    "CODIGO": "67",
+    "NOMBRE": "67 ANDREI FARCAS                        "
+  },
+  {
+    "CODIGO": "27",
+    "NOMBRE": "27 ANTONIO RUIZ                         "
+  }
+]
+--- COLUMNS WITH LARGO/ANCHO/ALTO ---
+[
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "EPLHUELLAS",
+    "COLUMN_NAME": "HUELLAANCHOIMAGEN"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "EPLHUELLAS",
+    "COLUMN_NAME": "HUELLAALTOIMAGEN"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LAPX",
+    "COLUMN_NAME": "ANCHO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LAPX",
+    "COLUMN_NAME": "ALTO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LAPXL1",
+    "COLUMN_NAME": "ANCHO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LAPXL1",
+    "COLUMN_NAME": "ALTO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LPPX",
+    "COLUMN_NAME": "ANCHO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LPPX",
+    "COLUMN_NAME": "ALTO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LPPXL1",
+    "COLUMN_NAME": "ANCHO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LPPXL1",
+    "COLUMN_NAME": "ALTO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "SNSPRD",
+    "COLUMN_NAME": "MEDIDAALTO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "SNSPRD",
+    "COLUMN_NAME": "MEDIDAANCHO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "SNSPRDL1",
+    "COLUMN_NAME": "MEDIDAALTO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "SNSPRDL1",
+    "COLUMN_NAME": "MEDIDAANCHO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "EPLHUELLAS",
+    "COLUMN_NAME": "HUELLAANCHOIMAGEN"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "EPLHUELLAS",
+    "COLUMN_NAME": "HUELLAALTOIMAGEN"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "LAPX",
+    "COLUMN_NAME": "ANCHO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "LAPX",
+    "COLUMN_NAME": "ALTO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "LAPXL1",
+    "COLUMN_NAME": "ANCHO"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "LAPXL1",
+    "COLUMN_NAME": "ALTO"
+  }
+]
