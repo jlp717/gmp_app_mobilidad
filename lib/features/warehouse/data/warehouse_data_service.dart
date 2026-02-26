@@ -100,9 +100,9 @@ class TruckInterior {
   double get volumeM3 => (lengthCm * widthCm * heightCm) / 1e6;
 
   factory TruckInterior.fromJson(Map<String, dynamic> json) => TruckInterior(
-    lengthCm: ((json['lengthCm'] ?? 600) as num).toDouble(),
-    widthCm: ((json['widthCm'] ?? 240) as num).toDouble(),
-    heightCm: ((json['heightCm'] ?? 220) as num).toDouble(),
+    lengthCm: ((json['lengthCm'] ?? 0) as num).toDouble(),
+    widthCm: ((json['widthCm'] ?? 0) as num).toDouble(),
+    heightCm: ((json['heightCm'] ?? 0) as num).toDouble(),
   );
 }
 

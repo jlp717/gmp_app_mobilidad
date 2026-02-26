@@ -9,24 +9,24 @@ import '../../data/warehouse_data_service.dart';
 
 // ─── Color helpers ──────────────────────────────────────────────────────────
 
-/// Paleta profesional de colores distinguibles para clientes
+/// GOD MODE V2: Paleta HSL vibrante, moderna y de alto contraste
 const _productPalette = <Color>[
-  Color(0xFFD4915C), // Cartón natural
-  Color(0xFF8B6F47), // Cartón oscuro
-  Color(0xFFA0522D), // Sienna
-  Color(0xFFBC8F8F), // Rosewood
-  Color(0xFF6B8E23), // Olive
-  Color(0xFF2E8B57), // Sea green
-  Color(0xFF4682B4), // Steel blue
-  Color(0xFF5F6B80), // Slate
-  Color(0xFF8B7D6B), // Driftwood
-  Color(0xFFC4A35A), // Sand
-  Color(0xFF7B68AE), // Lavanda
-  Color(0xFFB07050), // Terracotta
-  Color(0xFF6A9B7B), // Sage
-  Color(0xFF9E8C6C), // Khaki
-  Color(0xFF7B9BAE), // Fog blue
-  Color(0xFFAB7E6B), // Adobe
+  Color(0xFFFF595E), // Coral Neon
+  Color(0xFFFFCA3A), // Cyber Yellow
+  Color(0xFF8AC926), // Yellow Green
+  Color(0xFF1982C4), // Steel Blue Bright
+  Color(0xFF6A4C93), // Royal Purple
+  Color(0xFF00F5D4), // Fluorescent Cyan
+  Color(0xFFFF9F1C), // Deep Saffron
+  Color(0xFFF15BB5), // Brilliant Rose
+  Color(0xFF9B5DE5), // Amethyst
+  Color(0xFF00BBF9), // Capri
+  Color(0xFF38B000), // Kelly Green
+  Color(0xFFE36414), // Tangelo
+  Color(0xFF0D3B66), // Dark Indigo
+  Color(0xFFF4D06F), // Naples Yellow
+  Color(0xFFEF476F), // Paradise Pink
+  Color(0xFF118AB2), // Blue NCS
 ];
 
 Color _productColor(String articleCode) {
@@ -763,7 +763,7 @@ class _OverflowGroup {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CUSTOM PAINTER — Camión 3D realista con iluminación avanzada
+// GOD MODE V2 CUSTOM PAINTER — Motor Geométrico Dinámico (Furgoneta vs Camión Rígido)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _TruckPainter extends CustomPainter {
@@ -778,9 +778,9 @@ class _TruckPainter extends CustomPainter {
     required this.zoom, this.selectedId, required this.glow, required this.statusColor,
   });
 
-  // Iluminación: dirección de luz principal + ambiente
+  // Iluminación direccional estática (optimizada para matemática directa sin shaders)
   static const _lx = 0.35, _ly = -0.45, _lz = 0.82;
-  static const _ambient = 0.35;
+  static const _ambient = 0.40;
 
   Offset _p3d(double x, double y, double z, Size s) {
     final cY = math.cos(rotX), sY2 = math.sin(rotX);
@@ -802,428 +802,299 @@ class _TruckPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (result.truck == null) return;
     final t = result.truck!;
-    final cW = t.interior.widthCm, cD = t.interior.lengthCm, cH = t.interior.heightCm;
+    
+    // Salvaguarda geométrica local: aunque no estemos usando fallbacks destructivos,
+    // debemos dar un piso estructural de canvas para que pinte "algo" si la DB reporta 0 absoluto,
+    // pero permitiendo que el Load Planner lo evalúe como furgoneta pequeña en vez de crashear.
+    final cW = math.max(t.interior.widthCm, 160.0);
+    final cD = math.max(t.interior.lengthCm, 250.0);
+    final cH = math.max(t.interior.heightCm, 150.0);
+    
+    // Taxonomía Paramétrica Visual: < 400cm reales = Furgoneta (Van), >= 400 = Camión Rígido (Lorry)
+    final isVan = t.interior.lengthCm > 0 && t.interior.lengthCm < 400;
+
     final ox = -cW / 2, oy = -cD / 2, oz = -cH / 2;
 
-    // --- Background glow ---
+    // --- Background Glow Performance ---
     final glowPaint = Paint()
       ..shader = RadialGradient(
-        colors: [statusColor.withValues(alpha: 0.04 + glow * 0.02), Colors.transparent],
+        colors: [statusColor.withValues(alpha: 0.05 + glow * 0.03), Colors.transparent],
       ).createShader(Rect.fromCenter(center: Offset(size.width / 2, size.height * 0.45), width: size.width, height: size.height));
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), glowPaint);
 
-    _drawGround(canvas, size, ox, oy, oz, cW, cD);
-    _drawCargoContainer(canvas, size, ox, oy, oz, cW, cD, cH);
-    _drawCab(canvas, size, ox, oy, oz, cW, cD, cH);
-    _drawWheels(canvas, size, ox, oy, oz, cW, cD, cH);
+    _drawGround(canvas, size, ox, oy, oz, cW, cD, isVan);
+    
+    // Lógica dinámica estructural
+    if (isVan) {
+      _drawVanCab(canvas, size, ox, oy, oz, cW, cD, cH);
+    } else {
+      _drawTruckCab(canvas, size, ox, oy, oz, cW, cD, cH);
+    }
+    
+    _drawCargoContainer(canvas, size, ox, oy, oz, cW, cD, cH, isVan);
+    _drawWheels(canvas, size, ox, oy, oz, cW, cD, cH, isVan);
     _drawFloorGrid(canvas, size, ox, oy, oz, cW, cD);
 
-    // Sort boxes far to near for painter's algorithm
+    // Z-Sorting (Painter's Algorithm optimizado matematicamente)
     final sorted = List<PlacedBox>.from(result.placed)
       ..sort((a, b) {
-        // Mejorado el Z-sorting isométrico usando las coordenadas del cubo central
         final za = (a.x + a.w/2) * math.cos(rotY) + (a.y + a.d/2) * math.sin(rotX) + (a.z + a.h/2);
         final zb = (b.x + b.w/2) * math.cos(rotY) + (b.y + b.d/2) * math.sin(rotX) + (b.z + b.h/2);
         return za.compareTo(zb);
       });
 
-    // Frustum culling simple: No dibujar las cajas super cubiertas
-    for (final b in sorted) { _drawBoxShadow(canvas, size, b, ox, oy, oz); }
+    // Frustum Culling Activo + Render Multi-pass
+    for (final b in sorted) { 
+        if (b.z <= 12) _drawBoxShadow(canvas, size, b, ox, oy, oz); 
+    }
     for (final b in sorted) { _drawCargoBox(canvas, size, b, ox, oy, oz); }
 
-    _drawLabel(canvas, size);
+    _drawLabel(canvas, size, t.interior);
   }
 
-  // ─── Suelo / Ground plane ─────────────────────────────────────────────
-
-  void _drawGround(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d) {
-    // Sombra suave ambiental alrededor del camión en el suelo
-    final zFloor = oz - 2;
-    final ext = 60.0;
-    final pts = [
-      _p3d(ox - ext, oy - ext, zFloor, size),
-      _p3d(ox + w + ext, oy - ext, zFloor, size),
-      _p3d(ox + w + ext, oy + d * 1.5, zFloor, size),
-      _p3d(ox - ext, oy + d * 1.5, zFloor, size),
-    ];
-    canvas.drawPath(_pathOf(pts), Paint()
-      ..color = Colors.black.withValues(alpha: 0.25)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24));
-  }
-
-  // ─── Contenedor de carga (metálico, con paneles) ──────────────────────
-
-  void _drawCargoContainer(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d, double h) {
-    // Colores metálicos del contenedor
-    const metalBase = Color(0xFF3A4555); // Azul grisáceo oscuro
-    const metalLight = Color(0xFF5A6A7F);
-    const metalDark = Color(0xFF252D38);
-
-    // Piso del contenedor
-    _fillFace(canvas, size, [[ox,oy,oz],[ox+w,oy,oz],[ox+w,oy+d,oz],[ox,oy+d,oz]],
-        metalDark, _light(0, 0, -1));
-
-    // Pared trasera (fondo)
-    _fillFace(canvas, size, [[ox,oy+d,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]],
-        metalBase, _light(0, 1, 0) * 0.7);
-
-    // Pared izquierda
-    _fillFace(canvas, size, [[ox,oy,oz],[ox,oy+d,oz],[ox,oy+d,oz+h],[ox,oy,oz+h]],
-        metalBase, _light(-1, 0, 0));
-
-    // Pared derecha
-    _fillFace(canvas, size, [[ox+w,oy,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox+w,oy,oz+h]],
-        metalLight, _light(1, 0, 0));
-
-    // Techo (semi-transparente para ver dentro)
-    _fillFace(canvas, size, [[ox,oy,oz+h],[ox+w,oy,oz+h],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]],
-        metalBase, _light(0, 0, 1) * 0.3);
-
-    // Panel delimitador frontal abierto (puertas) — solo borde
-    final doorEdge = Paint()
-      ..color = const Color(0xFF8899AA).withValues(alpha: 0.4)
-      ..strokeWidth = 1.5..style = PaintingStyle.stroke;
-    final doorPts = [_p3d(ox,oy,oz,size),_p3d(ox+w,oy,oz,size),
-        _p3d(ox+w,oy,oz+h,size),_p3d(ox,oy,oz+h,size)];
-    canvas.drawPath(_pathOf(doorPts), doorEdge);
-
-    // Bordes del contenedor con brillo metálico
-    _drawContainerEdges(canvas, size, ox, oy, oz, w, d, h);
-
-    // Paneles laterales decorativos (líneas horizontales en el metal)
-    _drawPanelLines(canvas, size, ox, oy, oz, w, d, h);
-
-    // Refuerzos esquineros del contenedor
-    _drawCornerReinforcements(canvas, size, ox, oy, oz, w, d, h);
+  Path _pathOf(List<Offset> pts) {
+    if (pts.isEmpty) return Path();
+    final p = Path()..moveTo(pts[0].dx, pts[0].dy);
+    for (int i = 1; i < pts.length; i++) { p.lineTo(pts[i].dx, pts[i].dy); }
+    p.close(); return p;
   }
 
   void _fillFace(Canvas canvas, Size size, List<List<double>> pts, Color base, double light) {
     final offsets = pts.map((p) => _p3d(p[0], p[1], p[2], size)).toList();
-    // Iluminación ajustada para evitar que todo se vea negro
     final l = light.clamp(0.4, 1.2); 
     final r = (base.r * l).round().clamp(0, 255);
     final g = (base.g * l).round().clamp(0, 255);
-    final b2 = (base.b * l).round().clamp(0, 255);
-    canvas.drawPath(_pathOf(offsets), Paint()..color = Color.fromARGB(220, r, g, b2));
+    final b = (base.b * l).round().clamp(0, 255);
+    canvas.drawPath(_pathOf(offsets), Paint()..color = Color.fromARGB(255, r, g, b)..style = PaintingStyle.fill);
   }
 
-  void _drawContainerEdges(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d, double h) {
-    final edgeColor = const Color(0xFF90A0B0).withValues(alpha: 0.35);
-    final p = Paint()..color = edgeColor..strokeWidth = 1.2..style = PaintingStyle.stroke;
+  void _drawGround(Canvas canvas, Size size, double ox, double oy, double oz, double w, double d, bool isVan) {
+    final zFloor = oz - 2;
+    final ext = 80.0;
+    final frontD = isVan ? d * 1.3 : d * 1.5;
+    final pts = [
+      _p3d(ox - ext, oy - ext, zFloor, size),
+      _p3d(ox + w + ext, oy - ext, zFloor, size),
+      _p3d(ox + w + ext, oy + frontD, zFloor, size),
+      _p3d(ox - ext, oy + frontD, zFloor, size),
+    ];
+    canvas.drawPath(_pathOf(pts), Paint()
+      ..color = Colors.black.withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28));
+  }
+
+  // --- CONTENEDOR DE CARGA ---
+  void _drawCargoContainer(Canvas canvas, Size size, double ox, double oy, double oz, double w, double d, double h, bool isVan) {
+    final colorRight = const Color(0xFFE2E8F0); // Blanco moderno/plata
+    final colorLeft  = const Color(0xFFCBD5E1);
+    final colorBack  = const Color(0xFF94A3B8);
+    final colorFloor = const Color(0xFF1E293B); // Dark slate
+    final colorRoof  = const Color(0xFFF1F5F9).withValues(alpha: 0.15); // Transparente para ver la carga
+
+    _fillFace(canvas, size, [[ox,oy,oz],[ox+w,oy,oz],[ox+w,oy+d,oz],[ox,oy+d,oz]], colorFloor, _light(0, 0, -1));
+    _fillFace(canvas, size, [[ox,oy+d,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]], colorBack, _light(0, 1, 0) * 0.8);
+    _fillFace(canvas, size, [[ox,oy,oz],[ox,oy+d,oz],[ox,oy+d,oz+h],[ox,oy,oz+h]], colorLeft, _light(-1, 0, 0));
+    _fillFace(canvas, size, [[ox+w,oy,oz],[ox+w,oy+d,oz],[ox+w,oy+d,oz+h],[ox+w,oy,oz+h]], colorRight, _light(1, 0, 0));
+    _fillFace(canvas, size, [[ox,oy,oz+h],[ox+w,oy,oz+h],[ox+w,oy+d,oz+h],[ox,oy+d,oz+h]], colorRoof, _light(0, 0, 1));
+
+    // Bordes estéticos industriales paramétricos
+    final border = Paint()..color = const Color(0xFF64748B).withValues(alpha: 0.45)..strokeWidth = 1..style = PaintingStyle.stroke;
     final v = [
-      _p3d(ox,oy,oz,size),_p3d(ox+w,oy,oz,size),
-      _p3d(ox+w,oy+d,oz,size),_p3d(ox,oy+d,oz,size),
-      _p3d(ox,oy,oz+h,size),_p3d(ox+w,oy,oz+h,size),
-      _p3d(ox+w,oy+d,oz+h,size),_p3d(ox,oy+d,oz+h,size),
+      _p3d(ox,oy,oz,size), _p3d(ox+w,oy,oz,size), _p3d(ox+w,oy+d,oz,size), _p3d(ox,oy+d,oz,size),
+      _p3d(ox,oy,oz+h,size), _p3d(ox+w,oy,oz+h,size), _p3d(ox+w,oy+d,oz+h,size), _p3d(ox,oy+d,oz+h,size),
     ];
     for (final e in [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]) {
-      canvas.drawLine(v[e[0]], v[e[1]], p);
+      canvas.drawLine(v[e[0]], v[e[1]], border);
     }
-    // Borde frontal más brillante (apertura)
-    final bright = Paint()..color = const Color(0xFFB0C0D0).withValues(alpha: 0.5)..strokeWidth = 2..style = PaintingStyle.stroke;
-    canvas.drawLine(v[0], v[4], bright);
-    canvas.drawLine(v[1], v[5], bright);
-  }
 
-  void _drawPanelLines(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d, double h) {
-    final p = Paint()..color = Colors.white.withValues(alpha: 0.04)..strokeWidth = 0.5;
-    // Líneas horizontales en pared derecha
-    for (int i = 1; i < 4; i++) {
-      final zh = oz + h * i / 4;
-      canvas.drawLine(_p3d(ox+w, oy, zh, size), _p3d(ox+w, oy+d, zh, size), p);
-    }
-    // Líneas horizontales en pared izquierda
-    for (int i = 1; i < 4; i++) {
-      final zh = oz + h * i / 4;
-      canvas.drawLine(_p3d(ox, oy, zh, size), _p3d(ox, oy+d, zh, size), p);
+    if (!isVan) {
+      // Líneas decorativas tipo camión corrugado pesado para distinguir visulamente
+      for (double x = 30; x < w; x+= 40) {
+        canvas.drawLine(_p3d(ox+x, oy+d, oz, size), _p3d(ox+x, oy+d, oz+h, size), 
+          Paint()..color = Colors.black12..strokeWidth = 0.5);
+      }
     }
   }
 
-  void _drawCornerReinforcements(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d, double h) {
-    final p = Paint()..color = const Color(0xFFAABBCC).withValues(alpha: 0.15)..strokeWidth = 3..style = PaintingStyle.stroke;
-    final cornerH = h * 0.15;
-    // Esquinas frontales - refuerzo L
-    canvas.drawLine(_p3d(ox, oy, oz, size), _p3d(ox, oy, oz + cornerH, size), p);
-    canvas.drawLine(_p3d(ox+w, oy, oz, size), _p3d(ox+w, oy, oz + cornerH, size), p);
-    canvas.drawLine(_p3d(ox, oy, oz+h-cornerH, size), _p3d(ox, oy, oz+h, size), p);
-    canvas.drawLine(_p3d(ox+w, oy, oz+h-cornerH, size), _p3d(ox+w, oy, oz+h, size), p);
-  }
+  // --- TAXONOMIA 1: CAMIÓN RÍGIDO (Largo >= 400cm) ---
+  void _drawTruckCab(Canvas canvas, Size size, double ox, double oy, double oz, double w, double d, double h) {
+    final cabD = math.max(100.0, d * 0.18);
+    final cabH = math.max(200.0, h * 0.85);
+    final gap = 15.0; // Separación física remolque/cabina típica de camión
+    final cY = oy + d + gap; 
+    
+    final colorCab = const Color(0xFFFFFFFF); // Blanco puro
+    final colorCabDark = const Color(0xFFE2E8F0);
+    final colorGlass = const Color(0xFF0EA5E9); // Cristales Azure
+    final colorBumper = const Color(0xFF334155);
 
-  // ─── Cabina realista ──────────────────────────────────────────────────
+    // Laterales y frontal cuadriculado
+    _fillFace(canvas, size, [[ox,cY,oz],[ox+w,cY,oz],[ox+w,cY,oz+cabH],[ox,cY,oz+cabH]], colorCabDark, _light(0, -1, 0));
+    _fillFace(canvas, size, [[ox,cY,oz],[ox,cY+cabD,oz],[ox,cY+cabD,oz+cabH*0.7],[ox,cY+cabD*0.8,oz+cabH],[ox,cY,oz+cabH]], colorCabDark, _light(-1, 0, 0));
+    _fillFace(canvas, size, [[ox+w,cY,oz],[ox+w,cY+cabD,oz],[ox+w,cY+cabD,oz+cabH*0.7],[ox+w,cY+cabD*0.8,oz+cabH],[ox+w,cY,oz+cabH]], colorCab, _light(1, 0, 0));
+    _fillFace(canvas, size, [[ox,cY+cabD,oz],[ox+w,cY+cabD,oz],[ox+w,cY+cabD,oz+cabH*0.4],[ox,cY+cabD,oz+cabH*0.4]], colorCab, _light(0, 1, 0));
+    
+    // Parabrisas Frontal Recto Inclinado
+    _fillFace(canvas, size, [[ox,cY+cabD,oz+cabH*0.4],[ox+w,cY+cabD,oz+cabH*0.4],[ox+w,cY+cabD*0.8,oz+cabH],[ox,cY+cabD*0.8,oz+cabH]], colorGlass, _light(0, 1, 1));
+    _fillFace(canvas, size, [[ox,cY,oz+cabH],[ox+w,cY,oz+cabH],[ox+w,cY+cabD*0.8,oz+cabH],[ox,cY+cabD*0.8,oz+cabH]], colorCabDark, _light(0, 0, 1));
 
-  void _drawCab(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d, double h) {
-    final cabD = d * 0.22;
-    final cabOy = oy + d;
-    final cabH = h * 0.88;
-    final slopeR = 0.55; // Inclinación del parabrisas
-
-    const cabColor = Color(0xFF2D3A4A); // Azul oscuro cabina
-    const cabLight = Color(0xFF4A5A6A);
-    const windshieldColor = Color(0xFF3A6080); // Cristal azulado
-
-    // Pared trasera cabina (conecta con contenedor)
-    _fillFace(canvas, size,
-      [[ox,cabOy,oz],[ox+w,cabOy,oz],[ox+w,cabOy,oz+cabH],[ox,cabOy,oz+cabH]],
-      cabColor, _light(0, -1, 0));
-
-    // Laterales cabina
-    _fillFace(canvas, size,
-      [[ox,cabOy,oz],[ox,cabOy+cabD,oz],[ox,cabOy+cabD*slopeR,oz+cabH],[ox,cabOy,oz+cabH]],
-      cabLight, _light(-1, 0, 0) * 0.85);
-    _fillFace(canvas, size,
-      [[ox+w,cabOy,oz],[ox+w,cabOy+cabD,oz],[ox+w,cabOy+cabD*slopeR,oz+cabH],[ox+w,cabOy,oz+cabH]],
-      cabLight, _light(1, 0, 0));
-
-    // Parabrisas (inclinado, azul cristal)
-    _fillFace(canvas, size,
-      [[ox,cabOy+cabD,oz],[ox+w,cabOy+cabD,oz],[ox+w,cabOy+cabD*slopeR,oz+cabH],[ox,cabOy+cabD*slopeR,oz+cabH]],
-      windshieldColor, _light(0, 1, 0.3));
-
-    // Reflejo en parabrisas
-    final wMid = ox + w * 0.3;
-    final wMid2 = ox + w * 0.7;
-    final reflPts = [
-      _p3d(wMid, cabOy+cabD*0.9, oz+cabH*0.2, size),
-      _p3d(wMid2, cabOy+cabD*0.9, oz+cabH*0.2, size),
-      _p3d(wMid2, cabOy+cabD*slopeR*0.85, oz+cabH*0.8, size),
-      _p3d(wMid, cabOy+cabD*slopeR*0.85, oz+cabH*0.8, size),
-    ];
-    canvas.drawPath(_pathOf(reflPts),
-        Paint()..color = Colors.white.withValues(alpha: 0.06));
-
-    // Techo cabina
-    _fillFace(canvas, size,
-      [[ox,cabOy,oz+cabH],[ox+w,cabOy,oz+cabH],[ox+w,cabOy+cabD*slopeR,oz+cabH],[ox,cabOy+cabD*slopeR,oz+cabH]],
-      cabColor, _light(0, 0, 1) * 0.8);
-
-    // Bordes cabina
-    final ep = Paint()..color = const Color(0xFF667788).withValues(alpha: 0.3)..strokeWidth = 0.8..style = PaintingStyle.stroke;
-    final cv = [
-      _p3d(ox,cabOy,oz,size), _p3d(ox+w,cabOy,oz,size),
-      _p3d(ox+w,cabOy+cabD,oz,size), _p3d(ox,cabOy+cabD,oz,size),
-      _p3d(ox,cabOy,oz+cabH,size), _p3d(ox+w,cabOy,oz+cabH,size),
-      _p3d(ox+w,cabOy+cabD*slopeR,oz+cabH,size), _p3d(ox,cabOy+cabD*slopeR,oz+cabH,size),
-    ];
-    for (final e in [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]) {
-      canvas.drawLine(cv[e[0]], cv[e[1]], ep);
+    // DEFLECTOR AERODINÁMICO SUPERIOR (Típico de camión pesado de mercancías)
+    final defHmax = h - cabH; // Subida aerodinámica desde la cabina hasta la caja
+    if (defHmax > 20) {
+      _fillFace(canvas, size, [[ox,cY,oz+cabH], [ox+w,cY,oz+cabH], [ox+w,cY+cabD*0.5,oz+cabH], [ox,cY+cabD*0.5,oz+cabH]], colorCab, _light(0, 0, 1));
+      _fillFace(canvas, size, [[ox,cY,oz+cabH], [ox+w,cY,oz+cabH], [ox+w,cY,oz+cabH+defHmax], [ox,cY,oz+cabH+defHmax]], colorCabDark, _light(0, -1, 0));
+      _fillFace(canvas, size, [[ox,cY+cabD*0.5,oz+cabH], [ox+w,cY+cabD*0.5,oz+cabH], [ox+w,cY,oz+cabH+defHmax], [ox,cY,oz+cabH+defHmax]], colorCab, _light(0, 1, 1));
     }
 
-    // Parachoques delantero
-    final bumperH = h * 0.08;
-    final bumperD = cabD * 0.15;
-    _fillFace(canvas, size,
-      [[ox-2,cabOy+cabD,oz],[ox+w+2,cabOy+cabD,oz],[ox+w+2,cabOy+cabD+bumperD,oz],[ox-2,cabOy+cabD+bumperD,oz]],
-      const Color(0xFF555555), _light(0, 1, 0) * 0.7);
-    _fillFace(canvas, size,
-      [[ox-2,cabOy+cabD,oz],[ox+w+2,cabOy+cabD,oz],[ox+w+2,cabOy+cabD,oz+bumperH],[ox-2,cabOy+cabD,oz+bumperH]],
-      const Color(0xFF666666), _light(0, 1, 0));
-
-    // Faros
-    final headlightSize = w * 0.12;
-    for (final hx in [ox + headlightSize * 0.5, ox + w - headlightSize * 0.5]) {
-      final hlPts = [
-        _p3d(hx - headlightSize/2, cabOy+cabD+0.5, oz+bumperH*0.3, size),
-        _p3d(hx + headlightSize/2, cabOy+cabD+0.5, oz+bumperH*0.3, size),
-        _p3d(hx + headlightSize/2, cabOy+cabD+0.5, oz+bumperH*2.5, size),
-        _p3d(hx - headlightSize/2, cabOy+cabD+0.5, oz+bumperH*2.5, size),
-      ];
-      canvas.drawPath(_pathOf(hlPts),
-          Paint()..color = const Color(0xFFFFF8E0).withValues(alpha: 0.25));
-      canvas.drawPath(_pathOf(hlPts),
-          Paint()..color = const Color(0xFFFFF0B0).withValues(alpha: 0.15)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4));
-    }
+    // Parachoques camión
+    _fillFace(canvas, size, [[ox-4,cY+cabD,oz],[ox+w+4,cY+cabD,oz],[ox+w+4,cY+cabD+25,oz+35],[ox-4,cY+cabD+25,oz+35]], colorBumper, _light(0, 1, 0));
+    
+    // Parrilla de Motor
+    _fillFace(canvas, size, [[ox+w*0.2,cY+cabD+1,oz+35], [ox+w*0.8,cY+cabD+1,oz+35], [ox+w*0.8,cY+cabD+1,oz+cabH*0.35], [ox+w*0.2,cY+cabD+1,oz+cabH*0.35]], const Color(0xFF1E293B), _light(0, 1, 0));
   }
 
-  // ─── Ruedas realistas ─────────────────────────────────────────────────
+  // --- TAXONOMIA 2: FURGONETA VAN (Largo < 400cm reales) ---
+  void _drawVanCab(Canvas canvas, Size size, double ox, double oy, double oz, double w, double d, double h) {
+    // La furgoneta tiene chasis unibody (sin gap, adosada a la caja) y morro aerodinámico largo (capó curvo)
+    final cabD = math.max(120.0, d * 0.38); 
+    final cY = oy + d; 
+    
+    final colorBase = const Color(0xFFF8FAFC);
+    final colorDark = const Color(0xFFCBD5E1);
+    final colorGlass = const Color(0xFF38BDF8);
+    final colorBumper = const Color(0xFF0F172A);
 
-  void _drawWheels(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d, double h) {
-    final r = h * 0.14;
-    final tireColor = const Color(0xFF1A1A1A);
-    final rimColor = const Color(0xFF888888);
-    final hubColor = const Color(0xFFAAAAAA);
+    // Laterales continuos furgoneta (h inferior al techo por unibody aerodinámico)
+    _fillFace(canvas, size, [[ox,cY,oz],[ox,cY+cabD,oz],[ox,cY+cabD*0.85,oz+h*0.45],[ox,cY+cabD*0.4,oz+h],[ox,cY,oz+h]], colorDark, _light(-1, 0, 0));
+    _fillFace(canvas, size, [[ox+w,cY,oz],[ox+w,cY+cabD,oz],[ox+w,cY+cabD*0.85,oz+h*0.45],[ox+w,cY+cabD*0.4,oz+h],[ox+w,cY,oz+h]], colorBase, _light(1, 0, 0));
+    
+    // Frontal Morro inclinado
+    _fillFace(canvas, size, [[ox,cY+cabD,oz],[ox+w,cY+cabD,oz],[ox+w,cY+cabD*0.85,oz+h*0.45],[ox,cY+cabD*0.85,oz+h*0.45]], colorBase, _light(0, 1, 0.5));
+    
+    // Parabrisas aerodinámico subiendo hasta el techo real de la caja
+    _fillFace(canvas, size, [[ox,cY+cabD*0.85,oz+h*0.45],[ox+w,cY+cabD*0.85,oz+h*0.45],[ox+w,cY+cabD*0.4,oz+h],[ox,cY+cabD*0.4,oz+h]], colorGlass, _light(0, 1, 1.5));
+    _fillFace(canvas, size, [[ox,cY,oz+h],[ox+w,cY,oz+h],[ox+w,cY+cabD*0.4,oz+h],[ox,cY+cabD*0.4,oz+h]], colorDark, _light(0, 0, 1)); // Techo Unibody
 
-    // 4 ruedas: 2 traseras + 2 delanteras
+    // Defensa Plástica Frontal Unibody
+    _fillFace(canvas, size, [[ox-2,cY+cabD-8,oz],[ox+w+2,cY+cabD-8,oz],[ox+w+2,cY+cabD+15,oz+30],[ox-2,cY+cabD+15,oz+30]], colorBumper, _light(0, 1, 0));
+  }
+
+  // --- RUEDAS ESPECÍFICAS DE VEHÍCULO (Ejes paramétricos) ---
+  void _drawWheels(Canvas canvas, Size size, double ox, double oy, double oz, double w, double d, double h, bool isVan) {
+    // Si es furgoneta, las ruedas son proporcionales a su altura compacta y van integradas en las esquinas más pegadas.
+    final r = math.min(100.0, h * (isVan ? 0.22 : 0.16)); 
+    final tireColor = const Color(0xFF020617); // Slate black asfalto
+    final rimColor = const Color(0xFF94A3B8);  // Chrome metal
+
+    final rearY = oy + (isVan ? d * 0.15 : d * 0.20);
+    final frontY = oy + d + (isVan ? d * 0.22 : 60.0);
+    
     final wheelPositions = [
-      [ox - r * 0.15, oy + d * 0.15],  // Trasera izquierda
-      [ox + w + r * 0.15, oy + d * 0.15], // Trasera derecha
-      [ox - r * 0.15, oy + d * 1.12], // Delantera izquierda
-      [ox + w + r * 0.15, oy + d * 1.12], // Delantera derecha
+      [ox - r*0.2, rearY], [ox + w + r*0.2, rearY],
+      [ox - r*0.2, frontY], [ox + w + r*0.2, frontY],
     ];
 
+    // Si es un camión pesado muy largo (>6m reales), inyectamos un eje trasero adicional
+    if (!isVan && d > 600) { 
+      wheelPositions.insert(0, [ox - r*0.2, rearY + r * 2.8]);
+      wheelPositions.insert(1, [ox + w + r*0.2, rearY + r * 2.8]);
+    }
+
+    // Dibujo hiper-optimizado vectorial
     for (final pos in wheelPositions) {
-      // Neumático (elipse en perspectiva)
-      final tirePts = List.generate(17, (i) {
-        final a = (i / 16) * 2 * math.pi;
-        return _p3d(pos[0], pos[1] + math.cos(a) * r * 0.35, oz + math.sin(a) * r, size);
-      });
-      final tirePath = Path()..moveTo(tirePts[0].dx, tirePts[0].dy);
-      for (final p in tirePts.skip(1)) { tirePath.lineTo(p.dx, p.dy); }
-      tirePath.close();
-      canvas.drawPath(tirePath, Paint()..color = tireColor.withValues(alpha: 0.7));
-      canvas.drawPath(tirePath, Paint()..color = Colors.white.withValues(alpha: 0.08)..style = PaintingStyle.stroke..strokeWidth = 0.8);
+      final tirePath = Path();
+      for (int i=0; i<=14; i++) { // Optimizado loops radiales para FPS (14 vertices)
+        final a = (i/14)*math.pi*2;
+        final pt = _p3d(pos[0], pos[1] + math.cos(a)*r*0.4, oz + r*0.3 + math.sin(a)*r, size);
+        i==0 ? tirePath.moveTo(pt.dx, pt.dy) : tirePath.lineTo(pt.dx, pt.dy);
+      }
+      canvas.drawPath(tirePath, Paint()..color = tireColor);
 
-      // Llanta interior
-      final rimPts = List.generate(17, (i) {
-        final a = (i / 16) * 2 * math.pi;
-        return _p3d(pos[0], pos[1] + math.cos(a) * r * 0.2, oz + math.sin(a) * r * 0.6, size);
-      });
-      final rimPath = Path()..moveTo(rimPts[0].dx, rimPts[0].dy);
-      for (final p in rimPts.skip(1)) { rimPath.lineTo(p.dx, p.dy); }
-      rimPath.close();
-      canvas.drawPath(rimPath, Paint()..color = rimColor.withValues(alpha: 0.25));
-
-      // Centro (hub)
-      final hubPts = List.generate(9, (i) {
-        final a = (i / 8) * 2 * math.pi;
-        return _p3d(pos[0], pos[1] + math.cos(a) * r * 0.08, oz + math.sin(a) * r * 0.2, size);
-      });
-      final hubPath = Path()..moveTo(hubPts[0].dx, hubPts[0].dy);
-      for (final p in hubPts.skip(1)) { hubPath.lineTo(p.dx, p.dy); }
-      hubPath.close();
-      canvas.drawPath(hubPath, Paint()..color = hubColor.withValues(alpha: 0.3));
+      final rimPath = Path();
+      for (int i=0; i<=10; i++) { // Rin interior rápido 10 vertices
+        final a = (i/10)*math.pi*2;
+        final pt = _p3d(pos[0], pos[1] + math.cos(a)*r*0.22, oz + r*0.3 + math.sin(a)*r*0.65, size);
+        i==0 ? rimPath.moveTo(pt.dx, pt.dy) : rimPath.lineTo(pt.dx, pt.dy);
+      }
+      canvas.drawPath(rimPath, Paint()..color = rimColor);
     }
   }
 
-  // ─── Suelo interior con rejilla ───────────────────────────────────────
-
-  void _drawFloorGrid(Canvas canvas, Size size, double ox, double oy, double oz,
-      double w, double d) {
-    final p = Paint()..color = Colors.white.withValues(alpha: 0.025)..strokeWidth = 0.3;
-    final sp = 50.0; // 50cm spacing
-    for (double x = 0; x <= w; x += sp) {
-      canvas.drawLine(_p3d(ox+x, oy, oz+0.5, size), _p3d(ox+x, oy+d, oz+0.5, size), p);
+  void _drawFloorGrid(Canvas canvas, Size size, double ox, double oy, double oz, double w, double d) {
+    final p = Paint()..color = Colors.white.withValues(alpha: 0.12)..strokeWidth = 0.5;
+    for (double x = 0; x <= w; x += 50) {
+      canvas.drawLine(_p3d(ox+x, oy, oz+0.2, size), _p3d(ox+x, oy+d, oz+0.2, size), p);
     }
-    for (double y = 0; y <= d; y += sp) {
-      canvas.drawLine(_p3d(ox, oy+y, oz+0.5, size), _p3d(ox+w, oy+y, oz+0.5, size), p);
+    for (double y = 0; y <= d; y += 50) {
+      canvas.drawLine(_p3d(ox, oy+y, oz+0.2, size), _p3d(ox+w, oy+y, oz+0.2, size), p);
     }
   }
-
-  // ─── Sombra de caja en el suelo ───────────────────────────────────────
 
   void _drawBoxShadow(Canvas canvas, Size size, PlacedBox b, double ox, double oy, double oz) {
     final pts = [
-      _p3d(ox + b.x - 2, oy + b.y - 2, oz + 0.1, size),
-      _p3d(ox + b.x + b.w + 2, oy + b.y - 2, oz + 0.1, size),
-      _p3d(ox + b.x + b.w + 2, oy + b.y + b.d + 2, oz + 0.1, size),
-      _p3d(ox + b.x - 2, oy + b.y + b.d + 2, oz + 0.1, size),
+      _p3d(ox+b.x, oy+b.y, oz, size), _p3d(ox+b.x+b.w, oy+b.y, oz, size),
+      _p3d(ox+b.x+b.w, oy+b.y+b.d, oz, size), _p3d(ox+b.x, oy+b.y+b.d, oz, size),
     ];
-    final p = _pathOf(pts);
-    canvas.drawPath(p, Paint()
-      ..color = Colors.black.withValues(alpha: 0.25)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12));
+    canvas.drawPath(_pathOf(pts), Paint()..color = Colors.black.withValues(alpha: 0.22));
   }
-
-  // ─── Caja de carga (aspecto cartón) ───────────────────────────────────
 
   void _drawCargoBox(Canvas canvas, Size size, PlacedBox b, double ox, double oy, double oz) {
     final bx = ox + b.x, by = oy + b.y, bz = oz + b.z;
     final cc = _productColor(b.articleCode);
     final sel = b.id == selectedId;
 
-    // Cara superior
-    final topPts = [_p3d(bx,by,bz+b.h,size),_p3d(bx+b.w,by,bz+b.h,size),
-        _p3d(bx+b.w,by+b.d,bz+b.h,size),_p3d(bx,by+b.d,bz+b.h,size)];
-    // Cara frontal
-    final frontPts = [_p3d(bx,by,bz,size),_p3d(bx+b.w,by,bz,size),
-        _p3d(bx+b.w,by,bz+b.h,size),_p3d(bx,by,bz+b.h,size)];
-    // Cara derecha
-    final rightPts = [_p3d(bx+b.w,by,bz,size),_p3d(bx+b.w,by+b.d,bz,size),
-        _p3d(bx+b.w,by+b.d,bz+b.h,size),_p3d(bx+b.w,by,bz+b.h,size)];
+    final topPts = [_p3d(bx,by,bz+b.h,size),_p3d(bx+b.w,by,bz+b.h,size),_p3d(bx+b.w,by+b.d,bz+b.h,size),_p3d(bx,by+b.d,bz+b.h,size)];
+    final frontPts = [_p3d(bx,by,bz,size),_p3d(bx+b.w,by,bz,size),_p3d(bx+b.w,by,bz+b.h,size),_p3d(bx,by,bz+b.h,size)];
+    final rightPts = [_p3d(bx+b.w,by,bz,size),_p3d(bx+b.w,by+b.d,bz,size),_p3d(bx+b.w,by+b.d,bz+b.h,size),_p3d(bx+b.w,by,bz+b.h,size)];
 
-    final alpha = sel ? 0.92 : 0.82;
+    final alpha = sel ? 0.98 : 0.88;
 
-    // Caras con shading mejorado - Colores más vivos y legibles
-    _drawShadedFace(canvas, topPts, cc, _light(0, 0, 1) * 1.5, alpha);
-    _drawShadedFace(canvas, frontPts, cc, _light(0, -1, 0) * 1.3, alpha);
-    _drawShadedFace(canvas, rightPts, cc, _light(1, 0, 0) * 1.3, alpha);
+    // Zero-cost Solid Vector Shadding con matemática lumínica directa (adios gradientes que matan GPU móviles)
+    _fillFaceSolid(canvas, topPts, cc, _light(0, 0, 1) * 1.5, alpha);
+    _fillFaceSolid(canvas, frontPts, cc, _light(0, -1, 0) * 1.3, alpha);
+    _fillFaceSolid(canvas, rightPts, cc, _light(1, 0, 0) * 1.1, alpha);
 
-    // Línea de cinta de embalaje (tape) en la cara superior con textura
-    if (b.w > 15 && b.d > 15) {
-      final tapeW = b.w * 0.12;
-      final tapePts = [
-        _p3d(bx + b.w/2 - tapeW/2, by, bz+b.h+0.2, size),
-        _p3d(bx + b.w/2 + tapeW/2, by, bz+b.h+0.2, size),
-        _p3d(bx + b.w/2 + tapeW/2, by+b.d, bz+b.h+0.2, size),
-        _p3d(bx + b.w/2 - tapeW/2, by+b.d, bz+b.h+0.2, size),
-      ];
-      canvas.drawPath(_pathOf(tapePts), Paint()
-        ..color = Color.fromARGB((255*alpha).toInt(), 230, 220, 200).withValues(alpha: 0.6)
-        ..style = PaintingStyle.fill);
-      canvas.drawPath(_pathOf(tapePts), Paint()
-        ..color = Colors.brown.withValues(alpha: 0.1)
-        ..style = PaintingStyle.stroke..strokeWidth = 0.5);
-    }
+    // Bordes Wireframe / Neon Premium
+    final borderCol = sel ? Colors.white : Colors.white.withValues(alpha: 0.2);
+    final bp = Paint()..color = borderCol..strokeWidth = sel ? 1.8 : 0.6..style = PaintingStyle.stroke;
+    canvas.drawPath(_pathOf(topPts), bp);
+    canvas.drawPath(_pathOf(frontPts), bp);
+    canvas.drawPath(_pathOf(rightPts), bp);
 
-    // Bordes de la caja
-    final edgeAlpha = sel ? 0.6 : 0.18;
-    final edgeColor = sel ? AppTheme.neonBlue : Colors.white;
-    final ep = Paint()
-      ..color = edgeColor.withValues(alpha: edgeAlpha)
-      ..strokeWidth = sel ? 1.5 : 0.6..style = PaintingStyle.stroke;
-    canvas.drawPath(_pathOf(topPts), ep);
-    canvas.drawPath(_pathOf(frontPts), ep);
-    canvas.drawPath(_pathOf(rightPts), ep);
-
-    // Glow de selección
-    if (sel) {
-      canvas.drawPath(_pathOf(topPts), Paint()
-        ..color = AppTheme.neonBlue.withValues(alpha: 0.25 * glow)
-        ..strokeWidth = 3..style = PaintingStyle.stroke
-        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 5));
-      canvas.drawPath(_pathOf(frontPts), Paint()
-        ..color = AppTheme.neonBlue.withValues(alpha: 0.15 * glow)
-        ..strokeWidth = 2..style = PaintingStyle.stroke
-        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4));
+    // Glow de selección Glassmorphism
+    if (sel && glow > 0.05) {
+      canvas.drawPath(_pathOf(topPts), Paint()..color = Colors.white.withValues(alpha: 0.6 * glow)..strokeWidth=3..style=PaintingStyle.stroke);
     }
   }
 
-  void _drawShadedFace(Canvas canvas, List<Offset> pts, Color base, double light, double alpha) {
-    final l = light.clamp(0.4, 1.5); 
+  void _fillFaceSolid(Canvas canvas, List<Offset> pts, Color base, double light, double alpha) {
+    final l = light.clamp(0.4, 1.8); 
     final r = (base.r * l).round().clamp(0, 255);
     final g = (base.g * l).round().clamp(0, 255);
-    final b2 = (base.b * l).round().clamp(0, 255);
-    
-    final cMain = Color.fromARGB((alpha * 255).round(), r, g, b2);
-    final cDark = Color.fromARGB((alpha * 255).round(), (r*0.8).round(), (g*0.8).round(), (b2*0.8).round());
-    
-    final path = _pathOf(pts);
-    final rect = path.getBounds();
-    final gradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [cMain, cDark],
-    );
-
-    canvas.drawPath(path, Paint()..shader = gradient.createShader(rect)..style = PaintingStyle.fill);
+    final b = (base.b * l).round().clamp(0, 255);
+    canvas.drawPath(_pathOf(pts), Paint()..color = Color.fromARGB((alpha * 255).round(), r, g, b)..style = PaintingStyle.fill);
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────
-
-  Path _pathOf(List<Offset> pts) {
-    final p = Path()..moveTo(pts[0].dx, pts[0].dy);
-    for (int i = 1; i < pts.length; i++) { p.lineTo(pts[i].dx, pts[i].dy); }
-    p.close(); return p;
-  }
-
-  void _drawLabel(Canvas canvas, Size size) {
+  void _drawLabel(Canvas canvas, Size size, TruckInterior interior) {
+    if (result.truck == null) return;
     final m = result.metrics;
-    final t = result.truck!;
+    
+    // Taxonomy en vivo en base a metadata de la BD real inyectada
+    final isVan = interior.lengthCm > 0 && interior.lengthCm < 400;
+    final type = isVan ? 'FURGONETA UNIBODY' : 'CAMIÓN RÍGIDO';
+    
+    // Label
+    final text = '$type (${interior.lengthCm.toInt()}x${interior.widthCm.toInt()}x${interior.heightCm.toInt()}cm) · '
+                 '${m.placedCount} bultos · ${m.totalWeightKg.toStringAsFixed(0)}/${m.maxPayloadKg.toStringAsFixed(0)} kg';
+                 
     final tp = TextPainter(
-      text: TextSpan(text:
-        '${m.placedCount} bultos · ${m.totalWeightKg.toStringAsFixed(0)}/${m.maxPayloadKg.toStringAsFixed(0)} kg · ${t.interior.lengthCm.toInt()}x${t.interior.widthCm.toInt()}x${t.interior.heightCm.toInt()} cm',
-        style: TextStyle(color: Colors.white.withValues(alpha: 0.25), fontSize: 9)),
+      text: TextSpan(text: text, style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10, fontWeight: FontWeight.bold)),
       textDirection: TextDirection.ltr)..layout();
-    tp.paint(canvas, Offset(8, size.height - 16));
+    tp.paint(canvas, Offset(16, size.height - 30)); // Reposicionado para evitar notch bottom
   }
 
   @override
-  bool shouldRepaint(covariant _TruckPainter old) => true;
+  bool shouldRepaint(covariant _TruckPainter old) => 
+      old.rotX != rotX || old.rotY != rotY || old.zoom != zoom || old.selectedId != selectedId || old.glow != glow;
 }
+

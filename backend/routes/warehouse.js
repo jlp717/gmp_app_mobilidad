@@ -64,10 +64,8 @@ router.get('/dashboard', async (req, res) => {
                 driverName: (t.NOMBRE_REPARTIDOR || '').trim(),
                 orderCount: parseInt(t.NUM_ORDENES) || 0,
                 lineCount: parseInt(t.NUM_LINEAS) || 0,
-                maxPayloadKg: parseFloat(t.CARGAMAXIMA) > 0
-                    ? parseFloat(t.CARGAMAXIMA)
-                    : Math.round(((parseFloat(t.CONTENEDORVOLUMEN) || 0) >= 3 ? parseFloat(t.CONTENEDORVOLUMEN) : 20) * 300),
-                containerVolume: (parseFloat(t.CONTENEDORVOLUMEN) || 0) >= 3 ? parseFloat(t.CONTENEDORVOLUMEN) : 20,
+                maxPayloadKg: parseFloat(t.CARGAMAXIMA) || 0,
+                containerVolume: parseFloat(t.CONTENEDORVOLUMEN) || 0,
                 tolerancePct: parseFloat(t.TOLERANCIA) || 5,
             })),
         });
@@ -179,12 +177,10 @@ router.get('/vehicles', async (req, res) => {
                 code: v.CODE,
                 description: (v.DESCRIPCION || '').trim(),
                 matricula: (v.MATRICULA || '').trim(),
-                maxPayloadKg: parseFloat(v.CARGAMAXIMA) > 0
-                    ? parseFloat(v.CARGAMAXIMA)
-                    : Math.round(((parseFloat(v.CONTENEDORVOLUMEN) || 0) >= 3 ? parseFloat(v.CONTENEDORVOLUMEN) : 20) * 300),
+                maxPayloadKg: parseFloat(v.CARGAMAXIMA) || 0,
                 tara: parseFloat(v.TARA) || 0,
                 volumeM3: parseFloat(v.VOLUMEN) || 0,
-                containerVolumeM3: (parseFloat(v.CONTENEDORVOLUMEN) || 0) >= 3 ? parseFloat(v.CONTENEDORVOLUMEN) : 20,
+                containerVolumeM3: parseFloat(v.CONTENEDORVOLUMEN) || 0,
                 interior: {
                     lengthCm: parseFloat(v.LARGO_INTERIOR_CM) || 0,
                     widthCm: parseFloat(v.ANCHO_INTERIOR_CM) || 0,
@@ -226,9 +222,9 @@ router.put('/truck-config/:vehicleCode', async (req, res) => {
         try {
             await query(`
         UPDATE JAVIER.ALMACEN_CAMIONES_CONFIG SET
-          LARGO_INTERIOR_CM = ${parseFloat(largoInteriorCm) || 600},
-          ANCHO_INTERIOR_CM = ${parseFloat(anchoInteriorCm) || 240},
-          ALTO_INTERIOR_CM = ${parseFloat(altoInteriorCm) || 220},
+          LARGO_INTERIOR_CM = ${parseFloat(largoInteriorCm) || 'NULL'},
+          ANCHO_INTERIOR_CM = ${parseFloat(anchoInteriorCm) || 'NULL'},
+          ALTO_INTERIOR_CM = ${parseFloat(altoInteriorCm) || 'NULL'},
           TOLERANCIA_EXCESO = ${parseFloat(toleranciaExceso) || 5},
           NOTAS = '${(notas || '').replace(/'/g, "''").substring(0, 250)}',
           UPDATED_AT = CURRENT_TIMESTAMP,
@@ -240,8 +236,8 @@ router.put('/truck-config/:vehicleCode', async (req, res) => {
             await query(`
         INSERT INTO JAVIER.ALMACEN_CAMIONES_CONFIG
           (CODIGOVEHICULO, LARGO_INTERIOR_CM, ANCHO_INTERIOR_CM, ALTO_INTERIOR_CM, TOLERANCIA_EXCESO, NOTAS, UPDATED_BY)
-        VALUES ('${code}', ${parseFloat(largoInteriorCm) || 600}, ${parseFloat(anchoInteriorCm) || 240},
-                ${parseFloat(altoInteriorCm) || 220}, ${parseFloat(toleranciaExceso) || 5},
+        VALUES ('${code}', ${parseFloat(largoInteriorCm) || 'NULL'}, ${parseFloat(anchoInteriorCm) || 'NULL'},
+                ${parseFloat(altoInteriorCm) || 'NULL'}, ${parseFloat(toleranciaExceso) || 5},
                 '${(notas || '').replace(/'/g, "''").substring(0, 250)}',
                 '${(req.user?.code || 'SYSTEM').replace(/'/g, "''")}')
       `);
@@ -421,8 +417,9 @@ router.post('/personnel/:id/delete', async (req, res) => {
  */
 router.get('/articles', async (req, res) => {
     try {
-        const { search, onlyWithDimensions, limit = 50 } = req.query;
+        const { search, onlyWithDimensions, limit = 200 } = req.query;
         let where = "TRIM(A.CODIGOARTICULO) <> '' AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)";
+        where += " AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%PRUEBA%' AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%TEST%' AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%DESCUENTO%'";
         if (search) {
             const s = search.replace(/'/g, "''").trim().toUpperCase();
             where += ` AND (UPPER(TRIM(A.CODIGOARTICULO)) LIKE '%${s}%' OR UPPER(A.DESCRIPCIONARTICULO) LIKE '%${s}%')`;

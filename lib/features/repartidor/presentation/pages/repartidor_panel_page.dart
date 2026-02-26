@@ -3,6 +3,7 @@
 /// Equivalente al Panel de Ventas pero enfocado a operativa de reparto
 
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
@@ -128,32 +129,50 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 20), 16, Responsive.padding(context, small: 12, large: 20), 12),
+      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 20), 20, Responsive.padding(context, small: 12, large: 20), 16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+        color: AppTheme.darkCard,
+        border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.1))),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5)),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            padding: EdgeInsets.all(Responsive.padding(context, small: 8, large: 10)),
+            width: Responsive.value(context, phone: 48, desktop: 56),
+            height: Responsive.value(context, phone: 48, desktop: 56),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [Colors.orange.withOpacity(0.3), Colors.deepOrange.withOpacity(0.2)]),
-              borderRadius: BorderRadius.circular(12),
+              gradient: const LinearGradient(
+                colors: [AppTheme.neonBlue, AppTheme.neonPurple],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(color: AppTheme.neonBlue.withOpacity(0.3), blurRadius: 8, spreadRadius: 1),
+              ],
             ),
-            child: Icon(Icons.dashboard, color: Colors.orange, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
+            child: Center(
+              child: Text(
+                widget.repartidorId.isNotEmpty ? widget.repartidorId.substring(0, math.min(2, widget.repartidorId.length)).toUpperCase() : 'R',
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Panel de Reparto', style: TextStyle(fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                Text('Resumen de entregas y cobros', style: TextStyle(fontSize: Responsive.fontSize(context, small: 10, large: 12), color: AppTheme.textSecondary)),
+                const Text('NIVEL DIRECTOR', style: TextStyle(fontSize: 10, color: AppTheme.neonCyan, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text('Repartidor ${widget.repartidorId}', style: TextStyle(fontSize: Responsive.fontSize(context, small: 16, large: 20), fontWeight: FontWeight.w900, color: Colors.white)),
+                Text('Rendimiento, entregas y comisiones en tiempo real', style: TextStyle(fontSize: Responsive.fontSize(context, small: 10, large: 12), color: AppTheme.textSecondary)),
               ],
             ),
           ),
-          // Month selector
+          // Sector de filtros dinámicos (mes/año)
           _buildMonthSelector(),
         ],
       ),
