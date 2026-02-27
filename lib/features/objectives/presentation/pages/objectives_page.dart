@@ -366,6 +366,8 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     double clientProgress = targetClients > 0 ? (actualClients / targetClients) * 100 : 0;
     
     // ... YTD logic ...
+    // FIX: YTD must respect _selectedMonths filter, not blindly use months <= now.month
+    // Previously showed "Acumulado" with wrong values when user selected specific months
     final now = DateTime.now();
     double ytdSales = 0;
     double ytdObjective = 0;
@@ -373,7 +375,8 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
     if (currentYearData != null) {
       for (final monthData in currentYearData) {
         final monthNum = (monthData['month'] as num?)?.toInt() ?? 0;
-        if (monthNum <= now.month) {
+        // Only include months that are BOTH selected AND up to current month
+        if (_selectedMonths.contains(monthNum) && monthNum <= now.month) {
           ytdSales += (monthData['sales'] as num?)?.toDouble() ?? 0;
           ytdObjective += (monthData['objective'] as num?)?.toDouble() ?? 0;
         }

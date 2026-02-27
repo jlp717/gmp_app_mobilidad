@@ -555,6 +555,19 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       final bytes = await FacturasService.downloadFacturaPdfBytes(
         factura.serie, factura.numero, factura.ejercicio,
       );
+      
+      // FIX: Validate PDF buffer is not empty/corrupted before navigating to preview
+      // A valid PDF is at minimum ~100 bytes (%PDF-1.x header + trailer)
+      debugPrint('[FACTURAS] PDF bytes received: ${bytes.length}');
+      if (bytes.length < 100) {
+        modal.close();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: PDF vacío o corrupto (${bytes.length} bytes). Intenta de nuevo.'),
+              backgroundColor: Colors.red),
+        );
+        return;
+      }
       modal.close();
 
       if (!mounted) return;

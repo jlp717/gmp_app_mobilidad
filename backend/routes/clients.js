@@ -80,7 +80,7 @@ const getClientsHandler = async (req, res) => {
         COALESCE(S.TOTAL_MARGIN, 0) as totalMargin,
         C.ANOBAJA as yearInactive,
         TRIM(V.NOMBREVENDEDOR) as vendorName,
-        S.LAST_VENDOR as vendorCode
+        LV.LAST_VENDOR as vendorCode
       FROM DSEDAC.CLI C
       LEFT JOIN (
         SELECT 
@@ -88,8 +88,7 @@ const getClientsHandler = async (req, res) => {
           SUM(LCIMVT) as TOTAL_PURCHASES,
           SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
           COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
-          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE,
-          MAX(LCCDVD) as LAST_VENDOR
+          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
         FROM DSED.LACLAE
         WHERE LCAADC >= ${MIN_YEAR}
           AND TPDC = 'LAC'
@@ -99,9 +98,23 @@ const getClientsHandler = async (req, res) => {
           ${vendedorFilter.replace(/L\./g, '')}
         GROUP BY LCCDCL
       ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-      LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
+      -- FIX: Get vendor from most recent transaction (DB2 compatible)
+      -- Previously MAX(LCCDVD) returned alphabetically highest, not chronologically last
+      LEFT JOIN LATERAL (
+        SELECT LCCDVD as LAST_VENDOR
+        FROM DSED.LACLAE
+        WHERE LCCDCL = S.CLIENT_CODE
+          AND LCAADC >= ${MIN_YEAR}
+          AND TPDC = 'LAC'
+          AND LCTPVT IN ('CC', 'VC')
+          AND LCCLLN IN ('AB', 'VT')
+          AND LCSRAB NOT IN ('N', 'Z')
+        ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+        FETCH FIRST 1 ROWS ONLY
+      ) LV ON 1=1
+      LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
-        ${clientCodesFilter || `AND S.LAST_VENDOR IS NOT NULL`}
+        ${clientCodesFilter || `AND LV.LAST_VENDOR IS NOT NULL`}
         ${searchFilter}
       ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
       OFFSET ${parseInt(offset)} ROWS
@@ -383,7 +396,7 @@ router.get('/:code', async (req, res) => {
     const pendingCVC = parseFloat(paymentStatus[0]?.PENDING) || 0;
     const totalCAC = parseFloat(cacValidation[0]?.TOTALINVOICED) || 0;
     if (Math.abs(pendingCVC - totalCAC) > 100) {
-        logger.warn(`[CLIENT ${safeClientCode}] CVC/CAC discrepancy: CVC pending=${pendingCVC.toFixed(2)}, CAC total=${totalCAC.toFixed(2)}, diff=${(pendingCVC - totalCAC).toFixed(2)}`);
+      logger.warn(`[CLIENT ${safeClientCode}] CVC/CAC discrepancy: CVC pending=${pendingCVC.toFixed(2)}, CAC total=${totalCAC.toFixed(2)}, diff=${(pendingCVC - totalCAC).toFixed(2)}`);
     }
 
     const c = clientInfo[0];

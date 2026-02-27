@@ -238,7 +238,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           final currentAmount = double.tryParse(amountController.text) ?? 0;
-          final observacionesRequired = currentAmount < monthCommission && currentAmount > 0;
+          // FIX: Use epsilon tolerance (0.01€) to avoid floating-point false positives
+          // e.g. 165.88 < 165.88000000000001 would wrongly mark observations as mandatory
+          final observacionesRequired = (monthCommission - currentAmount) > 0.01 && currentAmount > 0;
           final isMonthPaid = paidMonths.contains(selectedMonth);
           final isMonthFuture = selectedMonth > now.month;
 

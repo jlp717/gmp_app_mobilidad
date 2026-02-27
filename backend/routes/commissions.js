@@ -1024,10 +1024,12 @@ router.post('/pay', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Faltan datos obligatorios (Comercial, Año, Importe)' });
     }
 
-    // NEW: Validate observaciones if paying less than generated amount
+    // Validate observaciones if paying less than generated amount
+    // FIX: Use epsilon tolerance (0.01€ = 1 cent) to avoid floating-point false positives
+    // e.g. 165.88 < 165.88000000000001 would wrongly trigger mandatory observaciones
     const amountNum = parseFloat(amount);
     const generatedNum = parseFloat(generatedAmount) || 0;
-    if (amountNum < generatedNum && (!observaciones || observaciones.trim() === '')) {
+    if ((generatedNum - amountNum) > 0.01 && (!observaciones || observaciones.trim() === '')) {
         logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode}`);
         return res.status(400).json({
             success: false,

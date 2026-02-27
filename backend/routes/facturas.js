@@ -150,10 +150,16 @@ router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
         const filename = `Factura_${serie}_${numero}_${ejercicio}.pdf`;
         const disposition = preview ? 'inline' : 'attachment';
 
+        const wasCached = !!getCachedPdf(cacheKey);
+        logger.info(`[FACTURAS] PDF serving: ${filename} (${pdfBuffer.length} bytes, cache: ${wasCached ? 'HIT' : 'MISS'})`);
+
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', `${disposition}; filename=${filename}`);
         res.set('Content-Length', pdfBuffer.length);
-        res.set('Cache-Control', 'private, max-age=300');
+        // FIX: no-store prevents Flutter HTTP client from caching stale/truncated PDF
+        // Server-side cache in emailPdfService.js (5min TTL) handles reuse
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.set('Pragma', 'no-cache');
 
         res.send(pdfBuffer);
     } catch (error) {

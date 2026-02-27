@@ -218,6 +218,10 @@ router.get('/matrix-data', async (req, res) => {
             } else if (level === 'family') {
                 selectClauses.push(`RTRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
                 groupClauses.push('L.CODIGOARTICULO');
+            } else if (level === 'subfamily') {
+                // FIX Bug #5: Support subfamily level in hierarchy for proper FI classification
+                selectClauses.push(`COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as ID_${levelIdx}`);
+                groupClauses.push('A.CODIGOSUBFAMILIA');
             }
         });
 
@@ -227,9 +231,14 @@ router.get('/matrix-data', async (req, res) => {
         selectClauses.push('SUM(L.LCIMVT) as SALES');
         selectClauses.push('SUM(L.LCIMVT - L.LCIMCT) as MARGIN');
 
+        // FIX: Add ART join when subfamily hierarchy is requested
+        const needsArtJoin = hierarchy.includes('subfamily');
+        const artJoinClause = needsArtJoin ? 'LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO' : '';
+
         const aggregateSQL = `
             SELECT ${selectClauses.join(', ')}
             FROM DSEDAC.LAC L
+              ${artJoinClause}
               WHERE 1=1
               AND ${LAC_SALES_FILTER}
               ${yearFilter}
