@@ -1,15 +1,22 @@
-/// Truck Body Renderer — Container, cab, wheels, ground
-/// Clean, professional visual style with parametric vehicle taxonomy
+/// Truck Body Renderer v2 — Premium visual design
+/// Features:
+/// - Metallic cab with windshield reflections
+/// - Translucent container walls (see cargo inside)
+/// - Floor grid for scale reference
+/// - Dimension arrows with real measurements
+/// - Dynamic shadows, gradient lighting
+/// - Van vs Truck parametric morphing
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../data/warehouse_data_service.dart';
 import 'projection_3d.dart';
 
 class TruckBodyRenderer {
   final Projection3D proj;
   final Size size;
-  final double cW, cD, cH;
-  final double ox, oy, oz;
+  final double cW, cD, cH; // Container dims in cm
+  final double ox, oy, oz; // Origin offsets
   final bool isVan;
 
   TruckBodyRenderer({
@@ -24,549 +31,605 @@ class TruckBodyRenderer {
     required this.isVan,
   });
 
-  // ─── COLOR CONSTANTS ─────────────────────────────────────────────────
-  // Clean, modern palette — lighter than before
-  static const _floorColor = Color(0xFF2D3748);
-  static const _wallColor = Color(0xFFE2E8F0);
-  static const _gridColor = Color(0xFF4A5568);
-  static const _edgeColor = Color(0xFF718096);
-  static const _doorColor = Color(0xFFDDE3EA);
-  static const _safetyYellow = Color(0xFFFFCA28);
-  static const _safetyRed = Color(0xFFEF4444);
-
-  // Cab colors
-  static const _cabWhite = Color(0xFFFFFFFF);
-  static const _cabLight = Color(0xFFF1F5F9);
-  static const _cabDark = Color(0xFFE2E8F0);
-  static const _glassBlue = Color(0xFF0EA5E9);
-  static const _bumperDark = Color(0xFF334155);
-  static const _grilleDark = Color(0xFF1E293B);
-
-  // Wheel colors
-  static const _tireDark = Color(0xFF0F172A);
-  static const _rimSilver = Color(0xFFCBD5E1);
-  static const _hubGrey = Color(0xFF94A3B8);
+  // ═══════════════════════════════════════════════════════════════════════
+  // COLORS — Premium metallic palette
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  // Container
+  static const Color _containerBase = Color(0xFF2D3748);
+  static const Color _containerFrame = Color(0xFF4A5568);
+  static const Color _containerFloor = Color(0xFF1A202C);
+  static const Color _containerWallAlpha = Color(0x30718096); // Translucent
+  
+  // Cab
+  static const Color _cabPrimary = Color(0xFF1E40AF);    // Deep blue
+  static const Color _cabSecondary = Color(0xFF2563EB);   // Lighter blue
+  static const Color _cabAccent = Color(0xFF60A5FA);      // Bright accent
+  static const Color _windshield = Color(0xFF38BDF8);     // Glass blue
+  static const Color _headlight = Color(0xFFFDE68A);      // Warm yellow
+  static const Color _chrome = Color(0xFFE2E8F0);         // Chrome silver
+  
+  // Environment
+  static const Color _groundShadow = Color(0x20000000);
+  static const Color _gridLine = Color(0x25FFFFFF);
+  static const Color _gridLineAccent = Color(0x40FFFFFF);
+  static const Color _measureLine = Color(0x60FFFFFF);
 
   void drawAll(Canvas canvas) {
     _drawGroundShadow(canvas);
+    _drawContainerFloor(canvas);
+    _drawFloorGrid(canvas);
+    _drawContainerWalls(canvas);
+    _drawContainerFrame(canvas);
+    _drawDimensionArrows(canvas);
+    
     if (isVan) {
       _drawVanCab(canvas);
     } else {
       _drawTruckCab(canvas);
     }
-    _drawCargoContainer(canvas);
     _drawWheels(canvas);
   }
 
-  // ─── GROUND SHADOW ───────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  // GROUND SHADOW — Soft, realistic ground plane
+  // ═══════════════════════════════════════════════════════════════════════
+
   void _drawGroundShadow(Canvas canvas) {
-    final zFloor = oz - 2;
-    final ext = 60.0;
-    final frontD = isVan ? cD * 1.3 : cD * 1.5;
-
-    // Soft ground shadow
-    final pts = [
-      proj.project(ox - ext, oy - ext, zFloor, size),
-      proj.project(ox + cW + ext, oy - ext, zFloor, size),
-      proj.project(ox + cW + ext, oy + frontD, zFloor, size),
-      proj.project(ox - ext, oy + frontD, zFloor, size),
-    ];
-    canvas.drawPath(
-      PolyHelper.pathOf(pts),
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.2)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24),
+    // Soft elliptical shadow under the truck
+    final center = proj.project(0, cD * 0.3, oz, size);
+    final rx = cD * 0.5 * proj.zoom * 0.4;
+    final ry = rx * 0.3;
+    
+    final shadowPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          _groundShadow,
+          _groundShadow.withValues(alpha: 0.05),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.6, 1.0],
+      ).createShader(Rect.fromCenter(center: center, width: rx * 2, height: ry * 2));
+    
+    canvas.drawOval(
+      Rect.fromCenter(center: center, width: rx * 2, height: ry * 2),
+      shadowPaint,
     );
+  }
 
-    // Subtle ground plane grid
-    final floorPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.04)
-      ..strokeWidth = 0.3;
-    for (double gx = -ext; gx <= cW + ext; gx += 80) {
-      canvas.drawLine(
-        proj.project(ox + gx, oy - ext, zFloor, size),
-        proj.project(ox + gx, oy + frontD, zFloor, size),
-        floorPaint,
-      );
+  // ═══════════════════════════════════════════════════════════════════════
+  // CONTAINER FLOOR — Solid, dark floor with subtle texture
+  // ═══════════════════════════════════════════════════════════════════════
+
+  void _drawContainerFloor(Canvas canvas) {
+    final pts = [
+      proj.project(ox, oy, oz, size),
+      proj.project(ox + cW, oy, oz, size),
+      proj.project(ox + cW, oy + cD, oz, size),
+      proj.project(ox, oy + cD, oz, size),
+    ];
+    
+    // Solid dark floor
+    PolyHelper.fillFaceSolid(canvas, pts, _containerFloor, 0.9, 1.0);
+    
+    // Subtle border
+    PolyHelper.strokeFace(canvas, pts, _containerFrame.withValues(alpha: 0.4), 1.5);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // FLOOR GRID — Scale reference lines every 50cm
+  // ═══════════════════════════════════════════════════════════════════════
+
+  void _drawFloorGrid(Canvas canvas) {
+    final gridSpacing = 50.0; // 50cm grid
+    final gridPaint = Paint()
+      ..color = _gridLine
+      ..strokeWidth = 0.5
+      ..style = PaintingStyle.stroke;
+    final accentPaint = Paint()
+      ..color = _gridLineAccent
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    // Width lines (X axis)
+    for (double x = 0; x <= cW; x += gridSpacing) {
+      final isAccent = (x % 100).abs() < 1;
+      final p1 = proj.project(ox + x, oy, oz, size);
+      final p2 = proj.project(ox + x, oy + cD, oz, size);
+      canvas.drawLine(p1, p2, isAccent ? accentPaint : gridPaint);
     }
-    for (double gy = -ext; gy <= frontD; gy += 80) {
-      canvas.drawLine(
-        proj.project(ox - ext, oy + gy, zFloor, size),
-        proj.project(ox + cW + ext, oy + gy, zFloor, size),
-        floorPaint,
-      );
+    
+    // Depth lines (Y axis)
+    for (double y = 0; y <= cD; y += gridSpacing) {
+      final isAccent = (y % 100).abs() < 1;
+      final p1 = proj.project(ox, oy + y, oz, size);
+      final p2 = proj.project(ox + cW, oy + y, oz, size);
+      canvas.drawLine(p1, p2, isAccent ? accentPaint : gridPaint);
     }
   }
 
-  // ─── CARGO CONTAINER ─────────────────────────────────────────────────
-  void _drawCargoContainer(Canvas canvas) {
-    final w = cW, d = cD, h = cH;
+  // ═══════════════════════════════════════════════════════════════════════
+  // CONTAINER WALLS — Translucent with frame edges
+  // ═══════════════════════════════════════════════════════════════════════
 
-    // FLOOR
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, oy, oz], [ox + w, oy, oz], [ox + w, oy + d, oz], [ox, oy + d, oz],
-    ], _floorColor, Lighting3D.intensity(0, 0, -1));
-
-    // Floor grid
-    final gridPaint = Paint()
-      ..color = _gridColor.withValues(alpha: 0.35)
-      ..strokeWidth = 0.3;
-    for (double gx = 0; gx <= w; gx += 40) {
-      canvas.drawLine(
-        proj.project(ox + gx, oy, oz + 0.5, size),
-        proj.project(ox + gx, oy + d, oz + 0.5, size),
-        gridPaint,
-      );
-    }
-    for (double gy = 0; gy <= d; gy += 40) {
-      canvas.drawLine(
-        proj.project(ox, oy + gy, oz + 0.5, size),
-        proj.project(ox + w, oy + gy, oz + 0.5, size),
-        gridPaint,
-      );
-    }
-
-    // BACK WALL (visible through open doors)
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, oy + d, oz], [ox + w, oy + d, oz],
-      [ox + w, oy + d, oz + h], [ox, oy + d, oz + h],
-    ], _wallColor.withValues(alpha: 0.5), Lighting3D.intensity(0, 1, 0) * 0.7);
-
-    // LEFT WALL (semi-transparent)
+  void _drawContainerWalls(Canvas canvas) {
+    // Left wall (translucent)
     final leftPts = [
       proj.project(ox, oy, oz, size),
-      proj.project(ox, oy + d, oz, size),
-      proj.project(ox, oy + d, oz + h, size),
-      proj.project(ox, oy, oz + h, size),
+      proj.project(ox, oy + cD, oz, size),
+      proj.project(ox, oy + cD, oz + cH, size),
+      proj.project(ox, oy, oz + cH, size),
     ];
-    canvas.drawPath(
-      PolyHelper.pathOf(leftPts),
-      Paint()..color = _wallColor.withValues(alpha: 0.35),
-    );
-    // Wall reinforcement bars
-    for (double gz = h * 0.25; gz < h; gz += h * 0.25) {
-      canvas.drawLine(
-        proj.project(ox, oy, oz + gz, size),
-        proj.project(ox, oy + d, oz + gz, size),
-        Paint()..color = _edgeColor.withValues(alpha: 0.25)..strokeWidth = 1.2,
-      );
-    }
-
-    // RIGHT WALL (semi-transparent)
+    PolyHelper.fillFaceSolid(canvas, leftPts, _containerBase, Lighting3D.leftLight, 0.25);
+    
+    // Right wall (translucent)
     final rightPts = [
-      proj.project(ox + w, oy, oz, size),
-      proj.project(ox + w, oy + d, oz, size),
-      proj.project(ox + w, oy + d, oz + h, size),
-      proj.project(ox + w, oy, oz + h, size),
+      proj.project(ox + cW, oy, oz, size),
+      proj.project(ox + cW, oy + cD, oz, size),
+      proj.project(ox + cW, oy + cD, oz + cH, size),
+      proj.project(ox + cW, oy, oz + cH, size),
     ];
-    canvas.drawPath(
-      PolyHelper.pathOf(rightPts),
-      Paint()..color = _wallColor.withValues(alpha: 0.35),
-    );
-    for (double gz = h * 0.25; gz < h; gz += h * 0.25) {
-      canvas.drawLine(
-        proj.project(ox + w, oy, oz + gz, size),
-        proj.project(ox + w, oy + d, oz + gz, size),
-        Paint()..color = _edgeColor.withValues(alpha: 0.25)..strokeWidth = 1.2,
-      );
-    }
+    PolyHelper.fillFaceSolid(canvas, rightPts, _containerBase, Lighting3D.rightLight, 0.25);
+    
+    // Back wall (slightly more opaque)
+    final backPts = [
+      proj.project(ox, oy + cD, oz, size),
+      proj.project(ox + cW, oy + cD, oz, size),
+      proj.project(ox + cW, oy + cD, oz + cH, size),
+      proj.project(ox, oy + cD, oz + cH, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, backPts, _containerBase, Lighting3D.backLight, 0.35);
+    
+    // Roof (very translucent)
+    final roofPts = [
+      proj.project(ox, oy, oz + cH, size),
+      proj.project(ox + cW, oy, oz + cH, size),
+      proj.project(ox + cW, oy + cD, oz + cH, size),
+      proj.project(ox, oy + cD, oz + cH, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, roofPts, _containerBase, Lighting3D.topLight, 0.12);
+    
+    // Open rear doors effect — no front wall, just door frame hints
+    _drawDoorFrame(canvas);
+  }
 
-    // ROOF (very transparent)
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, oy, oz + h], [ox + w, oy, oz + h],
-      [ox + w, oy + d, oz + h], [ox, oy + d, oz + h],
-    ], _wallColor, Lighting3D.intensity(0, 0, 1), alpha: 0.08);
-
-    // OPEN REAR DOORS
-    final doorSwing = d * 0.3;
-    final doorH = h * 0.95;
-    // Left door
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, oy, oz], [ox, oy - doorSwing, oz],
-      [ox, oy - doorSwing, oz + doorH], [ox, oy, oz + doorH],
-    ], _doorColor, Lighting3D.intensity(-1, -0.5, 0));
-    // Left door handle
-    canvas.drawLine(
-      proj.project(ox + 2, oy - doorSwing * 0.3, oz + h * 0.45, size),
-      proj.project(ox + 2, oy - doorSwing * 0.3, oz + h * 0.55, size),
-      Paint()..color = _bumperDark..strokeWidth = 2..strokeCap = StrokeCap.round,
-    );
-    // Right door
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox + w, oy, oz], [ox + w, oy - doorSwing, oz],
-      [ox + w, oy - doorSwing, oz + doorH], [ox + w, oy, oz + doorH],
-    ], _doorColor, Lighting3D.intensity(1, -0.5, 0));
-    // Right door handle
-    canvas.drawLine(
-      proj.project(ox + w - 2, oy - doorSwing * 0.3, oz + h * 0.45, size),
-      proj.project(ox + w - 2, oy - doorSwing * 0.3, oz + h * 0.55, size),
-      Paint()..color = _bumperDark..strokeWidth = 2..strokeCap = StrokeCap.round,
-    );
-
-    // WIREFRAME EDGES (clean border lines)
-    final border = Paint()
-      ..color = _edgeColor.withValues(alpha: 0.25)
-      ..strokeWidth = 0.7
+  void _drawDoorFrame(Canvas canvas) {
+    // Left door frame
+    final doorPaint = Paint()
+      ..color = _containerFrame.withValues(alpha: 0.6)
+      ..strokeWidth = 3
       ..style = PaintingStyle.stroke;
-    final v = [
-      proj.project(ox, oy, oz, size),
-      proj.project(ox + w, oy, oz, size),
-      proj.project(ox + w, oy + d, oz, size),
-      proj.project(ox, oy + d, oz, size),
-      proj.project(ox, oy, oz + h, size),
-      proj.project(ox + w, oy, oz + h, size),
-      proj.project(ox + w, oy + d, oz + h, size),
-      proj.project(ox, oy + d, oz + h, size),
-    ];
-    for (final e in [
-      [0, 1], [1, 2], [2, 3], [3, 0],
-      [4, 5], [5, 6], [6, 7], [7, 4],
-      [0, 4], [1, 5], [2, 6], [3, 7],
-    ]) {
-      canvas.drawLine(v[e[0]], v[e[1]], border);
+    
+    // Front opening with door frame hints
+    final fl = proj.project(ox, oy, oz, size);
+    final fr = proj.project(ox + cW, oy, oz, size);
+    final tl = proj.project(ox, oy, oz + cH, size);
+    final tr = proj.project(ox + cW, oy, oz + cH, size);
+    
+    // Draw door frame lines
+    canvas.drawLine(fl, tl, doorPaint);
+    canvas.drawLine(fr, tr, doorPaint);
+    canvas.drawLine(tl, tr, doorPaint);
+    canvas.drawLine(fl, fr, doorPaint);
+    
+    // Door hinge details
+    final hingePaint = Paint()
+      ..color = _chrome.withValues(alpha: 0.5)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    
+    // Left door hinges (3 small dashes)
+    for (final frac in [0.2, 0.5, 0.8]) {
+      final hp = Offset.lerp(fl, tl, frac)!;
+      final dx = (tl.dx - fl.dx).abs() > 2 ? 4.0 : 2.0;
+      canvas.drawLine(hp, Offset(hp.dx - dx, hp.dy), hingePaint);
     }
-
-    // Edge highlights (subtle bright line on top edges for depth)
-    final highlight = Paint()
-      ..color = Colors.white.withValues(alpha: 0.12)
-      ..strokeWidth = 0.5;
-    canvas.drawLine(v[4], v[5], highlight);
-    canvas.drawLine(v[5], v[6], highlight);
-    canvas.drawLine(v[4], v[7], highlight);
-
-    // SAFETY REFLECTIVE STRIPS on rear wall
-    final stripPaint = Paint()
-      ..color = _safetyYellow.withValues(alpha: 0.4)
-      ..strokeWidth = 2.5;
-    canvas.drawLine(
-      proj.project(ox + 5, oy + d - 1, oz + h * 0.02, size),
-      proj.project(ox + w - 5, oy + d - 1, oz + h * 0.02, size),
-      stripPaint,
-    );
-    canvas.drawLine(
-      proj.project(ox + 5, oy + d - 1, oz + h * 0.06, size),
-      proj.project(ox + w - 5, oy + d - 1, oz + h * 0.06, size),
-      Paint()..color = _safetyRed.withValues(alpha: 0.35)..strokeWidth = 2.5,
-    );
-
-    // Corrugated panel lines on outside walls (trucks only)
-    if (!isVan) {
-      for (double x = 30; x < w; x += 40) {
-        canvas.drawLine(
-          proj.project(ox + x, oy + d, oz, size),
-          proj.project(ox + x, oy + d, oz + h, size),
-          Paint()..color = _edgeColor.withValues(alpha: 0.1)..strokeWidth = 0.4,
-        );
-      }
+    // Right door hinges
+    for (final frac in [0.2, 0.5, 0.8]) {
+      final hp = Offset.lerp(fr, tr, frac)!;
+      final dx = (tr.dx - fr.dx).abs() > 2 ? 4.0 : 2.0;
+      canvas.drawLine(hp, Offset(hp.dx + dx, hp.dy), hingePaint);
     }
   }
 
-  // ─── TRUCK CAB (Rigid truck >= 400cm) ────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  // CONTAINER FRAME — Structural edges
+  // ═══════════════════════════════════════════════════════════════════════
+
+  void _drawContainerFrame(Canvas canvas) {
+    final framePaint = Paint()
+      ..color = _containerFrame
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    // Bottom edges
+    _drawEdge(canvas, ox, oy, oz, ox + cW, oy, oz, framePaint);
+    _drawEdge(canvas, ox, oy + cD, oz, ox + cW, oy + cD, oz, framePaint);
+    _drawEdge(canvas, ox, oy, oz, ox, oy + cD, oz, framePaint);
+    _drawEdge(canvas, ox + cW, oy, oz, ox + cW, oy + cD, oz, framePaint);
+    
+    // Top edges
+    _drawEdge(canvas, ox, oy, oz + cH, ox + cW, oy, oz + cH, framePaint);
+    _drawEdge(canvas, ox, oy + cD, oz + cH, ox + cW, oy + cD, oz + cH, framePaint);
+    _drawEdge(canvas, ox, oy, oz + cH, ox, oy + cD, oz + cH, framePaint);
+    _drawEdge(canvas, ox + cW, oy, oz + cH, ox + cW, oy + cD, oz + cH, framePaint);
+    
+    // Vertical edges
+    _drawEdge(canvas, ox, oy, oz, ox, oy, oz + cH, framePaint);
+    _drawEdge(canvas, ox + cW, oy, oz, ox + cW, oy, oz + cH, framePaint);
+    _drawEdge(canvas, ox, oy + cD, oz, ox, oy + cD, oz + cH, framePaint);
+    _drawEdge(canvas, ox + cW, oy + cD, oz, ox + cW, oy + cD, oz + cH, framePaint);
+  }
+
+  void _drawEdge(Canvas canvas, double x1, double y1, double z1, 
+                  double x2, double y2, double z2, Paint paint) {
+    canvas.drawLine(
+      proj.project(x1, y1, z1, size),
+      proj.project(x2, y2, z2, size),
+      paint,
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // DIMENSION ARROWS — Real measurements on container edges
+  // ═══════════════════════════════════════════════════════════════════════
+
+  void _drawDimensionArrows(Canvas canvas) {
+    final offset = 15.0; // Offset from container edge
+    final arrowPaint = Paint()
+      ..color = _measureLine
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+    
+    // Width arrow (bottom front)
+    final wl = proj.project(ox, oy - offset, oz, size);
+    final wr = proj.project(ox + cW, oy - offset, oz, size);
+    canvas.drawLine(wl, wr, arrowPaint);
+    _drawArrowHead(canvas, wl, wr, arrowPaint);
+    _drawArrowHead(canvas, wr, wl, arrowPaint);
+    _drawDimensionLabel(canvas, Offset.lerp(wl, wr, 0.5)!, '${cW.round()} cm');
+    
+    // Depth arrow (bottom left)
+    final dl = proj.project(ox - offset, oy, oz, size);
+    final dr = proj.project(ox - offset, oy + cD, oz, size);
+    canvas.drawLine(dl, dr, arrowPaint);
+    _drawArrowHead(canvas, dl, dr, arrowPaint);
+    _drawArrowHead(canvas, dr, dl, arrowPaint);
+    _drawDimensionLabel(canvas, Offset.lerp(dl, dr, 0.5)!, '${cD.round()} cm');
+    
+    // Height arrow (front left)
+    final hl = proj.project(ox - offset, oy - offset, oz, size);
+    final hr = proj.project(ox - offset, oy - offset, oz + cH, size);
+    canvas.drawLine(hl, hr, arrowPaint);
+    _drawArrowHead(canvas, hl, hr, arrowPaint);
+    _drawArrowHead(canvas, hr, hl, arrowPaint);
+    _drawDimensionLabel(canvas, Offset.lerp(hl, hr, 0.5)!, '${cH.round()} cm');
+  }
+
+  void _drawArrowHead(Canvas canvas, Offset from, Offset to, Paint paint) {
+    final dir = to - from;
+    final len = dir.distance;
+    if (len < 5) return;
+    final unit = dir / len;
+    final perp = Offset(-unit.dy, unit.dx);
+    final tipSize = 5.0;
+    canvas.drawLine(from, from + unit * tipSize + perp * tipSize * 0.5, paint);
+    canvas.drawLine(from, from + unit * tipSize - perp * tipSize * 0.5, paint);
+  }
+
+  void _drawDimensionLabel(Canvas canvas, Offset pos, String text) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: Color(0xAAFFFFFF),
+          fontSize: 9,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.5,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    
+    // Background pill
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: pos, width: tp.width + 10, height: tp.height + 6),
+      const Radius.circular(4),
+    );
+    canvas.drawRRect(rect, Paint()..color = const Color(0x60000000));
+    tp.paint(canvas, Offset(pos.dx - tp.width / 2, pos.dy - tp.height / 2));
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // TRUCK CAB — Metallic, premium design
+  // ═══════════════════════════════════════════════════════════════════════
+
   void _drawTruckCab(Canvas canvas) {
-    final w = cW, d = cD, h = cH;
-    final cabD = math.max(100.0, d * 0.18);
-    final cabH = math.max(200.0, h * 0.85);
-    final gap = 15.0;
-    final cY = oy + d + gap;
+    final cabW = cW * 1.05; // Slightly wider than container
+    final cabD = cW * 0.55; // Proportional depth
+    final cabH = cH * 0.9;  // Slightly lower
+    final cabX = ox - (cabW - cW) / 2;
+    final cabY = oy + cD;   // Behind the container
+    final cabZ = oz;
 
-    // Side panels
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, cY, oz], [ox + w, cY, oz], [ox + w, cY, oz + cabH], [ox, cY, oz + cabH],
-    ], _cabDark, Lighting3D.intensity(0, -1, 0));
-
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, cY, oz], [ox, cY + cabD, oz],
-      [ox, cY + cabD, oz + cabH * 0.7], [ox, cY + cabD * 0.8, oz + cabH],
-      [ox, cY, oz + cabH],
-    ], _cabDark, Lighting3D.intensity(-1, 0, 0));
-
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox + w, cY, oz], [ox + w, cY + cabD, oz],
-      [ox + w, cY + cabD, oz + cabH * 0.7], [ox + w, cY + cabD * 0.8, oz + cabH],
-      [ox + w, cY, oz + cabH],
-    ], _cabWhite, Lighting3D.intensity(1, 0, 0));
-
-    // Front lower panel
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, cY + cabD, oz], [ox + w, cY + cabD, oz],
-      [ox + w, cY + cabD, oz + cabH * 0.4], [ox, cY + cabD, oz + cabH * 0.4],
-    ], _cabWhite, Lighting3D.intensity(0, 1, 0));
-
-    // Windshield
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, cY + cabD, oz + cabH * 0.4], [ox + w, cY + cabD, oz + cabH * 0.4],
-      [ox + w, cY + cabD * 0.8, oz + cabH], [ox, cY + cabD * 0.8, oz + cabH],
-    ], _glassBlue, Lighting3D.intensity(0, 1, 1), alpha: 0.85);
-
-    // Windshield reflection highlight
-    final reflStart = proj.project(ox + w * 0.3, cY + cabD * 0.92, oz + cabH * 0.6, size);
-    final reflEnd = proj.project(ox + w * 0.7, cY + cabD * 0.88, oz + cabH * 0.85, size);
-    canvas.drawLine(
-      reflStart, reflEnd,
-      Paint()..color = Colors.white.withValues(alpha: 0.25)..strokeWidth = 1.5,
-    );
-
-    // Roof
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, cY, oz + cabH], [ox + w, cY, oz + cabH],
-      [ox + w, cY + cabD * 0.8, oz + cabH], [ox, cY + cabD * 0.8, oz + cabH],
-    ], _cabDark, Lighting3D.intensity(0, 0, 1));
-
-    // Aero deflector
-    final defH = h - cabH;
-    if (defH > 20) {
-      PolyHelper.fillFace(canvas, proj, size, [
-        [ox, cY, oz + cabH], [ox + w, cY, oz + cabH],
-        [ox + w, cY, oz + cabH + defH], [ox, cY, oz + cabH + defH],
-      ], _cabDark, Lighting3D.intensity(0, -1, 0));
-      PolyHelper.fillFace(canvas, proj, size, [
-        [ox, cY + cabD * 0.5, oz + cabH], [ox + w, cY + cabD * 0.5, oz + cabH],
-        [ox + w, cY, oz + cabH + defH], [ox, cY, oz + cabH + defH],
-      ], _cabLight, Lighting3D.intensity(0, 1, 1));
-    }
-
-    // Bumper
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox - 4, cY + cabD, oz], [ox + w + 4, cY + cabD, oz],
-      [ox + w + 4, cY + cabD + 20, oz + 30], [ox - 4, cY + cabD + 20, oz + 30],
-    ], _bumperDark, Lighting3D.intensity(0, 1, 0));
-
-    // Grille
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox + w * 0.2, cY + cabD + 1, oz + 30],
-      [ox + w * 0.8, cY + cabD + 1, oz + 30],
-      [ox + w * 0.8, cY + cabD + 1, oz + cabH * 0.35],
-      [ox + w * 0.2, cY + cabD + 1, oz + cabH * 0.35],
-    ], _grilleDark, Lighting3D.intensity(0, 1, 0));
-
-    // Headlights (two small bright circles)
-    _drawHeadlight(canvas, ox + w * 0.1, cY + cabD + 1, oz + cabH * 0.25);
-    _drawHeadlight(canvas, ox + w * 0.9, cY + cabD + 1, oz + cabH * 0.25);
-
-    // Side mirrors
-    _drawMirror(canvas, ox - 8, cY + cabD * 0.6, oz + cabH * 0.7);
-    _drawMirror(canvas, ox + w + 8, cY + cabD * 0.6, oz + cabH * 0.7);
-  }
-
-  // ─── VAN CAB (Furgoneta < 400cm) ────────────────────────────────────
-  void _drawVanCab(Canvas canvas) {
-    final w = cW, d = cD, h = cH;
-    final cabD = math.max(120.0, d * 0.38);
-    final cY = oy + d;
-
-    // Side panels (unibody, no gap)
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, cY, oz], [ox, cY + cabD, oz],
-      [ox, cY + cabD * 0.85, oz + h * 0.45],
-      [ox, cY + cabD * 0.4, oz + h],
-      [ox, cY, oz + h],
-    ], _cabDark, Lighting3D.intensity(-1, 0, 0));
-
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox + w, cY, oz], [ox + w, cY + cabD, oz],
-      [ox + w, cY + cabD * 0.85, oz + h * 0.45],
-      [ox + w, cY + cabD * 0.4, oz + h],
-      [ox + w, cY, oz + h],
-    ], _cabLight, Lighting3D.intensity(1, 0, 0));
-
-    // Front lower (hood/nose)
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, cY + cabD, oz], [ox + w, cY + cabD, oz],
-      [ox + w, cY + cabD * 0.85, oz + h * 0.45],
-      [ox, cY + cabD * 0.85, oz + h * 0.45],
-    ], _cabLight, Lighting3D.intensity(0, 1, 0.5));
-
-    // Windshield
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, cY + cabD * 0.85, oz + h * 0.45],
-      [ox + w, cY + cabD * 0.85, oz + h * 0.45],
-      [ox + w, cY + cabD * 0.4, oz + h],
-      [ox, cY + cabD * 0.4, oz + h],
-    ], _glassBlue, Lighting3D.intensity(0, 1, 1.5), alpha: 0.85);
-
-    // Windshield reflection
-    final reflStart = proj.project(ox + w * 0.25, cY + cabD * 0.7, oz + h * 0.6, size);
-    final reflEnd = proj.project(ox + w * 0.65, cY + cabD * 0.55, oz + h * 0.85, size);
-    canvas.drawLine(
-      reflStart, reflEnd,
-      Paint()..color = Colors.white.withValues(alpha: 0.2)..strokeWidth = 1.2,
-    );
-
-    // Roof (unibody)
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox, cY, oz + h], [ox + w, cY, oz + h],
-      [ox + w, cY + cabD * 0.4, oz + h], [ox, cY + cabD * 0.4, oz + h],
-    ], _cabDark, Lighting3D.intensity(0, 0, 1));
-
-    // Bumper
-    PolyHelper.fillFace(canvas, proj, size, [
-      [ox - 2, cY + cabD - 8, oz], [ox + w + 2, cY + cabD - 8, oz],
-      [ox + w + 2, cY + cabD + 12, oz + 25], [ox - 2, cY + cabD + 12, oz + 25],
-    ], _bumperDark, Lighting3D.intensity(0, 1, 0));
-
+    // Cab body — main block
+    final bottomFront = [
+      proj.project(cabX, cabY, cabZ, size),
+      proj.project(cabX + cabW, cabY, cabZ, size),
+      proj.project(cabX + cabW, cabY, cabZ + cabH * 0.65, size),
+      proj.project(cabX, cabY, cabZ + cabH * 0.65, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, bottomFront, _cabPrimary, Lighting3D.frontLight, 0.95);
+    PolyHelper.strokeFace(canvas, bottomFront, _cabSecondary.withValues(alpha: 0.3), 1);
+    
+    // Windshield area (angled)
+    final windshield = [
+      proj.project(cabX + cabW * 0.05, cabY, cabZ + cabH * 0.65, size),
+      proj.project(cabX + cabW * 0.95, cabY, cabZ + cabH * 0.65, size),
+      proj.project(cabX + cabW * 0.1, cabY - cabD * 0.2, cabZ + cabH, size),
+      proj.project(cabX + cabW * 0.05, cabY - cabD * 0.2, cabZ + cabH, size),
+    ];
+    // Glass gradient effect
+    PolyHelper.fillFaceSolid(canvas, windshield, _windshield, 0.8, 0.5);
+    // Glass reflection line
+    final reflectPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.15)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    final midW = Offset.lerp(windshield[0], windshield[1], 0.4)!;
+    final midW2 = Offset.lerp(windshield[3], windshield[2], 0.4)!;
+    canvas.drawLine(midW, midW2, reflectPaint);
+    
+    // Cab roof
+    final roof = [
+      proj.project(cabX, cabY - cabD * 0.2, cabZ + cabH, size),
+      proj.project(cabX + cabW, cabY - cabD * 0.2, cabZ + cabH, size),
+      proj.project(cabX + cabW, cabY + cabD, cabZ + cabH, size),
+      proj.project(cabX, cabY + cabD, cabZ + cabH, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, roof, _cabPrimary, Lighting3D.topLight, 0.85);
+    PolyHelper.strokeFace(canvas, roof, _cabSecondary.withValues(alpha: 0.2), 1);
+    
+    // Cab side
+    final side = [
+      proj.project(cabX + cabW, cabY, cabZ, size),
+      proj.project(cabX + cabW, cabY + cabD, cabZ, size),
+      proj.project(cabX + cabW, cabY + cabD, cabZ + cabH, size),
+      proj.project(cabX + cabW, cabY - cabD * 0.2, cabZ + cabH, size),
+      proj.project(cabX + cabW, cabY, cabZ + cabH * 0.65, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, side, _cabSecondary, Lighting3D.rightLight, 0.9);
+    PolyHelper.strokeFace(canvas, side, _cabAccent.withValues(alpha: 0.2), 1);
+    
+    // Side window
+    final sideWin = [
+      proj.project(cabX + cabW, cabY + cabD * 0.15, cabZ + cabH * 0.5, size),
+      proj.project(cabX + cabW, cabY + cabD * 0.7, cabZ + cabH * 0.5, size),
+      proj.project(cabX + cabW, cabY + cabD * 0.7, cabZ + cabH * 0.85, size),
+      proj.project(cabX + cabW, cabY + cabD * 0.15, cabZ + cabH * 0.85, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, sideWin, _windshield, 0.7, 0.45);
+    PolyHelper.strokeFace(canvas, sideWin, _chrome.withValues(alpha: 0.3), 1);
+    
     // Headlights
-    _drawHeadlight(canvas, ox + w * 0.08, cY + cabD + 1, oz + h * 0.2);
-    _drawHeadlight(canvas, ox + w * 0.92, cY + cabD + 1, oz + h * 0.2);
-
-    // Side mirrors
-    _drawMirror(canvas, ox - 6, cY + cabD * 0.5, oz + h * 0.7);
-    _drawMirror(canvas, ox + w + 6, cY + cabD * 0.5, oz + h * 0.7);
+    _drawHeadlight(canvas, cabX + cabW * 0.1, cabY, cabZ + cabH * 0.2);
+    _drawHeadlight(canvas, cabX + cabW * 0.9, cabY, cabZ + cabH * 0.2);
+    
+    // Bumper
+    final bumper = [
+      proj.project(cabX - 2, cabY - 3, cabZ, size),
+      proj.project(cabX + cabW + 2, cabY - 3, cabZ, size),
+      proj.project(cabX + cabW + 2, cabY - 3, cabZ + cabH * 0.15, size),
+      proj.project(cabX - 2, cabY - 3, cabZ + cabH * 0.15, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, bumper, _chrome, 0.7, 0.8);
+    
+    // Mirrors
+    _drawMirror(canvas, cabX - 8, cabY + cabD * 0.3, cabZ + cabH * 0.6);
+    _drawMirror(canvas, cabX + cabW + 8, cabY + cabD * 0.3, cabZ + cabH * 0.6);
   }
 
-  // ─── HEADLIGHT ───────────────────────────────────────────────────────
+  void _drawVanCab(Canvas canvas) {
+    // Van: integrated cab + container look
+    final cabD = cW * 0.3;
+    final cabY = oy + cD;
+    
+    // Van front (curved top)
+    final front = [
+      proj.project(ox, cabY, oz, size),
+      proj.project(ox + cW, cabY, oz, size),
+      proj.project(ox + cW, cabY, oz + cH * 0.55, size),
+      proj.project(ox + cW * 0.9, cabY, oz + cH, size),
+      proj.project(ox + cW * 0.1, cabY, oz + cH, size),
+      proj.project(ox, cabY, oz + cH * 0.55, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, front, _cabPrimary, Lighting3D.frontLight, 0.92);
+    PolyHelper.strokeFace(canvas, front, _cabSecondary.withValues(alpha: 0.3), 1);
+    
+    // Windshield
+    final ws = [
+      proj.project(ox + cW * 0.1, cabY, oz + cH * 0.55, size),
+      proj.project(ox + cW * 0.9, cabY, oz + cH * 0.55, size),
+      proj.project(ox + cW * 0.9, cabY, oz + cH * 0.95, size),
+      proj.project(ox + cW * 0.1, cabY, oz + cH * 0.95, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, ws, _windshield, 0.8, 0.5);
+    
+    // Van side
+    final side = [
+      proj.project(ox + cW, cabY, oz, size),
+      proj.project(ox + cW, cabY + cabD, oz, size),
+      proj.project(ox + cW, cabY + cabD, oz + cH, size),
+      proj.project(ox + cW, cabY, oz + cH, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, side, _cabSecondary, Lighting3D.rightLight, 0.85);
+    
+    // Van roof extension
+    final roofExt = [
+      proj.project(ox, cabY, oz + cH, size),
+      proj.project(ox + cW, cabY, oz + cH, size),
+      proj.project(ox + cW, cabY + cabD, oz + cH, size),
+      proj.project(ox, cabY + cabD, oz + cH, size),
+    ];
+    PolyHelper.fillFaceSolid(canvas, roofExt, _cabPrimary, Lighting3D.topLight, 0.8);
+    
+    // Headlights
+    _drawHeadlight(canvas, ox + cW * 0.15, cabY + 1, oz + cH * 0.2);
+    _drawHeadlight(canvas, ox + cW * 0.85, cabY + 1, oz + cH * 0.2);
+    
+    // Mirrors
+    _drawMirror(canvas, ox - 8, cabY + cabD * 0.3, oz + cH * 0.65);
+    _drawMirror(canvas, ox + cW + 8, cabY + cabD * 0.3, oz + cH * 0.65);
+  }
+
   void _drawHeadlight(Canvas canvas, double x, double y, double z) {
     final center = proj.project(x, y, z, size);
+    final r = 4.0 * proj.zoom;
+    if (r < 1) return;
+    
+    // Outer glow
     canvas.drawCircle(
-      center, 4.0 * proj.zoom,
-      Paint()..color = const Color(0xFFFEF3C7).withValues(alpha: 0.7),
+      center, r * 2.5,
+      Paint()
+        ..color = _headlight.withValues(alpha: 0.15)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
+    // Inner bright
     canvas.drawCircle(
-      center, 2.5 * proj.zoom,
-      Paint()..color = Colors.white.withValues(alpha: 0.9),
+      center, r,
+      Paint()
+        ..color = _headlight
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+    );
+    // Chrome ring
+    canvas.drawCircle(
+      center, r * 1.3,
+      Paint()
+        ..color = _chrome.withValues(alpha: 0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
     );
   }
 
-  // ─── MIRROR ──────────────────────────────────────────────────────────
   void _drawMirror(Canvas canvas, double x, double y, double z) {
-    final pts = [
-      proj.project(x, y - 8, z, size),
-      proj.project(x, y + 8, z, size),
-      proj.project(x, y + 8, z + 12, size),
-      proj.project(x, y - 8, z + 12, size),
-    ];
-    canvas.drawPath(
-      PolyHelper.pathOf(pts),
-      Paint()..color = _bumperDark.withValues(alpha: 0.6),
+    final center = proj.project(x, y, z, size);
+    final r = 3.5 * proj.zoom;
+    if (r < 1) return;
+    
+    // Mirror housing
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: center, width: r * 2, height: r * 3),
+        Radius.circular(r * 0.5),
+      ),
+      Paint()..color = _containerBase,
+    );
+    // Mirror glass
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: center, width: r * 1.4, height: r * 2.2),
+        Radius.circular(r * 0.3),
+      ),
+      Paint()..color = _windshield.withValues(alpha: 0.5),
     );
   }
 
-  // ─── WHEELS ──────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  // WHEELS — 3D-looking wheels with hub detail
+  // ═══════════════════════════════════════════════════════════════════════
+
   void _drawWheels(Canvas canvas) {
-    final w = cW, d = cD, h = cH;
-    final r = math.min(80.0, h * (isVan ? 0.22 : 0.16));
+    final wheelR = cH * 0.18;
+    final wheelZ = oz - wheelR * 0.4;
 
-    final rearY = oy + (isVan ? d * 0.15 : d * 0.20);
-    final frontY = oy + d + (isVan ? d * 0.22 : 60.0);
-
-    final positions = <List<double>>[
-      [ox - r * 0.2, rearY],
-      [ox + w + r * 0.2, rearY],
-      [ox - r * 0.2, frontY],
-      [ox + w + r * 0.2, frontY],
-    ];
-
-    // Extra rear axle for heavy trucks (> 6m)
-    if (!isVan && d > 600) {
-      positions.insert(0, [ox - r * 0.2, rearY + r * 2.8]);
-      positions.insert(1, [ox + w + r * 0.2, rearY + r * 2.8]);
-    }
-
-    for (final pos in positions) {
-      _drawWheel(canvas, pos[0], pos[1], r);
+    if (isVan) {
+      // Van: 4 wheels
+      _drawWheel(canvas, ox, oy + cD * 0.15, wheelZ, wheelR);
+      _drawWheel(canvas, ox + cW, oy + cD * 0.15, wheelZ, wheelR);
+      _drawWheel(canvas, ox, oy + cD * 0.85, wheelZ, wheelR);
+      _drawWheel(canvas, ox + cW, oy + cD * 0.85, wheelZ, wheelR);
+    } else {
+      // Truck: 6 wheels (dual rear)
+      _drawWheel(canvas, ox, oy + cD * 0.12, wheelZ, wheelR);
+      _drawWheel(canvas, ox + cW, oy + cD * 0.12, wheelZ, wheelR);
+      _drawWheel(canvas, ox, oy + cD * 0.75, wheelZ, wheelR);
+      _drawWheel(canvas, ox + cW, oy + cD * 0.75, wheelZ, wheelR);
+      _drawWheel(canvas, ox, oy + cD * 0.88, wheelZ, wheelR);
+      _drawWheel(canvas, ox + cW, oy + cD * 0.88, wheelZ, wheelR);
     }
   }
 
-  void _drawWheel(Canvas canvas, double wx, double wy, double r) {
-    const segments = 12; // Reduced from 18 for performance
+  void _drawWheel(Canvas canvas, double wx, double wy, double wz, double r) {
+    final center = proj.project(wx, wy, wz, size);
+    final sr = r * proj.zoom * 0.4;
+    if (sr < 2) return;
 
-    // Outer tire
-    final tirePath = Path();
-    for (int i = 0; i <= segments; i++) {
-      final a = (i / segments) * math.pi * 2;
-      final pt = proj.project(
-        wx, wy + math.cos(a) * r * 0.4, oz + r * 0.3 + math.sin(a) * r, size,
-      );
-      i == 0 ? tirePath.moveTo(pt.dx, pt.dy) : tirePath.lineTo(pt.dx, pt.dy);
-    }
-    canvas.drawPath(tirePath, Paint()..color = _tireDark);
-
-    // Sidewall
-    final sideWallPath = Path();
-    for (int i = 0; i <= segments; i++) {
-      final a = (i / segments) * math.pi * 2;
-      final pt = proj.project(
-        wx, wy + math.cos(a) * r * 0.32, oz + r * 0.3 + math.sin(a) * r * 0.82, size,
-      );
-      i == 0 ? sideWallPath.moveTo(pt.dx, pt.dy) : sideWallPath.lineTo(pt.dx, pt.dy);
-    }
-    canvas.drawPath(sideWallPath, Paint()..color = const Color(0xFF1E293B));
-
-    // Rim
-    final rimPath = Path();
-    for (int i = 0; i <= 10; i++) {
-      final a = (i / 10) * math.pi * 2;
-      final pt = proj.project(
-        wx, wy + math.cos(a) * r * 0.24, oz + r * 0.3 + math.sin(a) * r * 0.6, size,
-      );
-      i == 0 ? rimPath.moveTo(pt.dx, pt.dy) : rimPath.lineTo(pt.dx, pt.dy);
-    }
-    canvas.drawPath(rimPath, Paint()..color = _rimSilver);
-
-    // Hub
-    final hubCenter = proj.project(wx, wy, oz + r * 0.3, size);
-    canvas.drawCircle(hubCenter, r * 0.08 * proj.zoom, Paint()..color = _hubGrey);
-
-    // Spokes
-    for (int s = 0; s < 5; s++) {
-      final a = (s / 5) * math.pi * 2;
-      final spokeEnd = proj.project(
-        wx, wy + math.cos(a) * r * 0.22, oz + r * 0.3 + math.sin(a) * r * 0.55, size,
-      );
+    // Tire shadow
+    canvas.drawCircle(
+      Offset(center.dx + 1, center.dy + 2),
+      sr * 1.1,
+      Paint()..color = const Color(0x40000000)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+    
+    // Tire (dark rubber)
+    canvas.drawCircle(center, sr, Paint()..color = const Color(0xFF1A1A2E));
+    
+    // Tire tread ring
+    canvas.drawCircle(
+      center, sr * 0.85,
+      Paint()
+        ..color = const Color(0xFF2D2D44)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = sr * 0.15,
+    );
+    
+    // Hub cap (chrome)
+    canvas.drawCircle(center, sr * 0.45, Paint()..color = _chrome.withValues(alpha: 0.6));
+    
+    // Hub center
+    canvas.drawCircle(center, sr * 0.15, Paint()..color = const Color(0xFF4A5568));
+    
+    // Chrome rim
+    canvas.drawCircle(
+      center, sr * 0.65,
+      Paint()
+        ..color = _chrome.withValues(alpha: 0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    
+    // Spoke lines (4 spokes)
+    final spokePaint = Paint()
+      ..color = _chrome.withValues(alpha: 0.25)
+      ..strokeWidth = 1;
+    for (int i = 0; i < 4; i++) {
+      final angle = i * math.pi / 2;
       canvas.drawLine(
-        hubCenter, spokeEnd,
-        Paint()..color = _hubGrey.withValues(alpha: 0.6)..strokeWidth = 0.8,
+        Offset(center.dx + math.cos(angle) * sr * 0.2, center.dy + math.sin(angle) * sr * 0.2),
+        Offset(center.dx + math.cos(angle) * sr * 0.6, center.dy + math.sin(angle) * sr * 0.6),
+        spokePaint,
       );
     }
   }
 
-  // ─── WEIGHT HEATMAP FLOOR ────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  // WEIGHT HEATMAP — Overlay on floor
+  // ═══════════════════════════════════════════════════════════════════════
+
   void drawWeightHeatmap(Canvas canvas, List<dynamic> placed, double maxWeight) {
-    if (maxWeight <= 0) return;
-    const cellSize = 30.0;
-
-    // Accumulate weight per cell
-    final cellsW = (cW / cellSize).ceil();
-    final cellsD = (cD / cellSize).ceil();
-    final grid = List.generate(cellsW, (_) => List.filled(cellsD, 0.0));
-    double maxCell = 0;
-
+    if (placed.isEmpty) return;
     for (final b in placed) {
-      final bx = (b as dynamic).x as double;
-      final by = (b as dynamic).y as double;
-      final bw = (b as dynamic).w as double;
-      final bd = (b as dynamic).d as double;
-      final weight = (b as dynamic).weight as double;
-
-      final x1 = (bx / cellSize).floor().clamp(0, cellsW - 1);
-      final x2 = ((bx + bw) / cellSize).ceil().clamp(0, cellsW);
-      final y1 = (by / cellSize).floor().clamp(0, cellsD - 1);
-      final y2 = ((by + bd) / cellSize).ceil().clamp(0, cellsD);
-      final area = (x2 - x1) * (y2 - y1);
-      if (area <= 0) continue;
-      final wPerCell = weight / area;
-
-      for (int gx = x1; gx < x2 && gx < cellsW; gx++) {
-        for (int gy = y1; gy < y2 && gy < cellsD; gy++) {
-          grid[gx][gy] += wPerCell;
-          if (grid[gx][gy] > maxCell) maxCell = grid[gx][gy];
-        }
-      }
-    }
-
-    if (maxCell <= 0) return;
-
-    for (int gx = 0; gx < cellsW; gx++) {
-      for (int gy = 0; gy < cellsD; gy++) {
-        if (grid[gx][gy] <= 0) continue;
-        final t = (grid[gx][gy] / maxCell).clamp(0.0, 1.0);
-        final color = CargoColors.byWeight(grid[gx][gy], maxCell);
-        PolyHelper.fillFace(canvas, proj, size, [
-          [ox + gx * cellSize, oy + gy * cellSize, oz + 0.5],
-          [ox + (gx + 1) * cellSize, oy + gy * cellSize, oz + 0.5],
-          [ox + (gx + 1) * cellSize, oy + (gy + 1) * cellSize, oz + 0.5],
-          [ox + gx * cellSize, oy + (gy + 1) * cellSize, oz + 0.5],
-        ], color, 1.0, alpha: 0.25 + t * 0.2);
-      }
+      if (b is! PlacedBox) continue;
+      final color = CargoColors.byWeight(b.weight, maxWeight);
+      final pts = [
+        proj.project(ox + b.x, oy + b.y, oz + 0.5, size),
+        proj.project(ox + b.x + b.w, oy + b.y, oz + 0.5, size),
+        proj.project(ox + b.x + b.w, oy + b.y + b.d, oz + 0.5, size),
+        proj.project(ox + b.x, oy + b.y + b.d, oz + 0.5, size),
+      ];
+      PolyHelper.fillFaceSolid(canvas, pts, color, 0.8, 0.3);
     }
   }
 }

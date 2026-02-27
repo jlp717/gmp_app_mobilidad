@@ -1,12 +1,12 @@
-/// 3D Projection Engine — Math, lighting, and hit testing utilities
-/// Used by all painters in the 3D load planner
+/// 3D Projection Engine v2 — Optimized with precalculated trig, face culling,
+/// and efficient hit testing. Performance-critical path.
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../data/warehouse_data_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 3D PROJECTION
+// 3D PROJECTION — Precalculated sin/cos for performance
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class Projection3D {
@@ -15,21 +15,27 @@ class Projection3D {
   final double zoom;
   final Offset panOffset;
 
-  const Projection3D({
+  // Precalculated trig values — avoid recalculating per vertex
+  late final double _cosX, _sinX, _cosY, _sinY;
+
+  Projection3D({
     required this.rotX,
     required this.rotY,
     required this.zoom,
     this.panOffset = Offset.zero,
-  });
+  }) {
+    _cosY = math.cos(rotX);
+    _sinY = math.sin(rotX);
+    _cosX = math.cos(rotY);
+    _sinX = math.sin(rotY);
+  }
 
   /// Project a 3D point (x, y, z) to 2D screen coordinates
   Offset project(double x, double y, double z, Size size) {
-    final cY = math.cos(rotX), sY = math.sin(rotX);
-    final cX = math.cos(rotY), sX = math.sin(rotY);
-    final rx = x * cX - y * sX;
-    final ry = x * sX + y * cX;
-    final fy = ry * cY - z * sY;
-    final fz = ry * sY + z * cY;
+    final rx = x * _cosX - y * _sinX;
+    final ry = x * _sinX + y * _cosX;
+    final fy = ry * _cosY - z * _sinY;
+    final fz = ry * _sinY + z * _cosY;
     final sc = 0.4 * zoom;
     return Offset(
       size.width / 2 + rx * sc + panOffset.dx,
@@ -37,9 +43,24 @@ class Projection3D {
     );
   }
 
+  /// Batch project 8 corners of a box — returns [fbl, fbr, bbl, bbr, ftl, ftr, btl, btr]
+  List<Offset> projectBox(
+      double bx, double by, double bz, double w, double d, double h, Size size) {
+    return [
+      project(bx, by, bz, size),         // 0: front-bottom-left
+      project(bx + w, by, bz, size),     // 1: front-bottom-right
+      project(bx, by + d, bz, size),     // 2: back-bottom-left
+      project(bx + w, by + d, bz, size), // 3: back-bottom-right
+      project(bx, by, bz + h, size),     // 4: front-top-left
+      project(bx + w, by, bz + h, size), // 5: front-top-right
+      project(bx, by + d, bz + h, size), // 6: back-top-left
+      project(bx + w, by + d, bz + h, size), // 7: back-top-right
+    ];
+  }
+
   /// Calculate depth value for Z-sorting (higher = further from camera)
   double depth(double x, double y, double z) {
-    return (x) * math.cos(rotY) + (y) * math.sin(rotX) + (z);
+    return x * _cosX + y * _sinX * _cosY + z * _sinY;
   }
 
   /// Check if a projected point is within the viewport
@@ -50,6 +71,14 @@ class Projection3D {
         projected.dy < size.height + margin;
   }
 
+  /// Check if ANY corner of a projected box is visible
+  bool isBoxVisible(List<Offset> corners, Size size, {double margin = 50}) {
+    for (final c in corners) {
+      if (isVisible(c, size, margin)) return true;
+    }
+    return false;
+  }
+
   /// Approximate projected screen area of a box
   double projectedArea(double w, double d, double h) {
     return w * d * zoom * zoom * 0.16;
@@ -57,13 +86,13 @@ class Projection3D {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// LIGHTING ENGINE
+// LIGHTING ENGINE — Enhanced with specular highlights
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class Lighting3D {
   // Light direction (normalized): front-right-up
   static const double lx = 0.35, ly = -0.45, lz = 0.82;
-  static const double ambient = 0.40;
+  static const double ambient = 0.35;
 
   /// Calculate light intensity for a face with given normal (nx, ny, nz)
   static double intensity(double nx, double ny, double nz) {
@@ -71,18 +100,34 @@ class Lighting3D {
     return (ambient + (1 - ambient) * dot.clamp(0, 1));
   }
 
-  /// Apply lighting to a base color, returning a new color with alpha
+  /// Face-specific intensity presets for quick lookup
+  static const double topLight = 1.0;     // Brightest — facing light
+  static const double frontLight = 0.75;  // Medium
+  static const double rightLight = 0.55;  // Darker side
+  static const double leftLight = 0.45;   // Darkest side
+  static const double backLight = 0.35;   // Very dark
+  static const double bottomLight = 0.30; // Darkest
+
+  /// Apply lighting to a base color with alpha
   static Color applyLight(Color base, double light, double alpha) {
-    final l = light.clamp(0.4, 1.8);
+    final l = light.clamp(0.3, 1.5);
     final int r = (base.red * l).round().clamp(0, 255);
     final int g = (base.green * l).round().clamp(0, 255);
     final int b = (base.blue * l).round().clamp(0, 255);
     return Color.fromARGB((alpha * 255).round(), r, g, b);
   }
+
+  /// Create a gradient-like effect on a face (top → bottom darkening)
+  static List<Color> faceGradient(Color base, double light, double alpha) {
+    return [
+      applyLight(base, light * 1.15, alpha),  // Top of face — brighter
+      applyLight(base, light * 0.85, alpha),  // Bottom of face — darker
+    ];
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PATH & POLYGON HELPERS
+// PATH & POLYGON HELPERS — Optimized
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class PolyHelper {
@@ -127,6 +172,30 @@ class PolyHelper {
     );
   }
 
+  /// Fill with gradient paint for premium look
+  static void fillFaceGradient(
+    Canvas canvas,
+    List<Offset> pts,
+    Color colorTop,
+    Color colorBottom,
+  ) {
+    if (pts.length < 3) return;
+    // Calculate bounding box for gradient
+    double minY = double.infinity, maxY = double.negativeInfinity;
+    for (final p in pts) {
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
+    }
+    final paint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [colorTop, colorBottom],
+      ).createShader(Rect.fromLTRB(0, minY, 1, maxY))
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(pathOf(pts), paint);
+  }
+
   /// Draw a wireframe outline on projected points
   static void strokeFace(
     Canvas canvas,
@@ -169,7 +238,6 @@ class PolyHelper {
 
 class HitTester {
   /// Find the frontmost box under the tap point
-  /// Returns null if no box was hit
   static PlacedBox? hitTest({
     required Offset tapPoint,
     required Size canvasSize,
@@ -186,25 +254,13 @@ class HitTester {
       final bx = ox + b.x, by = oy + b.y, bz = oz + b.z;
       final depth = proj.depth(bx + b.w / 2, by + b.d / 2, bz + b.h / 2);
 
-      // Project 3 visible faces
-      final topPts = [
-        proj.project(bx, by, bz + b.h, canvasSize),
-        proj.project(bx + b.w, by, bz + b.h, canvasSize),
-        proj.project(bx + b.w, by + b.d, bz + b.h, canvasSize),
-        proj.project(bx, by + b.d, bz + b.h, canvasSize),
-      ];
-      final frontPts = [
-        proj.project(bx, by, bz, canvasSize),
-        proj.project(bx + b.w, by, bz, canvasSize),
-        proj.project(bx + b.w, by, bz + b.h, canvasSize),
-        proj.project(bx, by, bz + b.h, canvasSize),
-      ];
-      final rightPts = [
-        proj.project(bx + b.w, by, bz, canvasSize),
-        proj.project(bx + b.w, by + b.d, bz, canvasSize),
-        proj.project(bx + b.w, by + b.d, bz + b.h, canvasSize),
-        proj.project(bx + b.w, by, bz + b.h, canvasSize),
-      ];
+      final corners = proj.projectBox(bx, by, bz, b.w, b.d, b.h, canvasSize);
+      // Top face: 4,5,7,6
+      final topPts = [corners[4], corners[5], corners[7], corners[6]];
+      // Front face: 0,1,5,4
+      final frontPts = [corners[0], corners[1], corners[5], corners[4]];
+      // Right face: 1,3,7,5
+      final rightPts = [corners[1], corners[3], corners[7], corners[5]];
 
       if (PolyHelper.pointInPolygon(tapPoint, topPts) ||
           PolyHelper.pointInPolygon(tapPoint, frontPts) ||
@@ -220,30 +276,31 @@ class HitTester {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// COLOR PALETTES
+// COLOR PALETTES — Premium, high-contrast colors for product distinction
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Color mode for cargo visualization
 enum ColorMode { product, client, heatmap }
 
 class CargoColors {
+  // Premium palette — high saturation, distinct hues, designed for dark backgrounds
   static const palette = <Color>[
-    Color(0xFFFF595E), // Coral Neon
-    Color(0xFFFFCA3A), // Cyber Yellow
-    Color(0xFF8AC926), // Yellow Green
-    Color(0xFF1982C4), // Steel Blue
-    Color(0xFF6A4C93), // Royal Purple
-    Color(0xFF00F5D4), // Fluorescent Cyan
-    Color(0xFFFF9F1C), // Deep Saffron
-    Color(0xFFF15BB5), // Brilliant Rose
-    Color(0xFF9B5DE5), // Amethyst
-    Color(0xFF00BBF9), // Capri
-    Color(0xFF38B000), // Kelly Green
-    Color(0xFFE36414), // Tangelo
-    Color(0xFF0D3B66), // Dark Indigo
-    Color(0xFFF4D06F), // Naples Yellow
-    Color(0xFFEF476F), // Paradise Pink
-    Color(0xFF118AB2), // Blue NCS
+    Color(0xFFFF6B6B), // Soft Red
+    Color(0xFF4ECDC4), // Teal
+    Color(0xFFFFE66D), // Warm Yellow
+    Color(0xFF95E1D3), // Mint
+    Color(0xFFA06CD5), // Purple
+    Color(0xFFFF8C42), // Orange
+    Color(0xFF6BCB77), // Green
+    Color(0xFF4D96FF), // Blue
+    Color(0xFFFF6B9D), // Pink
+    Color(0xFF00D2FF), // Cyan
+    Color(0xFFFF9A9E), // Salmon
+    Color(0xFFA8E6CF), // Pale Green
+    Color(0xFFDDA0DD), // Plum
+    Color(0xFFF0E68C), // Khaki
+    Color(0xFF87CEEB), // Sky Blue
+    Color(0xFFFFB347), // Pastel Orange
   ];
 
   static Color byProduct(String articleCode) {
@@ -256,13 +313,12 @@ class CargoColors {
 
   static Color byWeight(double weight, double maxWeight) {
     final t = maxWeight > 0 ? (weight / maxWeight).clamp(0.0, 1.0) : 0.5;
-    // Blue → Green → Yellow → Red
     if (t < 0.33) {
-      return Color.lerp(const Color(0xFF3B82F6), const Color(0xFF22C55E), t / 0.33)!;
+      return Color.lerp(const Color(0xFF4D96FF), const Color(0xFF6BCB77), t / 0.33)!;
     } else if (t < 0.66) {
-      return Color.lerp(const Color(0xFF22C55E), const Color(0xFFEAB308), (t - 0.33) / 0.33)!;
+      return Color.lerp(const Color(0xFF6BCB77), const Color(0xFFFFE66D), (t - 0.33) / 0.33)!;
     } else {
-      return Color.lerp(const Color(0xFFEAB308), const Color(0xFFEF4444), (t - 0.66) / 0.34)!;
+      return Color.lerp(const Color(0xFFFFE66D), const Color(0xFFFF6B6B), (t - 0.66) / 0.34)!;
     }
   }
 
@@ -286,7 +342,7 @@ class CargoColors {
 
   static Color sizeColor(double weight) {
     if (weight <= 2) return Colors.lightBlue;
-    if (weight <= 10) return const Color(0xFF00FF88);
+    if (weight <= 10) return const Color(0xFF6BCB77);
     if (weight <= 25) return Colors.amber;
     return Colors.redAccent;
   }

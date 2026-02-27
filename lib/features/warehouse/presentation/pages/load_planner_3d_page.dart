@@ -1,5 +1,5 @@
-/// TETRIS LOGISTICO 3D — Complete rewrite with proper gestures, modular
-/// rendering, drag & drop, color modes, loading animation, and performance.
+/// TETRIS LOGISTICO 3D v2 — Premium multi-view load planner
+/// Features: 3D/Top/Front views, improved gestures, color legend
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -9,6 +9,8 @@ import '../../data/warehouse_data_service.dart';
 import '../painters/projection_3d.dart';
 import '../painters/truck_3d_painter.dart';
 import '../widgets/load_planner_panel.dart';
+
+enum ViewMode { perspective, top, front }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAGE
@@ -52,6 +54,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 
   // Color mode
   ColorMode _colorMode = ColorMode.product;
+  ViewMode _viewMode = ViewMode.perspective;
 
   // Loading animation
   late AnimationController _glowCtrl;
@@ -451,12 +454,25 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               ),
             ],
           ),
+          // View mode toggle
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.darkCard.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              _viewModeBtn(ViewMode.perspective, Icons.view_in_ar_rounded, '3D'),
+              _viewModeBtn(ViewMode.top, Icons.grid_on_rounded, 'Sup'),
+              _viewModeBtn(ViewMode.front, Icons.view_agenda_rounded, 'Front'),
+            ]),
+          ),
           // Play animation
           IconButton(
             onPressed: _playLoadAnimation,
             icon: const Icon(Icons.play_circle_outline_rounded,
                 color: AppTheme.neonPurple, size: 22),
-            tooltip: 'Animacion de carga',
+            tooltip: 'Animación de carga',
           ),
           if (_isManualMode)
             IconButton(
@@ -528,25 +544,18 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                       _lastFocalPoint = d.localFocalPoint;
                     });
                   },
-                  onTapUp: _handleTap,
+                  onTapUp: _viewMode == ViewMode.perspective ? _handleTap : null,
+                  onDoubleTap: () => setState(() {
+                    _rotX = -0.45; _rotY = 0.6; _zoom = 1.0;
+                    _panOffset = Offset.zero;
+                  }),
                   child: AnimatedBuilder(
                     animation: _glowCtrl,
-                    builder: (_, __) => CustomPaint(
-                      painter: TruckPainter(
-                        result: r,
-                        rotX: _rotX,
-                        rotY: _rotY,
-                        zoom: _zoom,
-                        panOffset: _panOffset,
-                        selectedId: _selectedBoxId,
-                        glow: _selectedBoxId != null
-                            ? _glowCtrl.value
-                            : 0.0,
-                        statusColor: sc,
-                        colorMode: _colorMode,
-                        animatedBoxCount: _animatedBoxCount,
+                    builder: (_, __) => RepaintBoundary(
+                      child: CustomPaint(
+                        painter: _buildCurrentPainter(r, sc),
+                        size: Size.infinite,
                       ),
-                      size: Size.infinite,
                     ),
                   ),
                 ),
@@ -622,27 +631,13 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           ),
         ),
       ),
-      // Color mode indicator
-      Positioned(
-        right: 8,
-        bottom: 8,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppTheme.darkCard.withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            _colorMode == ColorMode.product
-                ? 'Producto'
-                : _colorMode == ColorMode.client
-                    ? 'Cliente'
-                    : 'Peso',
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4), fontSize: 9),
-          ),
+      // Color legend
+      if (_result != null && _result!.placed.isNotEmpty)
+        Positioned(
+          right: 8,
+          bottom: _selectedBoxId != null ? 70 : 8,
+          child: _buildColorLegend(),
         ),
-      ),
     ]);
 
     // Interactive order panel
@@ -824,4 +819,143 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           ),
         ]),
       );
+
+  // ─── View mode toggle button ────────────────────────────────────────
+
+  Widget _viewModeBtn(ViewMode mode, IconData icon, String label) {
+    final isActive = _viewMode == mode;
+    return GestureDetector(
+      onTap: () => setState(() => _viewMode = mode),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isActive
+              ? AppTheme.neonBlue.withValues(alpha: 0.25)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon,
+              color: isActive ? AppTheme.neonBlue : Colors.white38,
+              size: 14),
+          const SizedBox(width: 3),
+          Text(label,
+              style: TextStyle(
+                  color: isActive ? AppTheme.neonBlue : Colors.white38,
+                  fontSize: 9,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
+        ]),
+      ),
+    );
+  }
+
+  // ─── Build the right painter for the current view ───────────────────
+
+  CustomPainter _buildCurrentPainter(LoadPlanResult r, Color sc) {
+    switch (_viewMode) {
+      case ViewMode.top:
+        return TopViewPainter(
+          result: r,
+          selectedId: _selectedBoxId,
+          colorMode: _colorMode,
+        );
+      case ViewMode.front:
+        return FrontViewPainter(
+          result: r,
+          selectedId: _selectedBoxId,
+          colorMode: _colorMode,
+        );
+      case ViewMode.perspective:
+        return TruckPainter(
+          result: r,
+          rotX: _rotX,
+          rotY: _rotY,
+          zoom: _zoom,
+          panOffset: _panOffset,
+          selectedId: _selectedBoxId,
+          glow: _selectedBoxId != null ? _glowCtrl.value : 0.0,
+          statusColor: sc,
+          colorMode: _colorMode,
+          animatedBoxCount: _animatedBoxCount,
+        );
+    }
+  }
+
+  // ─── Color legend ───────────────────────────────────────────────────
+
+  Widget _buildColorLegend() {
+    if (_result == null || _result!.placed.isEmpty) return const SizedBox();
+
+    final maxW = _result!.placed.map((b) => b.weight).reduce(math.max);
+
+    // Collect unique items for legend (max 8)
+    final Map<String, Color> legendItems = {};
+    for (final b in _result!.placed) {
+      final key = _colorMode == ColorMode.product
+          ? b.articleCode
+          : _colorMode == ColorMode.client
+              ? b.clientCode
+              : CargoColors.sizeLabel(b.weight);
+      if (!legendItems.containsKey(key)) {
+        legendItems[key] = CargoColors.forBox(b, _colorMode, maxW);
+      }
+      if (legendItems.length >= 8) break;
+    }
+
+    final modeLabel = _colorMode == ColorMode.product
+        ? 'Productos'
+        : _colorMode == ColorMode.client
+            ? 'Clientes'
+            : 'Peso';
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      constraints: const BoxConstraints(maxWidth: 140),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(modeLabel,
+              style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1)),
+          const SizedBox(height: 4),
+          ...legendItems.entries.map((e) => Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Row(children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: e.value,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      e.key,
+                      style: const TextStyle(
+                          color: Colors.white60, fontSize: 8),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ]),
+              )),
+          if (legendItems.length >= 8)
+            Text('+ ${_result!.placed.length - 8} más',
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    fontSize: 7)),
+        ],
+      ),
+    );
+  }
 }
