@@ -94,6 +94,11 @@ class _MainShellState extends State<MainShell> {
 
   void _onFilterChanged() {
     if (_dashboardProvider == null) return;
+    // FIX: Only propagate vendor filter to dashboard when user is on Panel tab
+    // Previously, filtering by vendor in Clientes/Objetivos would contaminate
+    // the dashboard's own filter state
+    if (_currentIndex != 0) return; // Panel is always index 0 for Jefe
+
     final filterProvider = context.read<FilterProvider>();
     final authProvider = context.read<AuthProvider>();
     final selectedVendor = filterProvider.selectedVendor;

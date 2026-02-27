@@ -506,7 +506,9 @@ class FacturasService {
   static Future<File> downloadFacturaPdf(String serie, int numero, int ejercicio) async {
     try {
       // Use ApiClient to get bytes directly - authentication is handled automatically
-      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf');
+      // FIX: Add timestamp to bust Dio HTTP cache on repeated downloads
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?_t=$ts');
 
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/Factura_${serie}_${numero}_${ejercicio}.pdf');
@@ -521,7 +523,10 @@ class FacturasService {
   /// Download PDF as raw bytes (for in-app preview)
   static Future<List<int>> downloadFacturaPdfBytes(String serie, int numero, int ejercicio) async {
     try {
-      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?preview=true');
+      // FIX: Add timestamp to bust Dio HTTP cache — without this, second request
+      // returns cached response and PDF appears blank/corrupted on re-open
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?preview=true&_t=$ts');
       return bytes;
     } catch (e) {
       debugPrint('Error downloading PDF bytes: $e');

@@ -21,14 +21,40 @@ const DEFAULT_WEIGHT_PER_BOX = 8.0; // kg
  * Estima dimensiones de caja basándose en el peso.
  * Productos más pesados → cajas más grandes (proporcional).
  */
-function estimateBoxDimensions(pesoUnidad, unidadesCaja) {
+function estimateBoxDimensions(pesoUnidad, unidadesCaja, articleName) {
     const pesoCaja = (pesoUnidad || 0) * Math.max(unidadesCaja || 1, 1);
-    if (pesoCaja <= 2) return { largo: 30, ancho: 20, alto: 12 };
-    if (pesoCaja <= 5) return { largo: 35, ancho: 25, alto: 15 };
-    if (pesoCaja <= 10) return { largo: 40, ancho: 30, alto: 18 };
-    if (pesoCaja <= 20) return { largo: 50, ancho: 35, alto: 22 };
-    if (pesoCaja <= 35) return { largo: 55, ancho: 40, alto: 25 };
-    return { largo: 60, ancho: 40, alto: 30 };
+    const name = (articleName || '').toUpperCase();
+
+    // Family-based estimation from article name patterns
+    if (name.includes('LATA') || name.includes('BOTE') || name.includes('CONSERVA')) {
+        return pesoCaja <= 5 ? { largo: 32, ancho: 24, alto: 12 } : { largo: 40, ancho: 32, alto: 16 };
+    }
+    if (name.includes('BOTELLA') || name.includes('VINO') || name.includes('CERVEZA') || name.includes('CAVA')) {
+        return pesoCaja <= 8 ? { largo: 30, ancho: 20, alto: 30 } : { largo: 40, ancho: 30, alto: 35 };
+    }
+    if (name.includes('ACEITE') || name.includes('GARRAFA') || name.includes('VINAGRE')) {
+        return { largo: 38, ancho: 28, alto: 30 };
+    }
+    if (name.includes('AGUA') || name.includes('PACK') || name.includes('REFRESCO') || name.includes('ZUMO')) {
+        return pesoCaja <= 10 ? { largo: 35, ancho: 25, alto: 22 } : { largo: 40, ancho: 30, alto: 25 };
+    }
+    if (name.includes('HARINA') || name.includes('AZUCAR') || name.includes('SAL ') || name.includes('ARROZ')) {
+        return pesoCaja <= 10 ? { largo: 35, ancho: 25, alto: 18 } : { largo: 45, ancho: 30, alto: 22 };
+    }
+
+    // 12-tier weight-based estimation
+    if (pesoCaja <= 1)  return { largo: 25, ancho: 18, alto: 10 };
+    if (pesoCaja <= 2)  return { largo: 30, ancho: 20, alto: 12 };
+    if (pesoCaja <= 4)  return { largo: 32, ancho: 22, alto: 14 };
+    if (pesoCaja <= 6)  return { largo: 35, ancho: 25, alto: 15 };
+    if (pesoCaja <= 8)  return { largo: 38, ancho: 28, alto: 16 };
+    if (pesoCaja <= 12) return { largo: 40, ancho: 30, alto: 18 };
+    if (pesoCaja <= 16) return { largo: 45, ancho: 32, alto: 20 };
+    if (pesoCaja <= 22) return { largo: 50, ancho: 35, alto: 22 };
+    if (pesoCaja <= 30) return { largo: 55, ancho: 38, alto: 25 };
+    if (pesoCaja <= 40) return { largo: 58, ancho: 40, alto: 28 };
+    if (pesoCaja <= 60) return { largo: 60, ancho: 40, alto: 30 };
+    return { largo: 65, ancho: 45, alto: 35 };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -90,11 +116,42 @@ async function getTruckConfig(vehicleCode) {
         if (maxPayload === 0) {
             maxPayload = numPalets * 500;
         }
-    } else if (lengthCm === 0 || widthCm === 0 || heightCm === 0) {
-        // Fallback básico si todo falla y no hay palets configurados tampoco
-        lengthCm = 600;
-        widthCm = 240;
-        heightCm = 220;
+    }
+
+    // Derive from container volume if available
+    if ((lengthCm === 0 || widthCm === 0 || heightCm === 0) && contVolM3 > 0) {
+        // Standard truck proportions: L:W:H ≈ 2.5:1:0.92
+        const wM = Math.cbrt(contVolM3 / (2.5 * 0.92));
+        widthCm = Math.max(160, Math.min(260, Math.round(wM * 100)));
+        lengthCm = Math.max(200, Math.min(1400, Math.round(wM * 2.5 * 100)));
+        heightCm = Math.max(150, Math.min(280, Math.round(wM * 0.92 * 100)));
+    }
+
+    // Derive from payload weight ranges
+    if ((lengthCm === 0 || widthCm === 0 || heightCm === 0) && maxPayload > 0) {
+        if (maxPayload <= 1500) {
+            lengthCm = 280; widthCm = 170; heightCm = 160; // Small van
+        } else if (maxPayload <= 3500) {
+            lengthCm = 380; widthCm = 200; heightCm = 190; // Large van
+        } else if (maxPayload <= 8000) {
+            lengthCm = 600; widthCm = 240; heightCm = 220; // Medium truck
+        } else {
+            lengthCm = 800; widthCm = 245; heightCm = 240; // Heavy truck
+        }
+    }
+
+    // Derive from vehicle description keywords
+    if (lengthCm === 0 || widthCm === 0 || heightCm === 0) {
+        const desc = (r.DESCRIPCION || '').toUpperCase();
+        if (desc.includes('KANGOO') || desc.includes('BERLINGO') || desc.includes('PARTNER')) {
+            lengthCm = 260; widthCm = 155; heightCm = 130;
+        } else if (desc.includes('FURGONETA') || desc.includes('FURGO')) {
+            lengthCm = 300; widthCm = 170; heightCm = 170;
+        } else if (desc.includes('SPRINTER') || desc.includes('CRAFTER') || desc.includes('MASTER') || desc.includes('DAILY')) {
+            lengthCm = 430; widthCm = 200; heightCm = 200;
+        } else {
+            lengthCm = 600; widthCm = 240; heightCm = 220; // Generic truck
+        }
     }
 
     if (maxPayload === 0) {
@@ -150,7 +207,7 @@ async function getArticleDimensions(articleCodes) {
         const weight = parseFloat(r.PESO_CAJA_KG) || pesoUd || DEFAULT_WEIGHT_PER_BOX;
 
         // Use real dimensions if available, otherwise estimate from weight
-        const estimated = estimateBoxDimensions(pesoUd, udsCaja);
+        const estimated = estimateBoxDimensions(pesoUd, udsCaja, r.NOMBRE);
 
         result[r.CODE] = {
             code: r.CODE,
@@ -223,44 +280,42 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
         articleCode: (r.ARTICULO || '').trim(),
         units: parseFloat(r.CANTIDAD) || 0,
         boxes: parseFloat(r.CAJAS) || 0,
-    }));
+    }))
+    .filter(o => {
+        // Skip zero-quantity lines
+        if (o.units === 0 && o.boxes === 0) return false;
+        // Skip known non-physical article codes
+        const code = o.articleCode;
+        if (code.length <= 2) return false;
+        if (['0000', '0006', '0022', '0043', 'D001', 'K'].includes(code)) return false;
+        return true;
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3D BIN PACKING — Shelf/Layer packing (robust, no fragmentation issues)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Algoritmo de Bin Packing 3D por capas (shelf packing).
- * Llena el camión capa por capa, fila por fila, de abajo a arriba.
- * Mucho más robusto que LAFF para cajas de tamaño similar.
- *
- * @param {Array} boxes - [{id, w, d, h, weight, label, ...}]
- * @param {Object} interior - {lengthCm, widthCm, heightCm}
- * @param {number} tolerancePct - % exceso permitido
- * @returns {Object} - {placed, overflow, metrics}
- */
 function binPack3D(boxes, interior, tolerancePct = 5) {
     const cW = interior.widthCm;
     const cD = interior.lengthCm;
     const cH = interior.heightCm;
 
-    // Sort boxes: largest volume first
-    const sorted = [...boxes].sort((a, b) => (b.w * b.d * b.h) - (a.w * a.d * a.h));
+    // Sort: heaviest first (stability), then largest volume
+    const sorted = [...boxes].sort((a, b) => {
+        const wDiff = b.weight - a.weight;
+        if (Math.abs(wDiff) > 1) return wDiff;
+        return (b.w * b.d * b.h) - (a.w * a.d * a.h);
+    });
 
     const placed = [];
     const overflow = [];
 
-    // Current position cursors
-    let curX = 0;      // across width
-    let curY = 0;      // along length (depth)
-    let curZ = 0;      // height (layer)
-    let rowMaxH = 0;   // tallest box in current row
-    let layerMaxD = 0; // deepest box in current layer
+    // Free space list: start with entire container
+    let freeSpaces = [{ x: 0, y: 0, z: 0, w: cW, d: cD, h: cH }];
 
-    for (const box of sorted) {
-        // Try best rotation: prefer laying flat (smallest h) for stable stacking
-        const rots = [
+    function generateRotations(box) {
+        const dims = [
             { w: box.w, d: box.d, h: box.h },
             { w: box.w, d: box.h, h: box.d },
             { w: box.d, d: box.w, h: box.h },
@@ -268,85 +323,74 @@ function binPack3D(boxes, interior, tolerancePct = 5) {
             { w: box.h, d: box.w, h: box.d },
             { w: box.h, d: box.d, h: box.w },
         ];
+        return dims.filter(r => r.w <= cW && r.d <= cD && r.h <= cH)
+                    .sort((a, b) => a.h - b.h); // prefer flat (lowest h)
+    }
 
-        // Pick rotation with smallest height that fits
-        const validRots = rots
-            .filter(r => r.w <= cW && r.d <= cD && r.h <= cH)
-            .sort((a, b) => a.h - b.h);
-
-        if (!validRots.length) {
-            overflow.push({ ...box });
-            continue;
+    function splitFreeSpace(space, boxRot) {
+        const newSpaces = [];
+        // Right remainder
+        const rw = space.w - boxRot.w;
+        if (rw > 2) {
+            newSpaces.push({ x: space.x + boxRot.w, y: space.y, z: space.z, w: rw, d: space.d, h: space.h });
         }
+        // Back remainder
+        const bd = space.d - boxRot.d;
+        if (bd > 2) {
+            newSpaces.push({ x: space.x, y: space.y + boxRot.d, z: space.z, w: boxRot.w, d: bd, h: space.h });
+        }
+        // Top remainder
+        const th = space.h - boxRot.h;
+        if (th > 2) {
+            newSpaces.push({ x: space.x, y: space.y, z: space.z + boxRot.h, w: boxRot.w, d: boxRot.d, h: th });
+        }
+        return newSpaces;
+    }
 
-        let placedThis = false;
+    for (const box of sorted) {
+        const rots = generateRotations(box);
+        if (!rots.length) { overflow.push({ ...box }); continue; }
 
-        for (const rot of validRots) {
-            // Try current position
-            if (curX + rot.w <= cW && curY + rot.d <= cD && curZ + rot.h <= cH) {
-                placed.push({
-                    id: box.id, label: box.label,
-                    orderNumber: box.orderNumber, clientCode: box.clientCode,
-                    articleCode: box.articleCode, weight: box.weight,
-                    x: curX, y: curY, z: curZ,
-                    w: rot.w, d: rot.d, h: rot.h,
-                });
-                rowMaxH = Math.max(rowMaxH, rot.h);
-                layerMaxD = Math.max(layerMaxD, rot.d);
-                curX += rot.w;
-                placedThis = true;
-                break;
-            }
+        let bestFit = null;
+        let bestSpace = -1;
+        let bestRot = null;
+        let bestScore = Infinity;
 
-            // Next row in same layer
-            if (curY + layerMaxD + rot.d <= cD && rot.w <= cW && curZ + rot.h <= cH) {
-                curX = 0;
-                curY += layerMaxD;
-                layerMaxD = 0;
-                rowMaxH = 0;
-
-                if (curX + rot.w <= cW && curY + rot.d <= cD && curZ + rot.h <= cH) {
-                    placed.push({
-                        id: box.id, label: box.label,
-                        orderNumber: box.orderNumber, clientCode: box.clientCode,
-                        articleCode: box.articleCode, weight: box.weight,
-                        x: curX, y: curY, z: curZ,
-                        w: rot.w, d: rot.d, h: rot.h,
-                    });
-                    rowMaxH = Math.max(rowMaxH, rot.h);
-                    layerMaxD = Math.max(layerMaxD, rot.d);
-                    curX += rot.w;
-                    placedThis = true;
-                    break;
-                }
-            }
-
-            // Next layer (go up)
-            if (curZ + rowMaxH + rot.h <= cH && rot.w <= cW && rot.d <= cD) {
-                curX = 0;
-                curY = 0;
-                curZ += rowMaxH || rot.h;
-                rowMaxH = 0;
-                layerMaxD = 0;
-
-                if (curX + rot.w <= cW && curY + rot.d <= cD && curZ + rot.h <= cH) {
-                    placed.push({
-                        id: box.id, label: box.label,
-                        orderNumber: box.orderNumber, clientCode: box.clientCode,
-                        articleCode: box.articleCode, weight: box.weight,
-                        x: curX, y: curY, z: curZ,
-                        w: rot.w, d: rot.d, h: rot.h,
-                    });
-                    rowMaxH = Math.max(rowMaxH, rot.h);
-                    layerMaxD = Math.max(layerMaxD, rot.d);
-                    curX += rot.w;
-                    placedThis = true;
-                    break;
+        for (let si = 0; si < freeSpaces.length; si++) {
+            const space = freeSpaces[si];
+            for (const rot of rots) {
+                if (rot.w <= space.w && rot.d <= space.d && rot.h <= space.h) {
+                    // Score: prefer lowest Z (gravity), then tightest fit
+                    const score = space.z * 10000 +
+                        (space.w - rot.w) * 3 + (space.d - rot.d) * 2 + (space.h - rot.h);
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestFit = space;
+                        bestSpace = si;
+                        bestRot = rot;
+                    }
                 }
             }
         }
 
-        if (!placedThis) {
+        if (bestFit && bestRot) {
+            placed.push({
+                id: box.id, label: box.label,
+                orderNumber: box.orderNumber, clientCode: box.clientCode,
+                articleCode: box.articleCode, weight: box.weight,
+                x: bestFit.x, y: bestFit.y, z: bestFit.z,
+                w: bestRot.w, d: bestRot.d, h: bestRot.h,
+            });
+
+            // Split free space
+            const newSpaces = splitFreeSpace(bestFit, bestRot);
+            freeSpaces.splice(bestSpace, 1, ...newSpaces);
+
+            // Periodically clean up tiny free spaces
+            if (placed.length % 25 === 0) {
+                freeSpaces = freeSpaces.filter(s => s.w * s.d * s.h > 1000); // > 10cm^3
+            }
+        } else {
             overflow.push({
                 id: box.id, label: box.label,
                 orderNumber: box.orderNumber, clientCode: box.clientCode,
@@ -378,7 +422,6 @@ function binPack3D(boxes, interior, tolerancePct = 5) {
                 ? Math.round((usedVolume / containerVolume) * 10000) / 100 : 0,
             totalWeightKg: Math.round(totalWeight * 100) / 100,
             overflowWeightKg: Math.round(overflowWeight * 100) / 100,
-            // Total demand (placed + overflow) vs capacity
             totalDemandVolumeCm3: totalDemandVolume,
             totalDemandWeightKg: Math.round(totalDemandWeight * 100) / 100,
             demandVsCapacityPct: containerVolume > 0
@@ -430,8 +473,9 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
     const boxes = [];
     let boxId = 0;
     for (const order of orders) {
-        const fallbackDims = estimateBoxDimensions(order.weightPerUnit || DEFAULT_WEIGHT_PER_BOX, 1);
-        const dim = dimensions[order.articleCode] || {
+        const dim0 = dimensions[order.articleCode];
+        const fallbackDims = estimateBoxDimensions(order.weightPerUnit || DEFAULT_WEIGHT_PER_BOX, 1, dim0 ? dim0.name : '');
+        const dim = dim0 || {
             largoCm: fallbackDims.largo,
             anchoCm: fallbackDims.ancho,
             altoCm: fallbackDims.alto,
@@ -511,7 +555,7 @@ async function planLoadManual(vehicleCode, items, customTolerance) {
     const boxes = [];
     let boxId = 0;
     for (const item of items) {
-        const fallbackDims = estimateBoxDimensions(item.weightKg || DEFAULT_WEIGHT_PER_BOX, 1);
+        const fallbackDims = estimateBoxDimensions(item.weightKg || DEFAULT_WEIGHT_PER_BOX, 1, item.label || '');
         const dim = dimensions[item.articleCode] || {
             largoCm: item.largoCm || fallbackDims.largo,
             anchoCm: item.anchoCm || fallbackDims.ancho,

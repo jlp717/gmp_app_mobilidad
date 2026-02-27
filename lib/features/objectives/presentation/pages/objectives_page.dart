@@ -1107,7 +1107,13 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Dynamic label based on selection
-                Text('Acumulado $year (${_selectedMonths.length} meses)',
+                // FIX: Count only months that are both selected AND up to current month
+                // e.g. if all 12 months selected but we're in Feb, show "2 meses" not "12 meses"
+                Text(() {
+                  final now = DateTime.now();
+                  final effectiveMonthCount = _selectedMonths.where((m) => m <= now.month).length;
+                  return 'Acumulado $year ($effectiveMonthCount meses)';
+                }(),
                     style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 11, fontWeight: FontWeight.w500)),
                 Text('${_formatCurrency(ytdSales)} de ${_formatCurrency(ytdObjective)}',
                     style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 10, color: AppTheme.textSecondary)),

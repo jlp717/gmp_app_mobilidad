@@ -835,6 +835,10 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
     final totalOrders = _safeInt(_kpiData!['totalOrders']);
     final uniqueClients = _safeInt(_kpiData!['uniqueClients']);
     final todaySales = _safeDouble(_kpiData!['todaySales']);
+    final totalMargin = _safeDouble(_kpiData!['totalMargin']);
+    final growthPercent = _safeDouble(_kpiData!['growthPercent']);
+    final lastMonthSales = _safeDouble(_kpiData!['lastMonthSales']);
+    final marginPct = totalSales > 0 ? (totalMargin / totalSales) * 100 : 0.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -850,15 +854,35 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
         const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
-            final cardWidth = (constraints.maxWidth - 12) / 2;
+            final cardWidth = (constraints.maxWidth - 24) / 3;
             return Wrap(
               spacing: 12,
               runSpacing: 12,
               children: [
-                _buildKPICard('Ventas Período', CurrencyFormatter.format(totalSales), Icons.euro, AppTheme.neonBlue, width: cardWidth),
-                _buildKPICard('Cartera Activa', uniqueClients.toString(), Icons.people, AppTheme.neonPurple, width: cardWidth),
-                _buildKPICard('Ventas Hoy', CurrencyFormatter.format(todaySales), Icons.today, Colors.amber, width: cardWidth),
-                _buildKPICard('Pedidos Hoy', totalOrders.toString(), Icons.shopping_cart, AppTheme.neonGreen, width: cardWidth),
+                _buildKPICard('Ventas Período', CurrencyFormatter.format(totalSales), Icons.euro, AppTheme.neonBlue,
+                  width: cardWidth,
+                  subtitle: growthPercent != 0 ? '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}% vs año ant.' : null,
+                  trend: growthPercent >= 0 ? 'up' : 'down',
+                ),
+                _buildKPICard('Margen Bruto', CurrencyFormatter.format(totalMargin), Icons.trending_up, AppTheme.neonGreen,
+                  width: cardWidth,
+                  subtitle: '${marginPct.toStringAsFixed(1)}% del total',
+                  trend: marginPct >= 15 ? 'up' : (marginPct >= 10 ? 'neutral' : 'down'),
+                ),
+                _buildKPICard('Cartera Activa', uniqueClients.toString(), Icons.people, AppTheme.neonPurple,
+                  width: cardWidth,
+                ),
+                _buildKPICard('Ventas Hoy', CurrencyFormatter.format(todaySales), Icons.today, Colors.amber,
+                  width: cardWidth,
+                ),
+                _buildKPICard('Pedidos Hoy', totalOrders.toString(), Icons.shopping_cart, AppTheme.neonCyan,
+                  width: cardWidth,
+                ),
+                _buildKPICard('Crec. Interanual', '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}%', Icons.show_chart, growthPercent >= 0 ? AppTheme.neonGreen : AppTheme.error,
+                  width: cardWidth,
+                  subtitle: 'vs ${CurrencyFormatter.format(lastMonthSales)}',
+                  trend: growthPercent >= 0 ? 'up' : 'down',
+                ),
               ],
             );
           },
@@ -867,16 +891,23 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
     );
   }
 
-  Widget _buildKPICard(String title, String value, IconData icon, Color color, {double? width}) {
+  Widget _buildKPICard(String title, String value, IconData icon, Color color, {double? width, String? subtitle, String? trend}) {
     return Container(
       width: width,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.surfaceColor,
+            color.withOpacity(0.08),
+          ],
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withOpacity(0.3)),
         boxShadow: [
-          BoxShadow(color: color.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: color.withOpacity(0.08), blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -884,16 +915,33 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 20),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: Text(title, style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+              Expanded(child: Text(title, style: const TextStyle(color: Colors.white70, fontSize: 10), overflow: TextOverflow.ellipsis)),
+              if (trend != null)
+                Icon(
+                  trend == 'up' ? Icons.trending_up : (trend == 'down' ? Icons.trending_down : Icons.trending_flat),
+                  color: trend == 'up' ? AppTheme.neonGreen : (trend == 'down' ? AppTheme.error : Colors.amber),
+                  size: 16,
+                ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+            child: Text(value, style: TextStyle(color: color, fontSize: 17, fontWeight: FontWeight.bold)),
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(subtitle, style: TextStyle(color: Colors.white38, fontSize: 9), overflow: TextOverflow.ellipsis),
+          ],
         ],
       ),
     );
