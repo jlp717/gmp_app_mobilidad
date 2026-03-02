@@ -895,11 +895,9 @@ router.get('/manual-layout/:vehicleCode/:date', async (req, res) => {
             },
         });
     } catch (error) {
-        if (isTableNotFound(error)) {
-            return res.json({ found: false, layout: null });
-        }
-        logger.error(`Get manual layout error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo layout manual', details: error.message });
+        // Any error = no saved layout. Never block the frontend 3D scene.
+        logger.warn(`Get manual layout error (returning found:false): ${error.message}`);
+        return res.json({ found: false, layout: null });
     }
 });
 

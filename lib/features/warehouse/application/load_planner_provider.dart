@@ -103,13 +103,19 @@ class LoadPlannerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Check for saved manual layout
+      // 1. Check for saved manual layout (non-fatal — if it fails, treat as null)
       final dateStr =
           '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-      final savedLayout = await WarehouseDataService.getManualLayout(
-        vehicleCode: vehicleCode,
-        date: dateStr,
-      );
+      Map<String, dynamic>? savedLayout;
+      try {
+        savedLayout = await WarehouseDataService.getManualLayout(
+          vehicleCode: vehicleCode,
+          date: dateStr,
+        );
+      } catch (e) {
+        debugPrint('Manual layout fetch failed (non-fatal): $e');
+        savedLayout = null;
+      }
 
       if (savedLayout != null) {
         // Restore from saved layout
