@@ -620,6 +620,46 @@ class WarehouseDataService {
         .toList();
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MANUAL LAYOUT PERSISTENCE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Get saved manual layout for a vehicle+date (returns null if none)
+  static Future<Map<String, dynamic>?> getManualLayout({
+    required String vehicleCode,
+    required String date,
+  }) async {
+    final response = await ApiClient.get(
+      '/warehouse/manual-layout/$vehicleCode/$date',
+    );
+    if (response['found'] == true) {
+      return response['layout'] as Map<String, dynamic>;
+    }
+    return null;
+  }
+
+  /// Save/update manual layout
+  static Future<void> saveManualLayout({
+    required String vehicleCode,
+    required String date,
+    required Map<String, dynamic> layoutJson,
+    Map<String, dynamic>? metricsJson,
+    String? vendor,
+  }) async {
+    await ApiClient.post('/warehouse/manual-layout', {
+      'vehicleCode': vehicleCode,
+      'date': date,
+      if (vendor != null) 'vendor': vendor,
+      'layoutJson': layoutJson,
+      'metricsJson': metricsJson ?? {},
+    });
+  }
+
+  /// Delete manual layout
+  static Future<void> deleteManualLayout(int id) async {
+    await ApiClient.post('/warehouse/manual-layout/$id/delete', {});
+  }
+
   /// Actualizar config camión
   static Future<void> updateTruckConfig({
     required String vehicleCode,

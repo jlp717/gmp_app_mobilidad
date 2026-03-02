@@ -721,4 +721,125 @@ router.get('/load-history', async (req, res) => {
     }
 });
 
+// =============================================================================
+// MANUAL LAYOUT — Persistencia de layouts manuales del load planner
+// =============================================================================
+
+/**
+ * GET /warehouse/manual-layout/:vehicleCode/:date
+ * Recupera el layout manual guardado para un camion y fecha
+ */
+router.get('/manual-layout/:vehicleCode/:date', async (req, res) => {
+    try {
+        const code = req.params.vehicleCode.replace(/'/g, "''").trim();
+        const date = req.params.date.replace(/'/g, "''").trim();
+
+        const rows = await query(`
+            SELECT ID, CODIGOVEHICULO, FECHA_CARGA, VENDEDOR,
+                   LAYOUT_JSON, METRICS_JSON, CREATED_AT, UPDATED_AT
+            FROM JAVIER.ALMACEN_CARGA_MANUAL
+            WHERE CODIGOVEHICULO = '${code}'
+              AND FECHA_CARGA = '${date}'
+        `);
+
+        if (!rows.length) {
+            return res.json({ found: false, layout: null });
+        }
+
+        const r = rows[0];
+        let layoutData = {};
+        let metricsData = {};
+        try { layoutData = JSON.parse(r.LAYOUT_JSON || '{}'); } catch (e) { /* ignore */ }
+        try { metricsData = JSON.parse(r.METRICS_JSON || '{}'); } catch (e) { /* ignore */ }
+
+        res.json({
+            found: true,
+            layout: {
+                id: r.ID,
+                vehicleCode: (r.CODIGOVEHICULO || '').trim(),
+                date: r.FECHA_CARGA,
+                vendor: (r.VENDEDOR || '').trim(),
+                boxes: layoutData.boxes || [],
+                excludedOrders: layoutData.excludedOrders || [],
+                metrics: metricsData,
+                createdAt: r.CREATED_AT,
+                updatedAt: r.UPDATED_AT,
+            },
+        });
+    } catch (error) {
+        logger.error(`Get manual layout error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo layout manual', details: error.message });
+    }
+});
+
+/**
+ * POST /warehouse/manual-layout
+ * Guardar o actualizar layout manual (upsert por vehicleCode + date)
+ * Body: { vehicleCode, date, vendor?, layoutJson, metricsJson? }
+ */
+router.post('/manual-layout', async (req, res) => {
+    try {
+        const { vehicleCode, date, vendor, layoutJson, metricsJson } = req.body;
+
+        if (!vehicleCode || !date || !layoutJson) {
+            return res.status(400).json({ error: 'vehicleCode, date y layoutJson son obligatorios' });
+        }
+
+        const code = vehicleCode.replace(/'/g, "''").trim();
+        const d = date.replace(/'/g, "''").trim();
+        const v = (vendor || '').replace(/'/g, "''").trim();
+        const layout = typeof layoutJson === 'string' ? layoutJson : JSON.stringify(layoutJson);
+        const metrics = typeof metricsJson === 'string' ? metricsJson : JSON.stringify(metricsJson || {});
+
+        // Try update first
+        const existing = await query(`
+            SELECT ID FROM JAVIER.ALMACEN_CARGA_MANUAL
+            WHERE CODIGOVEHICULO = '${code}' AND FECHA_CARGA = '${d}'
+        `);
+
+        if (existing.length > 0) {
+            await query(`
+                UPDATE JAVIER.ALMACEN_CARGA_MANUAL SET
+                    LAYOUT_JSON = '${layout.replace(/'/g, "''")}',
+                    METRICS_JSON = '${metrics.replace(/'/g, "''")}',
+                    VENDEDOR = '${v}',
+                    UPDATED_AT = CURRENT_TIMESTAMP
+                WHERE CODIGOVEHICULO = '${code}' AND FECHA_CARGA = '${d}'
+            `);
+            res.json({ success: true, action: 'updated', id: existing[0].ID });
+        } else {
+            await query(`
+                INSERT INTO JAVIER.ALMACEN_CARGA_MANUAL
+                    (CODIGOVEHICULO, FECHA_CARGA, VENDEDOR, LAYOUT_JSON, METRICS_JSON)
+                VALUES (
+                    '${code}', '${d}', '${v}',
+                    '${layout.replace(/'/g, "''")}',
+                    '${metrics.replace(/'/g, "''")}'
+                )
+            `);
+            res.json({ success: true, action: 'created' });
+        }
+    } catch (error) {
+        logger.error(`Save manual layout error: ${error.message}`);
+        res.status(500).json({ error: 'Error guardando layout manual', details: error.message });
+    }
+});
+
+/**
+ * DELETE /warehouse/manual-layout/:id
+ * Eliminar layout manual
+ */
+router.post('/manual-layout/:id/delete', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
+
+        await query(`DELETE FROM JAVIER.ALMACEN_CARGA_MANUAL WHERE ID = ${id}`);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error(`Delete manual layout error: ${error.message}`);
+        res.status(500).json({ error: 'Error eliminando layout', details: error.message });
+    }
+});
+
 module.exports = router;

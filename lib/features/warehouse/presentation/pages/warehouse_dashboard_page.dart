@@ -3,10 +3,15 @@
 /// Muestra los camiones del día con KPIs de carga
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../../../core/config/feature_flags.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../application/load_planner_provider.dart';
 import '../../data/warehouse_data_service.dart';
 import 'load_planner_3d_page.dart';
+import 'load_planner_v2_page.dart';
 
 class WarehouseDashboardPage extends StatefulWidget {
   const WarehouseDashboardPage({super.key});
@@ -272,11 +277,20 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => LoadPlanner3DPage(
-            vehicleCode: truck.vehicleCode,
-            vehicleName: truck.description,
-            date: _selectedDate,
-          ),
+          builder: (_) => FeatureFlags.newLoadPlanner
+              ? ChangeNotifierProvider(
+                  create: (_) => LoadPlannerProvider(),
+                  child: LoadPlannerV2Page(
+                    vehicleCode: truck.vehicleCode,
+                    vehicleName: truck.description,
+                    date: _selectedDate,
+                  ),
+                )
+              : LoadPlanner3DPage(
+                  vehicleCode: truck.vehicleCode,
+                  vehicleName: truck.description,
+                  date: _selectedDate,
+                ),
         ));
       },
       child: AnimatedBuilder(
