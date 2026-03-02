@@ -43,10 +43,18 @@ async function safeCreateTable(name, ddl) {
     }
 }
 
-// Fire-and-forget table setup (runs once when this module loads)
-(async () => {
-    try {
-        await safeCreateTable('JAVIER.ALMACEN_CAMIONES_CONFIG', `
+// ─── Table initialization (called once from server.js startServer) ───────────
+let _tablesInitialized = false;
+
+async function initWarehouseTables() {
+    if (_tablesInitialized) return;
+    _tablesInitialized = true;
+
+    logger.info('🔧 Warehouse: verifying tables…');
+
+    const tables = [
+        {
+            name: 'JAVIER.ALMACEN_CAMIONES_CONFIG', ddl: `
             CREATE TABLE JAVIER.ALMACEN_CAMIONES_CONFIG (
                 CODIGOVEHICULO VARCHAR(10) NOT NULL PRIMARY KEY,
                 LARGO_INTERIOR_CM DECIMAL(8,2),
@@ -56,9 +64,9 @@ async function safeCreateTable(name, ddl) {
                 NOTAS             VARCHAR(250) DEFAULT '',
                 UPDATED_AT        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UPDATED_BY        VARCHAR(20) DEFAULT 'SYSTEM'
-            )`);
-
-        await safeCreateTable('JAVIER.ALMACEN_ART_DIMENSIONES', `
+            )` },
+        {
+            name: 'JAVIER.ALMACEN_ART_DIMENSIONES', ddl: `
             CREATE TABLE JAVIER.ALMACEN_ART_DIMENSIONES (
                 CODIGOARTICULO VARCHAR(20) NOT NULL PRIMARY KEY,
                 LARGO_CM       DECIMAL(8,2),
@@ -68,9 +76,9 @@ async function safeCreateTable(name, ddl) {
                 NOTAS          VARCHAR(200) DEFAULT '',
                 UPDATED_AT     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UPDATED_BY     VARCHAR(20) DEFAULT 'SYSTEM'
-            )`);
-
-        await safeCreateTable('JAVIER.ALMACEN_PERSONAL', `
+            )` },
+        {
+            name: 'JAVIER.ALMACEN_PERSONAL', ddl: `
             CREATE TABLE JAVIER.ALMACEN_PERSONAL (
                 ID              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 NOMBRE          VARCHAR(100) NOT NULL,
@@ -81,9 +89,9 @@ async function safeCreateTable(name, ddl) {
                 EMAIL           VARCHAR(100) DEFAULT '',
                 CREATED_AT      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UPDATED_AT      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )`);
-
-        await safeCreateTable('JAVIER.ALMACEN_CARGA_HISTORICO', `
+            )` },
+        {
+            name: 'JAVIER.ALMACEN_CARGA_HISTORICO', ddl: `
             CREATE TABLE JAVIER.ALMACEN_CARGA_HISTORICO (
                 ID                  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 CODIGOVEHICULO      VARCHAR(10) NOT NULL,
@@ -97,9 +105,9 @@ async function safeCreateTable(name, ddl) {
                 ESTADO              VARCHAR(20),
                 CREATED_BY          VARCHAR(20) DEFAULT 'SYSTEM',
                 CREATED_AT          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )`);
-
-        await safeCreateTable('JAVIER.ALMACEN_CARGA_MANUAL', `
+            )` },
+        {
+            name: 'JAVIER.ALMACEN_CARGA_MANUAL', ddl: `
             CREATE TABLE JAVIER.ALMACEN_CARGA_MANUAL (
                 ID             INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 CODIGOVEHICULO VARCHAR(10)    NOT NULL,
@@ -110,11 +118,15 @@ async function safeCreateTable(name, ddl) {
                 CREATED_AT     TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
                 UPDATED_AT     TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT UQ_MANUAL_LAYOUT UNIQUE (CODIGOVEHICULO, FECHA_CARGA)
-            )`);
-    } catch (e) {
-        logger.warn(`⚠️ Warehouse table auto-setup error (non-fatal): ${e.message}`);
+            )` },
+    ];
+
+    for (const t of tables) {
+        await safeCreateTable(t.name, t.ddl);
     }
-})();
+
+    logger.info('✅ Warehouse: table check complete');
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // DASHBOARD — Vista general del día
@@ -968,3 +980,4 @@ router.post('/manual-layout/:id/delete', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.initWarehouseTables = initWarehouseTables;

@@ -222,6 +222,14 @@ async function startServer() {
     }
   }
 
+  // Ensure Warehouse tables exist (ALMACEN_CARGA_MANUAL, etc.)
+  try {
+    const { initWarehouseTables } = require('./routes/warehouse');
+    await initWarehouseTables();
+  } catch (whErr) {
+    logger.warn(`⚠️ Warehouse table setup error (non-fatal): ${whErr.message}`);
+  }
+
   // Initialize Redis cache (non-blocking - works without Redis too)
   initCache()
     .then(() => logger.info('✅ Redis cache initialized'))
