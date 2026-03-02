@@ -559,6 +559,9 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     let grandTotalCommission = 0;
     const now = new Date(); // To restrict "future coverage"
 
+    // PRE-LOAD payment data (needed for snapshot logic below)
+    const payments = await getVendorPayments(vendedorCode, selectedYear);
+
     for (let m = 1; m <= 12; m++) {
         const prevRow = salesRows.find(r => r.YEAR == prevYear && r.MONTH == m);
         const currRow = salesRows.find(r => r.YEAR == selectedYear && r.MONTH == m);
@@ -588,7 +591,23 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
 
         // Commission for this month
         const result = calculateCommission(currentSales, target, config);
-        const commValue = isExcluded ? 0 : result.commission;
+        let commValue = isExcluded ? 0 : result.commission;
+
+        // =====================================================================
+        // SNAPSHOT: For pre-transition months (Jan/Feb 2026) with recorded
+        // payments, use the stored COMISION_GENERADA instead of recalculating.
+        // This ensures the app shows exactly what was paid/confirmed.
+        // =====================================================================
+        const isPreTransitionMonth = (selectedYear === 2026 && m < 3 && VENDOR_COLUMN === 'R1_T8CDVD');
+        const paymentDetail = payments.details[m];
+        let snapshotApplied = false;
+
+        if (isPreTransitionMonth && paymentDetail && paymentDetail.totalPaid > 0) {
+            // Use stored values from COMMISSION_PAYMENTS
+            commValue = isExcluded ? 0 : parseFloat(paymentDetail.totalPaid);
+            snapshotApplied = true;
+            logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026 for ${vendedorCode}: using stored commission ${commValue.toFixed(2)}€ (calculated was ${result.commission.toFixed(2)}€)`);
+        }
 
         // Add to totals
         grandTotalCommission += commValue;
@@ -629,7 +648,12 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
 
         // Calculate provisional / actual commission on current accumulated amount
         const provisionalResult = calculateCommission(currentSales, proRatedTarget, config);
-        const provisionalCommission = isExcluded ? 0 : provisionalResult.commission;
+        let provisionalCommission = isExcluded ? 0 : provisionalResult.commission;
+
+        // SNAPSHOT: For pre-transition months, provisional = actual stored commission
+        if (snapshotApplied) {
+            provisionalCommission = commValue;
+        }
 
         months.push({
             month: m,
@@ -652,11 +676,11 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
             },
             dailyComplianceCtx: {
                 pct: (proRatedTarget > 0) ? (currentSales / proRatedTarget) * 100 : 0,
-                tier: provisionalResult.tier,
-                rate: provisionalResult.rate,
+                tier: snapshotApplied ? result.tier : provisionalResult.tier,
+                rate: snapshotApplied ? result.rate : provisionalResult.rate,
                 isGreen: isOnTrack,
                 provisionalCommission: provisionalCommission,
-                increment: provisionalResult.increment
+                increment: snapshotApplied ? result.increment : provisionalResult.increment
             }
         });
     }
@@ -681,9 +705,6 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
             rate: result.rate
         };
     });
-
-    // FIX #4: Load payment data
-    const payments = await getVendorPayments(vendedorCode, selectedYear);
 
     logger.debug(`[COMMISSIONS] Result for ${vendedorCode}: grandTotal=${grandTotalCommission.toFixed(2)}, totalPaid=${payments.total.toFixed(2)}, excluded=${isExcluded}`);
 
