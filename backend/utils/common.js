@@ -44,6 +44,20 @@ function getVendorColumn(year, month) {
     return VENDOR_COLUMN; // R1_T8CDVD
 }
 
+/**
+ * Build a CASE expression that returns the correct vendor column per row,
+ * handling the LCCDVD → R1_T8CDVD transition at TRANSITION_MONTH/TRANSITION_YEAR.
+ * Use in SELECT and GROUP BY for multi-year queries on DSEDAC.LAC / LACLAE.
+ * @param {string} tableAlias - SQL table alias (default 'L')
+ * @returns {string} SQL CASE expression or simple column reference
+ */
+function getVendorColumnExpr(tableAlias = 'L') {
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+    if (VENDOR_COLUMN === 'LCCDVD') return `${prefix}LCCDVD`;
+    // Multi-month transition: rows before March 2026 use LCCDVD, from March 2026+ use R1_T8CDVD
+    return `CASE WHEN ${prefix}LCAADC < ${TRANSITION_YEAR} OR (${prefix}LCAADC = ${TRANSITION_YEAR} AND ${prefix}LCMMDC < ${TRANSITION_MONTH}) THEN ${prefix}LCCDVD ELSE ${prefix}${VENDOR_COLUMN} END`;
+}
+
 logger.info(`[CONFIG] VENDOR_COLUMN = ${VENDOR_COLUMN} (transition: ${TRANSITION_MONTH}/${TRANSITION_YEAR})`);
 
 // =============================================================================
@@ -321,6 +335,7 @@ module.exports = {
     MIN_YEAR,
     VENDOR_COLUMN,
     getVendorColumn,
+    getVendorColumnExpr,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     LAC_TIPOVENTA_FILTER,

@@ -10,11 +10,13 @@ const {
     buildVendedorFilterLACLAE,
     buildColumnaVendedorFilter,
     getVendorColumn,
+    getVendorColumnExpr,
     formatCurrency,
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
-    getBSales
+    getBSales,
+    sanitizeForSQL
 } = require('../utils/common');
 
 // =============================================================================
@@ -179,25 +181,39 @@ router.get('/matrix-data', async (req, res) => {
             yearFilter = `AND L.LCAADC IN (${selectedYear}, ${prevYear})`;
         }
 
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        // Determine which years this query spans for date-aware vendor column
+        let queryYears = [];
+        if (years && years.trim().length > 0) {
+            queryYears = years.split(',').map(y => parseInt(y.trim())).filter(y => !isNaN(y));
+        }
+        if (queryYears.length === 0) {
+            queryYears = [selectedYear, prevYear];
+        }
+
+        // Use date-aware vendor filter that handles LCCDVD → R1_T8CDVD transition
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, queryYears);
 
         const clientFilter = clientCodes && clientCodes !== 'ALL'
-            ? `AND L.LCCDCL IN (${clientCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
+            ? `AND L.LCCDCL IN (${clientCodes.split(',').map(c => `'${sanitizeForSQL(c.trim())}'`).join(',')})`
             : '';
 
         const productFilter = productCodes && productCodes !== 'ALL'
-            ? `AND L.CODIGOARTICULO IN (${productCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
+            ? `AND L.CODIGOARTICULO IN (${productCodes.split(',').map(c => `'${sanitizeForSQL(c.trim())}'`).join(',')})`
             : '';
 
         let familyProductFilter = '';
         if (familyCodes && familyCodes !== 'ALL') {
-            const fCodes = familyCodes.split(',').map(f => `'${f.trim()}'`).join(',');
-            const famProducts = await cachedQuery(query, `SELECT TRIM(CODIGOARTICULO) as CODE FROM DSEDAC.ART WHERE CODIGOFAMILIA IN (${fCodes})`, `fam_prods:${fCodes}`, TTL.LONG);
-            if (famProducts.length > 0) {
-                const pCodes = famProducts.slice(0, 1000).map(p => `'${p.CODE}'`).join(','); // Safety limit
-                familyProductFilter = `AND L.CODIGOARTICULO IN (${pCodes})`; // Simplified for performance
-            } else {
+            const fCodes = familyCodes.split(',').map(f => `'${sanitizeForSQL(f.trim())}'`).filter(c => c !== "''").join(',');
+            if (!fCodes) {
                 familyProductFilter = 'AND 1=0';
+            } else {
+                const famProducts = await cachedQuery(query, `SELECT TRIM(CODIGOARTICULO) as CODE FROM DSEDAC.ART WHERE CODIGOFAMILIA IN (${fCodes})`, `fam_prods:${fCodes}`, TTL.LONG);
+                if (famProducts.length > 0) {
+                    const pCodes = famProducts.slice(0, 1000).map(p => `'${p.CODE}'`).join(','); // Safety limit
+                    familyProductFilter = `AND L.CODIGOARTICULO IN (${pCodes})`;
+                } else {
+                    familyProductFilter = 'AND 1=0';
+                }
             }
         }
 
@@ -205,11 +221,14 @@ router.get('/matrix-data', async (req, res) => {
         const selectClauses = ['L.LCAADC as YEAR', 'L.LCMMDC as MONTH'];
         const groupClauses = ['L.LCAADC', 'L.LCMMDC'];
 
+        // Build vendor column expression for date-aware transition
+        const vendorColExpr = getVendorColumnExpr('L');
+
         hierarchy.forEach((level, index) => {
             const levelIdx = index + 1;
             if (level === 'vendor') {
-                selectClauses.push(`RTRIM(L.LCCDVD) as ID_${levelIdx}`);
-                groupClauses.push('L.LCCDVD');
+                selectClauses.push(`RTRIM(${vendorColExpr}) as ID_${levelIdx}`);
+                groupClauses.push(vendorColExpr);
             } else if (level === 'client') {
                 selectClauses.push(`RTRIM(L.LCCDCL) as ID_${levelIdx}`);
                 groupClauses.push('L.LCCDCL');
@@ -251,6 +270,9 @@ router.get('/matrix-data', async (req, res) => {
             ORDER BY SUM(L.LCIMVT) DESC
             FETCH FIRST 50000 ROWS ONLY
         `;
+
+        // Log full SQL for debugging (only first time, not on cache hit)
+        logger.info(`[MATRIX] Full SQL (${aggregateSQL.replace(/\s+/g, ' ').length} chars): ${aggregateSQL.replace(/\s+/g, ' ').trim()}`);
 
         // We cache the RAW aggregate data
         const rawKey = `matrix:raw:${cacheKey}`;
@@ -352,8 +374,12 @@ router.get('/matrix-data', async (req, res) => {
         res.json(responseStub);
 
     } catch (error) {
-        logger.error(`Matrix data error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo datos matriciales' });
+        const odbcInfo = error.odbcErrors ? ` ODBC: ${JSON.stringify(error.odbcErrors)}` : '';
+        logger.error(`Matrix data error: ${error.message}${odbcInfo}`);
+        res.status(500).json({
+            error: 'Error obteniendo datos matriciales',
+            detail: process.env.NODE_ENV !== 'production' ? error.message : undefined
+        });
     }
 });
 

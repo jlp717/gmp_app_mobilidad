@@ -84,6 +84,22 @@ function isConnectionError(error) {
 }
 
 /**
+ * Detect SQL syntax/schema errors that will never succeed on retry.
+ * These are permanent errors — retrying wastes time and connections.
+ */
+function isSqlSyntaxError(error) {
+    const odbcStates = (error.odbcErrors || []).map(e => e.state);
+    const odbcCodes = (error.odbcErrors || []).map(e => e.code);
+
+    return odbcStates.includes('42S22') || // Column not found
+           odbcStates.includes('42S02') || // Table not found
+           odbcStates.includes('42000') || // Syntax error or access violation
+           odbcCodes.includes(-205) ||     // DB2: column not found
+           odbcCodes.includes(-204) ||     // DB2: object not found
+           odbcCodes.includes(-104);       // DB2: illegal symbol/token
+}
+
+/**
  * Keepalive: ping the DB every 2 minutes to prevent AS400 from
  * dropping idle connections. Lightweight query on SYSIBM.SYSDUMMY1.
  */
@@ -153,8 +169,14 @@ async function query(sql, logQuery = true, logError = true) {
                 logger.warn(`⚠️ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
             }
 
+            if (isSqlSyntaxError(error)) {
+                // SQL syntax/schema error — will never succeed, don't waste retries
+                logger.error(`🚫 SQL syntax/schema error (no retry): state=${(error.odbcErrors || []).map(e => e.state).join(',')} code=${(error.odbcErrors || []).map(e => e.code).join(',')}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ') : 'N/A'}`);
+                break;
+            }
+
             if (!connError && !error.message.includes('odbc')) {
-                // Syntax or logic error — don't retry
+                // Non-ODBC logic error — don't retry
                 break;
             }
 
@@ -227,6 +249,11 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
                 logger.error(`❌ Param Query Error (Final): ${error.message}`);
             } else if (logError) {
                 logger.warn(`⚠️ Param Query Retry (${attempt}): ${error.message}`);
+            }
+
+            if (isSqlSyntaxError(error)) {
+                logger.error(`🚫 SQL syntax/schema error (no retry): ${(error.odbcErrors || []).map(e => e.state).join(',')}`);
+                break;
             }
 
             if (!connError && !error.message.includes('odbc')) break;
