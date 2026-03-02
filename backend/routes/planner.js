@@ -588,18 +588,30 @@ router.post('/rutero/config', async (req, res) => {
             // SMART MERGE FIX PART 2: THE "GHOST" CLIENTS
             // If the user removed a client from their route (e.g. by dragging them to another day or skipping them),
             // the Dart array won't include them. We MUST save an ORDEN = -1 to permanently hide them from their AS400 natural day.
+            //
+            // ⚠️ FIX 2026-03-02: ONLY block clients that previously had a POSITIVE override (were explicitly managed).
+            // Do NOT block natural-only clients that were never in RUTERO_CONFIG.
+            // This prevents the Smart Merge from inadvertently hiding natural clients that simply
+            // weren't included in the reorder payload (e.g., truncation at 200 clients, lazy loading, etc).
+            // Natural-only clients without overrides continue to appear in their natural position.
+            // If a user truly wants to remove a natural client from a day, they must use the move_clients endpoint.
 
-            // Get the list of NATURAL (Original) clients for this day to identify who was removed
-            const naturalClients = getClientsForDayService(vendedor, dia, 'comercial', true) || [];
             const clientsInConfig = Object.keys(previousPositions);
-            const allPotentialClients = new Set([...naturalClients, ...clientsInConfig]);
 
-            for (const clientCode of allPotentialClients) {
+            for (const clientCode of clientsInConfig) {
                 if (!incomingClients.has(clientCode)) {
-                    // This client is in the natural route or had a previous override, but is MISSING in the new payload.
-                    // We only insert a block (-1) if it's NOT already blocked.
-                    if (previousPositions[clientCode] !== -1) {
-                        logger.info(`🚫 Smart Merge blocking natural/previous client ${clientCode} on day ${dia} (removed from UI)`);
+                    // This client had a previous override but is MISSING in the new payload.
+                    // Only re-block if it was previously POSITIVE (managed) — not if it was already blocked.
+                    const previousOrder = previousPositions[clientCode];
+                    if (previousOrder >= 0) {
+                        logger.info(`🚫 Smart Merge blocking previously-managed client ${clientCode} on day ${dia} (removed from reorder)`);
+                        await conn.query(`
+                            INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
+                            VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)
+                        `);
+                    } else if (previousOrder === -1) {
+                        // Preserve existing block (client was previously blocked, stays blocked)
+                        logger.debug(`🔒 Smart Merge preserving existing block for ${clientCode} on day ${dia}`);
                         await conn.query(`
                             INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
                             VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)
