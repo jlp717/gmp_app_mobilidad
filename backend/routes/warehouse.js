@@ -11,6 +11,112 @@ const { query } = require('../config/db');
 const loadPlanner = require('../services/loadPlanner');
 
 // ═════════════════════════════════════════════════════════════════════════════
+// AUTO-CREATE JAVIER.* WAREHOUSE TABLES (safe, idempotent)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Returns true if an error indicates a missing table (DB2 SQL0204 / ODBC 42S02) */
+function isTableNotFound(err) {
+    const msg = (err.message || '').toLowerCase();
+    const codes = (err.odbcErrors || []).map(e => e.code);
+    const states = (err.odbcErrors || []).map(e => e.state);
+    return codes.includes(-204) || states.includes('42S02') || msg.includes('sql0204');
+}
+
+/**
+ * Try to create a table. Silently ignore if it already exists (SQL0601).
+ */
+async function safeCreateTable(name, ddl) {
+    try {
+        await query(`SELECT 1 FROM ${name} FETCH FIRST 1 ROWS ONLY`, false, false);
+    } catch (probeErr) {
+        if (!isTableNotFound(probeErr)) return; // some other error, skip
+        try {
+            await query(ddl, false, false);
+            logger.info(`✅ Created table ${name}`);
+        } catch (createErr) {
+            if ((createErr.message || '').includes('SQL0601')) {
+                logger.info(`✅ ${name} already exists`);
+            } else {
+                logger.warn(`⚠️ Could not create ${name}: ${createErr.message}`);
+            }
+        }
+    }
+}
+
+// Fire-and-forget table setup (runs once when this module loads)
+(async () => {
+    try {
+        await safeCreateTable('JAVIER.ALMACEN_CAMIONES_CONFIG', `
+            CREATE TABLE JAVIER.ALMACEN_CAMIONES_CONFIG (
+                CODIGOVEHICULO VARCHAR(10) NOT NULL PRIMARY KEY,
+                LARGO_INTERIOR_CM DECIMAL(8,2),
+                ANCHO_INTERIOR_CM DECIMAL(8,2),
+                ALTO_INTERIOR_CM  DECIMAL(8,2),
+                TOLERANCIA_EXCESO DECIMAL(5,2) DEFAULT 5,
+                NOTAS             VARCHAR(250) DEFAULT '',
+                UPDATED_AT        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UPDATED_BY        VARCHAR(20) DEFAULT 'SYSTEM'
+            )`);
+
+        await safeCreateTable('JAVIER.ALMACEN_ART_DIMENSIONES', `
+            CREATE TABLE JAVIER.ALMACEN_ART_DIMENSIONES (
+                CODIGOARTICULO VARCHAR(20) NOT NULL PRIMARY KEY,
+                LARGO_CM       DECIMAL(8,2),
+                ANCHO_CM       DECIMAL(8,2),
+                ALTO_CM        DECIMAL(8,2),
+                PESO_CAJA_KG   DECIMAL(8,2),
+                NOTAS          VARCHAR(200) DEFAULT '',
+                UPDATED_AT     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UPDATED_BY     VARCHAR(20) DEFAULT 'SYSTEM'
+            )`);
+
+        await safeCreateTable('JAVIER.ALMACEN_PERSONAL', `
+            CREATE TABLE JAVIER.ALMACEN_PERSONAL (
+                ID              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                NOMBRE          VARCHAR(100) NOT NULL,
+                CODIGO_VENDEDOR VARCHAR(20) DEFAULT '',
+                ROL             VARCHAR(30) DEFAULT 'PREPARADOR',
+                ACTIVO          CHAR(1) DEFAULT 'S',
+                TELEFONO        VARCHAR(20) DEFAULT '',
+                EMAIL           VARCHAR(100) DEFAULT '',
+                CREATED_AT      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UPDATED_AT      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`);
+
+        await safeCreateTable('JAVIER.ALMACEN_CARGA_HISTORICO', `
+            CREATE TABLE JAVIER.ALMACEN_CARGA_HISTORICO (
+                ID                  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                CODIGOVEHICULO      VARCHAR(10) NOT NULL,
+                FECHA_PLANIFICACION DATE,
+                PESO_TOTAL_KG       DECIMAL(10,2),
+                VOLUMEN_TOTAL_CM3   DECIMAL(14,2),
+                PCT_VOLUMEN         DECIMAL(5,2),
+                PCT_PESO            DECIMAL(5,2),
+                NUM_ORDENES         INTEGER,
+                NUM_BULTOS          INTEGER,
+                ESTADO              VARCHAR(20),
+                CREATED_BY          VARCHAR(20) DEFAULT 'SYSTEM',
+                CREATED_AT          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`);
+
+        await safeCreateTable('JAVIER.ALMACEN_CARGA_MANUAL', `
+            CREATE TABLE JAVIER.ALMACEN_CARGA_MANUAL (
+                ID             INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                CODIGOVEHICULO VARCHAR(10)    NOT NULL,
+                FECHA_CARGA    DATE           NOT NULL,
+                VENDEDOR       VARCHAR(10)    DEFAULT '',
+                LAYOUT_JSON    CLOB(1M)       NOT NULL,
+                METRICS_JSON   VARCHAR(4000)  DEFAULT '{}',
+                CREATED_AT     TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+                UPDATED_AT     TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT UQ_MANUAL_LAYOUT UNIQUE (CODIGOVEHICULO, FECHA_CARGA)
+            )`);
+    } catch (e) {
+        logger.warn(`⚠️ Warehouse table auto-setup error (non-fatal): ${e.message}`);
+    }
+})();
+
+// ═════════════════════════════════════════════════════════════════════════════
 // DASHBOARD — Vista general del día
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -84,6 +190,9 @@ router.get('/dashboard', async (req, res) => {
             }),
         });
     } catch (error) {
+        if (isTableNotFound(error)) {
+            return res.json({ date: { year, month, day }, totalTrucks: 0, trucks: [] });
+        }
         logger.error(`Warehouse dashboard error: ${error.message}`);
         res.status(500).json({ error: 'Error cargando dashboard almacén', details: error.message });
     }
@@ -381,6 +490,10 @@ router.get('/personnel', async (req, res) => {
 
         res.json({ personnel });
     } catch (error) {
+        if (isTableNotFound(error)) {
+            // ALMACEN_PERSONAL doesn't exist yet — return only VDD drivers
+            return res.json({ personnel: [] });
+        }
         logger.error(`Personnel error: ${error.message}`);
         res.status(500).json({ error: 'Error obteniendo personal', details: error.message });
     }
@@ -716,6 +829,9 @@ router.get('/load-history', async (req, res) => {
             })),
         });
     } catch (error) {
+        if (isTableNotFound(error)) {
+            return res.json({ history: [] });
+        }
         logger.error(`Load history error: ${error.message}`);
         res.status(500).json({ error: 'Error obteniendo historial', details: error.message });
     }
@@ -767,6 +883,9 @@ router.get('/manual-layout/:vehicleCode/:date', async (req, res) => {
             },
         });
     } catch (error) {
+        if (isTableNotFound(error)) {
+            return res.json({ found: false, layout: null });
+        }
         logger.error(`Get manual layout error: ${error.message}`);
         res.status(500).json({ error: 'Error obteniendo layout manual', details: error.message });
     }
@@ -820,6 +939,9 @@ router.post('/manual-layout', async (req, res) => {
             res.json({ success: true, action: 'created' });
         }
     } catch (error) {
+        if (isTableNotFound(error)) {
+            return res.status(503).json({ error: 'Tabla ALMACEN_CARGA_MANUAL no disponible. Reinicia el servidor para crearla.' });
+        }
         logger.error(`Save manual layout error: ${error.message}`);
         res.status(500).json({ error: 'Error guardando layout manual', details: error.message });
     }
@@ -837,6 +959,9 @@ router.post('/manual-layout/:id/delete', async (req, res) => {
         await query(`DELETE FROM JAVIER.ALMACEN_CARGA_MANUAL WHERE ID = ${id}`);
         res.json({ success: true });
     } catch (error) {
+        if (isTableNotFound(error)) {
+            return res.json({ success: true }); // nothing to delete
+        }
         logger.error(`Delete manual layout error: ${error.message}`);
         res.status(500).json({ error: 'Error eliminando layout', details: error.message });
     }
