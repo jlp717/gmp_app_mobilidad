@@ -7,6 +7,46 @@ const getCurrentYear = () => getCurrentDate().getFullYear();
 const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 
 // =============================================================================
+// VENDOR COLUMN FEATURE FLAG (with transition date logic)
+// =============================================================================
+// VENDOR_COLUMN controls which DB2 column is used for vendor filtering:
+//   LCCDVD    = "Quién vendió" (lógica actual de producción)
+//   R1_T8CDVD = "Quién tiene el cliente asignado" (nueva lógica 2026)
+//
+// Set via environment variable. Default: LCCDVD (backward compatible)
+//
+// TRANSITION: From March 2026, use R1_T8CDVD. Jan/Feb 2026 and prior
+// always use LCCDVD so historical data remains unchanged.
+const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'LCCDVD';
+const TRANSITION_YEAR = 2026;
+const TRANSITION_MONTH = 3; // March 2026: new logic starts here
+
+/**
+ * Get the vendor column to use based on the target date.
+ * - Production (LCCDVD env or default): always returns LCCDVD
+ * - New logic (R1_T8CDVD env): returns LCCDVD for dates before March 2026,
+ *   R1_T8CDVD from March 2026 onwards.
+ * @param {number} [year] - Target year (defaults to current)
+ * @param {number} [month] - Target month 1-12 (defaults to current)
+ * @returns {string} 'LCCDVD' or 'R1_T8CDVD'
+ */
+function getVendorColumn(year, month) {
+    if (VENDOR_COLUMN === 'LCCDVD') return 'LCCDVD';
+
+    const now = getCurrentDate();
+    const y = parseInt(year) || now.getFullYear();
+    const m = parseInt(month) || (now.getMonth() + 1);
+
+    if (y < TRANSITION_YEAR || (y === TRANSITION_YEAR && m < TRANSITION_MONTH)) {
+        return 'LCCDVD';
+    }
+
+    return VENDOR_COLUMN; // R1_T8CDVD
+}
+
+logger.info(`[CONFIG] VENDOR_COLUMN = ${VENDOR_COLUMN} (transition: ${TRANSITION_MONTH}/${TRANSITION_YEAR})`);
+
+// =============================================================================
 // SALES FILTER CONSTANTS
 // =============================================================================
 // SALES FILTERS (GOLDEN DATA ALIGNMENT)
@@ -129,10 +169,12 @@ function buildDateFilter(yearParam, monthParam, tableAlias = '') {
     return { year, month, filter: `AND ${prefix}ANODOCUMENTO >= ${MIN_YEAR}` };
 }
 
-// Vendor filter for LACLAE table (uses short column name LCCDVD)
-function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
+// Vendor filter for LACLAE table
+// Uses getVendorColumn(year, month) for date-aware column selection
+function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L', year, month) {
     if (!vendedorCodes || vendedorCodes === 'ALL') return '';
     const prefix = tableAlias ? `${tableAlias}.` : '';
+    const col = getVendorColumn(year, month);
 
     const codeList = vendedorCodes.split(',').map(c => c.trim());
     const hasUnk = codeList.includes('UNK');
@@ -146,17 +188,59 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
 
     const conditions = [];
     if (validCodes.length > 0) {
-        // PERF: Removed TRIM() - DB2 CHAR comparison handles trailing spaces automatically
-        // This allows DB2 to use indexes on LCCDVD column
-        conditions.push(`${prefix}LCCDVD IN (${validCodes})`);
+        conditions.push(`${prefix}${col} IN (${validCodes})`);
     }
     if (hasUnk) {
-        conditions.push(`(${prefix}LCCDVD IS NULL OR ${prefix}LCCDVD = '')`);
+        conditions.push(`(${prefix}${col} IS NULL OR ${prefix}${col} = '')`);
     }
 
     if (conditions.length === 0) return 'AND 1=0';
 
     return `AND (${conditions.join(' OR ')})`;
+}
+
+/**
+ * Date-Aware Vendor Filter for multi-year SQL queries.
+ * Generates an OR block that handles column transition month-by-month.
+ * Use for evolution/matrix queries spanning multiple years/months.
+ *
+ * @param {string} vendedorCodes - Comma separated vendor codes (or 'ALL')
+ * @param {Array<number>} years - Array of years to filter
+ * @param {string} tableAlias - SQL table alias (default 'L')
+ * @returns {string} SQL snippet with AND prefix
+ */
+function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L') {
+    if (!vendedorCodes || vendedorCodes === 'ALL') return '';
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+
+    const codeList = vendedorCodes.split(',').map(c => c.trim());
+    const validCodes = codeList
+        .filter(c => /^[a-zA-Z0-9]+$/.test(c))
+        .map(c => `'${c}'`)
+        .join(',');
+
+    if (validCodes.length === 0) return 'AND 1=0';
+
+    // If VENDOR_COLUMN is default LCCDVD, no transition needed
+    if (VENDOR_COLUMN === 'LCCDVD') {
+        return `AND ${prefix}LCCDVD IN (${validCodes})`;
+    }
+
+    // Check if any requested years involve the transition period
+    const involvesTransition = (!Array.isArray(years) || years.length === 0)
+        ? true
+        : years.some(y => y >= (TRANSITION_YEAR - 1));
+
+    if (!involvesTransition) {
+        return `AND ${prefix}LCCDVD IN (${validCodes})`;
+    }
+
+    // Month-based transition: meses < TRANSITION_MONTH use old column,
+    // meses >= TRANSITION_MONTH use new column
+    const oldFilter = `(${prefix}LCMMDC < ${TRANSITION_MONTH} AND ${prefix}LCCDVD IN (${validCodes}))`;
+    const newFilter = `(${prefix}LCMMDC >= ${TRANSITION_MONTH} AND ${prefix}${VENDOR_COLUMN} IN (${validCodes}))`;
+
+    return `AND (${oldFilter} OR ${newFilter})`;
 }
 
 const { query } = require('../config/db');
@@ -235,6 +319,8 @@ module.exports = {
     getCurrentDate,
     getCurrentYear,
     MIN_YEAR,
+    VENDOR_COLUMN,
+    getVendorColumn,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     LAC_TIPOVENTA_FILTER,
@@ -242,9 +328,10 @@ module.exports = {
     formatCurrency,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    buildColumnaVendedorFilter,
     buildDateFilter,
-    getVendorName, // Added Export
-    getBSales, // Shared B-sales lookup
+    getVendorName,
+    getBSales,
     sanitizeForSQL,
     sanitizeCodeList,
 

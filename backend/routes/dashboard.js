@@ -8,6 +8,8 @@ const {
     getCurrentDate,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    buildColumnaVendedorFilter,
+    getVendorColumn,
     formatCurrency,
     MIN_YEAR,
     LAC_SALES_FILTER,
@@ -27,9 +29,8 @@ router.get('/metrics', async (req, res) => {
         const cacheKey = `dashboard:metrics:${currentYear}:${currentMonth || 'all'}:${vendedorCodes}`;
 
         // -- FETCH FROM REDIS CACHE (L2) --
-        // Logic wrapped directly in route to use parallel queries
-
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        // Determine Filter Column based on transition
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, [currentYear, currentYear - 1], 'L');
 
         const currentDataSql = `
           SELECT 

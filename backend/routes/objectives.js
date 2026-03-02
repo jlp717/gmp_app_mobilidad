@@ -6,6 +6,9 @@ const {
     getCurrentDate,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    buildColumnaVendedorFilter,
+    VENDOR_COLUMN,
+    getVendorColumn,
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
@@ -34,21 +37,23 @@ const {
  * Get all clients currently managed by a vendor (from current year or most recent data)
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
-    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
+    // Uses getVendorColumn(year) for date-aware column (LCCDVD before March 2026, R1_T8CDVD after)
+    const col = getVendorColumn(currentYear);
     const rows = await query(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.LCCDVD = '${vendorCode}'
+        WHERE L.${col} = '${vendorCode}'
           AND L.LCAADC = ${currentYear}
           AND ${LACLAE_SALES_FILTER}
     `, false);
 
     // If no clients in current year, try previous year
     if (rows.length === 0) {
+        const prevCol = getVendorColumn(currentYear - 1);
         const prevRows = await query(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.LCCDVD = '${vendorCode}'
+            WHERE L.${prevCol} = '${vendorCode}'
               AND L.LCAADC = ${currentYear - 1}
               AND ${LACLAE_SALES_FILTER}
         `, false);
@@ -356,8 +361,8 @@ router.get('/evolution', async (req, res) => {
         const uniqueYears = [...new Set(allYears)];
         const yearsFilter = uniqueYears.join(',');
 
-        // Use LACLAE-specific vendor filter (uses LCCDVD column)
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        // Use Date-Aware filter (handles LCCDVD for <March 2026 and R1_T8CDVD for >=March 2026)
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, uniqueYears, 'L');
 
         // Get Active Days for calculating pace 
         // Logic: if multiple vendors selected, we might average or select first? 
