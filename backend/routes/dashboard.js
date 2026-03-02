@@ -190,8 +190,9 @@ router.get('/matrix-data', async (req, res) => {
             queryYears = [selectedYear, prevYear];
         }
 
-        // Use date-aware vendor filter that handles LCCDVD → R1_T8CDVD transition
-        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, queryYears);
+        // Use LCCDVD only — DSEDAC.LAC does NOT have R1_T8CDVD column
+        // DB2 validates all column refs at parse time, so CASE with R1_T8CDVD fails with -205
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, queryYears, 'L', { forLACTable: true });
 
         const clientFilter = clientCodes && clientCodes !== 'ALL'
             ? `AND L.LCCDCL IN (${clientCodes.split(',').map(c => `'${sanitizeForSQL(c.trim())}'`).join(',')})`
@@ -221,8 +222,8 @@ router.get('/matrix-data', async (req, res) => {
         const selectClauses = ['L.LCAADC as YEAR', 'L.LCMMDC as MONTH'];
         const groupClauses = ['L.LCAADC', 'L.LCMMDC'];
 
-        // Build vendor column expression for date-aware transition
-        const vendorColExpr = getVendorColumnExpr('L');
+        // Build vendor column expression — force LCCDVD for DSEDAC.LAC (no R1_T8CDVD)
+        const vendorColExpr = getVendorColumnExpr('L', { forLACTable: true });
 
         hierarchy.forEach((level, index) => {
             const levelIdx = index + 1;

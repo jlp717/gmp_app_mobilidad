@@ -47,13 +47,20 @@ function getVendorColumn(year, month) {
 /**
  * Build a CASE expression that returns the correct vendor column per row,
  * handling the LCCDVD → R1_T8CDVD transition at TRANSITION_MONTH/TRANSITION_YEAR.
- * Use in SELECT and GROUP BY for multi-year queries on DSEDAC.LAC / LACLAE.
+ * Use in SELECT and GROUP BY for multi-year queries on DSED.LACLAE.
+ * 
+ * IMPORTANT: For DSEDAC.LAC table, pass { forLACTable: true } because LAC does NOT
+ * have the R1_T8CDVD column. DB2 validates all column references at parse time,
+ * so even CASE branches that never execute will cause -205 if the column is missing.
+ * 
  * @param {string} tableAlias - SQL table alias (default 'L')
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.forLACTable=false] - If true, always use LCCDVD (for DSEDAC.LAC which lacks R1_T8CDVD)
  * @returns {string} SQL CASE expression or simple column reference
  */
-function getVendorColumnExpr(tableAlias = 'L') {
+function getVendorColumnExpr(tableAlias = 'L', { forLACTable = false } = {}) {
     const prefix = tableAlias ? `${tableAlias}.` : '';
-    if (VENDOR_COLUMN === 'LCCDVD') return `${prefix}LCCDVD`;
+    if (VENDOR_COLUMN === 'LCCDVD' || forLACTable) return `${prefix}LCCDVD`;
     // Multi-month transition: rows before March 2026 use LCCDVD, from March 2026+ use R1_T8CDVD
     return `CASE WHEN ${prefix}LCAADC < ${TRANSITION_YEAR} OR (${prefix}LCAADC = ${TRANSITION_YEAR} AND ${prefix}LCMMDC < ${TRANSITION_MONTH}) THEN ${prefix}LCCDVD ELSE ${prefix}${VENDOR_COLUMN} END`;
 }
@@ -218,12 +225,17 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L', year, month)
  * Generates an OR block that handles column transition month-by-month.
  * Use for evolution/matrix queries spanning multiple years/months.
  *
+ * IMPORTANT: For DSEDAC.LAC table, pass { forLACTable: true } because LAC does NOT
+ * have the R1_T8CDVD column.
+ *
  * @param {string} vendedorCodes - Comma separated vendor codes (or 'ALL')
  * @param {Array<number>} years - Array of years to filter
  * @param {string} tableAlias - SQL table alias (default 'L')
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.forLACTable=false] - If true, always use LCCDVD (for DSEDAC.LAC which lacks R1_T8CDVD)
  * @returns {string} SQL snippet with AND prefix
  */
-function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L') {
+function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L', { forLACTable = false } = {}) {
     if (!vendedorCodes || vendedorCodes === 'ALL') return '';
     const prefix = tableAlias ? `${tableAlias}.` : '';
 
@@ -235,8 +247,8 @@ function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L')
 
     if (validCodes.length === 0) return 'AND 1=0';
 
-    // If VENDOR_COLUMN is default LCCDVD, no transition needed
-    if (VENDOR_COLUMN === 'LCCDVD') {
+    // If VENDOR_COLUMN is default LCCDVD, or querying DSEDAC.LAC (no R1_T8CDVD column), no transition needed
+    if (VENDOR_COLUMN === 'LCCDVD' || forLACTable) {
         return `AND ${prefix}LCCDVD IN (${validCodes})`;
     }
 
