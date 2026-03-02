@@ -8,7 +8,7 @@ dotenv.config();
 const DB_UID = process.env.ODBC_UID || 'JAVIER';
 const DB_PWD = process.env.ODBC_PWD || 'JAVIER';
 const DB_DSN = process.env.ODBC_DSN || 'GMP';
-const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;`;
+const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;CCSID=1208;`;
 
 let dbPool = null;
 const MAX_RETRIES = 3;
@@ -16,10 +16,46 @@ const RETRY_DELAY_BASE_MS = 500;   // Exponential: 500ms, 1000ms, 2000ms
 let poolRecreateInProgress = false; // Prevent concurrent pool recreation
 let keepaliveInterval = null;       // Keepalive timer
 
+// Track connections that already have CCSID set to UTF-8
+const _utf8Connections = new WeakSet();
+
+/**
+ * Ensure an ODBC connection uses CCSID 1208 (UTF-8) for character translation.
+ * Without this, the IBM i ODBC driver returns CP1252 bytes which node-odbc
+ * misinterprets as UTF-8, corrupting Ñ, tildes, and other non-ASCII chars.
+ */
+async function ensureUtf8(conn) {
+    if (_utf8Connections.has(conn)) return;
+    try {
+        await conn.query("CALL QSYS.QCMDEXC('CHGJOB CCSID(1208)', 0000000018.00000)");
+        logger.debug('[DB] Connection CCSID set to 1208 (UTF-8)');
+    } catch (e) {
+        // Non-fatal: CCSID=1208 in connection string might already handle it,
+        // or the user might lack CHGJOB authority
+        logger.debug(`[DB] CHGJOB CCSID(1208) skipped: ${e.message}`);
+    }
+    _utf8Connections.add(conn);
+}
+
+/**
+ * Wrap a pool so that every connection obtained via pool.connect()
+ * automatically gets CCSID 1208 (UTF-8) initialization.
+ */
+function wrapPoolWithUtf8(pool) {
+    const originalConnect = pool.connect.bind(pool);
+    pool.connect = async function () {
+        const conn = await originalConnect();
+        await ensureUtf8(conn);
+        return conn;
+    };
+    return pool;
+}
+
 async function initDb() {
     try {
         dbPool = await odbc.pool(DB_CONFIG);
-        logger.info('✅ Database connection pool initialized');
+        wrapPoolWithUtf8(dbPool);
+        logger.info('✅ Database connection pool initialized (UTF-8 CCSID=1208)');
         startKeepalive();
         return dbPool;
     } catch (error) {
@@ -54,7 +90,8 @@ async function recreatePool() {
         await new Promise(res => setTimeout(res, 500));
 
         dbPool = await odbc.pool(DB_CONFIG);
-        logger.info('✅ Database pool recreated successfully');
+        wrapPoolWithUtf8(dbPool);
+        logger.info('✅ Database pool recreated successfully (UTF-8 CCSID=1208)');
         startKeepalive();
     } catch (error) {
         logger.error(`❌ Pool recreation failed: ${error.message}`);
