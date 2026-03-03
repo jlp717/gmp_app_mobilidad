@@ -254,6 +254,26 @@ class ApiClient {
     }
   }
 
+  /// POST with custom timeout (for heavy endpoints)
+  static Future<Map<String, dynamic>> postWithTimeout(
+    String endpoint,
+    Map<String, dynamic> data, {
+    Duration? receiveTimeout,
+  }) async {
+    try {
+      final response = await dio.post(
+        endpoint,
+        data: data,
+        options: receiveTimeout != null
+            ? Options(receiveTimeout: receiveTimeout)
+            : null,
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   /// PUT request
   static Future<Map<String, dynamic>> put(
     String endpoint, {
@@ -284,10 +304,14 @@ class ApiClient {
       final statusCode = e.response?.statusCode ?? 0;
       final data = e.response?.data;
       
-      // Extract server error message
+      // Extract server error message (include details for debugging)
       String? serverMessage;
       if (data is Map<String, dynamic>) {
-        serverMessage = data['error'] as String? ?? data['message'] as String?;
+        final error = data['error'] as String?;
+        final details = data['details'] as String?;
+        serverMessage = details != null && details.isNotEmpty
+            ? '$error: $details'
+            : (error ?? data['message'] as String?);
       }
       
       if (statusCode == 401) {

@@ -239,6 +239,7 @@ router.get('/dashboard', async (req, res) => {
 router.post('/load-plan', async (req, res) => {
     try {
         const { vehicleCode, year, month, day, tolerance } = req.body;
+        logger.info(`[LOAD-PLAN] Request received: vehicle=${vehicleCode}, date=${year}-${month}-${day}`);
 
         if (!vehicleCode) {
             return res.status(400).json({ error: 'vehicleCode es obligatorio' });

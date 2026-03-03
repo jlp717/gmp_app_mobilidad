@@ -461,13 +461,17 @@ class WarehouseDataService {
     double? tolerance,
   }) async {
     final now = DateTime.now();
-    final response = await ApiClient.post('/warehouse/load-plan', {
-      'vehicleCode': vehicleCode,
-      'year': year ?? now.year,
-      'month': month ?? (now.month),
-      'day': day ?? now.day,
-      if (tolerance != null) 'tolerance': tolerance,
-    });
+    final response = await ApiClient.postWithTimeout(
+      '/warehouse/load-plan',
+      {
+        'vehicleCode': vehicleCode,
+        'year': year ?? now.year,
+        'month': month ?? (now.month),
+        'day': day ?? now.day,
+        if (tolerance != null) 'tolerance': tolerance,
+      },
+      receiveTimeout: const Duration(seconds: 60),
+    );
 
     return LoadPlanResult.fromJson(response);
   }

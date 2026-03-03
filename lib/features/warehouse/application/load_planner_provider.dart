@@ -200,7 +200,9 @@ class LoadPlannerProvider extends ChangeNotifier {
         _saveState = SaveState.saved;
         _hasManualChanges = false;
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[LoadPlanner] ERROR loading plan: $e');
+      debugPrint('[LoadPlanner] Stack: $stack');
       _error = e.toString();
     } finally {
       _isLoading = false;

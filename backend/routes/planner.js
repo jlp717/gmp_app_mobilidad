@@ -319,6 +319,10 @@ router.post('/rutero/move_clients', async (req, res) => {
             return res.status(400).json({ error: 'Datos inválidos. Se requiere vendedor y array de movimientos.' });
         }
 
+        if (vendedor.includes(',')) {
+            return res.status(400).json({ error: 'Vendedor debe ser un código único, no una lista.' });
+        }
+
         const DIAS_PROHIBIDOS = ['domingo'];
         const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 
@@ -510,6 +514,11 @@ router.post('/rutero/config', async (req, res) => {
 
         if (!vendedor || !dia || !orden || !Array.isArray(orden)) {
             return res.status(400).json({ error: 'Datos inválidos. Se requiere vendedor, dia y array de orden.' });
+        }
+
+        // Guard: vendedor must be a single code, not a comma-separated list
+        if (vendedor.includes(',')) {
+            return res.status(400).json({ error: 'Vendedor debe ser un código único, no una lista.' });
         }
 
         const pool = getPool();

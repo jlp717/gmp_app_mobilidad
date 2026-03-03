@@ -194,10 +194,23 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   }
   
   /// Obtiene el código del vendedor a usar (seleccionado o el propio)
+  /// Para GETs: puede ser una lista comma-separated (todos los vendedores)
   String get _activeVendedorCode {
     if (!mounted) return widget.employeeCode;
     final filterCode = context.read<FilterProvider>().selectedVendor;
     return filterCode ?? widget.employeeCode;
+  }
+
+  /// Para operaciones de escritura (POST): devuelve un ÚNICO código de vendedor.
+  /// Retorna null si hay múltiples vendedores y no se ha seleccionado uno específico.
+  String? get _singleVendedorCode {
+    if (!mounted) return null;
+    final filterCode = context.read<FilterProvider>().selectedVendor;
+    if (filterCode != null) return filterCode;
+    // Si employeeCode no contiene comas, es un solo vendedor
+    if (!widget.employeeCode.contains(',')) return widget.employeeCode;
+    // Jefe de ventas sin selección específica → no se puede escribir
+    return null;
   }
   
 
@@ -1100,25 +1113,39 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     }
   }
   void _openReorderModal() async {
+    final vendedor = _singleVendedorCode;
+    if (vendedor == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Selecciona un vendedor específico para reordenar'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
     // Show FULL list in reorder dialog to ensure consistency
-    final clientsToOrder = List<Map<String, dynamic>>.from(_dayClients);
-    
+    final clientsToOrder =
+        List<Map<String, dynamic>>.from(_dayClients);
+
     final result = await showDialog<List<Map<String, dynamic>>>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => ReorderDialog(
-          clients: clientsToOrder, 
-          activeVendedor: _activeVendedorCode,
+          clients: clientsToOrder,
+          activeVendedor: vendedor,
           currentDay: _selectedDay,
       ),
     );
-    
+
     if (result != null) {
        await _saveNewOrder(result);
     }
-    
-    // SIEMPRE refrescar después de cerrar el diálogo para actualizar contadores
-    // ya que pueden haberse movido clientes a otros días
+
+    // SIEMPRE refrescar después de cerrar el diálogo
     await _refreshDataAndCounts();
   }
 
@@ -1158,6 +1185,9 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   }
 
   Future<void> _saveNewOrder(List<Map<String, dynamic>> newOrder) async {
+      final vendedor = _singleVendedorCode;
+      if (vendedor == null) return;
+
       setState(() => _isLoadingWeek = true);
       try {
           final orderPayload = newOrder.asMap().entries.map((e) => <String, dynamic>{
@@ -1165,9 +1195,9 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
               'posicion': e.key,
               'posicionOriginal': (e.value['posicionOriginal'] as int?) ?? e.key,
           }).toList();
-          
+
           await ApiClient.post('/rutero/config', {
-              'vendedor': _activeVendedorCode,
+              'vendedor': vendedor,
               'dia': _selectedDay.toLowerCase(),
               'orden': orderPayload
           });
