@@ -90,8 +90,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   repartidorRoutes = require('./routes/repartidor');
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
-  const warehouseModule = require('./routes/warehouse');
-  warehouseRoutes = warehouseModule.router;
+  warehouseRoutes = require('./routes/warehouse');
 }
 
 const app = express();
