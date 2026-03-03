@@ -145,6 +145,7 @@ function init() {
   document.getElementById('loading').classList.add('hidden');
 
   // Notify Flutter
+  window._sceneInitDone = true;
   sendToFlutter('sceneReady', {});
 }
 

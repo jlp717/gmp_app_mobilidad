@@ -54,6 +54,26 @@
 </head>
 <body>
   <div id="loading">Inicializando escena 3D...</div>
+  <script>
+    // Safety net: if Three.js module fails to load, notify Flutter after timeout
+    // so the overlay disappears and user can at least see other UI
+    window._sceneInitDone = false;
+    window.addEventListener('error', function(e) {
+      console.error('Scene load error:', e.message);
+      if (!window._sceneInitDone && window.FlutterBridge) {
+        window._sceneInitDone = true;
+        window.FlutterBridge.postMessage(JSON.stringify({ type: 'sceneReady' }));
+      }
+    });
+    setTimeout(function() {
+      if (!window._sceneInitDone && window.FlutterBridge) {
+        console.warn('Scene init timeout — sending sceneReady anyway');
+        window._sceneInitDone = true;
+        window.FlutterBridge.postMessage(JSON.stringify({ type: 'sceneReady' }));
+        document.getElementById('loading').textContent = 'Error al cargar 3D. Reintente.';
+      }
+    }, 10000);
+  </script>
   <script type="module" src="load_planner_3d.js"></script>
 </body>
 </html>

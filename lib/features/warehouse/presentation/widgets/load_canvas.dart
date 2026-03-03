@@ -41,6 +41,9 @@ class _LoadCanvasState extends State<LoadCanvas> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(AppTheme.darkBase)
+      ..setOnConsoleMessage((message) {
+        debugPrint('[WebView JS] ${message.level}: ${message.message}');
+      })
       ..addJavaScriptChannel(
         'FlutterBridge',
         onMessageReceived: _handleJsMessage,
@@ -51,6 +54,14 @@ class _LoadCanvasState extends State<LoadCanvas> {
         ),
       )
       ..loadFlutterAsset('assets/load_planner/index.html');
+
+    // Safety timeout: if sceneReady never arrives, force it
+    Future.delayed(const Duration(seconds: 12), () {
+      if (mounted && !_sceneReady) {
+        debugPrint('[LoadCanvas] sceneReady timeout — forcing ready');
+        setState(() => _sceneReady = true);
+      }
+    });
   }
 
   void _onPageLoaded() {
