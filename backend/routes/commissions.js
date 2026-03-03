@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { query, queryWithParams } = require('../config/db');
+const { query, queryWithParams, getPool } = require('../config/db');
 const logger = require('../middleware/logger');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
@@ -60,166 +60,128 @@ const DEFAULT_CONFIG_2026 = {
 
 // =============================================================================
 // DATABASE INITIALIZATION (JAVIER Schema)
+// Uses DIRECT pool connections to avoid query() retry/pool-recreation logic.
 // =============================================================================
 async function initCommissionTables() {
-    // 1. Initialize COMM_CONFIG table
+    const pool = getPool();
+    if (!pool) { logger.warn('⚠️ Commission init: no DB pool'); return; }
+    let conn;
     try {
-        let commConfigExists = false;
+        conn = await pool.connect();
+
+        // 1. COMM_CONFIG table
         try {
-            await query(`SELECT 1 FROM JAVIER.COMM_CONFIG FETCH FIRST 1 ROWS ONLY`, false, false);
-            commConfigExists = true;
+            await conn.query(`SELECT 1 FROM JAVIER.COMM_CONFIG FETCH FIRST 1 ROWS ONLY`);
             logger.info('✅ JAVIER.COMM_CONFIG found and ready.');
         } catch (e) {
-            // Table likely not found, proceed to create
             logger.info('⚙️ Initializing JAVIER.COMM_CONFIG table...');
-        }
-
-        if (!commConfigExists) {
-            // 2. Create Table (DB2 syntax)
-            await query(`
-                 CREATE TABLE JAVIER.COMM_CONFIG (
-                     ID INT NOT NULL,
-                     YEAR INT NOT NULL,
-                     IPC_PCT DECIMAL(5,2) DEFAULT 3.00,
-                     TIER1_MAX DECIMAL(5,2) DEFAULT 103.00,
-                     TIER1_PCT DECIMAL(5,2) DEFAULT 1.00,
-                     TIER2_MAX DECIMAL(5,2) DEFAULT 106.00,
-                     TIER2_PCT DECIMAL(5,2) DEFAULT 1.30,
-                     TIER3_MAX DECIMAL(5,2) DEFAULT 110.00,
-                     TIER3_PCT DECIMAL(5,2) DEFAULT 1.60,
-                     TIER4_PCT DECIMAL(5,2) DEFAULT 2.00,
-                     PRIMARY KEY (ID)
-                 )
-            `);
-            logger.info('✅ JAVIER.COMM_CONFIG table created.');
-
-            // 3. Seed Data
-            await query(`
-                INSERT INTO JAVIER.COMM_CONFIG (ID, YEAR, IPC_PCT, TIER1_MAX, TIER1_PCT, TIER2_MAX, TIER2_PCT, TIER3_MAX, TIER3_PCT, TIER4_PCT)
-                VALUES (1, 2026, 3.00, 103.00, 1.00, 106.00, 1.30, 110.00, 1.60, 2.00)
-            `);
-            logger.info('🌱 JAVIER.COMM_CONFIG seeded default values.');
-        }
-    } catch (error) {
-        // If it fails (e.g., race condition or permission), we log but don't crash.
-        // Logic will fall back to DEFAULT_CONFIG_2026.
-        logger.warn(`⚠️ DB Init Warning: ${error.message}. Using default memory config.`);
-    }
-
-    // FIX #1: Ensure EXCLUIDO_COMISIONES column exists in COMMISSION_EXCEPTIONS
-    try {
-        await query(`SELECT EXCLUIDO_COMISIONES FROM JAVIER.COMMISSION_EXCEPTIONS FETCH FIRST 1 ROWS ONLY`, false, false);
-        logger.info('✅ EXCLUIDO_COMISIONES column exists.');
-    } catch (colErr) {
-        logger.info('⚙️ Adding EXCLUIDO_COMISIONES column to COMMISSION_EXCEPTIONS...');
-        try {
-            await query(`ALTER TABLE JAVIER.COMMISSION_EXCEPTIONS ADD COLUMN EXCLUIDO_COMISIONES CHAR(1) DEFAULT 'N'`);
-            logger.info('✅ EXCLUIDO_COMISIONES column added.');
-        } catch (alterErr) {
-            logger.warn(`⚠️ Could not add column (may already exist): ${alterErr.message}`);
-        }
-    }
-
-    // Seed default excluded vendors - ONLY if table is empty to avoid overriding user changes
-    try {
-        const count = await query(`SELECT COUNT(*) as CNT FROM JAVIER.COMMISSION_EXCEPTIONS`, false, false);
-        if (count && count[0].CNT == 0) {
-            const defaultExcluded = ['03', '13', '93', '80']; // Use '03' to match typical DB format
-            for (const code of defaultExcluded) {
-                await query(`INSERT INTO JAVIER.COMMISSION_EXCEPTIONS (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES) VALUES ('${code}', 'N', 'Y')`);
+            try {
+                await conn.query(`
+                     CREATE TABLE JAVIER.COMM_CONFIG (
+                         ID INT NOT NULL,
+                         YEAR INT NOT NULL,
+                         IPC_PCT DECIMAL(5,2) DEFAULT 3.00,
+                         TIER1_MAX DECIMAL(5,2) DEFAULT 103.00,
+                         TIER1_PCT DECIMAL(5,2) DEFAULT 1.00,
+                         TIER2_MAX DECIMAL(5,2) DEFAULT 106.00,
+                         TIER2_PCT DECIMAL(5,2) DEFAULT 1.30,
+                         TIER3_MAX DECIMAL(5,2) DEFAULT 110.00,
+                         TIER3_PCT DECIMAL(5,2) DEFAULT 1.60,
+                         TIER4_PCT DECIMAL(5,2) DEFAULT 2.00,
+                         PRIMARY KEY (ID)
+                     )
+                `);
+                logger.info('✅ JAVIER.COMM_CONFIG table created.');
+                await conn.query(`
+                    INSERT INTO JAVIER.COMM_CONFIG (ID, YEAR, IPC_PCT, TIER1_MAX, TIER1_PCT, TIER2_MAX, TIER2_PCT, TIER3_MAX, TIER3_PCT, TIER4_PCT)
+                    VALUES (1, 2026, 3.00, 103.00, 1.00, 106.00, 1.30, 110.00, 1.60, 2.00)
+                `);
+                logger.info('🌱 JAVIER.COMM_CONFIG seeded default values.');
+            } catch (createErr) {
+                logger.warn(`⚠️ COMM_CONFIG init: ${createErr.message}`);
             }
-            logger.info(`🌱 Seeded default excluded vendors [${defaultExcluded.join(',')}] into empty table.`);
         }
-    } catch (seedErr) {
-        logger.debug(`Seed check error: ${seedErr.message}`);
-    }
 
-    // FIX #4: Create COMMISSION_PAYMENTS table if not exists
-    try {
-        await query(`SELECT 1 FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
-        logger.info('✅ JAVIER.COMMISSION_PAYMENTS table exists.');
-    } catch (e) {
-        logger.info('⚙️ Creating JAVIER.COMMISSION_PAYMENTS table...');
+        // 2. EXCLUIDO_COMISIONES column
         try {
-            await query(`
-                CREATE TABLE JAVIER.COMMISSION_PAYMENTS (
-                    ID INT NOT NULL GENERATED ALWAYS AS IDENTITY,
-                    VENDEDOR_CODIGO VARCHAR(10) NOT NULL,
-                    ANIO INT NOT NULL,
-                    MES INT NOT NULL,
-                    VENTAS_REAL DECIMAL(14,2) NOT NULL DEFAULT 0,
-                    OBJETIVO_MES DECIMAL(14,2) NOT NULL DEFAULT 0,
-                    VENTAS_SOBRE_OBJETIVO DECIMAL(14,2) NOT NULL DEFAULT 0,
-                    COMISION_GENERADA DECIMAL(12,2) NOT NULL DEFAULT 0,
-                    IMPORTE_PAGADO DECIMAL(12,2) NOT NULL DEFAULT 0,
-                    FECHA_PAGO TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    OBSERVACIONES VARCHAR(1000) NOT NULL DEFAULT '',
-                    CREADO_POR VARCHAR(50) NOT NULL DEFAULT 'unknown',
-                    FECHA_CREACION TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (ID)
-                )
-            `);
-            logger.info('✅ JAVIER.COMMISSION_PAYMENTS table created.');
-        } catch (createErr) {
-            logger.warn(`⚠️ Could not create COMMISSION_PAYMENTS: ${createErr.message}`);
+            await conn.query(`SELECT EXCLUIDO_COMISIONES FROM JAVIER.COMMISSION_EXCEPTIONS FETCH FIRST 1 ROWS ONLY`);
+            logger.info('✅ EXCLUIDO_COMISIONES column exists.');
+        } catch (colErr) {
+            try {
+                await conn.query(`ALTER TABLE JAVIER.COMMISSION_EXCEPTIONS ADD COLUMN EXCLUIDO_COMISIONES CHAR(1) DEFAULT 'N'`);
+                logger.info('✅ EXCLUIDO_COMISIONES column added.');
+            } catch (alterErr) {
+                // may already exist
+            }
         }
-    }
 
-    // Add OBJETIVO_MES column for snapshot (idempotent - skipped if exists)
-    try {
-        await query(`SELECT OBJETIVO_MES FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
-    } catch (colErr) {
-        logger.info('⚙️ Adding OBJETIVO_MES column to COMMISSION_PAYMENTS...');
+        // 3. Seed default excluded vendors
         try {
-            await query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN OBJETIVO_MES DECIMAL(12,2) DEFAULT 0`);
-            logger.info('✅ OBJETIVO_MES column added.');
-        } catch (alterErr) {
-            logger.warn(`⚠️ Could not add OBJETIVO_MES column: ${alterErr.message}`);
+            const count = await conn.query(`SELECT COUNT(*) as CNT FROM JAVIER.COMMISSION_EXCEPTIONS`);
+            if (count && count[0].CNT == 0) {
+                const defaultExcluded = ['03', '13', '93', '80'];
+                for (const code of defaultExcluded) {
+                    await conn.query(`INSERT INTO JAVIER.COMMISSION_EXCEPTIONS (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES) VALUES ('${code}', 'N', 'Y')`);
+                }
+                logger.info(`🌱 Seeded default excluded vendors.`);
+            }
+        } catch (seedErr) {
+            logger.debug(`Seed check: ${seedErr.message}`);
         }
-    }
 
-    // Add VENTAS_SOBRE_OBJETIVO column for snapshot
-    try {
-        await query(`SELECT VENTAS_SOBRE_OBJETIVO FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
-    } catch (colErr) {
-        logger.info('⚙️ Adding VENTAS_SOBRE_OBJETIVO column to COMMISSION_PAYMENTS...');
+        // 4. COMMISSION_PAYMENTS table
         try {
-            await query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN VENTAS_SOBRE_OBJETIVO DECIMAL(12,2) DEFAULT 0`);
-            logger.info('✅ VENTAS_SOBRE_OBJETIVO column added.');
-        } catch (alterErr) {
-            logger.warn(`⚠️ Could not add VENTAS_SOBRE_OBJETIVO column: ${alterErr.message}`);
+            await conn.query(`SELECT 1 FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`);
+            logger.info('✅ JAVIER.COMMISSION_PAYMENTS table exists.');
+        } catch (e) {
+            try {
+                await conn.query(`
+                    CREATE TABLE JAVIER.COMMISSION_PAYMENTS (
+                        ID INT NOT NULL GENERATED ALWAYS AS IDENTITY,
+                        VENDEDOR_CODIGO VARCHAR(10) NOT NULL,
+                        ANIO INT NOT NULL,
+                        MES INT NOT NULL,
+                        VENTAS_REAL DECIMAL(14,2) NOT NULL DEFAULT 0,
+                        OBJETIVO_MES DECIMAL(14,2) NOT NULL DEFAULT 0,
+                        VENTAS_SOBRE_OBJETIVO DECIMAL(14,2) NOT NULL DEFAULT 0,
+                        COMISION_GENERADA DECIMAL(12,2) NOT NULL DEFAULT 0,
+                        IMPORTE_PAGADO DECIMAL(12,2) NOT NULL DEFAULT 0,
+                        FECHA_PAGO TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        OBSERVACIONES VARCHAR(1000) NOT NULL DEFAULT '',
+                        CREADO_POR VARCHAR(50) NOT NULL DEFAULT 'unknown',
+                        FECHA_CREACION TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (ID)
+                    )
+                `);
+                logger.info('✅ JAVIER.COMMISSION_PAYMENTS table created.');
+            } catch (createErr) {
+                logger.warn(`⚠️ COMMISSION_PAYMENTS: ${createErr.message}`);
+            }
         }
+
+        // 5. Columns idempotent additions
+        try { await conn.query(`SELECT OBJETIVO_MES FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`); } catch (e) {
+            try { await conn.query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN OBJETIVO_MES DECIMAL(12,2) DEFAULT 0`); } catch (_) { }
+        }
+        try { await conn.query(`SELECT VENTAS_SOBRE_OBJETIVO FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`); } catch (e) {
+            try { await conn.query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN VENTAS_SOBRE_OBJETIVO DECIMAL(12,2) DEFAULT 0`); } catch (_) { }
+        }
+
+        // 6. Index
+        try { await conn.query(`CREATE INDEX IDX_CP_VENDOR_YEAR ON JAVIER.COMMISSION_PAYMENTS(VENDEDOR_CODIGO, ANIO)`); } catch (_) { }
+
+    } catch (error) {
+        logger.warn(`⚠️ Commission tables init error: ${error.message}`);
+    } finally {
+        if (conn) try { await conn.close(); } catch (_) { }
     }
 
-    // Performance index for payment lookups
-    try {
-        await query(`CREATE INDEX IDX_CP_VENDOR_YEAR ON JAVIER.COMMISSION_PAYMENTS(VENDEDOR_CODIGO, ANIO)`, false, false);
-        logger.info('✅ Index IDX_CP_VENDOR_YEAR created.');
-    } catch (idxErr) {
-        // Index may already exist - expected after first run
-        logger.debug(`Index creation note: ${idxErr.message}`);
-    }
-
-    // Load excluded vendors into memory
+    // Load excluded vendors into memory (uses query() which is fine here — pool is stable)
     await loadExcludedVendors();
     logger.info(`✅ Commission system initialized. Excluded vendors: [${EXCLUDED_VENDORS.join(', ')}]`);
 }
 
-// Run initialization on module load (with retry on failure)
-setTimeout(async () => {
-    try {
-        await initCommissionTables();
-    } catch (err) {
-        logger.warn(`Commission tables init failed, retrying in 10s: ${err.message}`);
-        setTimeout(async () => {
-            try {
-                await initCommissionTables();
-            } catch (retryErr) {
-                logger.error(`Commission tables init retry failed: ${retryErr.message}`);
-            }
-        }, 10000);
-    }
-}, 3000);
+// Exported for server.js to call during startup sequence (no more fire-and-forget setTimeout)
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -1123,4 +1085,4 @@ router.get('/excluded-vendors', async (req, res) => {
     }
 });
 
-module.exports = router;
+module.exports = { router, initCommissionTables };

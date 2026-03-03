@@ -83,13 +83,15 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   objectivesRoutes = require('./routes/objectives');
   exportRoutes = require('./routes/export');
   chatbotRoutes = require('./routes/chatbot');
-  commissionsRoutes = require('./routes/commissions');
+  const commissionsModule = require('./routes/commissions');
+  commissionsRoutes = commissionsModule.router;
   filtersRoutes = require('./routes/filters');
   entregasRoutes = require('./routes/entregas');
   repartidorRoutes = require('./routes/repartidor');
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
-  warehouseRoutes = require('./routes/warehouse');
+  const warehouseModule = require('./routes/warehouse');
+  warehouseRoutes = warehouseModule.router;
 }
 
 const app = express();
@@ -186,17 +188,21 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
 async function startServer() {
   await initDb();
 
-  // Ensure Delivery Status Table Exists (Safe Strategy for DB2 i5/OS)
-  // NOTE: SYSIBM.SYSTABLES does not exist on i5/OS. Use direct SELECT to probe.
+  // ─── PHASE 1: Verify/create DB schema using DIRECT connections ────────
+  // Uses getPool().connect() directly, NOT query(), to avoid retry/pool-recreation logic.
+  const { getPool } = require('./config/db');
+
+  // Delivery Status table
   try {
-    // Try a lightweight probe query on the table itself
-    await query(`SELECT COUNT(*) as CNT FROM JAVIER.DELIVERY_STATUS`, false, false);
-    logger.info('✅ JAVIER.DELIVERY_STATUS table verified and ready.'); setDeliveryStatusAvailable(true);
-  } catch (probeErr) {
-    // Table likely doesn't exist (SQL0204) — attempt to create it
-    logger.warn(`⚠️ DELIVERY_STATUS probe failed (${probeErr.message}). Attempting to create table...`);
+    const pool = getPool();
+    const conn = await pool.connect();
     try {
-      await query(`
+      await conn.query(`SELECT COUNT(*) as CNT FROM JAVIER.DELIVERY_STATUS`);
+      logger.info('✅ JAVIER.DELIVERY_STATUS table verified and ready.');
+      setDeliveryStatusAvailable(true);
+    } catch (probeErr) {
+      try {
+        await conn.query(`
             CREATE TABLE JAVIER.DELIVERY_STATUS (
                 ID VARCHAR(64) NOT NULL PRIMARY KEY,
                 STATUS VARCHAR(20) DEFAULT 'PENDIENTE',
@@ -207,22 +213,26 @@ async function startServer() {
                 UPDATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
                 REPARTIDOR_ID VARCHAR(20)
             )
-        `, false, false);
-      logger.info('✅ JAVIER.DELIVERY_STATUS table created successfully.');
-      setDeliveryStatusAvailable(true);
-    } catch (createErr) {
-      // Table might already exist (race condition) or we lack DDL permissions
-      if (createErr.message && createErr.message.includes('SQL0601')) {
-        logger.info('✅ JAVIER.DELIVERY_STATUS already exists (confirmed via SQL0601).');
+        `);
+        logger.info('✅ JAVIER.DELIVERY_STATUS table created successfully.');
         setDeliveryStatusAvailable(true);
-      } else {
-        logger.error(`❌ Cannot create DELIVERY_STATUS table: ${createErr.message}`);
-        logger.warn('⚠️ Delivery status tracking will use in-memory fallback. Deliveries module will still work but status changes won\'t persist across restarts.');
+      } catch (createErr) {
+        if (createErr.message && createErr.message.includes('SQL0601')) {
+          logger.info('✅ JAVIER.DELIVERY_STATUS already exists.');
+          setDeliveryStatusAvailable(true);
+        } else {
+          logger.warn(`⚠️ Cannot create DELIVERY_STATUS table: ${createErr.message}`);
+          logger.warn('⚠️ Delivery status tracking will use in-memory fallback.');
+        }
       }
+    } finally {
+      try { await conn.close(); } catch (_) { }
     }
+  } catch (e) {
+    logger.warn(`⚠️ DELIVERY_STATUS setup skipped: ${e.message}`);
   }
 
-  // Ensure Warehouse tables exist (ALMACEN_CARGA_MANUAL, etc.)
+  // ─── PHASE 2: Create/verify DB schema (direct connections, no pool recreation) ───
   try {
     const { initWarehouseTables } = require('./routes/warehouse');
     await initWarehouseTables();
@@ -230,15 +240,18 @@ async function startServer() {
     logger.warn(`⚠️ Warehouse table setup error (non-fatal): ${whErr.message}`);
   }
 
-  // Initialize Redis cache (non-blocking - works without Redis too)
+  try {
+    const { initCommissionTables } = require('./routes/commissions');
+    await initCommissionTables();
+  } catch (commErr) {
+    logger.warn(`⚠️ Commission table setup error (non-fatal): ${commErr.message}`);
+  }
+
+  // ─── PHASE 3: Initialize caches (pool is stable, schema is ready) ─────
   initCache()
     .then(() => logger.info('✅ Redis cache initialized'))
     .catch(err => logger.warn(`⚠️ Redis unavailable (using L1 only): ${err.message}`));
 
-  // ─── CRITICAL: Preload caches BEFORE accepting requests ───────────────
-  // LACLAE cache is required by Rutero, Commissions, and Objectives.
-  // Metadata cache is required by Analytics/Dashboard filters.
-  // Without these, every request hits "Cache not ready" fallback.
   logger.info('📦 Pre-loading critical caches before accepting requests…');
   const cacheStart = Date.now();
 
@@ -256,7 +269,7 @@ async function startServer() {
     logger.warn(`⚠️ Metadata cache error (non-fatal): ${err.message}`);
   }
 
-  // ─── NOW start server (caches are warm) ───────────────────────────────
+  // ─── PHASE 4: Start server (schema ready + caches warm) ───────────────
   app.listen(PORT, '0.0.0.0', () => {
     logger.info('═'.repeat(60));
     logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);

@@ -7,7 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, getPool } = require('../config/db');
 const loadPlanner = require('../services/loadPlanner');
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -24,22 +24,32 @@ function isTableNotFound(err) {
 
 /**
  * Try to create a table. Silently ignore if it already exists (SQL0601).
+ * Uses DIRECT pool connections to avoid the query() retry/pool-recreation logic.
  */
 async function safeCreateTable(name, ddl) {
+    const pool = getPool();
+    if (!pool) { logger.warn(`⚠️ Cannot verify ${name}: no DB pool`); return; }
+    let conn;
     try {
-        await query(`SELECT 1 FROM ${name} FETCH FIRST 1 ROWS ONLY`, false, false);
+        conn = await pool.connect();
+        await conn.query(`SELECT 1 FROM ${name} FETCH FIRST 1 ROWS ONLY`);
+        // Table exists — nothing to do
     } catch (probeErr) {
-        if (!isTableNotFound(probeErr)) return; // some other error, skip
+        if (!isTableNotFound(probeErr)) { if (conn) try { await conn.close(); } catch (_) { } return; }
+        // Table not found — create it
         try {
-            await query(ddl, false, false);
+            if (!conn) conn = await pool.connect();
+            await conn.query(ddl);
             logger.info(`✅ Created table ${name}`);
         } catch (createErr) {
             if ((createErr.message || '').includes('SQL0601')) {
-                logger.info(`✅ ${name} already exists`);
+                // already exists (race condition) — fine
             } else {
                 logger.warn(`⚠️ Could not create ${name}: ${createErr.message}`);
             }
         }
+    } finally {
+        if (conn) try { await conn.close(); } catch (_) { }
     }
 }
 

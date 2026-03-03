@@ -111,13 +111,13 @@ function isConnectionError(error) {
     const odbcStates = (error.odbcErrors || []).map(e => e.state);
 
     return msg.includes('communication link failure') ||
-           msg.includes('so close') ||
-           msg.includes('connection') ||
-           odbcCodes.includes(10054) ||   // TCP reset by remote
-           odbcCodes.includes(10053) ||   // Software caused connection abort
-           odbcStates.includes('08S01') || // Communication link failure
-           odbcStates.includes('08003') || // Connection not open
-           odbcStates.includes('HY000');   // General ODBC error (often stale conn)
+        msg.includes('so close') ||
+        msg.includes('connection') ||
+        odbcCodes.includes(10054) ||   // TCP reset by remote
+        odbcCodes.includes(10053) ||   // Software caused connection abort
+        odbcStates.includes('08S01') || // Communication link failure
+        odbcStates.includes('08003') || // Connection not open
+        odbcStates.includes('HY000');   // General ODBC error (often stale conn)
 }
 
 /**
@@ -129,11 +129,11 @@ function isSqlSyntaxError(error) {
     const odbcCodes = (error.odbcErrors || []).map(e => e.code);
 
     return odbcStates.includes('42S22') || // Column not found
-           odbcStates.includes('42S02') || // Table not found
-           odbcStates.includes('42000') || // Syntax error or access violation
-           odbcCodes.includes(-205) ||     // DB2: column not found
-           odbcCodes.includes(-204) ||     // DB2: object not found
-           odbcCodes.includes(-104);       // DB2: illegal symbol/token
+        odbcStates.includes('42S02') || // Table not found
+        odbcStates.includes('42000') || // Syntax error or access violation
+        odbcCodes.includes(-205) ||     // DB2: column not found
+        odbcCodes.includes(-204) ||     // DB2: object not found
+        odbcCodes.includes(-104);       // DB2: illegal symbol/token
 }
 
 /**
@@ -208,7 +208,9 @@ async function query(sql, logQuery = true, logError = true) {
 
             if (isSqlSyntaxError(error)) {
                 // SQL syntax/schema error — will never succeed, don't waste retries
-                logger.error(`🚫 SQL syntax/schema error (no retry): state=${(error.odbcErrors || []).map(e => e.state).join(',')} code=${(error.odbcErrors || []).map(e => e.code).join(',')}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ') : 'N/A'}`);
+                if (logError) {
+                    logger.error(`🚫 SQL syntax/schema error (no retry): state=${(error.odbcErrors || []).map(e => e.state).join(',')} code=${(error.odbcErrors || []).map(e => e.code).join(',')}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ') : 'N/A'}`);
+                }
                 break;
             }
 
@@ -240,7 +242,7 @@ async function query(sql, logQuery = true, logError = true) {
     // If ALL retries failed with connection errors, schedule pool recreation
     // for the next request (don't block this one further)
     if (connectionErrorCount >= MAX_RETRIES) {
-        recreatePool().catch(() => {}); // fire-and-forget
+        recreatePool().catch(() => { }); // fire-and-forget
     }
 
     throw lastError;
@@ -312,7 +314,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
     }
 
     if (connectionErrorCount >= MAX_RETRIES) {
-        recreatePool().catch(() => {});
+        recreatePool().catch(() => { });
     }
 
     throw lastError;
