@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 // ODBC Connection String
-const ODBC_CONNECTION = 'DSN=GMP;UID=JAVIER;PWD=JAVIER';
+const ODBC_CONNECTION = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
 
 // Helper: Execute query
 async function query(sql: string): Promise<any[]> {

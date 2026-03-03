@@ -203,7 +203,17 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               TRIM(COALESCE(CLI.POBLACION, '')) as POBLACION,
               TRIM(COALESCE(CLI.TELEFONO1, '')) as TELEFONO,
               TRIM(COALESCE(CLI.TELEFONO2, '')) as TELEFONO2,
+              CPC.IMPORTETOTAL,
               CPC.IMPORTEBRUTO,
+              CPC.IMPORTEBASEIMPONIBLE1 as CPC_BASE1,
+              CPC.IMPORTEBASEIMPONIBLE2 as CPC_BASE2,
+              CPC.IMPORTEBASEIMPONIBLE3 as CPC_BASE3,
+              CPC.PORCENTAJEIVA1 as CPC_PCTIVA1,
+              CPC.PORCENTAJEIVA2 as CPC_PCTIVA2,
+              CPC.PORCENTAJEIVA3 as CPC_PCTIVA3,
+              CPC.IMPORTEIVA1 as CPC_IVA1,
+              CPC.IMPORTEIVA2 as CPC_IVA2,
+              CPC.IMPORTEIVA3 as CPC_IVA3,
               TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
               TRIM(CPC.CODIGORUTA) as RUTA,
@@ -240,12 +250,13 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         }
 
         // --- DEDUPLICATION ---
-        //Group by Albaran ID to prevent duplicates from multiple OPP rows
+        // Group by Albaran ID + Client to prevent duplicates from multiple OPP rows
+        // NOTE: Same albaran can have multiple CPC records for different clients
         const uniqueMap = new Map();
         rows.forEach(row => {
-            // FIX: Ensure ID matches the one used in JOIN (Trimmed Series)
             const serie = (row.SERIEALBARAN || '').trim();
-            const id = `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
+            const cliente = (row.CLIENTE || '').trim();
+            const id = `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`;
             if (!uniqueMap.has(id)) {
                 uniqueMap.set(id, row);
             }
@@ -355,12 +366,35 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 return parseFloat(str) || 0;
             };
 
-            const importeParsed = parseMoney(row.IMPORTEBRUTO);
+            // Use IMPORTETOTAL (correct final amount incl. IVA) instead of IMPORTEBRUTO (gross pre-discount)
+            const importeTotal = parseMoney(row.IMPORTETOTAL);
+            const importeBruto = parseMoney(row.IMPORTEBRUTO);
+
+            // IVA breakdown from CPC (up to 3 tax bases)
+            const base1 = parseMoney(row.CPC_BASE1);
+            const base2 = parseMoney(row.CPC_BASE2);
+            const base3 = parseMoney(row.CPC_BASE3);
+            const pctIva1 = parseMoney(row.CPC_PCTIVA1);
+            const pctIva2 = parseMoney(row.CPC_PCTIVA2);
+            const pctIva3 = parseMoney(row.CPC_PCTIVA3);
+            const iva1 = parseMoney(row.CPC_IVA1);
+            const iva2 = parseMoney(row.CPC_IVA2);
+            const iva3 = parseMoney(row.CPC_IVA3);
+
+            const netoSum = Math.round((base1 + base2 + base3) * 100) / 100;
+            const ivaSum = Math.round((iva1 + iva2 + iva3) * 100) / 100;
+
+            // Build IVA breakdown array (only non-zero bases)
+            const ivaBreakdown = [];
+            if (base1 > 0) ivaBreakdown.push({ base: base1, pct: pctIva1, iva: iva1 });
+            if (base2 > 0) ivaBreakdown.push({ base: base2, pct: pctIva2, iva: iva2 });
+            if (base3 > 0) ivaBreakdown.push({ base: base3, pct: pctIva3, iva: iva3 });
 
             const serie = (row.SERIEALBARAN || '').trim();
+            const cliente = (row.CLIENTE || '').trim();
 
             return {
-                id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
+                id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`,
                 subempresa: row.SUBEMPRESAALBARAN,
                 ejercicio: row.EJERCICIOALBARAN,
                 serie: serie,
@@ -369,13 +403,18 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 numeroFactura: numeroFactura,
                 serieFactura: serieFactura,
                 documentoTipo: esFactura ? 'FACTURA' : 'ALBARÁN',
-                codigoCliente: row.CLIENTE?.trim(),
+                codigoCliente: cliente,
                 nombreCliente: row.NOMBRE_CLIENTE?.trim(),
                 direccion: row.DIRECCION?.trim(),
                 poblacion: row.POBLACION?.trim(),
                 telefono: row.TELEFONO?.trim(),
                 telefono2: row.TELEFONO2?.trim() || '',
-                importe: parseFloat(row.IMPORTEBRUTO) || 0,
+                importe: importeTotal,
+                importeBruto: importeBruto,
+                netoSum: netoSum,
+                ivaSum: ivaSum,
+                ivaBreakdown: ivaBreakdown,
+                checksum: `${Math.round((netoSum + ivaSum) * 100) / 100}`,
                 formaPago: fp,
                 formaPagoDesc: paymentInfo.desc,
                 tipoPago: paymentInfo.type,
@@ -524,16 +563,26 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         if (serie) whereClause += ` AND CPC.SERIEALBARAN = '${serie}'`;
         if (terminal) whereClause += ` AND CPC.TERMINALALBARAN = ${terminal}`;
 
-        // 2. Get Header from CPC (consistent with list endpoint - uses IMPORTEBRUTO)
+        // 2. Get Header from CPC (uses IMPORTETOTAL - correct final amount)
         const headerSql = `
-            SELECT 
+            SELECT
                 CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
-                CPC.IMPORTEBRUTO as IMPORTE,
+                CPC.IMPORTETOTAL as IMPORTE,
+                CPC.IMPORTEBRUTO as IMPORTE_BRUTO,
+                CPC.IMPORTEBASEIMPONIBLE1 as CPC_BASE1,
+                CPC.IMPORTEBASEIMPONIBLE2 as CPC_BASE2,
+                CPC.IMPORTEBASEIMPONIBLE3 as CPC_BASE3,
+                CPC.PORCENTAJEIVA1 as CPC_PCTIVA1,
+                CPC.PORCENTAJEIVA2 as CPC_PCTIVA2,
+                CPC.PORCENTAJEIVA3 as CPC_PCTIVA3,
+                CPC.IMPORTEIVA1 as CPC_IVA1,
+                CPC.IMPORTEIVA2 as CPC_IVA2,
+                CPC.IMPORTEIVA3 as CPC_IVA3,
                 CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
                 TRIM(CPC.CODIGOFORMAPAGO) as FORMA_PAGO,
-                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as CLIENTE_NOM, 
-                TRIM(COALESCE(CLI.DIRECCION, '')) as DIR, 
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as CLIENTE_NOM,
+                TRIM(COALESCE(CLI.DIRECCION, '')) as DIR,
                 TRIM(COALESCE(CLI.POBLACION, '')) as POB,
                 CAC.NUMEROFACTURA, CAC.SERIEFACTURA
             FROM DSEDAC.CPC CPC
@@ -567,6 +616,23 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 
         const items = await query(itemsSql, false);
 
+        // IVA breakdown for detail
+        const base1 = parseFloat(header.CPC_BASE1) || 0;
+        const base2 = parseFloat(header.CPC_BASE2) || 0;
+        const base3 = parseFloat(header.CPC_BASE3) || 0;
+        const pctIva1 = parseFloat(header.CPC_PCTIVA1) || 0;
+        const pctIva2 = parseFloat(header.CPC_PCTIVA2) || 0;
+        const pctIva3 = parseFloat(header.CPC_PCTIVA3) || 0;
+        const iva1 = parseFloat(header.CPC_IVA1) || 0;
+        const iva2 = parseFloat(header.CPC_IVA2) || 0;
+        const iva3 = parseFloat(header.CPC_IVA3) || 0;
+        const netoSum = Math.round((base1 + base2 + base3) * 100) / 100;
+        const ivaSum = Math.round((iva1 + iva2 + iva3) * 100) / 100;
+        const ivaBreakdown = [];
+        if (base1 > 0) ivaBreakdown.push({ base: base1, pct: pctIva1, iva: iva1 });
+        if (base2 > 0) ivaBreakdown.push({ base: base2, pct: pctIva2, iva: iva2 });
+        if (base3 > 0) ivaBreakdown.push({ base: base3, pct: pctIva3, iva: iva3 });
+
         const albaran = {
             id: `${header.EJERCICIOALBARAN}-${(header.SERIEALBARAN || '').trim()}-${header.TERMINALALBARAN}-${header.NUMEROALBARAN}`,
             numeroAlbaran: header.NUMEROALBARAN,
@@ -582,6 +648,11 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             documentoTipo: (header.NUMEROFACTURA || 0) > 0 ? 'FACTURA' : 'ALBARÁN',
             fecha: `${header.DIADOCUMENTO}/${header.MESDOCUMENTO}/${header.ANODOCUMENTO}`,
             importe: parseFloat(header.IMPORTE) || 0,
+            importeBruto: parseFloat(header.IMPORTE_BRUTO) || 0,
+            netoSum: netoSum,
+            ivaSum: ivaSum,
+            ivaBreakdown: ivaBreakdown,
+            checksum: `${Math.round((netoSum + ivaSum) * 100) / 100}`,
             formaPago: (header.FORMA_PAGO || '').trim(),
             items: items.map(i => ({
                 itemId: i.SECUENCIA,

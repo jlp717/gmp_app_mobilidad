@@ -40,7 +40,8 @@ function buildOdbcConnectionString(): string {
   const uid = process.env.ODBC_UID || '';
   const pwd = process.env.ODBC_PWD || '';
   // Usar DSN configurado en Windows ODBC con credenciales
-  return `DSN=GMP;UID=${uid};PWD=${pwd};NAM=1;`;
+  // CCSID=1208 ensures IBM i returns UTF-8 (fixes Ñ, tildes, accents)
+  return `DSN=GMP;UID=${uid};PWD=${pwd};NAM=1;CCSID=1208;`;
 }
 
 export const config = {

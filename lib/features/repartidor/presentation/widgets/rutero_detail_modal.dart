@@ -312,7 +312,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 const Divider(color: AppTheme.borderColor, height: 20),
                 _buildInfoRow(Icons.location_on, 'Dirección', '${widget.albaran.direccion}, ${widget.albaran.poblacion}'),
                 const Divider(color: AppTheme.borderColor, height: 20),
-                _buildInfoRow(Icons.euro, 'Importe', '${widget.albaran.importeTotal.toStringAsFixed(2)} €'),
+                // IVA breakdown: show neto + each IVA line + total
+                if (widget.albaran.importeNeto > 0) ...[
+                  _buildInfoRow(Icons.euro, 'Importe Neto', '${widget.albaran.importeNeto.toStringAsFixed(2)} €'),
+                  for (final iva in widget.albaran.ivaBreakdown)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _buildInfoRow(
+                        Icons.percent,
+                        'IVA ${iva.pct.toStringAsFixed(0)}%',
+                        '${iva.iva.toStringAsFixed(2)} €',
+                      ),
+                    ),
+                  const Divider(color: AppTheme.borderColor, height: 20),
+                  _buildInfoRow(Icons.euro, 'Total', '${widget.albaran.importeTotal.toStringAsFixed(2)} €'),
+                ] else ...[
+                  _buildInfoRow(Icons.euro, 'Importe', '${widget.albaran.importeTotal.toStringAsFixed(2)} €'),
+                ],
                 const Divider(color: AppTheme.borderColor, height: 20),
                 _buildInfoRow(Icons.payment, 'Forma pago', widget.albaran.formaPagoDesc),
                 if (widget.albaran.observaciones != null && widget.albaran.observaciones!.isNotEmpty) ...[
