@@ -359,6 +359,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
         const rows = await query(sql);
 
         // --- DEDUPLICATION v2: Group by unique albaran key AND factura key to eliminate all duplicates ---
+        // FIX: For Facturas, if multiple albaranes are part of the same invoice, SUM their amounts!
         const uniqueMap = new Map();
         rows.forEach(row => {
             const serie = (row.SERIEALBARAN || '').toString().trim();
@@ -367,19 +368,32 @@ router.get('/history/documents/:clientId', async (req, res) => {
             const key = numFactura > 0
                 ? `FAC-${row.EJERCICIOALBARAN}-${(row.SERIEFACTURA || serie).toString().trim()}-${numFactura}`
                 : `ALB-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
+
             if (!uniqueMap.has(key)) {
-                uniqueMap.set(key, row);
+                // First time seeing this document/invoice, deep copy so we can mutate safely
+                uniqueMap.set(key, { ...row });
             } else if (numFactura > 0) {
-                // For facturas, prefer row with highest albaran number (latest)
+                // Factura already exists, this is another albaran for the SAME invoice!
                 const existing = uniqueMap.get(key);
+
+                // 1. Sum the monetary amounts
+                existing.IMPORTETOTAL = (parseFloat(existing.IMPORTETOTAL) || 0) + (parseFloat(row.IMPORTETOTAL) || 0);
+                existing.IMPORTE_PENDIENTE = (parseFloat(existing.IMPORTE_PENDIENTE) || 0) + (parseFloat(row.IMPORTE_PENDIENTE) || 0);
+
+                // 2. Keep the latest albaran number for display/status purposes
                 if ((row.NUMEROALBARAN || 0) > (existing.NUMEROALBARAN || 0)) {
-                    uniqueMap.set(key, row);
+                    existing.NUMEROALBARAN = row.NUMEROALBARAN;
+                    // Inherit the latest status tracking info
+                    existing.DELIVERY_STATUS = row.DELIVERY_STATUS || existing.DELIVERY_STATUS;
+                    existing.FIRMA_PATH = row.FIRMA_PATH || existing.FIRMA_PATH;
+                    existing.CONFORMADOSN = row.CONFORMADOSN || existing.CONFORMADOSN;
+                    // Note: Date/Time logic usually inherits from the later drop-off or the earliest logic
                 }
             }
         });
         const uniqueRows = Array.from(uniqueMap.values());
         if (uniqueRows.length < rows.length) {
-            logger.info(`[REPARTIDOR] Deduplication v2: ${rows.length} raw rows -> ${uniqueRows.length} unique documents for client ${clientId}`);
+            logger.info(`[REPARTIDOR] Deduplication v2 (Summing): ${rows.length} raw rows -> ${uniqueRows.length} unique documents for client ${clientId}`);
         }
 
         const documents = uniqueRows.map(row => {

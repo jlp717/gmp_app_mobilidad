@@ -1359,8 +1359,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     try {
       final isFactura = doc.type == _DocType.factura;
       final bytes = await RepartidorDataService.downloadDocument(
-        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
-        serie: doc.serie,
+        year: isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
         terminal: doc.terminal,
         type: isFactura ? 'factura' : 'albaran',
@@ -1386,6 +1386,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         context,
         MaterialPageRoute(
           builder: (_) => PdfPreviewScreen(
+            key: ValueKey('preview_${doc.id}_${DateTime.now().millisecondsSinceEpoch}'),
             pdfBytes: pdfBytes,
             title: '$typeLabel ${doc.number}',
             fileName: fileName,
@@ -1410,8 +1411,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     try {
       final isFactura = doc.type == _DocType.factura;
       final bytes = await RepartidorDataService.downloadDocument(
-        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
-        serie: doc.serie,
+        year: isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
         terminal: doc.terminal,
         type: isFactura ? 'factura' : 'albaran',
@@ -1467,8 +1468,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
     try {
       await RepartidorDataService.sendEmail(
-        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
-        serie: doc.serie,
+        year: isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
         type: isFactura ? 'factura' : 'albaran',
         destinatario: result.email,
@@ -1505,8 +1506,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     final modal = AsyncOperationModal.show(context, text: 'Preparando WhatsApp...');
     try {
       final bytes = await RepartidorDataService.downloadDocument(
-        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
-        serie: doc.serie,
+        year: isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
         terminal: doc.terminal,
         type: isFactura ? 'factura' : 'albaran',
@@ -1541,8 +1542,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     try {
       final isFactura = doc.type == _DocType.factura;
       final bytes = await RepartidorDataService.downloadDocument(
-        year: doc.ejercicio > 0 ? doc.ejercicio : doc.date.year,
-        serie: doc.serie,
+        year: isFactura ? (doc.ejercicioFactura ?? doc.ejercicio) : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
         number: isFactura ? (doc.facturaNumber ?? doc.number) : (doc.albaranNumber ?? doc.number),
         terminal: doc.terminal,
         type: isFactura ? 'factura' : 'albaran',
