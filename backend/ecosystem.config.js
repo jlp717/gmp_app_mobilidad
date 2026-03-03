@@ -54,7 +54,7 @@ module.exports = {
             ignore_watch: ['node_modules', 'logs', '.validation-baselines', 'coverage'],
 
             // ==================== HEALTH CHECK ====================
-            listen_timeout: 10000, // Time to wait for app to be ready
+            listen_timeout: 30000, // Time to wait for app to be ready (LACLAE cache preload)
             kill_timeout: 5000, // Time to wait for graceful shutdown
 
             // ==================== AUTO RESTART ON FILE CHANGE ====================

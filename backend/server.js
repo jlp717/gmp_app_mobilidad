@@ -235,7 +235,28 @@ async function startServer() {
     .then(() => logger.info('✅ Redis cache initialized'))
     .catch(err => logger.warn(`⚠️ Redis unavailable (using L1 only): ${err.message}`));
 
-  // Start server first so it's responsive
+  // ─── CRITICAL: Preload caches BEFORE accepting requests ───────────────
+  // LACLAE cache is required by Rutero, Commissions, and Objectives.
+  // Metadata cache is required by Analytics/Dashboard filters.
+  // Without these, every request hits "Cache not ready" fallback.
+  logger.info('📦 Pre-loading critical caches before accepting requests…');
+  const cacheStart = Date.now();
+
+  try {
+    await preloadCache(PORT);
+    logger.info(`✅ LACLAE cache ready (${Date.now() - cacheStart}ms)`);
+  } catch (err) {
+    logger.warn(`⚠️ LACLAE preload error (non-fatal): ${err.message}`);
+  }
+
+  try {
+    await loadMetadataCache();
+    logger.info(`✅ Metadata cache ready (${Date.now() - cacheStart}ms total)`);
+  } catch (err) {
+    logger.warn(`⚠️ Metadata cache error (non-fatal): ${err.message}`);
+  }
+
+  // ─── NOW start server (caches are warm) ───────────────────────────────
   app.listen(PORT, '0.0.0.0', () => {
     logger.info('═'.repeat(60));
     logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);
@@ -243,16 +264,13 @@ async function startServer() {
     logger.info(`  Connected to DB2 via ODBC - Real Data`);
     logger.info(`  Security: HMAC TOKEN AUTH 🔒`);
     logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
+    logger.info(`  Caches: LACLAE + Metadata pre-loaded ✅`);
     logger.info('═'.repeat(60));
 
-    // Signal PM2 that we are ready
+    // Signal PM2 that we are ready (caches are warm, safe to receive traffic)
     if (process.send) {
       process.send('ready');
     }
-
-    // Start System Preload (Cache Warmup)
-    preloadCache(PORT).catch(err => logger.warn(`Preload error: ${err.message}`));
-    loadMetadataCache().catch(err => logger.warn(`Metadata cache error: ${err.message}`));
   });
 }
 
