@@ -130,7 +130,7 @@ async function initWarehouseTables() {
                 CODIGOVEHICULO VARCHAR(10)    NOT NULL,
                 FECHA_CARGA    DATE           NOT NULL,
                 VENDEDOR       VARCHAR(10)    DEFAULT '',
-                LAYOUT_JSON    CLOB(1M)       NOT NULL,
+                LAYOUT_JSON    CLOB(1048576)  NOT NULL,
                 METRICS_JSON   VARCHAR(4000)  DEFAULT '{}',
                 CREATED_AT     TIMESTAMP      DEFAULT CURRENT TIMESTAMP,
                 UPDATED_AT     TIMESTAMP      DEFAULT CURRENT TIMESTAMP,
@@ -885,7 +885,7 @@ router.get('/manual-layout/:vehicleCode/:date', async (req, res) => {
             FROM JAVIER.ALMACEN_CARGA_MANUAL
             WHERE CODIGOVEHICULO = '${code}'
               AND FECHA_CARGA = '${date}'
-        `);
+        `, false, false);
 
         if (!rows.length) {
             return res.json({ found: false, layout: null });
