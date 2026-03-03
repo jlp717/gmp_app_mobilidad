@@ -25,6 +25,8 @@ function isTableNotFound(err) {
 /**
  * Try to create a table. Silently ignore if it already exists (SQL0601).
  * Uses DIRECT pool connections to avoid the query() retry/pool-recreation logic.
+ * IMPORTANT: Gets a FRESH connection for DDL because DB2 for i leaves
+ * the connection in a dirty state after a failed SQL statement.
  */
 async function safeCreateTable(name, ddl) {
     const pool = getPool();
@@ -35,10 +37,15 @@ async function safeCreateTable(name, ddl) {
         await conn.query(`SELECT 1 FROM ${name} FETCH FIRST 1 ROWS ONLY`);
         // Table exists — nothing to do
     } catch (probeErr) {
-        if (!isTableNotFound(probeErr)) { if (conn) try { await conn.close(); } catch (_) { } return; }
-        // Table not found — create it
+        // Close dirty connection first
+        if (conn) try { await conn.close(); } catch (_) { }
+        conn = null;
+
+        if (!isTableNotFound(probeErr)) return; // some other error, skip
+
+        // Get FRESH connection for DDL
         try {
-            if (!conn) conn = await pool.connect();
+            conn = await pool.connect();
             await conn.query(ddl);
             logger.info(`✅ Created table ${name}`);
         } catch (createErr) {
@@ -72,7 +79,7 @@ async function initWarehouseTables() {
                 ALTO_INTERIOR_CM  DECIMAL(8,2),
                 TOLERANCIA_EXCESO DECIMAL(5,2) DEFAULT 5,
                 NOTAS             VARCHAR(250) DEFAULT '',
-                UPDATED_AT        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UPDATED_AT        TIMESTAMP DEFAULT CURRENT TIMESTAMP,
                 UPDATED_BY        VARCHAR(20) DEFAULT 'SYSTEM'
             )` },
         {
@@ -84,7 +91,7 @@ async function initWarehouseTables() {
                 ALTO_CM        DECIMAL(8,2),
                 PESO_CAJA_KG   DECIMAL(8,2),
                 NOTAS          VARCHAR(200) DEFAULT '',
-                UPDATED_AT     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UPDATED_AT     TIMESTAMP DEFAULT CURRENT TIMESTAMP,
                 UPDATED_BY     VARCHAR(20) DEFAULT 'SYSTEM'
             )` },
         {
@@ -97,8 +104,8 @@ async function initWarehouseTables() {
                 ACTIVO          CHAR(1) DEFAULT 'S',
                 TELEFONO        VARCHAR(20) DEFAULT '',
                 EMAIL           VARCHAR(100) DEFAULT '',
-                CREATED_AT      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UPDATED_AT      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CREATED_AT      TIMESTAMP DEFAULT CURRENT TIMESTAMP,
+                UPDATED_AT      TIMESTAMP DEFAULT CURRENT TIMESTAMP
             )` },
         {
             name: 'JAVIER.ALMACEN_CARGA_HISTORICO', ddl: `
@@ -114,7 +121,7 @@ async function initWarehouseTables() {
                 NUM_BULTOS          INTEGER,
                 ESTADO              VARCHAR(20),
                 CREATED_BY          VARCHAR(20) DEFAULT 'SYSTEM',
-                CREATED_AT          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CREATED_AT          TIMESTAMP DEFAULT CURRENT TIMESTAMP
             )` },
         {
             name: 'JAVIER.ALMACEN_CARGA_MANUAL', ddl: `
@@ -125,8 +132,8 @@ async function initWarehouseTables() {
                 VENDEDOR       VARCHAR(10)    DEFAULT '',
                 LAYOUT_JSON    CLOB(1M)       NOT NULL,
                 METRICS_JSON   VARCHAR(4000)  DEFAULT '{}',
-                CREATED_AT     TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
-                UPDATED_AT     TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+                CREATED_AT     TIMESTAMP      DEFAULT CURRENT TIMESTAMP,
+                UPDATED_AT     TIMESTAMP      DEFAULT CURRENT TIMESTAMP,
                 CONSTRAINT UQ_MANUAL_LAYOUT UNIQUE (CODIGOVEHICULO, FECHA_CARGA)
             )` },
     ];

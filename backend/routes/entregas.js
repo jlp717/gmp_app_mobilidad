@@ -267,7 +267,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 
             // Debug specific rows to see why logic fails
             if (rows.length < 5 || Math.random() < 0.05) {
-                logger.info(`[ENTREGAS_DEBUG] Albaran: ${row.NUMEROALBARAN}, FP: '${fp}', Info: ${JSON.stringify(paymentInfo)}, esCTR: ${esCTR}`);
+                logger.debug(`[ENTREGAS_DEBUG] Albaran: ${row.NUMEROALBARAN}, FP: '${fp}', Info: ${JSON.stringify(paymentInfo)}, esCTR: ${esCTR}`);
             }
 
             if (!paymentInfo.mustCollect && !paymentInfo.canCollect && paymentInfo === DEFAULT_PAYMENT) {

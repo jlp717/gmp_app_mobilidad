@@ -74,6 +74,9 @@ async function initCommissionTables() {
             await conn.query(`SELECT 1 FROM JAVIER.COMM_CONFIG FETCH FIRST 1 ROWS ONLY`);
             logger.info('✅ JAVIER.COMM_CONFIG found and ready.');
         } catch (e) {
+            // Close dirty connection, get fresh one
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
             logger.info('⚙️ Initializing JAVIER.COMM_CONFIG table...');
             try {
                 await conn.query(`
@@ -107,6 +110,8 @@ async function initCommissionTables() {
             await conn.query(`SELECT EXCLUIDO_COMISIONES FROM JAVIER.COMMISSION_EXCEPTIONS FETCH FIRST 1 ROWS ONLY`);
             logger.info('✅ EXCLUIDO_COMISIONES column exists.');
         } catch (colErr) {
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
             try {
                 await conn.query(`ALTER TABLE JAVIER.COMMISSION_EXCEPTIONS ADD COLUMN EXCLUIDO_COMISIONES CHAR(1) DEFAULT 'N'`);
                 logger.info('✅ EXCLUIDO_COMISIONES column added.');
@@ -134,6 +139,9 @@ async function initCommissionTables() {
             await conn.query(`SELECT 1 FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`);
             logger.info('✅ JAVIER.COMMISSION_PAYMENTS table exists.');
         } catch (e) {
+            // Close dirty connection, get fresh one
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
             try {
                 await conn.query(`
                     CREATE TABLE JAVIER.COMMISSION_PAYMENTS (
@@ -146,10 +154,10 @@ async function initCommissionTables() {
                         VENTAS_SOBRE_OBJETIVO DECIMAL(14,2) NOT NULL DEFAULT 0,
                         COMISION_GENERADA DECIMAL(12,2) NOT NULL DEFAULT 0,
                         IMPORTE_PAGADO DECIMAL(12,2) NOT NULL DEFAULT 0,
-                        FECHA_PAGO TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        FECHA_PAGO TIMESTAMP NOT NULL DEFAULT CURRENT TIMESTAMP,
                         OBSERVACIONES VARCHAR(1000) NOT NULL DEFAULT '',
                         CREADO_POR VARCHAR(50) NOT NULL DEFAULT 'unknown',
-                        FECHA_CREACION TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        FECHA_CREACION TIMESTAMP NOT NULL DEFAULT CURRENT TIMESTAMP,
                         PRIMARY KEY (ID)
                     )
                 `);
@@ -159,11 +167,15 @@ async function initCommissionTables() {
             }
         }
 
-        // 5. Columns idempotent additions
+        // 5. Columns idempotent additions (fresh connection after any potential failures)
         try { await conn.query(`SELECT OBJETIVO_MES FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`); } catch (e) {
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
             try { await conn.query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN OBJETIVO_MES DECIMAL(12,2) DEFAULT 0`); } catch (_) { }
         }
         try { await conn.query(`SELECT VENTAS_SOBRE_OBJETIVO FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`); } catch (e) {
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
             try { await conn.query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN VENTAS_SOBRE_OBJETIVO DECIMAL(12,2) DEFAULT 0`); } catch (_) { }
         }
 
