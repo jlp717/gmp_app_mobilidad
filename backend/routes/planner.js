@@ -505,7 +505,6 @@ router.post('/rutero/move_clients', async (req, res) => {
 // RUTERO CONFIGURATION (GET/POST)
 // =============================================================================
 router.post('/rutero/config', async (req, res) => {
-    let conn;
     try {
         const { vendedor, dia, orden } = req.body;
 
@@ -516,11 +515,7 @@ router.post('/rutero/config', async (req, res) => {
         const pool = getPool();
         if (!pool) throw new Error("Database pool not initialized");
 
-        conn = await pool.connect();
-        // Removed beginTransaction to avoid DB2 Journaling silent failure
-
         // 🎯 FIX: Clear Redis cache for the day endpoint before doing DB transactions
-        // Ensures that if the request hits another worker, it won't mistakenly use stale data
         try {
             await deleteCachePattern(`rutero:config:v2:${vendedor}:*`);
             await deleteCachePattern(`query:rutero:details:v3:*`);
@@ -530,12 +525,29 @@ router.post('/rutero/config', async (req, res) => {
             logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
         }
 
+        // Helper to run SQL with detailed error logging.
+        // Gets a FRESH connection each time to avoid DB2 dirty-connection issues.
+        async function execSql(label, sql) {
+            let c;
+            try {
+                c = await pool.connect();
+                const result = await c.query(sql);
+                return result;
+            } catch (err) {
+                const odbcDetail = (err.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
+                logger.error(`❌ SQL FAILED (${label}): ${odbcDetail || err.message}`);
+                logger.error(`   SQL was: ${sql.substring(0, 500)}`);
+                throw err;
+            } finally {
+                if (c) try { await c.close(); } catch (_) {}
+            }
+        }
+
         let previousPositions = {};
         try {
-            const prevRows = await conn.query(`
-                SELECT CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG 
-                WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}'
-            `);
+            const prevRows = await execSql('fetch-previous',
+                `SELECT CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}'`
+            );
             prevRows.forEach(row => {
                 previousPositions[row.CLIENTE?.trim()] = row.ORDEN;
             });
@@ -543,23 +555,20 @@ router.post('/rutero/config', async (req, res) => {
             logger.warn(`Could not fetch previous positions: ${e.message}`);
         }
 
-        // Delete POSITIVE entries ONLY if they match exactly the client we are inserting
-        // Wait, if we want to replace the whole day's sorting list:
-        // We delete ALL POSITIVE overrides for this day, so the new `orden` array becomes the absolute truth
+        // Delete ALL POSITIVE overrides for this day, so the new `orden` array becomes the absolute truth
         // BUT we MUST preserve blocking entries (ORDEN = -1)!
-        // BUT what if `orden` array CONTAINS a client that PREVIOUSLY had a blocking entry?
-        // We must ALSO delete the blocking entry for the clients that are in the `orden` payload!
-        await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND ORDEN >= 0`);
+        await execSql('delete-positive',
+            `DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND ORDEN >= 0`
+        );
 
         if (orden.length > 0) {
             // Also explicitly delete any existing blocking entries for the clients we are trying to insert
             const updatingClients = orden.filter(o => o.cliente).map(o => `'${o.cliente.trim()}'`).join(',');
             if (updatingClients) {
-                await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND TRIM(CLIENTE) IN (${updatingClients})`);
+                await execSql('delete-blocks-for-updating',
+                    `DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND TRIM(CLIENTE) IN (${updatingClients})`
+                );
             }
-
-            // REMOVED: Cross-day deletion that was destroying move operations
-            // Previously: DELETE ... WHERE CLIENTE IN (...) across ALL days - this wiped out moves!
 
             const incomingClients = new Set();
 
@@ -567,10 +576,6 @@ router.post('/rutero/config', async (req, res) => {
                 if (!item.cliente) continue;
                 incomingClients.add(item.cliente.trim());
 
-                // SMART MERGE FIX:
-                // Only save explicit overrides if the user actually shifted this specific client,
-                // OR if the client ALREADY had an override (to avoid deleting past work).
-                // Clients that are just sitting in their natural position remain unconfigured!
                 const posNueva = parseInt(item.posicion) || 0;
                 let posAnterior = item.posicionOriginal !== undefined ? parseInt(item.posicionOriginal) : posNueva;
                 const hadPreviousOverride = previousPositions[item.cliente.trim()] !== undefined;
@@ -578,49 +583,33 @@ router.post('/rutero/config', async (req, res) => {
                 const hayCambio = posAnterior !== posNueva;
 
                 if (hayCambio || hadPreviousOverride) {
-                    await conn.query(`
-                      INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
-                      VALUES ('${vendedor}', '${dia}', '${item.cliente}', ${posNueva})
-                    `);
+                    await execSql(`insert-client-${item.cliente}`,
+                        `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES ('${vendedor}', '${dia}', '${item.cliente}', ${posNueva})`
+                    );
                 }
             }
 
-            // SMART MERGE FIX PART 2: THE "GHOST" CLIENTS
-            // If the user removed a client from their route (e.g. by dragging them to another day or skipping them),
-            // the Dart array won't include them. We MUST save an ORDEN = -1 to permanently hide them from their AS400 natural day.
-            //
-            // ⚠️ FIX 2026-03-02: ONLY block clients that previously had a POSITIVE override (were explicitly managed).
-            // Do NOT block natural-only clients that were never in RUTERO_CONFIG.
-            // This prevents the Smart Merge from inadvertently hiding natural clients that simply
-            // weren't included in the reorder payload (e.g., truncation at 200 clients, lazy loading, etc).
-            // Natural-only clients without overrides continue to appear in their natural position.
-            // If a user truly wants to remove a natural client from a day, they must use the move_clients endpoint.
-
+            // SMART MERGE PART 2: THE "GHOST" CLIENTS
+            // Only block clients that previously had a POSITIVE override (were explicitly managed).
             const clientsInConfig = Object.keys(previousPositions);
 
             for (const clientCode of clientsInConfig) {
                 if (!incomingClients.has(clientCode)) {
-                    // This client had a previous override but is MISSING in the new payload.
-                    // Only re-block if it was previously POSITIVE (managed) — not if it was already blocked.
                     const previousOrder = previousPositions[clientCode];
                     if (previousOrder >= 0) {
                         logger.info(`🚫 Smart Merge blocking previously-managed client ${clientCode} on day ${dia} (removed from reorder)`);
-                        await conn.query(`
-                            INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
-                            VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)
-                        `);
+                        await execSql(`block-ghost-${clientCode}`,
+                            `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)`
+                        );
                     } else if (previousOrder === -1) {
-                        // Preserve existing block (client was previously blocked, stays blocked)
                         logger.debug(`🔒 Smart Merge preserving existing block for ${clientCode} on day ${dia}`);
-                        await conn.query(`
-                            INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
-                            VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)
-                        `);
+                        await execSql(`preserve-block-${clientCode}`,
+                            `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)`
+                        );
                     }
                 }
             }
         }
-        // Removed commit to rely on auto-commit
 
         // Invalidate cache for this vendor's config to ensure immediate updates
         try {
@@ -643,13 +632,11 @@ router.post('/rutero/config', async (req, res) => {
 
             for (const item of orden) {
                 if (item.cliente) {
-                    await conn.query(`
-                        INSERT INTO JAVIER.RUTERO_LOG 
-                        (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES)
-                        VALUES ('${vendedor}', 'REORDENAMIENTO', '${dia}', '${dia}', '${item.cliente}', 
-                                '', NULL, ${parseInt(item.posicion) || 0}, 
-                                '${logDetail} a posición ${item.posicion}')
-                    `);
+                    try {
+                        await execSql(`log-${item.cliente}`,
+                            `INSERT INTO JAVIER.RUTERO_LOG (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES) VALUES ('${vendedor}', 'REORDENAMIENTO', '${dia}', '${dia}', '${item.cliente}', '', NULL, ${parseInt(item.posicion) || 0}, '${logDetail} a posicion ${item.posicion}')`
+                        );
+                    } catch (_) { /* non-blocking */ }
                 }
             }
         } catch (logErr) {
@@ -704,15 +691,9 @@ router.post('/rutero/config', async (req, res) => {
         res.json({ success: true, message: 'Orden actualizado y notificado' });
 
     } catch (error) {
-        if (conn) {
-            // Ignore rollback as auto-commit is used
-        }
-        logger.error(`Rutero config save error: ${error.message}`);
-        res.status(500).json({ error: 'Error guardando orden', details: error.message });
-    } finally {
-        if (conn) {
-            try { await conn.close(); } catch (e) { logger.warn(`Connection close failed: ${e.message}`); }
-        }
+        const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
+        logger.error(`Rutero config save error: ${odbcDetail || error.message}`);
+        res.status(500).json({ error: 'Error guardando orden', details: odbcDetail || error.message });
     }
 });
 

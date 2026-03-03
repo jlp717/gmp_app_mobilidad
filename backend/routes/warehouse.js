@@ -52,7 +52,8 @@ async function safeCreateTable(name, ddl) {
             if ((createErr.message || '').includes('SQL0601')) {
                 // already exists (race condition) — fine
             } else {
-                logger.warn(`⚠️ Could not create ${name}: ${createErr.message}`);
+                const odbcDetail = (createErr.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
+                logger.warn(`⚠️ Could not create ${name}: ${odbcDetail || createErr.message}`);
             }
         }
     } finally {
@@ -130,11 +131,10 @@ async function initWarehouseTables() {
                 CODIGOVEHICULO VARCHAR(10)    NOT NULL,
                 FECHA_CARGA    DATE           NOT NULL,
                 VENDEDOR       VARCHAR(10)    DEFAULT '',
-                LAYOUT_JSON    CLOB(1048576)  NOT NULL,
+                LAYOUT_JSON    CLOB(1M)       DEFAULT '',
                 METRICS_JSON   VARCHAR(4000)  DEFAULT '{}',
                 CREATED_AT     TIMESTAMP      DEFAULT CURRENT TIMESTAMP,
-                UPDATED_AT     TIMESTAMP      DEFAULT CURRENT TIMESTAMP,
-                CONSTRAINT UQ_MANUAL_LAYOUT UNIQUE (CODIGOVEHICULO, FECHA_CARGA)
+                UPDATED_AT     TIMESTAMP      DEFAULT CURRENT TIMESTAMP
             )` },
     ];
 
@@ -276,8 +276,10 @@ router.post('/load-plan', async (req, res) => {
 
         res.json(result);
     } catch (error) {
-        logger.error(`Load plan error: ${error.message}`);
-        res.status(500).json({ error: 'Error planificando carga', details: error.message });
+        const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
+        logger.error(`Load plan error: ${odbcDetail || error.message}`);
+        logger.error(`Load plan stack: ${error.stack}`);
+        res.status(500).json({ error: 'Error planificando carga', details: odbcDetail || error.message });
     }
 });
 
@@ -811,8 +813,9 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
             })),
         });
     } catch (error) {
-        logger.error(`Truck orders error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo órdenes', details: error.message });
+        const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
+        logger.error(`Truck orders error: ${odbcDetail || error.message}`);
+        res.status(500).json({ error: 'Error obteniendo órdenes', details: odbcDetail || error.message });
     }
 });
 
