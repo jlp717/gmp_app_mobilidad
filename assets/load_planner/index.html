@@ -1,13 +1,32 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Load Planner 3D</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #0F172A; }
-    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0F172A;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
     /* CSS2D labels */
     .box-label {
       font-family: 'Segoe UI', system-ui, sans-serif;
@@ -20,10 +39,14 @@
       padding: 2px 6px;
       pointer-events: none;
       white-space: nowrap;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
       backdrop-filter: blur(4px);
     }
-    .box-label.hidden { display: none; }
+
+    .box-label.hidden {
+      display: none;
+    }
+
     /* Dimension labels */
     .dim-label {
       font-family: 'Segoe UI Mono', 'Consolas', monospace;
@@ -33,39 +56,54 @@
       pointer-events: none;
       white-space: nowrap;
     }
+
     /* Loading overlay */
     #loading {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      display: flex; align-items: center; justify-content: center;
-      background: #0F172A; color: #6B7280; font-family: system-ui;
-      font-size: 14px; z-index: 100;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0F172A;
+      color: #6B7280;
+      font-family: system-ui;
+      font-size: 14px;
+      z-index: 100;
     }
-    #loading.hidden { display: none; }
+
+    #loading.hidden {
+      display: none;
+    }
   </style>
 
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+      "three": "./lib/three.module.js",
+      "three/addons/controls/OrbitControls.js": "./lib/OrbitControls.js",
+      "three/addons/renderers/CSS2DRenderer.js": "./lib/CSS2DRenderer.js"
     }
   }
   </script>
 </head>
+
 <body>
   <div id="loading">Inicializando escena 3D...</div>
   <script>
     // Safety net: if Three.js module fails to load, notify Flutter after timeout
     // so the overlay disappears and user can at least see other UI
     window._sceneInitDone = false;
-    window.addEventListener('error', function(e) {
+    window.addEventListener('error', function (e) {
       console.error('Scene load error:', e.message);
       if (!window._sceneInitDone && window.FlutterBridge) {
         window._sceneInitDone = true;
         window.FlutterBridge.postMessage(JSON.stringify({ type: 'sceneReady' }));
       }
     });
-    setTimeout(function() {
+    setTimeout(function () {
       if (!window._sceneInitDone && window.FlutterBridge) {
         console.warn('Scene init timeout — sending sceneReady anyway');
         window._sceneInitDone = true;
@@ -76,4 +114,5 @@
   </script>
   <script type="module" src="load_planner_3d.js"></script>
 </body>
+
 </html>

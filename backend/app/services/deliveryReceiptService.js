@@ -359,28 +359,31 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             doc.moveDown(0.4);
 
             // ═══════════════ TOTALES ═══════════════
-            const totLabelX = L + 90;
-            const totValX = L + 165;
-            const totW = 38;
+            const totLabelX = L + 80;
+            const totValX = L + 155;
+            const totValW = 55;
 
             // Bultos total
+            let currentY = doc.y;
             doc.fontSize(6).font('Helvetica')
-                .text('Bultos:', totLabelX, doc.y, { width: 70 })
-                .text(String(totalBultos || header?.NUMEROBULTOS || 0), totValX, doc.y - 7, { width: totW, align: 'right' });
-            doc.moveDown(0.3);
+                .text('Bultos:', totLabelX, currentY, { width: 70 });
+            doc.text(String(totalBultos || header?.NUMEROBULTOS || 0), totValX, currentY, { width: totValW, align: 'right' });
+            doc.y = currentY + 9;
 
             // Importe Neto (base imponible)
-            doc.text('Importe Neto:', totLabelX, doc.y, { width: 70 })
-                .text(fmt(baseImponible) + ' €', totValX, doc.y - 7, { width: totW, align: 'right' });
-            doc.moveDown(0.3);
+            currentY = doc.y;
+            doc.text('Importe Neto:', totLabelX, currentY, { width: 70 });
+            doc.text(fmt(baseImponible) + ' €', totValX, currentY, { width: totValW, align: 'right' });
+            doc.y = currentY + 9;
 
             // Desglose IVA por tipo
             const sortedIva = Object.entries(gruposIVA).sort((a, b) => Number(a[0]) - Number(b[0]));
             sortedIva.forEach(([pct, data]) => {
                 if (data.base > 0) {
-                    doc.text(`IVA ${pct}%:`, totLabelX, doc.y, { width: 70 })
-                        .text(fmt(data.iva) + ' €', totValX, doc.y - 7, { width: totW, align: 'right' });
-                    doc.moveDown(0.2);
+                    currentY = doc.y;
+                    doc.text(`IVA ${pct}%:`, totLabelX, currentY, { width: 70 });
+                    doc.text(fmt(data.iva) + ' €', totValX, currentY, { width: totValW, align: 'right' });
+                    doc.y = currentY + 8;
                 }
             });
             doc.moveDown(0.2);
@@ -388,13 +391,14 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             // TOTAL - línea separadora + total destacado
             doc.strokeColor('#000').lineWidth(0.5)
                 .moveTo(totLabelX, doc.y).lineTo(L + W, doc.y).stroke();
-            doc.moveDown(0.3);
+            doc.moveDown(0.4);
 
+            currentY = doc.y;
             doc.font('Helvetica-Bold').fontSize(10)
-                .text('TOTAL:', totLabelX, doc.y, { width: 65 })
-                .text(fmt(importeTotal) + ' €', totValX, doc.y - 11, { width: totW, align: 'right' });
+                .text('TOTAL:', totLabelX, currentY, { width: 65 });
+            doc.text(fmt(importeTotal) + ' €', totValX, currentY, { width: totValW, align: 'right' });
 
-            doc.moveDown(0.6);
+            doc.y = currentY + 12;
 
             // ═══════════════ FIRMA DEL CLIENTE ═══════════════
             if (hasSignature) {

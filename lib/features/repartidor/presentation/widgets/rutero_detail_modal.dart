@@ -894,11 +894,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         linea.descripcion,
                         style: TextStyle(
                           color: AppTheme.textPrimary,
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w500,
                           decoration: isChecked ? null : TextDecoration.lineThrough,
                         ),
-                        maxLines: 2,
+                        maxLines: 4,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),

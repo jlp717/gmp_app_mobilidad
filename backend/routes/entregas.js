@@ -249,19 +249,33 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             return res.json({ success: true, albaranes: [], total: 0 });
         }
 
-        // --- DEDUPLICATION ---
-        // Group by Albaran ID + Client to prevent duplicates from multiple OPP rows
-        // NOTE: Same albaran can have multiple CPC records for different clients
-        const uniqueMap = new Map();
+        // --- DEDUPLICATION & AGGREGATION ---
+        // Group by Albaran ID + Client and SUM financial fields
+        const aggregatedMap = new Map();
         rows.forEach(row => {
             const serie = (row.SERIEALBARAN || '').trim();
             const cliente = (row.CLIENTE || '').trim();
             const id = `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`;
-            if (!uniqueMap.has(id)) {
-                uniqueMap.set(id, row);
+
+            if (!aggregatedMap.has(id)) {
+                // Initialize with a copy to avoid mutating original row
+                aggregatedMap.set(id, { ...row });
+            } else {
+                const existing = aggregatedMap.get(id);
+                // Sum financial fields
+                existing.IMPORTETOTAL = (parseFloat(existing.IMPORTETOTAL) || 0) + (parseFloat(row.IMPORTETOTAL) || 0);
+                existing.IMPORTEBRUTO = (parseFloat(existing.IMPORTEBRUTO) || 0) + (parseFloat(row.IMPORTEBRUTO) || 0);
+                existing.CPC_BASE1 = (parseFloat(existing.CPC_BASE1) || 0) + (parseFloat(row.CPC_BASE1) || 0);
+                existing.CPC_BASE2 = (parseFloat(existing.CPC_BASE2) || 0) + (parseFloat(row.CPC_BASE2) || 0);
+                existing.CPC_BASE3 = (parseFloat(existing.CPC_BASE3) || 0) + (parseFloat(row.CPC_BASE3) || 0);
+                existing.CPC_IVA1 = (parseFloat(existing.CPC_IVA1) || 0) + (parseFloat(row.CPC_IVA1) || 0);
+                existing.CPC_IVA2 = (parseFloat(existing.CPC_IVA2) || 0) + (parseFloat(row.CPC_IVA2) || 0);
+                existing.CPC_IVA3 = (parseFloat(existing.CPC_IVA3) || 0) + (parseFloat(row.CPC_IVA3) || 0);
+                // Keep the latest status/info if they differ? 
+                // Usually status is the same per Albaran ID.
             }
         });
-        const uniqueRows = Array.from(uniqueMap.values());
+        const uniqueRows = Array.from(aggregatedMap.values());
 
         // Process rows
         const albaranes = uniqueRows.map(row => {
@@ -598,7 +612,26 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         const headers = await query(headerSql, false);
         if (headers.length === 0) return res.status(404).json({ success: false, error: 'Albaran not found' });
 
-        const header = headers[0];
+        // AGGREGATE: If multiple CPC rows exist for the same Albaran detail request
+        // Sum the financial fields across all matching rows
+        const header = { ...headers[0] };
+        if (headers.length > 1) {
+            header.IMPORTE = 0;
+            header.IMPORTE_BRUTO = 0;
+            header.CPC_BASE1 = 0; header.CPC_BASE2 = 0; header.CPC_BASE3 = 0;
+            header.CPC_IVA1 = 0; header.CPC_IVA2 = 0; header.CPC_IVA3 = 0;
+
+            headers.forEach(h => {
+                header.IMPORTE += (parseFloat(h.IMPORTE) || 0);
+                header.IMPORTE_BRUTO += (parseFloat(h.IMPORTE_BRUTO) || 0);
+                header.CPC_BASE1 += (parseFloat(h.CPC_BASE1) || 0);
+                header.CPC_BASE2 += (parseFloat(h.CPC_BASE2) || 0);
+                header.CPC_BASE3 += (parseFloat(h.CPC_BASE3) || 0);
+                header.CPC_IVA1 += (parseFloat(h.CPC_IVA1) || 0);
+                header.CPC_IVA2 += (parseFloat(h.CPC_IVA2) || 0);
+                header.CPC_IVA3 += (parseFloat(h.CPC_IVA3) || 0);
+            });
+        }
 
         // 3. Get Items from LAC (Simplified for ODBC compatibility - NO ALIASES)
         // 3. Get Items from LAC (Super Simplified for ODBC)

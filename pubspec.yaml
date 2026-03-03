@@ -90,3 +90,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/load_planner/
+    - assets/load_planner/lib/
