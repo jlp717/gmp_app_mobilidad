@@ -79,38 +79,48 @@
     }
   </style>
 
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "./lib/three.module.js",
-      "three/addons/controls/OrbitControls.js": "./lib/OrbitControls.js",
-      "three/addons/renderers/CSS2DRenderer.js": "./lib/CSS2DRenderer.js"
-    }
-  }
-  </script>
+  <!-- No import map: all imports use relative paths for maximum WebView compatibility -->
 </head>
 
 <body>
   <div id="loading">Inicializando escena 3D...</div>
   <script>
     // Safety net: if Three.js module fails to load, notify Flutter after timeout
-    // so the overlay disappears and user can at least see other UI
     window._sceneInitDone = false;
+    window._sceneError = null;
+
     window.addEventListener('error', function (e) {
-      console.error('Scene load error:', e.message);
+      console.error('Scene load error:', e.message, e.filename, e.lineno);
+      window._sceneError = e.message;
       if (!window._sceneInitDone && window.FlutterBridge) {
         window._sceneInitDone = true;
         window.FlutterBridge.postMessage(JSON.stringify({ type: 'sceneReady' }));
+        document.getElementById('loading').textContent = 'Error JS: ' + e.message;
       }
     });
-    setTimeout(function () {
+
+    // Catch module import failures (unresolved bare specifiers, etc.)
+    window.addEventListener('unhandledrejection', function (e) {
+      console.error('Module load rejection:', e.reason);
+      window._sceneError = String(e.reason);
       if (!window._sceneInitDone && window.FlutterBridge) {
-        console.warn('Scene init timeout — sending sceneReady anyway');
         window._sceneInitDone = true;
         window.FlutterBridge.postMessage(JSON.stringify({ type: 'sceneReady' }));
-        document.getElementById('loading').textContent = 'Error al cargar 3D. Reintente.';
+        document.getElementById('loading').textContent = 'Error modulo: ' + e.reason;
       }
-    }, 10000);
+    });
+
+    setTimeout(function () {
+      if (!window._sceneInitDone) {
+        console.warn('Scene init timeout (15s)');
+        var msg = window._sceneError || 'Timeout inicializando Three.js';
+        if (window.FlutterBridge) {
+          window._sceneInitDone = true;
+          window.FlutterBridge.postMessage(JSON.stringify({ type: 'sceneReady' }));
+        }
+        document.getElementById('loading').textContent = 'Error: ' + msg;
+      }
+    }, 15000);
   </script>
   <script type="module" src="load_planner_3d.js"></script>
 </body>

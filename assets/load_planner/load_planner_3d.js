@@ -11,9 +11,9 @@
  * - Flutter bridge (bidirectional JSON messaging)
  */
 
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import * as THREE from './lib/three.module.js';
+import { OrbitControls } from './lib/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from './lib/CSS2DRenderer.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
