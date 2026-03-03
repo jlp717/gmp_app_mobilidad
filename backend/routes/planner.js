@@ -611,10 +611,9 @@ router.post('/rutero/config', async (req, res) => {
                             `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)`
                         );
                     } else if (previousOrder === -1) {
-                        logger.debug(`🔒 Smart Merge preserving existing block for ${clientCode} on day ${dia}`);
-                        await execSql(`preserve-block-${clientCode}`,
-                            `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)`
-                        );
+                        // Block already exists in DB (step 1 only deletes ORDEN >= 0)
+                        // No action needed — the existing -1 row is preserved automatically
+                        logger.debug(`🔒 Smart Merge: existing block for ${clientCode} on ${dia} already preserved (not deleted)`);
                     }
                 }
             }
