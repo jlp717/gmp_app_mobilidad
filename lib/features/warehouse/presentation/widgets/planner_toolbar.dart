@@ -5,9 +5,11 @@ import '../../../../core/theme/app_theme.dart';
 import '../../application/load_planner_provider.dart';
 import '../../domain/models/load_planner_models.dart';
 
-/// Toolbar with view mode, color mode, undo/redo, reset.
+/// Toolbar with view mode, color mode, undo/redo, reset, wall toggle.
 class PlannerToolbar extends StatelessWidget {
-  const PlannerToolbar({super.key});
+  final VoidCallback? onToggleWalls;
+
+  const PlannerToolbar({super.key, this.onToggleWalls});
 
   @override
   Widget build(BuildContext context) {
@@ -45,11 +47,31 @@ class PlannerToolbar extends StatelessWidget {
                   (ColorMode.product, Icons.inventory_2, 'Producto'),
                   (ColorMode.client, Icons.people, 'Cliente'),
                   (ColorMode.weight, Icons.fitness_center, 'Peso'),
+                  (ColorMode.delivery, Icons.local_shipping, 'Entrega'),
                 ],
                 onChanged: provider.setColorMode,
               ),
 
               const Spacer(),
+
+              // Profit optimizer
+              _ToolButton(
+                icon: Icons.auto_awesome,
+                tooltip: 'Optimizar carga (max beneficio)',
+                enabled: !provider.isOptimizing,
+                onPressed: () => provider.runProfitOptimizer(),
+                color: AppTheme.neonGreen,
+              ),
+              const SizedBox(width: 4),
+
+              // Wall toggle
+              _ToolButton(
+                icon: Icons.grid_on,
+                tooltip: 'Mostrar/ocultar paredes',
+                onPressed: onToggleWalls ?? () {},
+                enabled: onToggleWalls != null,
+              ),
+              const SizedBox(width: 4),
 
               // Undo
               _ToolButton(

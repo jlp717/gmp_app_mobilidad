@@ -32,6 +32,8 @@ class LoadPlannerV2Page extends StatefulWidget {
 
 class _LoadPlannerV2PageState extends State<LoadPlannerV2Page> {
   bool _panelVisible = true;
+  bool _wallsVisible = true;
+  final _canvasKey = GlobalKey<LoadCanvasState>();
 
   @override
   void initState() {
@@ -57,7 +59,12 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page> {
           _buildHeader(context),
 
           // Toolbar
-          const PlannerToolbar(),
+          PlannerToolbar(
+            onToggleWalls: () {
+              setState(() => _wallsVisible = !_wallsVisible);
+              _canvasKey.currentState?.toggleWalls(_wallsVisible);
+            },
+          ),
 
           // Metrics
           Consumer<LoadPlannerProvider>(
@@ -202,7 +209,7 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page> {
           flex: _panelVisible ? 7 : 10,
           child: Stack(
             children: [
-              const LoadCanvas(),
+              LoadCanvas(key: _canvasKey),
 
               // Box info overlay
               if (provider.selectedBoxIndex != null &&
@@ -273,7 +280,7 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page> {
     return Stack(
       children: [
         // Full-screen canvas
-        const LoadCanvas(),
+        LoadCanvas(key: _canvasKey),
 
         // Box info overlay
         if (provider.selectedBoxIndex != null &&

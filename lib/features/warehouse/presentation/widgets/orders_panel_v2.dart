@@ -5,8 +5,11 @@ import '../../../../core/theme/app_theme.dart';
 import '../../application/load_planner_provider.dart';
 import '../../domain/models/load_planner_models.dart';
 
+/// Sort options for boxes/orders
+enum BoxSortMode { none, weightDesc, weightAsc, volumeDesc, client, order }
+
 /// Side panel with 3 tabs: Clients summary, Products, Overflow.
-/// Supports search, exclude/include toggles, and drag-to-restore.
+/// Supports search, exclude/include toggles, bulk operations, sort and filters.
 class OrdersPanelV2 extends StatefulWidget {
   const OrdersPanelV2({super.key});
 
@@ -18,6 +21,12 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _searchQuery = '';
+  BoxSortMode _sortMode = BoxSortMode.none;
+
+  // Filters
+  bool _filterHeavy = false; // >15kg
+  bool _filterMedium = false; // 5-15kg
+  bool _filterLight = false; // <5kg
 
   @override
   void initState() {
@@ -29,6 +38,23 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  /// Token-based search: splits query into words, ALL must match
+  bool _matchesSearch(String text) {
+    if (_searchQuery.isEmpty) return true;
+    final tokens = _searchQuery.split(RegExp(r'\s+'));
+    final lower = text.toLowerCase();
+    return tokens.every((t) => lower.contains(t));
+  }
+
+  /// Check if a box passes weight filter
+  bool _passesWeightFilter(double weight) {
+    if (!_filterHeavy && !_filterMedium && !_filterLight) return true;
+    if (_filterHeavy && weight > 15) return true;
+    if (_filterMedium && weight >= 5 && weight <= 15) return true;
+    if (_filterLight && weight < 5) return true;
+    return false;
   }
 
   @override
@@ -49,6 +75,15 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             children: [
               // Search bar
               _buildSearchBar(),
+
+              // Bulk action buttons
+              _buildBulkActions(provider),
+
+              // Filter chips
+              _buildFilterChips(),
+
+              // Sort dropdown
+              _buildSortRow(),
 
               // Tabs
               TabBar(
@@ -130,17 +165,23 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       child: TextField(
-        onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+        onChanged: (v) => setState(() => _searchQuery = v.toLowerCase().trim()),
         style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
         decoration: InputDecoration(
-          hintText: 'Buscar articulo, cliente...',
+          hintText: 'Buscar articulo, cliente, pedido...',
           hintStyle: TextStyle(
             color: AppTheme.textTertiary.withOpacity(0.5),
             fontSize: 12,
           ),
           prefixIcon: const Icon(Icons.search, size: 18),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 16),
+                  onPressed: () => setState(() => _searchQuery = ''),
+                )
+              : null,
           isDense: true,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -156,13 +197,209 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // BULK ACTIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildBulkActions(LoadPlannerProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: _MiniActionButton(
+              icon: Icons.remove_circle_outline,
+              label: 'Quitar todo',
+              color: AppTheme.error,
+              onPressed: provider.placedBoxes.isNotEmpty
+                  ? () => _confirmBulkAction(
+                        context,
+                        'Quitar todas las cajas del camion?',
+                        provider.excludeAllOrders,
+                      )
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _MiniActionButton(
+              icon: Icons.add_circle_outline,
+              label: 'Añadir todo',
+              color: AppTheme.neonGreen,
+              onPressed: provider.overflowBoxes.isNotEmpty
+                  ? provider.includeAllOrders
+                  : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmBulkAction(
+    BuildContext context,
+    String message,
+    VoidCallback action,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        title: const Text('Confirmar'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              action();
+            },
+            child: Text('Confirmar', style: TextStyle(color: AppTheme.error)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FILTER CHIPS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildFilterChips() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _FilterChip(
+              label: 'Pesado (>15kg)',
+              selected: _filterHeavy,
+              color: AppTheme.error,
+              onSelected: (v) => setState(() => _filterHeavy = v),
+            ),
+            const SizedBox(width: 4),
+            _FilterChip(
+              label: 'Medio (5-15kg)',
+              selected: _filterMedium,
+              color: AppTheme.warning,
+              onSelected: (v) => setState(() => _filterMedium = v),
+            ),
+            const SizedBox(width: 4),
+            _FilterChip(
+              label: 'Ligero (<5kg)',
+              selected: _filterLight,
+              color: AppTheme.neonGreen,
+              onSelected: (v) => setState(() => _filterLight = v),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SORT ROW
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildSortRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Row(
+        children: [
+          const Icon(Icons.sort, size: 14, color: AppTheme.textTertiary),
+          const SizedBox(width: 4),
+          Expanded(
+            child: DropdownButton<BoxSortMode>(
+              value: _sortMode,
+              isDense: true,
+              isExpanded: true,
+              dropdownColor: AppTheme.darkCard,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppTheme.textSecondary,
+              ),
+              underline: const SizedBox.shrink(),
+              items: const [
+                DropdownMenuItem(
+                  value: BoxSortMode.none,
+                  child: Text('Sin ordenar'),
+                ),
+                DropdownMenuItem(
+                  value: BoxSortMode.weightDesc,
+                  child: Text('Peso (mayor a menor)'),
+                ),
+                DropdownMenuItem(
+                  value: BoxSortMode.weightAsc,
+                  child: Text('Peso (menor a mayor)'),
+                ),
+                DropdownMenuItem(
+                  value: BoxSortMode.volumeDesc,
+                  child: Text('Volumen (mayor a menor)'),
+                ),
+                DropdownMenuItem(
+                  value: BoxSortMode.client,
+                  child: Text('Cliente'),
+                ),
+                DropdownMenuItem(
+                  value: BoxSortMode.order,
+                  child: Text('N° Pedido'),
+                ),
+              ],
+              onChanged: (v) => setState(() => _sortMode = v ?? BoxSortMode.none),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SORT HELPER
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  List<MapEntry<int, List<LoadBox>>> _sortOrders(
+      List<MapEntry<int, List<LoadBox>>> orders) {
+    switch (_sortMode) {
+      case BoxSortMode.weightDesc:
+        orders.sort((a, b) {
+          final wa = a.value.fold<double>(0, (s, box) => s + box.weight);
+          final wb = b.value.fold<double>(0, (s, box) => s + box.weight);
+          return wb.compareTo(wa);
+        });
+      case BoxSortMode.weightAsc:
+        orders.sort((a, b) {
+          final wa = a.value.fold<double>(0, (s, box) => s + box.weight);
+          final wb = b.value.fold<double>(0, (s, box) => s + box.weight);
+          return wa.compareTo(wb);
+        });
+      case BoxSortMode.volumeDesc:
+        orders.sort((a, b) {
+          final va = a.value.fold<double>(0, (s, box) => s + box.volume);
+          final vb = b.value.fold<double>(0, (s, box) => s + box.volume);
+          return vb.compareTo(va);
+        });
+      case BoxSortMode.client:
+        orders.sort(
+            (a, b) => a.value.first.clientCode.compareTo(b.value.first.clientCode));
+      case BoxSortMode.order:
+        orders.sort((a, b) => a.key.compareTo(b.key));
+      case BoxSortMode.none:
+        break;
+    }
+    return orders;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // CLIENTS TAB
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildClientsTab(LoadPlannerProvider provider) {
     final summaries = provider.clientSummaries.where((s) {
-      if (_searchQuery.isEmpty) return true;
-      return s.clientCode.toLowerCase().contains(_searchQuery);
+      if (!_matchesSearch(s.clientCode)) return false;
+      return true;
     }).toList();
 
     if (summaries.isEmpty) return _emptyState('Sin clientes');
@@ -172,13 +409,17 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
       itemCount: summaries.length,
       itemBuilder: (_, i) {
         final s = summaries[i];
-        return _ClientRow(summary: s, truck: provider.truck);
+        return _ClientRow(
+          summary: s,
+          truck: provider.truck,
+          onExclude: () => provider.excludeByClient(s.clientCode),
+        );
       },
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // BOXES TAB — individual boxes with order exclusion
+  // BOXES TAB
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildBoxesTab(LoadPlannerProvider provider) {
@@ -187,20 +428,27 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     for (final box in provider.placedBoxes) {
       orderMap.putIfAbsent(box.orderNumber, () => []).add(box);
     }
-    // Also include excluded orders (from overflow)
     for (final box in provider.overflowBoxes) {
       if (provider.isOrderExcluded(box.orderNumber)) {
         orderMap.putIfAbsent(box.orderNumber, () => []).add(box);
       }
     }
 
-    final orders = orderMap.entries.where((e) {
-      if (_searchQuery.isEmpty) return true;
-      return e.value.any((b) =>
-          b.label.toLowerCase().contains(_searchQuery) ||
-          b.clientCode.toLowerCase().contains(_searchQuery) ||
-          b.articleCode.toLowerCase().contains(_searchQuery));
+    var orders = orderMap.entries.where((e) {
+      // Token-based search across label, client, article, order number
+      final searchText =
+          '${e.value.first.label} ${e.value.first.clientCode} ${e.value.first.articleCode} ${e.key}';
+      if (!_matchesSearch(searchText)) return false;
+
+      // Weight filter
+      final totalWeight = e.value.fold<double>(0, (s, b) => s + b.weight);
+      final avgWeight = totalWeight / e.value.length;
+      if (!_passesWeightFilter(avgWeight)) return false;
+
+      return true;
     }).toList();
+
+    orders = _sortOrders(orders);
 
     if (orders.isEmpty) return _emptyState('Sin cajas');
 
@@ -239,9 +487,10 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 
   Widget _buildOverflowTab(LoadPlannerProvider provider) {
     final overflow = provider.overflowBoxes.where((b) {
-      if (_searchQuery.isEmpty) return true;
-      return b.label.toLowerCase().contains(_searchQuery) ||
-          b.clientCode.toLowerCase().contains(_searchQuery);
+      final searchText = '${b.label} ${b.clientCode} ${b.orderNumber}';
+      if (!_matchesSearch(searchText)) return false;
+      if (!_passesWeightFilter(b.weight)) return false;
+      return true;
     }).toList();
 
     if (overflow.isEmpty) {
@@ -315,11 +564,109 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 // SUB-WIDGETS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+class _MiniActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback? onPressed;
+
+  const _MiniActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onPressed != null;
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: isEnabled
+              ? color.withOpacity(0.1)
+              : AppTheme.darkCard.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isEnabled
+                ? color.withOpacity(0.3)
+                : AppTheme.borderColor.withOpacity(0.1),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isEnabled ? color : AppTheme.textTertiary.withOpacity(0.4),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color:
+                    isEnabled ? color : AppTheme.textTertiary.withOpacity(0.4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Color color;
+  final ValueChanged<bool> onSelected;
+
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onSelected(!selected),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: selected ? color.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? color.withOpacity(0.5) : AppTheme.borderColor.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? color : AppTheme.textTertiary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ClientRow extends StatelessWidget {
   final ClientSummary summary;
   final TruckDimensions? truck;
+  final VoidCallback? onExclude;
 
-  const _ClientRow({required this.summary, this.truck});
+  const _ClientRow({required this.summary, this.truck, this.onExclude});
 
   @override
   Widget build(BuildContext context) {
@@ -415,6 +762,23 @@ class _ClientRow extends StatelessWidget {
                 ],
               ),
             ),
+
+            // Exclude client button
+            if (onExclude != null) ...[
+              const SizedBox(width: 4),
+              InkWell(
+                onTap: onExclude,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.remove_circle_outline,
+                    size: 16,
+                    color: AppTheme.error.withOpacity(0.6),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

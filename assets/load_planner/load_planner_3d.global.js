@@ -12,14 +12,18 @@ const CSS2DObject = window.CSS2DObject;
 
 const COLORS = {
   background: 0x0F172A,
-  floor: 0x1A2332,
+  floor: 0x1E293B,
+  floorAccent: 0x334155,
   gridMinor: 0x00D4FF,
   gridMajor: 0x00D4FF,
-  wallColor: 0x00D4FF,
-  edgeColor: 0x00D4FF,
+  wallColor: 0x38BDF8,
+  wallEdge: 0x00D4FF,
+  cabBody: 0x1E3A5F,
+  cabWindow: 0x38BDF8,
+  roofRail: 0x64748B,
   selectedEmissive: 0x00D4FF,
   collisionEmissive: 0xFF3B5C,
-  cabColor: 0x00D4FF,
+  rearMarker: 0x22C55E,
 };
 
 // 16-color high-contrast palette (dark background optimized)
@@ -38,28 +42,38 @@ const WEIGHT_GRADIENT = [
   { t: 1.0, r: 0.95, g: 0.22, b: 0.22 },   // red (heavy)
 ];
 
+// Delivery sequence gradient (green = load first → red = load last)
+const DELIVERY_GRADIENT = [
+  { t: 0.0, r: 0.13, g: 0.77, b: 0.37 },   // green (load first / deliver last)
+  { t: 0.5, r: 0.95, g: 0.85, b: 0.15 },    // yellow (middle)
+  { t: 1.0, r: 0.95, g: 0.22, b: 0.22 },    // red (load last / deliver first)
+];
+
 const MAX_WEIGHT_KG = 30;
-const CM_TO_M = 0.01; // We work in meters in Three.js, data comes in cm
+const CM_TO_M = 0.01;
+const MAX_VISIBLE_LABELS = 25;
+const MIN_BOX_SIZE_CM = 5; // Minimum visual size for tiny boxes
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-let scene, camera, renderer, css2dRenderer, controls;
-let truckGroup, boxesGroup;
-let raycaster, pointer;
-let boxMeshes = []; // Array of { mesh, edges, label, data }
-let boxesData = []; // Raw box data from Flutter
-let truckDims = null; // { lengthCm, widthCm, heightCm, maxPayloadKg }
-let colorMode = 'product';
-let selectedIndex = null;
-let isDragging = false;
-let dragIndex = -1;
-let dragPlane = null;
-let dragOffset = new THREE.Vector3();
-let pointerDownTime = 0;
-let pointerDownPos = { x: 0, y: 0 };
-let animationId = null;
+var scene, camera, renderer, css2dRenderer, controls;
+var truckGroup, boxesGroup, wallsGroup;
+var raycaster, pointer;
+var boxMeshes = []; // Array of { mesh, edges, label, labelDiv, data, volume }
+var boxesData = [];
+var truckDims = null;
+var colorMode = 'product';
+var selectedIndex = null;
+var isDragging = false;
+var dragIndex = -1;
+var dragPlane = null;
+var dragOffset = new THREE.Vector3();
+var pointerDownTime = 0;
+var pointerDownPos = { x: 0, y: 0 };
+var animationId = null;
+var wallsVisible = true;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INITIALIZATION
@@ -69,7 +83,7 @@ function init() {
   // Scene
   scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.background);
-  scene.fog = new THREE.FogExp2(COLORS.background, 0.15);
+  scene.fog = new THREE.FogExp2(COLORS.background, 0.12);
 
   // Camera
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -101,7 +115,7 @@ function init() {
   controls.dampingFactor = 0.08;
   controls.minDistance = 1;
   controls.maxDistance = 20;
-  controls.maxPolarAngle = Math.PI * 0.48; // Don't go below floor
+  controls.maxPolarAngle = Math.PI * 0.48;
   controls.minPolarAngle = 0.1;
   controls.target.set(0, 0, 0);
   controls.update();
@@ -116,10 +130,11 @@ function init() {
   // Groups
   truckGroup = new THREE.Group();
   boxesGroup = new THREE.Group();
+  wallsGroup = new THREE.Group();
   scene.add(truckGroup);
   scene.add(boxesGroup);
 
-  // Drag plane (horizontal at y=0 in Three.js space, which is the truck floor)
+  // Drag plane
   dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   // Events
@@ -142,15 +157,15 @@ function init() {
 
 function setupLights() {
   // Ambient — soft fill
-  const ambient = new THREE.AmbientLight(0x8090B0, 0.5);
+  var ambient = new THREE.AmbientLight(0x8090B0, 0.5);
   scene.add(ambient);
 
   // Hemisphere — sky/ground gradient
-  const hemi = new THREE.HemisphereLight(0x4488CC, 0x1A2332, 0.4);
+  var hemi = new THREE.HemisphereLight(0x4488CC, 0x1A2332, 0.4);
   scene.add(hemi);
 
   // Main directional (sun-like, with shadows)
-  const dir = new THREE.DirectionalLight(0xFFFFFF, 0.9);
+  var dir = new THREE.DirectionalLight(0xFFFFFF, 0.9);
   dir.position.set(5, 8, 4);
   dir.castShadow = true;
   dir.shadow.mapSize.width = 2048;
@@ -165,145 +180,317 @@ function setupLights() {
   scene.add(dir);
 
   // Accent light (subtle neon cyan kick)
-  const accent = new THREE.PointLight(0x00D4FF, 0.3, 15);
+  var accent = new THREE.PointLight(0x00D4FF, 0.3, 15);
   accent.position.set(-3, 5, -2);
   scene.add(accent);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TRUCK CONSTRUCTION
+// TRUCK CONSTRUCTION — Realistic design
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function buildTruck(dims) {
   truckGroup.clear();
   truckDims = dims;
 
-  const L = dims.lengthCm * CM_TO_M;
-  const W = dims.widthCm * CM_TO_M;
-  const H = dims.heightCm * CM_TO_M;
+  var L = dims.lengthCm * CM_TO_M;
+  var W = dims.widthCm * CM_TO_M;
+  var H = dims.heightCm * CM_TO_M;
 
-  // Center truck so origin is at center-bottom
-  const halfL = L / 2;
-  const halfW = W / 2;
+  var halfL = L / 2;
+  var halfW = W / 2;
 
-  // Floor
-  const floorGeo = new THREE.PlaneGeometry(L, W);
-  const floorMat = new THREE.MeshStandardMaterial({
+  // ── FLOOR ──────────────────────────────────────────────────────────────
+  // Metallic floor with subtle texture
+  var floorGeo = new THREE.PlaneGeometry(L, W);
+  var floorMat = new THREE.MeshStandardMaterial({
     color: COLORS.floor,
-    roughness: 0.9,
-    metalness: 0.0,
+    roughness: 0.7,
+    metalness: 0.3,
     side: THREE.DoubleSide,
   });
-  const floor = new THREE.Mesh(floorGeo, floorMat);
+  var floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
-  floor.position.set(0, 0.001, 0); // Slightly above 0 to avoid z-fighting
+  floor.position.set(0, 0.001, 0);
   floor.receiveShadow = true;
   floor.name = 'truck-floor';
   truckGroup.add(floor);
 
-  // Grid (50cm minor, 1m major)
-  const gridGroup = new THREE.Group();
-  const minorStep = 0.5; // meters
-  const majorStep = 1.0;
-
-  // Minor grid lines
-  const minorMat = new THREE.LineBasicMaterial({ color: COLORS.gridMinor, opacity: 0.06, transparent: true });
-  for (let x = -halfL; x <= halfL; x += minorStep) {
-    const geo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(x, 0.002, -halfW),
-      new THREE.Vector3(x, 0.002, halfW),
+  // Floor planks (visual texture — horizontal lines across floor)
+  var plankMat = new THREE.LineBasicMaterial({ color: COLORS.floorAccent, opacity: 0.3, transparent: true });
+  var plankStep = 0.12; // 12cm planks
+  for (var pz = -halfW; pz <= halfW; pz += plankStep) {
+    var plankGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-halfL, 0.002, pz),
+      new THREE.Vector3(halfL, 0.002, pz),
     ]);
-    gridGroup.add(new THREE.Line(geo, minorMat));
-  }
-  for (let z = -halfW; z <= halfW; z += minorStep) {
-    const geo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-halfL, 0.002, z),
-      new THREE.Vector3(halfL, 0.002, z),
-    ]);
-    gridGroup.add(new THREE.Line(geo, minorMat));
+    truckGroup.add(new THREE.Line(plankGeo, plankMat));
   }
 
-  // Major grid lines
-  const majorMat = new THREE.LineBasicMaterial({ color: COLORS.gridMajor, opacity: 0.12, transparent: true });
-  for (let x = -halfL; x <= halfL; x += majorStep) {
-    const geo = new THREE.BufferGeometry().setFromPoints([
+  // ── GRID ───────────────────────────────────────────────────────────────
+  var gridGroup = new THREE.Group();
+  var minorStep = 0.5;
+  var majorStep = 1.0;
+
+  var minorMat = new THREE.LineBasicMaterial({ color: COLORS.gridMinor, opacity: 0.04, transparent: true });
+  for (var x = -halfL; x <= halfL + 0.001; x += minorStep) {
+    var geo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(x, 0.003, -halfW),
       new THREE.Vector3(x, 0.003, halfW),
     ]);
-    gridGroup.add(new THREE.Line(geo, majorMat));
+    gridGroup.add(new THREE.Line(geo, minorMat));
   }
-  for (let z = -halfW; z <= halfW; z += majorStep) {
-    const geo = new THREE.BufferGeometry().setFromPoints([
+  for (var z = -halfW; z <= halfW + 0.001; z += minorStep) {
+    var geo2 = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-halfL, 0.003, z),
       new THREE.Vector3(halfL, 0.003, z),
     ]);
-    gridGroup.add(new THREE.Line(geo, majorMat));
+    gridGroup.add(new THREE.Line(geo2, minorMat));
+  }
+
+  var majorMat = new THREE.LineBasicMaterial({ color: COLORS.gridMajor, opacity: 0.08, transparent: true });
+  for (var mx = -halfL; mx <= halfL + 0.001; mx += majorStep) {
+    var geo3 = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(mx, 0.004, -halfW),
+      new THREE.Vector3(mx, 0.004, halfW),
+    ]);
+    gridGroup.add(new THREE.Line(geo3, majorMat));
+  }
+  for (var mz = -halfW; mz <= halfW + 0.001; mz += majorStep) {
+    var geo4 = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-halfL, 0.004, mz),
+      new THREE.Vector3(halfL, 0.004, mz),
+    ]);
+    gridGroup.add(new THREE.Line(geo4, majorMat));
   }
   truckGroup.add(gridGroup);
 
-  // Walls (semi-transparent)
-  const wallMat = new THREE.MeshStandardMaterial({
+  // ── WALLS (toggleable group) ───────────────────────────────────────────
+  wallsGroup = new THREE.Group();
+  wallsGroup.name = 'walls';
+
+  var wallThickness = 0.025; // 2.5cm thick walls
+
+  // Wall material — translucent metal panels
+  var wallMat = new THREE.MeshStandardMaterial({
+    color: COLORS.wallColor,
+    transparent: true,
+    opacity: 0.08,
+    side: THREE.DoubleSide,
+    roughness: 0.4,
+    metalness: 0.6,
+  });
+
+  // Left wall panel
+  var leftWallGeo = new THREE.BoxGeometry(L, H, wallThickness);
+  var leftWall = new THREE.Mesh(leftWallGeo, wallMat.clone());
+  leftWall.position.set(0, H / 2, -halfW - wallThickness / 2);
+  leftWall.receiveShadow = true;
+  wallsGroup.add(leftWall);
+
+  // Right wall panel
+  var rightWall = new THREE.Mesh(leftWallGeo, wallMat.clone());
+  rightWall.position.set(0, H / 2, halfW + wallThickness / 2);
+  rightWall.receiveShadow = true;
+  wallsGroup.add(rightWall);
+
+  // Front wall (cab-side, solid)
+  var frontWallGeo = new THREE.BoxGeometry(wallThickness, H, W + wallThickness * 2);
+  var frontWallMat = new THREE.MeshStandardMaterial({
+    color: COLORS.cabBody,
+    transparent: true,
+    opacity: 0.25,
+    roughness: 0.3,
+    metalness: 0.7,
+  });
+  var frontWall = new THREE.Mesh(frontWallGeo, frontWallMat);
+  frontWall.position.set(-halfL - wallThickness / 2, H / 2, 0);
+  frontWall.receiveShadow = true;
+  wallsGroup.add(frontWall);
+
+  // Roof panel (very translucent)
+  var roofGeo = new THREE.BoxGeometry(L, wallThickness, W + wallThickness * 2);
+  var roofMat = new THREE.MeshStandardMaterial({
     color: COLORS.wallColor,
     transparent: true,
     opacity: 0.04,
     side: THREE.DoubleSide,
-    roughness: 0.5,
-    metalness: 0.1,
+    roughness: 0.3,
+    metalness: 0.5,
+  });
+  var roof = new THREE.Mesh(roofGeo, roofMat);
+  roof.position.set(0, H + wallThickness / 2, 0);
+  wallsGroup.add(roof);
+
+  // ── EDGE FRAME (structural outline) ────────────────────────────────────
+  var edgeMat = new THREE.LineBasicMaterial({ color: COLORS.wallEdge, opacity: 0.4, transparent: true });
+
+  // Bottom rectangle
+  addEdgeLine(wallsGroup, edgeMat, [-halfL, 0, -halfW], [halfL, 0, -halfW]);
+  addEdgeLine(wallsGroup, edgeMat, [-halfL, 0, halfW], [halfL, 0, halfW]);
+  addEdgeLine(wallsGroup, edgeMat, [-halfL, 0, -halfW], [-halfL, 0, halfW]);
+  addEdgeLine(wallsGroup, edgeMat, [halfL, 0, -halfW], [halfL, 0, halfW]);
+
+  // Top rectangle
+  addEdgeLine(wallsGroup, edgeMat, [-halfL, H, -halfW], [halfL, H, -halfW]);
+  addEdgeLine(wallsGroup, edgeMat, [-halfL, H, halfW], [halfL, H, halfW]);
+  addEdgeLine(wallsGroup, edgeMat, [-halfL, H, -halfW], [-halfL, H, halfW]);
+  addEdgeLine(wallsGroup, edgeMat, [halfL, H, -halfW], [halfL, H, halfW]);
+
+  // Vertical pillars
+  addEdgeLine(wallsGroup, edgeMat, [-halfL, 0, -halfW], [-halfL, H, -halfW]);
+  addEdgeLine(wallsGroup, edgeMat, [-halfL, 0, halfW], [-halfL, H, halfW]);
+  addEdgeLine(wallsGroup, edgeMat, [halfL, 0, -halfW], [halfL, H, -halfW]);
+  addEdgeLine(wallsGroup, edgeMat, [halfL, 0, halfW], [halfL, H, halfW]);
+
+  // ── ROOF RAILS (cylinders along top edges) ─────────────────────────────
+  var railRadius = 0.012;
+  var railMat = new THREE.MeshStandardMaterial({
+    color: COLORS.roofRail,
+    roughness: 0.3,
+    metalness: 0.8,
   });
 
-  // Back wall (at -halfL, i.e. the cab end)
-  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(W, H), wallMat);
-  backWall.position.set(-halfL, H / 2, 0);
-  backWall.rotation.y = Math.PI / 2;
-  truckGroup.add(backWall);
+  // Longitudinal rails (left & right top edges)
+  var railGeoL = new THREE.CylinderGeometry(railRadius, railRadius, L, 8);
+  railGeoL.rotateZ(Math.PI / 2);
+  var railLeft = new THREE.Mesh(railGeoL, railMat);
+  railLeft.position.set(0, H + railRadius, -halfW);
+  wallsGroup.add(railLeft);
+  var railRight = new THREE.Mesh(railGeoL.clone(), railMat);
+  railRight.position.set(0, H + railRadius, halfW);
+  wallsGroup.add(railRight);
 
-  // Left wall
-  const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(L, H), wallMat);
-  leftWall.position.set(0, H / 2, -halfW);
-  truckGroup.add(leftWall);
+  // Cross rails (front & back top edges)
+  var railGeoW = new THREE.CylinderGeometry(railRadius, railRadius, W, 8);
+  railGeoW.rotateX(Math.PI / 2);
+  var railFront = new THREE.Mesh(railGeoW, railMat);
+  railFront.position.set(-halfL, H + railRadius, 0);
+  wallsGroup.add(railFront);
+  var railBack = new THREE.Mesh(railGeoW.clone(), railMat);
+  railBack.position.set(halfL, H + railRadius, 0);
+  wallsGroup.add(railBack);
 
-  // Right wall
-  const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(L, H), wallMat);
-  rightWall.position.set(0, H / 2, halfW);
-  truckGroup.add(rightWall);
+  truckGroup.add(wallsGroup);
 
-  // Edges (wireframe box outline)
-  const edgeMat = new THREE.LineBasicMaterial({ color: COLORS.edgeColor, opacity: 0.35, transparent: true });
-  const edgeGeo = new THREE.BoxGeometry(L, H, W);
-  const edgeLines = new THREE.LineSegments(
-    new THREE.EdgesGeometry(edgeGeo),
-    edgeMat
-  );
-  edgeLines.position.set(0, H / 2, 0);
-  truckGroup.add(edgeLines);
-
-  // Cab indicator (subtle marker at -halfL end)
-  const cabGeo = new THREE.BoxGeometry(0.05, H * 0.3, W * 0.8);
-  const cabMat = new THREE.MeshStandardMaterial({
-    color: COLORS.cabColor,
+  // ── REAR OPENING MARKERS ───────────────────────────────────────────────
+  // Dashed lines at rear to show open loading area
+  var rearDashMat = new THREE.LineDashedMaterial({
+    color: COLORS.rearMarker,
+    dashSize: 0.08,
+    gapSize: 0.04,
+    opacity: 0.5,
     transparent: true,
-    opacity: 0.08,
-    roughness: 0.5,
   });
-  const cab = new THREE.Mesh(cabGeo, cabMat);
-  cab.position.set(-halfL - 0.03, H * 0.15, 0);
-  truckGroup.add(cab);
 
-  // Dimension labels
-  addDimLabel(`${(L).toFixed(1)}m`, new THREE.Vector3(0, -0.15, halfW + 0.15));
-  addDimLabel(`${(W).toFixed(1)}m`, new THREE.Vector3(halfL + 0.15, -0.15, 0));
-  addDimLabel(`${(H).toFixed(1)}m`, new THREE.Vector3(halfL + 0.15, H / 2, halfW + 0.15));
+  // Bottom rear line
+  var rearBottomGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(halfL, 0.005, -halfW),
+    new THREE.Vector3(halfL, 0.005, halfW),
+  ]);
+  var rearBottom = new THREE.Line(rearBottomGeo, rearDashMat);
+  rearBottom.computeLineDistances();
+  truckGroup.add(rearBottom);
 
-  // Adjust camera and controls to fit truck
-  const maxDim = Math.max(L, W, H);
+  // Side rear markers (small arrows/indicators)
+  var rearArrowMat = new THREE.MeshStandardMaterial({
+    color: COLORS.rearMarker,
+    transparent: true,
+    opacity: 0.6,
+  });
+  var arrowGeo = new THREE.ConeGeometry(0.04, 0.08, 4);
+  arrowGeo.rotateZ(Math.PI / 2); // Point toward +X (out the back)
+  var arrowL = new THREE.Mesh(arrowGeo, rearArrowMat);
+  arrowL.position.set(halfL + 0.06, H * 0.5, -halfW);
+  truckGroup.add(arrowL);
+  var arrowR = new THREE.Mesh(arrowGeo.clone(), rearArrowMat);
+  arrowR.position.set(halfL + 0.06, H * 0.5, halfW);
+  truckGroup.add(arrowR);
+
+  // "CARGA" label at rear
+  var rearLabelDiv = document.createElement('div');
+  rearLabelDiv.className = 'dim-label';
+  rearLabelDiv.textContent = '← CARGA';
+  rearLabelDiv.style.color = 'rgba(34, 197, 94, 0.7)';
+  rearLabelDiv.style.fontSize = '12px';
+  var rearLabel = new CSS2DObject(rearLabelDiv);
+  rearLabel.position.set(halfL + 0.15, H * 0.5, 0);
+  truckGroup.add(rearLabel);
+
+  // ── CAB (simplified front section) ─────────────────────────────────────
+  var cabLength = Math.min(L * 0.15, 0.6); // Proportional cab, max 60cm
+  var cabHeight = H * 1.15; // Cab slightly taller than cargo area
+  var cabWidth = W + wallThickness * 2;
+
+  // Cab body
+  var cabBodyGeo = new THREE.BoxGeometry(cabLength, cabHeight, cabWidth);
+  var cabBodyMat = new THREE.MeshStandardMaterial({
+    color: COLORS.cabBody,
+    roughness: 0.3,
+    metalness: 0.6,
+    transparent: true,
+    opacity: 0.35,
+  });
+  var cabBody = new THREE.Mesh(cabBodyGeo, cabBodyMat);
+  cabBody.position.set(-halfL - cabLength / 2 - wallThickness, cabHeight / 2, 0);
+  cabBody.castShadow = true;
+  truckGroup.add(cabBody);
+
+  // Windshield (front face of cab — lighter, more transparent)
+  var windshieldGeo = new THREE.PlaneGeometry(cabWidth * 0.75, cabHeight * 0.4);
+  var windshieldMat = new THREE.MeshStandardMaterial({
+    color: COLORS.cabWindow,
+    transparent: true,
+    opacity: 0.15,
+    side: THREE.DoubleSide,
+    roughness: 0.1,
+    metalness: 0.2,
+  });
+  var windshield = new THREE.Mesh(windshieldGeo, windshieldMat);
+  windshield.position.set(-halfL - cabLength - wallThickness + 0.005, cabHeight * 0.65, 0);
+  windshield.rotation.y = Math.PI / 2;
+  truckGroup.add(windshield);
+
+  // Side windows
+  var sideWindowGeo = new THREE.PlaneGeometry(cabLength * 0.6, cabHeight * 0.3);
+  var sideWindowLeft = new THREE.Mesh(sideWindowGeo, windshieldMat.clone());
+  sideWindowLeft.position.set(-halfL - cabLength / 2 - wallThickness, cabHeight * 0.65, -cabWidth / 2 + 0.005);
+  truckGroup.add(sideWindowLeft);
+  var sideWindowRight = new THREE.Mesh(sideWindowGeo.clone(), windshieldMat.clone());
+  sideWindowRight.position.set(-halfL - cabLength / 2 - wallThickness, cabHeight * 0.65, cabWidth / 2 - 0.005);
+  truckGroup.add(sideWindowRight);
+
+  // Cab edge outline
+  var cabEdgeMat = new THREE.LineBasicMaterial({ color: COLORS.wallEdge, opacity: 0.25, transparent: true });
+  var cabEdgeGeo = new THREE.BoxGeometry(cabLength, cabHeight, cabWidth);
+  var cabEdges = new THREE.LineSegments(new THREE.EdgesGeometry(cabEdgeGeo), cabEdgeMat);
+  cabEdges.position.copy(cabBody.position);
+  truckGroup.add(cabEdges);
+
+  // Wheels (simple cylinders under the truck)
+  buildWheels(halfL, halfW, cabLength, wallThickness);
+
+  // ── DIMENSION LABELS ───────────────────────────────────────────────────
+  addDimLabel((L * 100).toFixed(0) + 'cm', new THREE.Vector3(0, -0.15, halfW + 0.2));
+  addDimLabel((W * 100).toFixed(0) + 'cm', new THREE.Vector3(halfL + 0.2, -0.15, 0));
+  addDimLabel((H * 100).toFixed(0) + 'cm', new THREE.Vector3(halfL + 0.2, H / 2, halfW + 0.2));
+
+  // ── CAMERA SETUP ───────────────────────────────────────────────────────
+  var maxDim = Math.max(L, W, H);
   camera.position.set(L * 0.8, maxDim * 1.0, W * 1.2);
   controls.target.set(0, H * 0.3, 0);
   controls.update();
 
-  // Adjust shadow camera to truck size
-  const shadowCam = scene.children.find(c => c.isDirectionalLight)?.shadow?.camera;
+  // Adjust shadow camera
+  var shadowCam = null;
+  for (var ci = 0; ci < scene.children.length; ci++) {
+    if (scene.children[ci].isDirectionalLight && scene.children[ci].shadow) {
+      shadowCam = scene.children[ci].shadow.camera;
+      break;
+    }
+  }
   if (shadowCam) {
-    const ext = maxDim * 1.2;
+    var ext = maxDim * 1.5;
     shadowCam.left = -ext;
     shadowCam.right = ext;
     shadowCam.top = ext;
@@ -312,11 +499,61 @@ function buildTruck(dims) {
   }
 }
 
+function buildWheels(halfL, halfW, cabLength, wallThickness) {
+  var wheelRadius = 0.08;
+  var wheelWidth = 0.06;
+  var wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 12);
+  wheelGeo.rotateX(Math.PI / 2);
+  var wheelMat = new THREE.MeshStandardMaterial({
+    color: 0x1A1A2E,
+    roughness: 0.8,
+    metalness: 0.2,
+  });
+  var hubMat = new THREE.MeshStandardMaterial({
+    color: 0x64748B,
+    roughness: 0.3,
+    metalness: 0.8,
+  });
+  var hubGeo = new THREE.CylinderGeometry(wheelRadius * 0.4, wheelRadius * 0.4, wheelWidth + 0.01, 8);
+  hubGeo.rotateX(Math.PI / 2);
+
+  // Rear axle wheels (at ~70% back from cab)
+  var rearAxleX = halfL * 0.5;
+  var frontAxleX = -halfL - cabLength * 0.5 - wallThickness;
+  var wheelZ = halfW + 0.04;
+  var wheelY = -wheelRadius * 0.3;
+
+  var positions = [
+    [rearAxleX, wheelY, -wheelZ],
+    [rearAxleX, wheelY, wheelZ],
+    [frontAxleX, wheelY, -wheelZ],
+    [frontAxleX, wheelY, wheelZ],
+  ];
+
+  for (var wi = 0; wi < positions.length; wi++) {
+    var pos = positions[wi];
+    var wheel = new THREE.Mesh(wheelGeo, wheelMat);
+    wheel.position.set(pos[0], pos[1], pos[2]);
+    truckGroup.add(wheel);
+    var hub = new THREE.Mesh(hubGeo, hubMat);
+    hub.position.set(pos[0], pos[1], pos[2]);
+    truckGroup.add(hub);
+  }
+}
+
+function addEdgeLine(group, mat, from, to) {
+  var geo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(from[0], from[1], from[2]),
+    new THREE.Vector3(to[0], to[1], to[2]),
+  ]);
+  group.add(new THREE.Line(geo, mat));
+}
+
 function addDimLabel(text, position) {
-  const div = document.createElement('div');
+  var div = document.createElement('div');
   div.className = 'dim-label';
   div.textContent = text;
-  const label = new CSS2DObject(div);
+  var label = new CSS2DObject(div);
   label.position.copy(position);
   truckGroup.add(label);
 }
@@ -326,60 +563,59 @@ function addDimLabel(text, position) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function buildBoxes(boxes) {
-  // Clear old
   boxesGroup.clear();
   boxMeshes = [];
   boxesData = boxes;
 
   if (!truckDims) return;
 
-  const halfL = truckDims.lengthCm * CM_TO_M / 2;
-  const halfW = truckDims.widthCm * CM_TO_M / 2;
+  var halfL = truckDims.lengthCm * CM_TO_M / 2;
+  var halfW = truckDims.widthCm * CM_TO_M / 2;
 
-  for (let i = 0; i < boxes.length; i++) {
-    const b = boxes[i];
-    const w = b.w * CM_TO_M;
-    const d = b.d * CM_TO_M;
-    const h = b.h * CM_TO_M;
+  for (var i = 0; i < boxes.length; i++) {
+    var b = boxes[i];
+    // Enforce minimum visual size
+    var bw = Math.max(b.w, MIN_BOX_SIZE_CM) * CM_TO_M;
+    var bd = Math.max(b.d, MIN_BOX_SIZE_CM) * CM_TO_M;
+    var bh = Math.max(b.h, MIN_BOX_SIZE_CM) * CM_TO_M;
 
-    // Geometry
-    const geo = new THREE.BoxGeometry(w, h, d);
-    const color = getBoxColor(b, i);
-    const mat = new THREE.MeshStandardMaterial({
+    var geo = new THREE.BoxGeometry(bw, bh, bd);
+    var color = getBoxColor(b, i);
+    var mat = new THREE.MeshStandardMaterial({
       color: color,
-      roughness: 0.4,
-      metalness: 0.1,
+      roughness: 0.35,
+      metalness: 0.15,
       transparent: false,
     });
 
-    const mesh = new THREE.Mesh(geo, mat);
+    var mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
-    // Position: convert from data coords (origin = corner) to Three.js (origin = center of truck floor)
-    const px = b.x * CM_TO_M - halfL + w / 2;
-    const py = b.z * CM_TO_M + h / 2; // z in data = y in Three.js (height)
-    const pz = b.y * CM_TO_M - halfW + d / 2; // y in data = z in Three.js (depth)
+    // Position: data coords (origin = corner) → Three.js (center of truck floor)
+    var px = b.x * CM_TO_M - halfL + bw / 2;
+    var py = b.z * CM_TO_M + bh / 2;
+    var pz = b.y * CM_TO_M - halfW + bd / 2;
     mesh.position.set(px, py, pz);
-
     mesh.userData = { boxIndex: i };
     boxesGroup.add(mesh);
 
-    // Edges (subtle border)
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0xFFFFFF, opacity: 0.25, transparent: true });
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+    // Edges
+    var edgeMat = new THREE.LineBasicMaterial({ color: 0xFFFFFF, opacity: 0.2, transparent: true });
+    var edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
     edges.position.copy(mesh.position);
     boxesGroup.add(edges);
 
     // CSS2D Label
-    const labelDiv = document.createElement('div');
-    labelDiv.className = 'box-label';
+    var labelDiv = document.createElement('div');
+    labelDiv.className = 'box-label hidden'; // Start hidden, smart visibility will show the right ones
     labelDiv.textContent = truncate(b.label, 14);
-    const label = new CSS2DObject(labelDiv);
-    label.position.set(0, h / 2 + 0.03, 0);
+    var label = new CSS2DObject(labelDiv);
+    label.position.set(0, bh / 2 + 0.03, 0);
     mesh.add(label);
 
-    boxMeshes.push({ mesh, edges, label, labelDiv, data: b });
+    var volume = bw * bd * bh;
+    boxMeshes.push({ mesh: mesh, edges: edges, label: label, labelDiv: labelDiv, data: b, volume: volume });
   }
 
   updateLabelVisibility();
@@ -391,6 +627,8 @@ function getBoxColor(box, index) {
       return BOX_PALETTE[hashCode(box.clientCode) % BOX_PALETTE.length];
     case 'weight':
       return weightToColor(box.weight);
+    case 'delivery':
+      return deliveryToColor(box, index);
     case 'product':
     default:
       return BOX_PALETTE[hashCode(box.articleCode) % BOX_PALETTE.length];
@@ -398,27 +636,37 @@ function getBoxColor(box, index) {
 }
 
 function weightToColor(weight) {
-  const t = Math.min(weight / MAX_WEIGHT_KG, 1.0);
-  let r, g, b;
+  var t = Math.min(weight / MAX_WEIGHT_KG, 1.0);
+  return gradientColor(WEIGHT_GRADIENT, t);
+}
 
-  for (let i = 0; i < WEIGHT_GRADIENT.length - 1; i++) {
-    const a = WEIGHT_GRADIENT[i];
-    const c = WEIGHT_GRADIENT[i + 1];
+function deliveryToColor(box, index) {
+  // Use index as proxy for delivery order (first box = first to deliver)
+  var total = boxesData.length;
+  var t = total > 1 ? index / (total - 1) : 0;
+  return gradientColor(DELIVERY_GRADIENT, t);
+}
+
+function gradientColor(gradient, t) {
+  for (var i = 0; i < gradient.length - 1; i++) {
+    var a = gradient[i];
+    var c = gradient[i + 1];
     if (t >= a.t && t <= c.t) {
-      const f = (t - a.t) / (c.t - a.t);
-      r = a.r + (c.r - a.r) * f;
-      g = a.g + (c.g - a.g) * f;
-      b = a.b + (c.b - a.b) * f;
-      return new THREE.Color(r, g, b);
+      var f = (t - a.t) / (c.t - a.t);
+      return new THREE.Color(
+        a.r + (c.r - a.r) * f,
+        a.g + (c.g - a.g) * f,
+        a.b + (c.b - a.b) * f
+      );
     }
   }
-  const last = WEIGHT_GRADIENT[WEIGHT_GRADIENT.length - 1];
+  var last = gradient[gradient.length - 1];
   return new THREE.Color(last.r, last.g, last.b);
 }
 
 function hashCode(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
+  var hash = 0;
+  for (var i = 0; i < str.length; i++) {
     hash = ((hash << 5) - hash) + str.charCodeAt(i);
     hash |= 0;
   }
@@ -436,70 +684,120 @@ function truncate(str, maxLen) {
 function setSelected(index) {
   selectedIndex = index;
 
-  for (let i = 0; i < boxMeshes.length; i++) {
-    const { mesh, edges } = boxMeshes[i];
-    const isSelected = (i === index);
+  for (var i = 0; i < boxMeshes.length; i++) {
+    var entry = boxMeshes[i];
+    var isSelected = (i === index);
 
     if (isSelected) {
-      mesh.material.emissive = new THREE.Color(COLORS.selectedEmissive);
-      mesh.material.emissiveIntensity = 0.4;
-      edges.material.color = new THREE.Color(COLORS.selectedEmissive);
-      edges.material.opacity = 0.8;
-      edges.material.linewidth = 2;
+      entry.mesh.material.emissive = new THREE.Color(COLORS.selectedEmissive);
+      entry.mesh.material.emissiveIntensity = 0.4;
+      entry.edges.material.color = new THREE.Color(COLORS.selectedEmissive);
+      entry.edges.material.opacity = 0.8;
+      // Show label for selected box
+      entry.labelDiv.className = 'box-label selected-label';
     } else {
-      mesh.material.emissive = new THREE.Color(0x000000);
-      mesh.material.emissiveIntensity = 0;
-      edges.material.color = new THREE.Color(0xFFFFFF);
-      edges.material.opacity = 0.25;
+      entry.mesh.material.emissive = new THREE.Color(0x000000);
+      entry.mesh.material.emissiveIntensity = 0;
+      entry.edges.material.color = new THREE.Color(0xFFFFFF);
+      entry.edges.material.opacity = 0.2;
     }
   }
+
+  // Re-apply smart label visibility (selected box label is force-shown above)
+  updateLabelVisibility();
 }
 
 function setCollisionState(index, hasCollision) {
   if (index < 0 || index >= boxMeshes.length) return;
-  const { mesh, edges } = boxMeshes[index];
+  var entry = boxMeshes[index];
 
   if (hasCollision) {
-    mesh.material.emissive = new THREE.Color(COLORS.collisionEmissive);
-    mesh.material.emissiveIntensity = 0.6;
-    edges.material.color = new THREE.Color(COLORS.collisionEmissive);
-    edges.material.opacity = 0.9;
+    entry.mesh.material.emissive = new THREE.Color(COLORS.collisionEmissive);
+    entry.mesh.material.emissiveIntensity = 0.6;
+    entry.edges.material.color = new THREE.Color(COLORS.collisionEmissive);
+    entry.edges.material.opacity = 0.9;
   } else if (index === selectedIndex) {
-    mesh.material.emissive = new THREE.Color(COLORS.selectedEmissive);
-    mesh.material.emissiveIntensity = 0.4;
-    edges.material.color = new THREE.Color(COLORS.selectedEmissive);
-    edges.material.opacity = 0.8;
+    entry.mesh.material.emissive = new THREE.Color(COLORS.selectedEmissive);
+    entry.mesh.material.emissiveIntensity = 0.4;
+    entry.edges.material.color = new THREE.Color(COLORS.selectedEmissive);
+    entry.edges.material.opacity = 0.8;
   } else {
-    mesh.material.emissive = new THREE.Color(0x000000);
-    mesh.material.emissiveIntensity = 0;
-    edges.material.color = new THREE.Color(0xFFFFFF);
-    edges.material.opacity = 0.25;
+    entry.mesh.material.emissive = new THREE.Color(0x000000);
+    entry.mesh.material.emissiveIntensity = 0;
+    entry.edges.material.color = new THREE.Color(0xFFFFFF);
+    entry.edges.material.opacity = 0.2;
   }
 }
 
 function updateColorMode(mode) {
   colorMode = mode;
-  for (let i = 0; i < boxMeshes.length; i++) {
-    const color = getBoxColor(boxMeshes[i].data, i);
+  for (var i = 0; i < boxMeshes.length; i++) {
+    var color = getBoxColor(boxMeshes[i].data, i);
     boxMeshes[i].mesh.material.color = new THREE.Color(color);
   }
-  // Re-apply selection
   if (selectedIndex !== null) setSelected(selectedIndex);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// LABEL LOD
+// SMART LABEL SYSTEM — Cap visible labels, prioritize largest boxes
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function updateLabelVisibility() {
-  if (!camera) return;
+  if (!camera || boxMeshes.length === 0) return;
 
-  for (const { mesh, labelDiv } of boxMeshes) {
-    const dist = camera.position.distanceTo(mesh.position);
-    // Hide labels when too far (box would be tiny on screen)
-    const size = Math.max(mesh.geometry.parameters.width, mesh.geometry.parameters.depth);
-    const screenSize = (size / dist) * window.innerHeight * 0.5;
-    labelDiv.className = screenSize < 20 ? 'box-label hidden' : 'box-label';
+  // If few enough boxes, show all
+  if (boxMeshes.length <= MAX_VISIBLE_LABELS) {
+    for (var ai = 0; ai < boxMeshes.length; ai++) {
+      if (ai === selectedIndex) {
+        boxMeshes[ai].labelDiv.className = 'box-label selected-label';
+      } else {
+        boxMeshes[ai].labelDiv.className = 'box-label';
+      }
+    }
+    return;
+  }
+
+  // Sort by volume descending to find top N largest boxes
+  var indices = [];
+  for (var si = 0; si < boxMeshes.length; si++) {
+    indices.push(si);
+  }
+  indices.sort(function(a, b) {
+    return boxMeshes[b].volume - boxMeshes[a].volume;
+  });
+
+  // Build set of visible label indices
+  var visibleSet = {};
+  var count = 0;
+  for (var vi = 0; vi < indices.length && count < MAX_VISIBLE_LABELS; vi++) {
+    var idx = indices[vi];
+    // Also check distance — don't show label if box is too far from camera
+    var dist = camera.position.distanceTo(boxMeshes[idx].mesh.position);
+    var size = Math.max(
+      boxMeshes[idx].mesh.geometry.parameters.width,
+      boxMeshes[idx].mesh.geometry.parameters.depth
+    );
+    var screenSize = (size / dist) * window.innerHeight * 0.5;
+    if (screenSize >= 12) { // Only show if box is visible enough on screen
+      visibleSet[idx] = true;
+      count++;
+    }
+  }
+
+  // Always show selected box label
+  if (selectedIndex !== null && selectedIndex >= 0 && selectedIndex < boxMeshes.length) {
+    visibleSet[selectedIndex] = true;
+  }
+
+  // Apply visibility
+  for (var li = 0; li < boxMeshes.length; li++) {
+    if (li === selectedIndex) {
+      boxMeshes[li].labelDiv.className = 'box-label selected-label';
+    } else if (visibleSet[li]) {
+      boxMeshes[li].labelDiv.className = 'box-label';
+    } else {
+      boxMeshes[li].labelDiv.className = 'box-label hidden';
+    }
   }
 }
 
@@ -510,45 +808,39 @@ function updateLabelVisibility() {
 function setViewMode(mode) {
   if (!truckDims) return;
 
-  const L = truckDims.lengthCm * CM_TO_M;
-  const W = truckDims.widthCm * CM_TO_M;
-  const H = truckDims.heightCm * CM_TO_M;
-  const maxDim = Math.max(L, W, H);
+  var L = truckDims.lengthCm * CM_TO_M;
+  var W = truckDims.widthCm * CM_TO_M;
+  var H = truckDims.heightCm * CM_TO_M;
+  var maxDim = Math.max(L, W, H);
 
-  // Animate camera transition
-  const duration = 600; // ms
-  const start = { pos: camera.position.clone(), target: controls.target.clone() };
-  let end;
+  var duration = 600;
+  var startPos = camera.position.clone();
+  var startTarget = controls.target.clone();
+  var endPos, endTarget;
 
   switch (mode) {
     case 'top':
-      end = {
-        pos: new THREE.Vector3(0, maxDim * 2.0, 0.001),
-        target: new THREE.Vector3(0, 0, 0),
-      };
+      endPos = new THREE.Vector3(0, maxDim * 2.0, 0.001);
+      endTarget = new THREE.Vector3(0, 0, 0);
       break;
     case 'front':
-      end = {
-        pos: new THREE.Vector3(0, H * 0.5, maxDim * 2.0),
-        target: new THREE.Vector3(0, H * 0.35, 0),
-      };
+      endPos = new THREE.Vector3(0, H * 0.5, maxDim * 2.0);
+      endTarget = new THREE.Vector3(0, H * 0.35, 0);
       break;
     case 'perspective':
     default:
-      end = {
-        pos: new THREE.Vector3(L * 0.8, maxDim * 1.0, W * 1.2),
-        target: new THREE.Vector3(0, H * 0.3, 0),
-      };
+      endPos = new THREE.Vector3(L * 0.8, maxDim * 1.0, W * 1.2);
+      endTarget = new THREE.Vector3(0, H * 0.3, 0);
       break;
   }
 
-  const startTime = performance.now();
+  var startTime = performance.now();
   function animateCamera(now) {
-    const t = Math.min((now - startTime) / duration, 1.0);
-    const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+    var t = Math.min((now - startTime) / duration, 1.0);
+    var ease = 1 - Math.pow(1 - t, 3);
 
-    camera.position.lerpVectors(start.pos, end.pos, ease);
-    controls.target.lerpVectors(start.target, end.target, ease);
+    camera.position.lerpVectors(startPos, endPos, ease);
+    controls.target.lerpVectors(startTarget, endTarget, ease);
     controls.update();
 
     if (t < 1.0) {
@@ -559,11 +851,11 @@ function setViewMode(mode) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// POINTER EVENTS (tap, long-press drag, orbit)
+// POINTER EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function getPointerNDC(event) {
-  const rect = renderer.domElement.getBoundingClientRect();
+  var rect = renderer.domElement.getBoundingClientRect();
   return new THREE.Vector2(
     ((event.clientX - rect.left) / rect.width) * 2 - 1,
     -((event.clientY - rect.top) / rect.height) * 2 + 1,
@@ -571,19 +863,21 @@ function getPointerNDC(event) {
 }
 
 function onPointerDown(event) {
-  if (event.pointerType === 'touch' && event.isPrimary === false) return; // Only handle first touch
+  if (event.pointerType === 'touch' && event.isPrimary === false) return;
 
   pointerDownTime = performance.now();
   pointerDownPos = { x: event.clientX, y: event.clientY };
   pointer.copy(getPointerNDC(event));
 
-  // Raycast to detect box under pointer
   raycaster.setFromCamera(pointer, camera);
-  const meshes = boxMeshes.map(b => b.mesh);
-  const intersects = raycaster.intersectObjects(meshes);
+  var meshes = [];
+  for (var pi = 0; pi < boxMeshes.length; pi++) {
+    meshes.push(boxMeshes[pi].mesh);
+  }
+  var intersects = raycaster.intersectObjects(meshes);
 
   if (intersects.length > 0) {
-    const hit = intersects[0].object;
+    var hit = intersects[0].object;
     dragIndex = hit.userData.boxIndex;
   }
 }
@@ -591,27 +885,24 @@ function onPointerDown(event) {
 function onPointerMove(event) {
   if (dragIndex < 0) return;
 
-  const dx = event.clientX - pointerDownPos.x;
-  const dy = event.clientY - pointerDownPos.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const elapsed = performance.now() - pointerDownTime;
+  var dx = event.clientX - pointerDownPos.x;
+  var dy = event.clientY - pointerDownPos.y;
+  var dist = Math.sqrt(dx * dx + dy * dy);
+  var elapsed = performance.now() - pointerDownTime;
 
-  // Start drag after 200ms hold + 5px move (long-press drag)
   if (!isDragging && elapsed > 200 && dist > 5) {
     isDragging = true;
-    controls.enabled = false; // Disable orbit during drag
+    controls.enabled = false;
 
-    // Calculate offset between box position and initial hit point
     pointer.copy(getPointerNDC(event));
     raycaster.setFromCamera(pointer, camera);
-    const intersection = new THREE.Vector3();
+    var intersection = new THREE.Vector3();
     raycaster.ray.intersectPlane(dragPlane, intersection);
 
-    const mesh = boxMeshes[dragIndex].mesh;
+    var mesh = boxMeshes[dragIndex].mesh;
     dragOffset.subVectors(mesh.position, intersection);
-    dragOffset.y = 0; // Keep on floor plane
+    dragOffset.y = 0;
 
-    // Set box semi-transparent during drag
     mesh.material.transparent = true;
     mesh.material.opacity = 0.7;
 
@@ -621,39 +912,34 @@ function onPointerMove(event) {
   if (isDragging && dragIndex >= 0) {
     pointer.copy(getPointerNDC(event));
     raycaster.setFromCamera(pointer, camera);
-    const intersection = new THREE.Vector3();
-    raycaster.ray.intersectPlane(dragPlane, intersection);
+    var intersection2 = new THREE.Vector3();
+    raycaster.ray.intersectPlane(dragPlane, intersection2);
 
-    if (intersection) {
-      const newPos = intersection.add(dragOffset);
-      const mesh = boxMeshes[dragIndex].mesh;
+    if (intersection2) {
+      var newPos = intersection2.add(dragOffset);
+      var mesh2 = boxMeshes[dragIndex].mesh;
 
-      // Clamp to truck bounds
       if (truckDims) {
-        const halfL = truckDims.lengthCm * CM_TO_M / 2;
-        const halfW = truckDims.widthCm * CM_TO_M / 2;
-        const bw = mesh.geometry.parameters.width / 2;
-        const bd = mesh.geometry.parameters.depth / 2;
+        var tHalfL = truckDims.lengthCm * CM_TO_M / 2;
+        var tHalfW = truckDims.widthCm * CM_TO_M / 2;
+        var mbw = mesh2.geometry.parameters.width / 2;
+        var mbd = mesh2.geometry.parameters.depth / 2;
 
-        newPos.x = Math.max(-halfL + bw, Math.min(halfL - bw, newPos.x));
-        newPos.z = Math.max(-halfW + bd, Math.min(halfW - bd, newPos.z));
+        newPos.x = Math.max(-tHalfL + mbw, Math.min(tHalfL - mbw, newPos.x));
+        newPos.z = Math.max(-tHalfW + mbd, Math.min(tHalfW - mbd, newPos.z));
       }
 
-      mesh.position.x = newPos.x;
-      mesh.position.z = newPos.z;
-      // Keep same Y (height)
-
-      // Update edge position too
+      mesh2.position.x = newPos.x;
+      mesh2.position.z = newPos.z;
       boxMeshes[dragIndex].edges.position.x = newPos.x;
       boxMeshes[dragIndex].edges.position.z = newPos.z;
 
-      // Convert back to data coordinates and send to Flutter
-      const halfL = truckDims.lengthCm * CM_TO_M / 2;
-      const halfW = truckDims.widthCm * CM_TO_M / 2;
-      const bw = mesh.geometry.parameters.width / 2;
-      const bd = mesh.geometry.parameters.depth / 2;
-      const dataX = (newPos.x + halfL - bw) / CM_TO_M;
-      const dataY = (newPos.z + halfW - bd) / CM_TO_M;
+      var dHalfL = truckDims.lengthCm * CM_TO_M / 2;
+      var dHalfW = truckDims.widthCm * CM_TO_M / 2;
+      var dbw = mesh2.geometry.parameters.width / 2;
+      var dbd = mesh2.geometry.parameters.depth / 2;
+      var dataX = (newPos.x + dHalfL - dbw) / CM_TO_M;
+      var dataY = (newPos.z + dHalfW - dbd) / CM_TO_M;
 
       sendToFlutter('boxDragMove', {
         index: dragIndex,
@@ -666,17 +952,16 @@ function onPointerMove(event) {
 
 function onPointerUp(event) {
   if (isDragging && dragIndex >= 0) {
-    const mesh = boxMeshes[dragIndex].mesh;
+    var mesh = boxMeshes[dragIndex].mesh;
     mesh.material.transparent = false;
     mesh.material.opacity = 1.0;
 
-    // Convert final position to data coordinates
-    const halfL = truckDims.lengthCm * CM_TO_M / 2;
-    const halfW = truckDims.widthCm * CM_TO_M / 2;
-    const bw = mesh.geometry.parameters.width / 2;
-    const bd = mesh.geometry.parameters.depth / 2;
-    const dataX = (mesh.position.x + halfL - bw) / CM_TO_M;
-    const dataY = (mesh.position.z + halfW - bd) / CM_TO_M;
+    var halfL = truckDims.lengthCm * CM_TO_M / 2;
+    var halfW = truckDims.widthCm * CM_TO_M / 2;
+    var bw = mesh.geometry.parameters.width / 2;
+    var bd = mesh.geometry.parameters.depth / 2;
+    var dataX = (mesh.position.x + halfL - bw) / CM_TO_M;
+    var dataY = (mesh.position.z + halfW - bd) / CM_TO_M;
 
     sendToFlutter('boxDragEnd', {
       index: dragIndex,
@@ -687,22 +972,20 @@ function onPointerUp(event) {
     isDragging = false;
     controls.enabled = true;
   } else if (dragIndex >= 0) {
-    // It was a tap (not a drag)
-    const elapsed = performance.now() - pointerDownTime;
-    const dx = event.clientX - pointerDownPos.x;
-    const dy = event.clientY - pointerDownPos.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    var elapsed = performance.now() - pointerDownTime;
+    var dx = event.clientX - pointerDownPos.x;
+    var dy = event.clientY - pointerDownPos.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
 
     if (elapsed < 300 && dist < 10) {
       sendToFlutter('boxSelected', { index: dragIndex });
     }
   } else {
-    // Tapped on background
-    const elapsed = performance.now() - pointerDownTime;
-    const dx = event.clientX - pointerDownPos.x;
-    const dy = event.clientY - pointerDownPos.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (elapsed < 300 && dist < 10) {
+    var elapsed2 = performance.now() - pointerDownTime;
+    var dx2 = event.clientX - pointerDownPos.x;
+    var dy2 = event.clientY - pointerDownPos.y;
+    var dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+    if (elapsed2 < 300 && dist2 < 10) {
       sendToFlutter('canvasTapped', {});
     }
   }
@@ -713,7 +996,7 @@ function onPointerUp(event) {
 
 function onPointerCancel() {
   if (isDragging && dragIndex >= 0) {
-    const mesh = boxMeshes[dragIndex].mesh;
+    var mesh = boxMeshes[dragIndex].mesh;
     mesh.material.transparent = false;
     mesh.material.opacity = 1.0;
   }
@@ -737,10 +1020,18 @@ function onResize() {
 // ANIMATION LOOP
 // ═══════════════════════════════════════════════════════════════════════════════
 
+var _labelCounter = 0;
 function animate() {
   animationId = requestAnimationFrame(animate);
   controls.update();
-  updateLabelVisibility();
+
+  // Update labels less frequently for performance (every 10th frame)
+  _labelCounter++;
+  if (_labelCounter >= 10) {
+    _labelCounter = 0;
+    updateLabelVisibility();
+  }
+
   renderer.render(scene, camera);
   css2dRenderer.render(scene, camera);
 }
@@ -752,19 +1043,18 @@ function animate() {
 function sendToFlutter(type, payload) {
   try {
     if (window.FlutterBridge) {
-      window.FlutterBridge.postMessage(JSON.stringify({ type, ...payload }));
+      window.FlutterBridge.postMessage(JSON.stringify({ type: type, ...payload }));
     }
   } catch (e) {
     console.warn('FlutterBridge send failed:', e);
   }
 }
 
-// Expose bridge methods for Flutter to call
 window.ThreeBridge = {
-  loadScene(truckJson, boxesJson) {
+  loadScene: function(truckJson, boxesJson) {
     try {
-      const truck = typeof truckJson === 'string' ? JSON.parse(truckJson) : truckJson;
-      const boxes = typeof boxesJson === 'string' ? JSON.parse(boxesJson) : boxesJson;
+      var truck = typeof truckJson === 'string' ? JSON.parse(truckJson) : truckJson;
+      var boxes = typeof boxesJson === 'string' ? JSON.parse(boxesJson) : boxesJson;
       buildTruck(truck);
       buildBoxes(boxes);
     } catch (e) {
@@ -772,9 +1062,9 @@ window.ThreeBridge = {
     }
   },
 
-  updateBoxes(boxesJson) {
+  updateBoxes: function(boxesJson) {
     try {
-      const boxes = typeof boxesJson === 'string' ? JSON.parse(boxesJson) : boxesJson;
+      var boxes = typeof boxesJson === 'string' ? JSON.parse(boxesJson) : boxesJson;
       buildBoxes(boxes);
       if (selectedIndex !== null) setSelected(selectedIndex);
     } catch (e) {
@@ -782,51 +1072,57 @@ window.ThreeBridge = {
     }
   },
 
-  updateBoxPosition(index, x, y, z) {
+  updateBoxPosition: function(index, x, y, z) {
     if (index < 0 || index >= boxMeshes.length || !truckDims) return;
-    const { mesh, edges } = boxMeshes[index];
-    const halfL = truckDims.lengthCm * CM_TO_M / 2;
-    const halfW = truckDims.widthCm * CM_TO_M / 2;
-    const bw = mesh.geometry.parameters.width / 2;
-    const bd = mesh.geometry.parameters.depth / 2;
-    const bh = mesh.geometry.parameters.height / 2;
+    var entry = boxMeshes[index];
+    var halfL = truckDims.lengthCm * CM_TO_M / 2;
+    var halfW = truckDims.widthCm * CM_TO_M / 2;
+    var bw = entry.mesh.geometry.parameters.width / 2;
+    var bd = entry.mesh.geometry.parameters.depth / 2;
+    var bh = entry.mesh.geometry.parameters.height / 2;
 
-    const px = x * CM_TO_M - halfL + bw;
-    const py = z * CM_TO_M + bh;
-    const pz = y * CM_TO_M - halfW + bd;
+    var px = x * CM_TO_M - halfL + bw;
+    var py = z * CM_TO_M + bh;
+    var pz = y * CM_TO_M - halfW + bd;
 
-    mesh.position.set(px, py, pz);
-    edges.position.set(px, py, pz);
+    entry.mesh.position.set(px, py, pz);
+    entry.edges.position.set(px, py, pz);
   },
 
-  selectBox(index) {
+  selectBox: function(index) {
     setSelected(index === null || index === undefined || index < 0 ? null : index);
   },
 
-  setViewMode(mode) {
+  setViewMode: function(mode) {
     setViewMode(mode);
   },
 
-  setColorMode(mode) {
+  setColorMode: function(mode) {
     updateColorMode(mode);
   },
 
-  setCollisionState(index, hasCollision) {
+  setCollisionState: function(index, hasCollision) {
     setCollisionState(index, hasCollision);
   },
 
-  highlightOverflow(orderNumbers) {
-    // Dim overflow boxes
-    const overflowSet = new Set(orderNumbers);
-    for (let i = 0; i < boxMeshes.length; i++) {
-      const { mesh } = boxMeshes[i];
-      const isOverflow = overflowSet.has(boxMeshes[i].data.orderNumber);
+  toggleWalls: function(visible) {
+    wallsVisible = visible;
+    wallsGroup.visible = visible;
+  },
+
+  highlightOverflow: function(orderNumbers) {
+    var overflowSet = {};
+    for (var oi = 0; oi < orderNumbers.length; oi++) {
+      overflowSet[orderNumbers[oi]] = true;
+    }
+    for (var hi = 0; hi < boxMeshes.length; hi++) {
+      var isOverflow = overflowSet[boxMeshes[hi].data.orderNumber] === true;
       if (isOverflow) {
-        mesh.material.opacity = 0.3;
-        mesh.material.transparent = true;
+        boxMeshes[hi].mesh.material.opacity = 0.3;
+        boxMeshes[hi].mesh.material.transparent = true;
       } else {
-        mesh.material.opacity = 1.0;
-        mesh.material.transparent = false;
+        boxMeshes[hi].mesh.material.opacity = 1.0;
+        boxMeshes[hi].mesh.material.transparent = false;
       }
     }
   },

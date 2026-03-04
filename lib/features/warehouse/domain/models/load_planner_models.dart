@@ -7,7 +7,7 @@
 
 enum ViewMode { perspective, top, front }
 
-enum ColorMode { product, client, weight }
+enum ColorMode { product, client, weight, delivery }
 
 enum LoadStatus { seguro, optimo, exceso }
 

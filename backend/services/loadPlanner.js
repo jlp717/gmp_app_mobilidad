@@ -25,36 +25,57 @@ function estimateBoxDimensions(pesoUnidad, unidadesCaja, articleName) {
     const pesoCaja = (pesoUnidad || 0) * Math.max(unidadesCaja || 1, 1);
     const name = (articleName || '').toUpperCase();
 
-    // Family-based estimation from article name patterns
+    // Family-based estimation from article name patterns (wider spread for visual differentiation)
     if (name.includes('LATA') || name.includes('BOTE') || name.includes('CONSERVA')) {
-        return pesoCaja <= 5 ? { largo: 32, ancho: 24, alto: 12 } : { largo: 40, ancho: 32, alto: 16 };
+        return pesoCaja <= 5 ? { largo: 28, ancho: 20, alto: 10 } : { largo: 42, ancho: 34, alto: 16 };
     }
     if (name.includes('BOTELLA') || name.includes('VINO') || name.includes('CERVEZA') || name.includes('CAVA')) {
-        return pesoCaja <= 8 ? { largo: 30, ancho: 20, alto: 30 } : { largo: 40, ancho: 30, alto: 35 };
+        return pesoCaja <= 8 ? { largo: 28, ancho: 18, alto: 32 } : { largo: 42, ancho: 30, alto: 38 };
     }
     if (name.includes('ACEITE') || name.includes('GARRAFA') || name.includes('VINAGRE')) {
-        return { largo: 38, ancho: 28, alto: 30 };
+        return pesoCaja <= 10 ? { largo: 35, ancho: 25, alto: 28 } : { largo: 42, ancho: 32, alto: 35 };
     }
     if (name.includes('AGUA') || name.includes('PACK') || name.includes('REFRESCO') || name.includes('ZUMO')) {
-        return pesoCaja <= 10 ? { largo: 35, ancho: 25, alto: 22 } : { largo: 40, ancho: 30, alto: 25 };
+        return pesoCaja <= 10 ? { largo: 32, ancho: 22, alto: 20 } : { largo: 44, ancho: 32, alto: 28 };
     }
     if (name.includes('HARINA') || name.includes('AZUCAR') || name.includes('SAL ') || name.includes('ARROZ')) {
-        return pesoCaja <= 10 ? { largo: 35, ancho: 25, alto: 18 } : { largo: 45, ancho: 30, alto: 22 };
+        return pesoCaja <= 10 ? { largo: 32, ancho: 22, alto: 16 } : { largo: 48, ancho: 32, alto: 24 };
+    }
+    if (name.includes('LECHE') || name.includes('BRICK') || name.includes('NATA')) {
+        return pesoCaja <= 8 ? { largo: 26, ancho: 18, alto: 18 } : { largo: 38, ancho: 26, alto: 24 };
+    }
+    if (name.includes('PATATA') || name.includes('CEBOLLA') || name.includes('FRUTA') || name.includes('VERDURA') || name.includes('TOMATE')) {
+        return pesoCaja <= 10 ? { largo: 40, ancho: 30, alto: 20 } : { largo: 55, ancho: 38, alto: 28 };
+    }
+    if (name.includes('CONGELAD') || name.includes('HELADO') || name.includes('HIELO')) {
+        return pesoCaja <= 8 ? { largo: 35, ancho: 25, alto: 18 } : { largo: 50, ancho: 35, alto: 30 };
+    }
+    if (name.includes('JAMON') || name.includes('EMBUTI') || name.includes('CHORIZO') || name.includes('SALCHICH')) {
+        return pesoCaja <= 5 ? { largo: 30, ancho: 20, alto: 12 } : { largo: 45, ancho: 30, alto: 18 };
+    }
+    if (name.includes('QUESO') || name.includes('YOGUR') || name.includes('LACTEO')) {
+        return pesoCaja <= 6 ? { largo: 28, ancho: 22, alto: 14 } : { largo: 40, ancho: 30, alto: 20 };
+    }
+    if (name.includes('PAN') || name.includes('BOLLO') || name.includes('GALLETA')) {
+        return pesoCaja <= 3 ? { largo: 35, ancho: 22, alto: 15 } : { largo: 50, ancho: 35, alto: 22 };
+    }
+    if (name.includes('LIMPIEZA') || name.includes('DETERGENT') || name.includes('LEJIA') || name.includes('JABON')) {
+        return pesoCaja <= 8 ? { largo: 32, ancho: 24, alto: 22 } : { largo: 48, ancho: 35, alto: 30 };
     }
 
-    // 12-tier weight-based estimation
-    if (pesoCaja <= 1)  return { largo: 25, ancho: 18, alto: 10 };
-    if (pesoCaja <= 2)  return { largo: 30, ancho: 20, alto: 12 };
-    if (pesoCaja <= 4)  return { largo: 32, ancho: 22, alto: 14 };
-    if (pesoCaja <= 6)  return { largo: 35, ancho: 25, alto: 15 };
+    // 12-tier weight-based estimation (wider spread: 20×15×8 → 70×50×40)
+    if (pesoCaja <= 1)  return { largo: 20, ancho: 15, alto: 8 };
+    if (pesoCaja <= 2)  return { largo: 25, ancho: 18, alto: 10 };
+    if (pesoCaja <= 4)  return { largo: 30, ancho: 20, alto: 12 };
+    if (pesoCaja <= 6)  return { largo: 34, ancho: 24, alto: 14 };
     if (pesoCaja <= 8)  return { largo: 38, ancho: 28, alto: 16 };
-    if (pesoCaja <= 12) return { largo: 40, ancho: 30, alto: 18 };
-    if (pesoCaja <= 16) return { largo: 45, ancho: 32, alto: 20 };
-    if (pesoCaja <= 22) return { largo: 50, ancho: 35, alto: 22 };
-    if (pesoCaja <= 30) return { largo: 55, ancho: 38, alto: 25 };
-    if (pesoCaja <= 40) return { largo: 58, ancho: 40, alto: 28 };
-    if (pesoCaja <= 60) return { largo: 60, ancho: 40, alto: 30 };
-    return { largo: 65, ancho: 45, alto: 35 };
+    if (pesoCaja <= 12) return { largo: 42, ancho: 30, alto: 20 };
+    if (pesoCaja <= 16) return { largo: 48, ancho: 34, alto: 24 };
+    if (pesoCaja <= 22) return { largo: 52, ancho: 38, alto: 28 };
+    if (pesoCaja <= 30) return { largo: 58, ancho: 42, alto: 32 };
+    if (pesoCaja <= 40) return { largo: 62, ancho: 45, alto: 35 };
+    if (pesoCaja <= 60) return { largo: 66, ancho: 48, alto: 38 };
+    return { largo: 70, ancho: 50, alto: 40 };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -594,9 +615,117 @@ async function planLoadManual(vehicleCode, items, customTolerance) {
     return { truck, tolerancePct: tolerance, ...result };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PROFIT OPTIMIZER — Greedy knapsack by profit density (value/volume)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Given all orders for a vehicle+date, selects the subset that maximizes
+ * total revenue while fitting within truck capacity.
+ *
+ * Uses a greedy approach: sort orders by value/volume ratio descending,
+ * then include orders until truck is full.
+ *
+ * Returns { included: [orderNumbers], excluded: [orderNumbers],
+ *           totalValue, totalWeight, totalVolume }
+ */
+async function optimizeForProfit(vehicleCode, year, month, day) {
+    const truck = await getTruckConfig(vehicleCode);
+    if (!truck) throw new Error(`Vehículo '${vehicleCode}' no encontrado`);
+
+    const orders = await getOrdersForVehicle(vehicleCode, year, month, day);
+    if (!orders.length) return { included: [], excluded: [], totalValue: 0, totalWeight: 0, totalVolume: 0 };
+
+    const articleCodes = [...new Set(orders.map(o => o.articleCode))];
+    const dimensions = await getArticleDimensions(articleCodes);
+
+    // Group order lines by order number, aggregate weight + volume + value
+    const orderAgg = {};
+    for (const order of orders) {
+        const dim = dimensions[order.articleCode];
+        const fallbackDims = estimateBoxDimensions(order.weightPerUnit || DEFAULT_WEIGHT_PER_BOX, 1, dim ? dim.name : '');
+        const d = dim || {
+            largoCm: fallbackDims.largo,
+            anchoCm: fallbackDims.ancho,
+            altoCm: fallbackDims.alto,
+            weightKg: DEFAULT_WEIGHT_PER_BOX,
+        };
+
+        const numBoxes = order.boxes > 0 ? Math.round(order.boxes) : 1;
+        const lineWeight = order.units > 0
+            ? order.units * (d.weightKg || DEFAULT_WEIGHT_PER_BOX)
+            : numBoxes * (d.weightKg || DEFAULT_WEIGHT_PER_BOX);
+        const lineVolume = (d.largoCm * d.anchoCm * d.altoCm) * numBoxes;
+
+        // Use units * weight as proxy for value (heavier = more product = more revenue)
+        // In a real scenario this would come from a price table
+        const lineValue = lineWeight;
+
+        if (!orderAgg[order.orderNumber]) {
+            orderAgg[order.orderNumber] = {
+                orderNumber: order.orderNumber,
+                clientCode: order.clientCode,
+                weight: 0,
+                volume: 0,
+                value: 0,
+                boxCount: 0,
+            };
+        }
+        orderAgg[order.orderNumber].weight += lineWeight;
+        orderAgg[order.orderNumber].volume += lineVolume;
+        orderAgg[order.orderNumber].value += lineValue;
+        orderAgg[order.orderNumber].boxCount += numBoxes;
+    }
+
+    const orderList = Object.values(orderAgg);
+
+    // Calculate density (value per cm³) and sort descending
+    for (const o of orderList) {
+        o.density = o.volume > 0 ? o.value / o.volume : 0;
+    }
+    orderList.sort((a, b) => b.density - a.density);
+
+    // Greedy fill
+    const maxWeight = truck.maxPayloadKg;
+    const maxVolume = truck.interior.lengthCm * truck.interior.widthCm * truck.interior.heightCm;
+    // Allow tolerance
+    const tolFactor = 1 + (truck.tolerancePct || 5) / 100;
+
+    let usedWeight = 0;
+    let usedVolume = 0;
+    let totalValue = 0;
+    const included = [];
+    const excluded = [];
+
+    for (const o of orderList) {
+        const newWeight = usedWeight + o.weight;
+        const newVolume = usedVolume + o.volume;
+
+        if (newWeight <= maxWeight * tolFactor && newVolume <= maxVolume * tolFactor) {
+            included.push(o.orderNumber);
+            usedWeight = newWeight;
+            usedVolume = newVolume;
+            totalValue += o.value;
+        } else {
+            excluded.push(o.orderNumber);
+        }
+    }
+
+    logger.info(`Profit optimizer ${vehicleCode}: ${included.length} included, ${excluded.length} excluded, value=${totalValue.toFixed(1)}kg`);
+
+    return {
+        included,
+        excluded,
+        totalValue: Math.round(totalValue * 100) / 100,
+        totalWeight: Math.round(usedWeight * 100) / 100,
+        totalVolume: Math.round(usedVolume),
+    };
+}
+
 module.exports = {
     planLoad,
     planLoadManual,
+    optimizeForProfit,
     getTruckConfig,
     getArticleDimensions,
     getOrdersForVehicle,

@@ -659,6 +659,22 @@ class WarehouseDataService {
     });
   }
 
+  /// Optimize load for maximum profit
+  static Future<Map<String, dynamic>> optimizeLoad({
+    required String vehicleCode,
+    required int year,
+    required int month,
+    required int day,
+  }) async {
+    final response = await ApiClient.post('/warehouse/load-plan/optimize', {
+      'vehicleCode': vehicleCode,
+      'year': year,
+      'month': month,
+      'day': day,
+    });
+    return response;
+  }
+
   /// Delete manual layout
   static Future<void> deleteManualLayout(int id) async {
     await ApiClient.post('/warehouse/manual-layout/$id/delete', {});

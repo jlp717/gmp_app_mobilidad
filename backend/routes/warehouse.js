@@ -285,6 +285,30 @@ router.post('/load-plan', async (req, res) => {
 });
 
 /**
+ * POST /warehouse/load-plan/optimize
+ * Body: { vehicleCode, year, month, day }
+ * Optimiza la carga para máximo beneficio (greedy knapsack)
+ */
+router.post('/load-plan/optimize', async (req, res) => {
+    try {
+        const { vehicleCode, year, month, day } = req.body;
+        if (!vehicleCode) {
+            return res.status(400).json({ error: 'vehicleCode es obligatorio' });
+        }
+        const now = new Date();
+        const y = parseInt(year) || now.getFullYear();
+        const m = parseInt(month) || (now.getMonth() + 1);
+        const d = parseInt(day) || now.getDate();
+
+        const result = await loadPlanner.optimizeForProfit(vehicleCode, y, m, d);
+        res.json(result);
+    } catch (error) {
+        logger.error(`Optimize load error: ${error.message}`);
+        res.status(500).json({ error: 'Error optimizando carga', details: error.message });
+    }
+});
+
+/**
  * POST /warehouse/load-plan-manual
  * Body: { vehicleCode, items: [{articleCode, quantity, ...}], tolerance? }
  * Para simulaciones "what-if" desde el frontend

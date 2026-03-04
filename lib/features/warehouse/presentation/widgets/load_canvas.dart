@@ -17,10 +17,10 @@ class LoadCanvas extends StatefulWidget {
   const LoadCanvas({super.key});
 
   @override
-  State<LoadCanvas> createState() => _LoadCanvasState();
+  LoadCanvasState createState() => LoadCanvasState();
 }
 
-class _LoadCanvasState extends State<LoadCanvas> {
+class LoadCanvasState extends State<LoadCanvas> {
   late final WebViewController _controller;
   bool _sceneReady = false;
 
@@ -152,6 +152,11 @@ class _LoadCanvasState extends State<LoadCanvas> {
   void _runJs(String code) {
     if (!_sceneReady) return;
     _controller.runJavaScript(code);
+  }
+
+  /// Toggle wall visibility from outside (toolbar button)
+  void toggleWalls(bool visible) {
+    _runJs('ThreeBridge.toggleWalls($visible)');
   }
 
   void _pushFullState(LoadPlannerProvider provider) {

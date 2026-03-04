@@ -304,6 +304,77 @@ class LoadPlannerProvider extends ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // PROFIT OPTIMIZER
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  bool _isOptimizing = false;
+  bool get isOptimizing => _isOptimizing;
+
+  /// Run profit optimizer: exclude orders the algorithm says to exclude,
+  /// include ones it says to include.
+  Future<void> runProfitOptimizer() async {
+    if (_vehicleCode == null || _date == null) return;
+    _isOptimizing = true;
+    notifyListeners();
+
+    try {
+      final result = await WarehouseDataService.optimizeLoad(
+        vehicleCode: _vehicleCode!,
+        year: _date!.year,
+        month: _date!.month,
+        day: _date!.day,
+      );
+
+      final excludedSet =
+          (result['excluded'] as List?)?.cast<int>().toSet() ?? {};
+      final includedSet =
+          (result['included'] as List?)?.cast<int>().toSet() ?? {};
+
+      if (excludedSet.isEmpty && includedSet.isEmpty) {
+        _isOptimizing = false;
+        notifyListeners();
+        return;
+      }
+
+      _pushUndo();
+
+      // Move excluded orders from placed to overflow
+      final toExclude = <LoadBox>[];
+      _placedBoxes.removeWhere((b) {
+        if (excludedSet.contains(b.orderNumber)) {
+          toExclude.add(b);
+          return true;
+        }
+        return false;
+      });
+      _overflowBoxes.addAll(toExclude);
+      _excludedOrders.addAll(excludedSet);
+
+      // Move included orders from overflow to placed
+      final toInclude = <LoadBox>[];
+      _overflowBoxes.removeWhere((b) {
+        if (includedSet.contains(b.orderNumber)) {
+          toInclude.add(b);
+          return true;
+        }
+        return false;
+      });
+      _placedBoxes.addAll(toInclude);
+      _excludedOrders.removeAll(includedSet);
+
+      _hasManualChanges = true;
+      _recalculateMetrics();
+      _scheduleAutoSave();
+    } catch (e) {
+      debugPrint('[LoadPlanner] Optimizer error: $e');
+      _error = 'Error al optimizar: $e';
+    } finally {
+      _isOptimizing = false;
+      notifyListeners();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // BOX SELECTION
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -454,6 +525,72 @@ class LoadPlannerProvider extends ChangeNotifier {
 
   bool isOrderExcluded(int orderNumber) =>
       _excludedOrders.contains(orderNumber);
+
+  /// Exclude ALL currently placed orders (move everything to overflow)
+  void excludeAllOrders() {
+    if (_placedBoxes.isEmpty) return;
+    _pushUndo();
+    final allOrderNumbers =
+        _placedBoxes.map((b) => b.orderNumber).toSet();
+    _excludedOrders.addAll(allOrderNumbers);
+    _overflowBoxes.addAll(_placedBoxes);
+    _placedBoxes = [];
+    _hasManualChanges = true;
+    _recalculateMetrics();
+    _scheduleAutoSave();
+    notifyListeners();
+  }
+
+  /// Include ALL overflow orders (move everything back to placed)
+  void includeAllOrders() {
+    if (_overflowBoxes.isEmpty) return;
+    _pushUndo();
+    _excludedOrders.clear();
+    _placedBoxes.addAll(_overflowBoxes);
+    _overflowBoxes = [];
+    _hasManualChanges = true;
+    _recalculateMetrics();
+    _scheduleAutoSave();
+    notifyListeners();
+  }
+
+  /// Exclude all orders for a specific client
+  void excludeByClient(String clientCode) {
+    _pushUndo();
+    final toMove = <LoadBox>[];
+    _placedBoxes.removeWhere((b) {
+      if (b.clientCode == clientCode) {
+        _excludedOrders.add(b.orderNumber);
+        toMove.add(b);
+        return true;
+      }
+      return false;
+    });
+    _overflowBoxes.addAll(toMove);
+    _hasManualChanges = true;
+    _recalculateMetrics();
+    _scheduleAutoSave();
+    notifyListeners();
+  }
+
+  /// Include all orders for a specific client
+  void includeByClient(String clientCode) {
+    _pushUndo();
+    final toRestore = <LoadBox>[];
+    _overflowBoxes.removeWhere((b) {
+      if (b.clientCode == clientCode) {
+        _excludedOrders.remove(b.orderNumber);
+        toRestore.add(b);
+        return true;
+      }
+      return false;
+    });
+    _placedBoxes.addAll(toRestore);
+    _hasManualChanges = true;
+    _recalculateMetrics();
+    _scheduleAutoSave();
+    notifyListeners();
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // UNDO / REDO
