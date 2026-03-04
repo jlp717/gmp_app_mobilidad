@@ -30,6 +30,7 @@ class _LoadCanvasState extends State<LoadCanvas> {
   int? _lastSelectedIndex;
   int _lastBoxCount = -1;
   bool _lastCollisionState = false;
+  bool _fullStatePushed = false;
 
   @override
   void initState() {
@@ -156,6 +157,7 @@ class _LoadCanvasState extends State<LoadCanvas> {
   void _pushFullState(LoadPlannerProvider provider) {
     if (!_sceneReady) return;
     if (provider.truck == null) return;
+    _fullStatePushed = true;
 
     final truckJson = jsonEncode({
       'lengthCm': provider.truck!.lengthCm,
@@ -218,6 +220,12 @@ class _LoadCanvasState extends State<LoadCanvas> {
 
   void _syncProviderToJs(LoadPlannerProvider provider) {
     if (!_sceneReady) return;
+
+    // If full state was never pushed (sceneReady arrived before data loaded), push now
+    if (!_fullStatePushed && provider.truck != null) {
+      _pushFullState(provider);
+      return;
+    }
 
     // View mode changed
     if (provider.viewMode != _lastViewMode) {

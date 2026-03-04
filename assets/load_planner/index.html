@@ -79,34 +79,25 @@
     }
   </style>
 
-  <!-- No import map: all imports use relative paths for maximum WebView compatibility -->
+  <!-- Global scripts — NO ES modules, maximum WebView compatibility -->
 </head>
 
 <body>
   <div id="loading">Inicializando escena 3D...</div>
   <script>
-    // Safety net: if Three.js module fails to load, notify Flutter after timeout
+    // Safety net: capture any script error and report to Flutter
     window._sceneInitDone = false;
     window._sceneError = null;
 
     window.addEventListener('error', function (e) {
-      console.error('Scene load error:', e.message, e.filename, e.lineno);
-      window._sceneError = e.message;
+      var detail = (e.filename ? e.filename + ':' + e.lineno + ' ' : '') + e.message;
+      console.error('Scene error:', detail);
+      window._sceneError = detail;
+      var el = document.getElementById('loading');
+      if (el) el.textContent = 'Error: ' + detail;
       if (!window._sceneInitDone && window.FlutterBridge) {
         window._sceneInitDone = true;
         window.FlutterBridge.postMessage(JSON.stringify({ type: 'sceneReady' }));
-        document.getElementById('loading').textContent = 'Error JS: ' + e.message;
-      }
-    });
-
-    // Catch module import failures (unresolved bare specifiers, etc.)
-    window.addEventListener('unhandledrejection', function (e) {
-      console.error('Module load rejection:', e.reason);
-      window._sceneError = String(e.reason);
-      if (!window._sceneInitDone && window.FlutterBridge) {
-        window._sceneInitDone = true;
-        window.FlutterBridge.postMessage(JSON.stringify({ type: 'sceneReady' }));
-        document.getElementById('loading').textContent = 'Error modulo: ' + e.reason;
       }
     });
 
@@ -118,11 +109,17 @@
           window._sceneInitDone = true;
           window.FlutterBridge.postMessage(JSON.stringify({ type: 'sceneReady' }));
         }
-        document.getElementById('loading').textContent = 'Error: ' + msg;
+        var el = document.getElementById('loading');
+        if (el) el.textContent = 'Error: ' + msg;
       }
     }, 15000);
   </script>
-  <script type="module" src="load_planner_3d.js"></script>
+
+  <!-- Load order: Three.js core → addons → main app (all regular scripts, NO modules) -->
+  <script src="lib/three.global.js"></script>
+  <script src="lib/OrbitControls.global.js"></script>
+  <script src="lib/CSS2DRenderer.global.js"></script>
+  <script src="load_planner_3d.global.js"></script>
 </body>
 
 </html>
