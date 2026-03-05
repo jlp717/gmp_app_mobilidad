@@ -9,41 +9,25 @@
  * Usage: node test_warehouse_endpoints.js
  */
 
-const crypto = require('crypto');
 const http = require('http');
 
 // ─── Config ────────────────────────────────────────────────────────────────
 const SERVER_HOST = '127.0.0.1';
 const SERVER_PORT = 3334;
-const BASE = `http://${SERVER_HOST}:${SERVER_PORT}/api/warehouse`;
-const TOKEN_SECRET = 'b3f8a2d9e1c7f405916d83ab2e0f7c4d5a91b8e3d6f2c0a4178e5b9d3f6a1c8';
+const LOGIN_USER = 'DIEGO';
+const LOGIN_PASS = '9322';
 
-// Generate a valid HMAC token
-function makeToken() {
-    const payload = { id: 'VTEST', user: 'TEST', timestamp: Date.now() };
-    const data = Buffer.from(JSON.stringify(payload)).toString('base64');
-    const sig = crypto.createHmac('sha256', TOKEN_SECRET).update(data).digest('hex');
-    return `${data}.${sig}`;
-}
-
-const TOKEN = makeToken();
+let TOKEN = null;
 
 // ─── HTTP helpers ──────────────────────────────────────────────────────────
-function request(method, path, body) {
+function rawRequest(method, fullPath, body, headers) {
     return new Promise((resolve, reject) => {
-        const url = new URL(path, BASE + '/');
-        // Fix: if path starts with /, use it relative to /api/warehouse
-        const fullPath = '/api/warehouse/' + path.replace(/^\//, '');
-
         const options = {
             hostname: SERVER_HOST,
             port: SERVER_PORT,
             path: fullPath,
             method,
-            headers: {
-                'Authorization': `Bearer ${TOKEN}`,
-                'Content-Type': 'application/json',
-            },
+            headers: headers || {},
         };
 
         const req = http.request(options, (res) => {
@@ -59,6 +43,32 @@ function request(method, path, body) {
         req.on('error', reject);
         if (body) req.write(JSON.stringify(body));
         req.end();
+    });
+}
+
+async function login() {
+    console.log(`  Logging in as ${LOGIN_USER}...`);
+    const r = await rawRequest('POST', '/api/auth/login', {
+        username: LOGIN_USER,
+        password: LOGIN_PASS
+    }, { 'Content-Type': 'application/json' });
+
+    if (r.status !== 200 || !r.data.token) {
+        console.error(`  ❌ LOGIN FAILED: status=${r.status}`, JSON.stringify(r.data).substring(0, 200));
+        process.exit(1);
+    }
+
+    TOKEN = r.data.token;
+    console.log(`  ✅ Logged in as ${r.data.user?.name || LOGIN_USER} (role: ${r.data.role})`);
+    console.log(`  Token: ${TOKEN.substring(0, 30)}...`);
+    return r.data;
+}
+
+function request(method, path, body) {
+    const fullPath = '/api/warehouse/' + path.replace(/^\//, '');
+    return rawRequest(method, fullPath, body, {
+        'Authorization': `Bearer ${TOKEN}`,
+        'Content-Type': 'application/json',
     });
 }
 
@@ -516,11 +526,13 @@ async function main() {
     console.log('═══════════════════════════════════════════════════════════════');
     console.log('  WAREHOUSE ENDPOINTS — Full Test Suite');
     console.log('═══════════════════════════════════════════════════════════════');
-    console.log(`  Server: localhost:3334`);
-    console.log(`  Token: ${TOKEN.substring(0, 30)}...`);
+    console.log(`  Server: ${SERVER_HOST}:${SERVER_PORT}`);
     console.log(`  Time: ${new Date().toISOString()}`);
 
     try {
+        // 0. Login
+        await login();
+
         // 1. Dashboard
         const dashboard = await testDashboard();
 
