@@ -63,6 +63,7 @@ dependencies:
 
   # WebView (Three.js 3D visualization)
   webview_flutter: ^4.10.0
+  screenshot: ^3.0.0             # Canvas screenshot capture
 
 dev_dependencies:
   flutter_test:

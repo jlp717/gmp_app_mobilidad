@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../application/load_planner_provider.dart';
 import '../../domain/models/load_planner_models.dart';
 
-/// Toolbar with view mode, color mode, undo/redo, reset, wall toggle.
+/// Premium floating-pill toolbar with animated highlight indicators.
 class PlannerToolbar extends StatelessWidget {
   final VoidCallback? onToggleWalls;
 
@@ -16,82 +17,107 @@ class PlannerToolbar extends StatelessWidget {
     return Consumer<LoadPlannerProvider>(
       builder: (context, provider, _) {
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: AppTheme.darkSurface.withOpacity(0.95),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppTheme.darkSurface.withOpacity(0.95),
+                AppTheme.darkBase.withOpacity(0.9),
+              ],
+            ),
             border: Border(
               bottom: BorderSide(
-                color: AppTheme.neonBlue.withOpacity(0.15),
+                color: AppTheme.neonBlue.withOpacity(0.1),
                 width: 1,
               ),
             ),
           ),
           child: Row(
             children: [
-              // View mode toggle
-              _SegmentedButton<ViewMode>(
+              // View mode pills
+              _PillSegmented<ViewMode>(
                 selected: provider.viewMode,
                 options: const [
-                  (ViewMode.perspective, Icons.view_in_ar, '3D'),
-                  (ViewMode.top, Icons.layers, 'Planta'),
-                  (ViewMode.front, Icons.crop_square, 'Frente'),
+                  (ViewMode.perspective, Icons.view_in_ar_rounded, '3D'),
+                  (ViewMode.top, Icons.layers_rounded, 'Planta'),
+                  (ViewMode.front, Icons.crop_square_rounded, 'Frente'),
                 ],
-                onChanged: provider.setViewMode,
+                onChanged: (v) {
+                  HapticFeedback.selectionClick();
+                  provider.setViewMode(v);
+                },
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
 
-              // Color mode toggle
-              _SegmentedButton<ColorMode>(
+              // Color mode pills
+              _PillSegmented<ColorMode>(
                 selected: provider.colorMode,
                 options: const [
-                  (ColorMode.product, Icons.inventory_2, 'Producto'),
-                  (ColorMode.client, Icons.people, 'Cliente'),
-                  (ColorMode.weight, Icons.fitness_center, 'Peso'),
-                  (ColorMode.delivery, Icons.local_shipping, 'Entrega'),
+                  (ColorMode.product, Icons.inventory_2_rounded, 'Producto'),
+                  (ColorMode.client, Icons.people_rounded, 'Cliente'),
+                  (ColorMode.weight, Icons.fitness_center_rounded, 'Peso'),
+                  (ColorMode.delivery, Icons.local_shipping_rounded, 'Entrega'),
                 ],
-                onChanged: provider.setColorMode,
+                onChanged: (v) {
+                  HapticFeedback.selectionClick();
+                  provider.setColorMode(v);
+                },
               ),
 
               const Spacer(),
 
-              // Profit optimizer
-              _ToolButton(
-                icon: Icons.auto_awesome,
+              // Profit optimizer — glow on hover
+              _GlowToolButton(
+                icon: Icons.auto_awesome_rounded,
                 tooltip: 'Optimizar carga (max beneficio)',
                 enabled: !provider.isOptimizing,
-                onPressed: () => provider.runProfitOptimizer(),
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  provider.runProfitOptimizer();
+                },
                 color: AppTheme.neonGreen,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 2),
 
               // Wall toggle
-              _ToolButton(
-                icon: Icons.grid_on,
+              _GlowToolButton(
+                icon: Icons.grid_on_rounded,
                 tooltip: 'Mostrar/ocultar paredes',
-                onPressed: onToggleWalls ?? () {},
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  onToggleWalls?.call();
+                },
                 enabled: onToggleWalls != null,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 2),
 
               // Undo
-              _ToolButton(
-                icon: Icons.undo,
+              _GlowToolButton(
+                icon: Icons.undo_rounded,
                 tooltip: 'Deshacer',
                 enabled: provider.canUndo,
-                onPressed: provider.undo,
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  provider.undo();
+                },
               ),
               // Redo
-              _ToolButton(
-                icon: Icons.redo,
+              _GlowToolButton(
+                icon: Icons.redo_rounded,
                 tooltip: 'Rehacer',
                 enabled: provider.canRedo,
-                onPressed: provider.redo,
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  provider.redo();
+                },
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
 
-              // Reset to algorithm
-              _ToolButton(
-                icon: Icons.refresh,
+              // Reset — warning glow
+              _GlowToolButton(
+                icon: Icons.refresh_rounded,
                 tooltip: 'Recalcular (descartar cambios)',
                 enabled: provider.hasManualChanges,
                 onPressed: () => _confirmReset(context, provider),
@@ -105,13 +131,28 @@ class PlannerToolbar extends StatelessWidget {
   }
 
   void _confirmReset(BuildContext context, LoadPlannerProvider provider) {
+    HapticFeedback.mediumImpact();
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.darkSurface,
-        title: const Text('Recalcular carga'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: AppTheme.warning.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                color: AppTheme.warning, size: 22),
+            const SizedBox(width: 8),
+            const Text('Recalcular carga'),
+          ],
+        ),
         content: const Text(
-          'Se descartaran los cambios manuales y se recalculara la carga desde el algoritmo. Esta accion no se puede deshacer.',
+          'Se descartarán los cambios manuales y se recalculará la carga desde el algoritmo. Esta acción no se puede deshacer.',
         ),
         actions: [
           TextButton(
@@ -134,12 +175,16 @@ class PlannerToolbar extends StatelessWidget {
   }
 }
 
-class _SegmentedButton<T> extends StatelessWidget {
+// =============================================================================
+// PILL SEGMENTED CONTROL — floating pill with animated highlight
+// =============================================================================
+
+class _PillSegmented<T> extends StatelessWidget {
   final T selected;
   final List<(T, IconData, String)> options;
   final ValueChanged<T> onChanged;
 
-  const _SegmentedButton({
+  const _PillSegmented({
     required this.selected,
     required this.options,
     required this.onChanged,
@@ -148,11 +193,12 @@ class _SegmentedButton<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(8),
+        color: AppTheme.darkCard.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: AppTheme.borderColor.withOpacity(0.3),
+          color: AppTheme.borderColor.withOpacity(0.2),
           width: 1,
         ),
       ),
@@ -164,32 +210,51 @@ class _SegmentedButton<T> extends StatelessWidget {
             onTap: () => onChanged(opt.$1),
             child: AnimatedContainer(
               duration: AppTheme.animFast,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: isActive
-                    ? AppTheme.neonBlue.withOpacity(0.2)
+                    ? AppTheme.neonBlue.withOpacity(0.15)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(7),
+                border: isActive
+                    ? Border.all(
+                        color: AppTheme.neonBlue.withOpacity(0.3),
+                        width: 1,
+                      )
+                    : null,
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                          color: AppTheme.neonBlue.withOpacity(0.1),
+                          blurRadius: 8,
+                        ),
+                      ]
+                    : null,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     opt.$2,
-                    size: 14,
-                    color: isActive ? AppTheme.neonBlue : AppTheme.textTertiary,
+                    size: 13,
+                    color: isActive
+                        ? AppTheme.neonBlue
+                        : AppTheme.textTertiary.withOpacity(0.7),
                   ),
                   const SizedBox(width: 4),
-                  Text(
-                    opt.$3,
+                  AnimatedDefaultTextStyle(
+                    duration: AppTheme.animFast,
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight:
                           isActive ? FontWeight.w600 : FontWeight.w400,
                       color: isActive
                           ? AppTheme.neonBlue
-                          : AppTheme.textTertiary,
+                          : AppTheme.textTertiary.withOpacity(0.7),
+                      letterSpacing: isActive ? 0.2 : 0.0,
                     ),
+                    child: Text(opt.$3),
                   ),
                 ],
               ),
@@ -201,14 +266,18 @@ class _SegmentedButton<T> extends StatelessWidget {
   }
 }
 
-class _ToolButton extends StatelessWidget {
+// =============================================================================
+// GLOW TOOL BUTTON — icon button with subtle glow when active/hovered
+// =============================================================================
+
+class _GlowToolButton extends StatefulWidget {
   final IconData icon;
   final String tooltip;
   final bool enabled;
   final VoidCallback onPressed;
   final Color? color;
 
-  const _ToolButton({
+  const _GlowToolButton({
     required this.icon,
     required this.tooltip,
     this.enabled = true,
@@ -217,18 +286,47 @@ class _ToolButton extends StatelessWidget {
   });
 
   @override
+  State<_GlowToolButton> createState() => _GlowToolButtonState();
+}
+
+class _GlowToolButtonState extends State<_GlowToolButton> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final c = enabled
-        ? (color ?? AppTheme.textSecondary)
-        : AppTheme.textTertiary.withOpacity(0.4);
+    final baseColor = widget.enabled
+        ? (widget.color ?? AppTheme.textSecondary)
+        : AppTheme.textTertiary.withOpacity(0.3);
+
     return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: enabled ? onPressed : null,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 18, color: c),
+      message: widget.tooltip,
+      child: GestureDetector(
+        onTapDown: widget.enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: widget.enabled
+            ? (_) {
+                setState(() => _pressed = false);
+                widget.onPressed();
+              }
+            : null,
+        onTapCancel: () => setState(() => _pressed = false),
+        child: AnimatedContainer(
+          duration: AppTheme.animFast,
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: _pressed
+                ? baseColor.withOpacity(0.1)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: _pressed && widget.enabled
+                ? [
+                    BoxShadow(
+                      color: baseColor.withOpacity(0.15),
+                      blurRadius: 8,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Icon(widget.icon, size: 18, color: baseColor),
         ),
       ),
     );

@@ -17,7 +17,8 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #0F172A;
+      background: #0A0E1A;
+      font-family: -apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
     }
 
     canvas {
@@ -27,47 +28,87 @@
       touch-action: none;
     }
 
-    /* CSS2D labels */
+    /* ═══════════════════════════════════════════════════════════════
+       CSS2D Labels — Glassmorphism Premium Design
+       ═══════════════════════════════════════════════════════════════ */
     .box-label {
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      font-family: -apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
       font-size: 10px;
       font-weight: 600;
       color: #FFFFFF;
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(0, 212, 255, 0.3);
-      border-radius: 4px;
-      padding: 2px 6px;
+      background: rgba(10, 14, 26, 0.75);
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      border-radius: 6px;
+      padding: 3px 8px;
       pointer-events: none;
       white-space: nowrap;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(4px);
-      opacity: 1;
-      transition: opacity 0.25s ease;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4),
+                  0 0 1px rgba(0, 212, 255, 0.2),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: opacity 0.3s ease, transform 0.2s ease;
+      transform: translateY(0);
     }
 
-    .box-label.hidden {
-      opacity: 0;
-      pointer-events: none;
+    .box-label .box-label-text {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #FFFFFF;
+      line-height: 1.2;
+    }
+
+    .box-label .box-label-weight {
+      font-size: 8px;
+      font-weight: 500;
+      color: rgba(0, 212, 255, 0.8);
+      letter-spacing: 0.04em;
     }
 
     .box-label.selected-label {
-      border-color: rgba(0, 212, 255, 0.8);
-      background: rgba(0, 212, 255, 0.25);
+      border-color: rgba(0, 212, 255, 0.7);
+      background: rgba(0, 212, 255, 0.2);
+      box-shadow: 0 2px 12px rgba(0, 212, 255, 0.3),
+                  0 0 20px rgba(0, 212, 255, 0.1),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.1);
       font-size: 11px;
       z-index: 10;
+      transform: translateY(-2px);
     }
 
-    /* Dimension labels */
+    .box-label.selected-label .box-label-text {
+      font-size: 11px;
+      color: #FFFFFF;
+    }
+
+    .box-label.selected-label .box-label-weight {
+      font-size: 9px;
+      color: rgba(0, 212, 255, 1.0);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Dimension Labels
+       ═══════════════════════════════════════════════════════════════ */
     .dim-label {
-      font-family: 'Segoe UI Mono', 'Consolas', monospace;
+      font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
       font-size: 11px;
       font-weight: 500;
-      color: rgba(0, 212, 255, 0.6);
+      color: rgba(0, 212, 255, 0.5);
       pointer-events: none;
       white-space: nowrap;
+      text-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+      letter-spacing: 0.05em;
     }
 
-    /* Loading overlay */
+    /* ═══════════════════════════════════════════════════════════════
+       Loading Overlay — Premium Spinner
+       ═══════════════════════════════════════════════════════════════ */
     #loading {
       position: fixed;
       top: 0;
@@ -75,27 +116,42 @@
       width: 100%;
       height: 100%;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #0F172A;
+      gap: 16px;
+      background: #0A0E1A;
       color: #6B7280;
-      font-family: system-ui;
-      font-size: 14px;
+      font-family: -apple-system, system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
       z-index: 100;
+    }
+
+    #loading::before {
+      content: '';
+      width: 32px;
+      height: 32px;
+      border: 2px solid rgba(0, 212, 255, 0.15);
+      border-top-color: rgba(0, 212, 255, 0.8);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
 
     #loading.hidden {
       display: none;
     }
   </style>
-
-  <!-- Global scripts — NO ES modules, maximum WebView compatibility -->
 </head>
 
 <body>
   <div id="loading">Inicializando escena 3D...</div>
   <script>
-    // Safety net: capture any script error and report to Flutter
     window._sceneInitDone = false;
     window._sceneError = null;
 
@@ -125,7 +181,6 @@
     }, 15000);
   </script>
 
-  <!-- Load order: Three.js core → addons → main app (all regular scripts, NO modules) -->
   <script src="lib/three.global.js"></script>
   <script src="lib/OrbitControls.global.js"></script>
   <script src="lib/CSS2DRenderer.global.js"></script>

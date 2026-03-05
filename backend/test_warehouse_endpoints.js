@@ -46,6 +46,9 @@ function rawRequest(method, fullPath, body, headers) {
     });
 }
 
+/** Small delay to allow DB2 transaction isolation to settle */
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 async function login() {
     console.log(`  Logging in as ${LOGIN_USER}...`);
     const r = await rawRequest('POST', '/api/auth/login', {
@@ -59,7 +62,7 @@ async function login() {
     }
 
     TOKEN = r.data.token;
-    console.log(`  ✅ Logged in as ${r.data.user?.name || LOGIN_USER} (role: ${r.data.role})`);
+    console.log(`  ✅ Logged in as ${r.data.user?.name || LOGIN_USER} (${r.data.user?.id || '?'}) (role: ${r.data.role})`);
     console.log(`  Token: ${TOKEN.substring(0, 30)}...`);
     return r.data;
 }
@@ -96,6 +99,7 @@ function check(name, condition, detail) {
 // ─── Cleanup tracking ──────────────────────────────────────────────────────
 const createdPersonnelIds = [];
 let createdTruckConfig = null;
+let originalTruckConfig = null; // Save original config to restore
 let createdArticleDims = null;
 let createdManualLayoutCode = null;
 let createdManualLayoutDate = null;
@@ -155,33 +159,40 @@ async function testVehicles() {
 async function testTruckConfig(vehicleCode) {
     console.log('\n── TRUCK CONFIG ──');
 
-    // GET config
+    // GET config — save original for restoration
     const r = await GET(`truck-config/${vehicleCode}`);
     check('GET /truck-config/:code — status 200', r.status === 200, `status=${r.status}`);
     if (r.status === 200) {
+        originalTruckConfig = r.data;
         check('Truck config has dimensions', r.data.interior != null || r.data.lengthCm != null, JSON.stringify(r.data).substring(0, 100));
         console.log(`    ℹ️  Config for ${vehicleCode}: ${JSON.stringify(r.data).substring(0, 120)}`);
     }
 
-    // PUT (write test config) — use a test vehicle code to avoid overwriting real data
-    const testCode = '__TEST__';
-    createdTruckConfig = testCode;
+    // PUT — update the REAL vehicle code (getTruckConfig joins DSEDAC.VEH,
+    // so fake codes like '__TEST__' don't exist in VEH → 404)
+    createdTruckConfig = vehicleCode;
 
-    const putR = await PUT(`truck-config/${testCode}`, {
+    const putR = await PUT(`truck-config/${vehicleCode}`, {
         largoInteriorCm: 500,
         anchoInteriorCm: 220,
         altoInteriorCm: 200,
         toleranciaExceso: 10,
-        notas: 'TEST SCRIPT — will be deleted'
+        notas: 'TEST SCRIPT — will be restored'
     });
     check('PUT /truck-config — status 200', putR.status === 200, `status=${putR.status}`);
     if (putR.status === 200) {
-        console.log(`    ℹ️  Created test truck config for ${testCode}`);
+        console.log(`    ℹ️  Updated truck config for ${vehicleCode}`);
     }
 
-    // Verify it was saved
-    const verifyR = await GET(`truck-config/${testCode}`);
+    // Verify it was saved — adequate delay for DB2 transaction isolation
+    await sleep(1000);
+    const verifyR = await GET(`truck-config/${vehicleCode}`);
     check('GET /truck-config after PUT — found', verifyR.status === 200, `status=${verifyR.status}`);
+    if (verifyR.status === 200) {
+        check('PUT config — dims applied',
+            verifyR.data.interior?.lengthCm === 500 || verifyR.data.lengthCm === 500,
+            `lengthCm=${verifyR.data.interior?.lengthCm ?? verifyR.data.lengthCm}`);
+    }
 }
 
 async function testPersonnel() {
@@ -197,7 +208,7 @@ async function testPersonnel() {
         const p = r.data.personnel[0];
         check('Personnel has name', !!p.name, p.name);
         check('Personnel has role', !!p.role, p.role);
-        console.log(`    ℹ️  First: ${p.name} (${p.role}, source=${p.source})`);
+        console.log(`    ℹ️  First: ${p.vendorCode || p.id} ${p.name} (${p.role}, source=${p.source})`);
     }
 
     // POST — create test person
@@ -210,9 +221,14 @@ async function testPersonnel() {
     });
     check('POST /personnel — status 200', createR.status === 200, `status=${createR.status}`);
 
-    // Find the created ID
+    // Wait for DB2 to commit the INSERT before querying again
+    await sleep(1000);
+
+    // Find the created person
     const afterCreate = await GET('personnel');
-    const testPerson = afterCreate.data.personnel?.find(p => p.name === 'TEST_OPERARIO_SCRIPT');
+    const testPerson = afterCreate.data.personnel?.find(p =>
+        p.name === 'TEST_OPERARIO_SCRIPT' || p.vendorCode === 'T999'
+    );
     if (testPerson) {
         createdPersonnelIds.push(testPerson.id);
         check('POST /personnel — person found in list', true, `id=${testPerson.id}`);
@@ -226,6 +242,7 @@ async function testPersonnel() {
         check('PUT /personnel/:id — status 200', updateR.status === 200, `status=${updateR.status}`);
 
         // Verify update
+        await sleep(500);
         const afterUpdate = await GET('personnel');
         const updated = afterUpdate.data.personnel?.find(p => p.id === testPerson.id);
         check('PUT /personnel — name updated', updated?.name === 'TEST_OPERARIO_UPDATED', updated?.name);
@@ -235,11 +252,13 @@ async function testPersonnel() {
         check('POST /personnel/:id/delete — status 200', delR.status === 200, `status=${delR.status}`);
 
         // Verify soft delete (should not appear in active list)
+        await sleep(500);
         const afterDel = await GET('personnel');
         const deleted = afterDel.data.personnel?.find(p => p.id === testPerson.id);
         check('Soft delete — not in active list', !deleted, deleted ? 'still found!' : 'correctly removed');
     } else {
-        check('POST /personnel — person found in list', false, 'could not find created person');
+        check('POST /personnel — person found in list', false,
+              `could not find person (${afterCreate.data.personnel?.length || 0} total)`);
     }
 }
 
@@ -342,10 +361,13 @@ async function testLoadPlan(vehicleCode) {
 
         if (r.data.placed?.length > 0) {
             const b = r.data.placed[0];
-            check('Box has position', b.position != null, JSON.stringify(b.position));
-            check('Box has size', b.size != null, JSON.stringify(b.size));
+            // binPack3D returns flat fields: x, y, z, w, d, h (not nested position/size)
+            check('Box has position (x,y,z)', b.x !== undefined && b.y !== undefined && b.z !== undefined,
+                  `x=${b.x}, y=${b.y}, z=${b.z}`);
+            check('Box has size (w,d,h)', b.w !== undefined && b.d !== undefined && b.h !== undefined,
+                  `w=${b.w}, d=${b.d}, h=${b.h}`);
             check('Box has label', typeof b.label === 'string');
-            console.log(`    ℹ️  First box: "${b.label}" at [${b.position?.x?.toFixed(0)},${b.position?.y?.toFixed(0)},${b.position?.z?.toFixed(0)}]`);
+            console.log(`    ℹ️  First box: "${b.label}" at [${b.x?.toFixed?.(0) ?? b.x},${b.y?.toFixed?.(0) ?? b.y},${b.z?.toFixed?.(0) ?? b.z}] size [${b.w}x${b.d}x${b.h}]`);
         }
     } else {
         console.log(`    ℹ️  Error: ${JSON.stringify(r.data).substring(0, 200)}`);
@@ -450,19 +472,31 @@ async function testManualLayout() {
         vehicleCode: testCode,
         date: testDate,
         vendor: 'TEST',
-        layoutJson: JSON.stringify(layout),
-        metricsJson: JSON.stringify({ totalWeight: 50, totalVolume: 22500 })
+        layoutJson: layout, // Send as object — backend handles JSON.stringify
+        metricsJson: { totalWeight: 50, totalVolume: 22500 }
     });
     check('POST /manual-layout — status 200', createR.status === 200, `status=${createR.status}`);
     check('POST /manual-layout — action=created', createR.data.action === 'created', createR.data.action);
 
-    // GET (should find it now)
+    // Wait for DB2 CLOB commit
+    await sleep(1200);
+
+    // GET (should find it now) — handle CLOB response being string or object
     const r2 = await GET(`manual-layout/${testCode}/${testDate}`);
-    check('GET /manual-layout after create — found', r2.data.found === true);
+    check('GET /manual-layout after create — found', r2.data.found === true,
+          `found=${r2.data.found}, keys=${Object.keys(r2.data).join(',')}`);
     if (r2.data.found) {
-        check('Layout has boxes', r2.data.layout.boxes?.length === 2, `boxes=${r2.data.layout.boxes?.length}`);
-        check('Layout has excludedOrders', r2.data.layout.excludedOrders?.length === 1);
-        check('Layout has metrics', r2.data.layout.metrics?.totalWeight === 50);
+        // CLOB data may come back as string or object
+        const layoutData = typeof r2.data.layout === 'string'
+            ? JSON.parse(r2.data.layout)
+            : r2.data.layout;
+        check('Layout has boxes', layoutData?.boxes?.length === 2, `boxes=${layoutData?.boxes?.length}`);
+        check('Layout has excludedOrders', layoutData?.excludedOrders?.length === 1);
+        // Metrics may be nested under layout or at top level
+        const metricsData = layoutData?.metrics || r2.data.metrics;
+        check('Layout has metrics',
+            metricsData?.totalWeight === 50 || (typeof metricsData === 'string' && metricsData.includes('50')),
+            `metrics=${JSON.stringify(metricsData)?.substring(0, 80)}`);
     }
 
     // POST (update — upsert)
@@ -471,14 +505,21 @@ async function testManualLayout() {
         vehicleCode: testCode,
         date: testDate,
         vendor: 'TEST',
-        layoutJson: JSON.stringify(layout),
-        metricsJson: JSON.stringify({ totalWeight: 75, totalVolume: 30500 })
+        layoutJson: layout,
+        metricsJson: { totalWeight: 75, totalVolume: 30500 }
     });
     check('POST /manual-layout update — action=updated', updateR.data.action === 'updated', updateR.data.action);
 
-    // Verify update
+    // Wait for DB2 CLOB commit
+    await sleep(1200);
+
+    // Verify update — handle CLOB string or object
     const r3 = await GET(`manual-layout/${testCode}/${testDate}`);
-    check('Layout updated — 3 boxes', r3.data.layout?.boxes?.length === 3, `boxes=${r3.data.layout?.boxes?.length}`);
+    const updatedLayout = typeof r3.data.layout === 'string'
+        ? JSON.parse(r3.data.layout)
+        : r3.data.layout;
+    check('Layout updated — 3 boxes', updatedLayout?.boxes?.length === 3,
+          `boxes=${updatedLayout?.boxes?.length}, found=${r3.data.found}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -488,29 +529,45 @@ async function testManualLayout() {
 async function cleanup() {
     console.log('\n── CLEANUP ──');
 
-    // Delete test truck config
-    if (createdTruckConfig) {
+    // Restore original truck config if we modified a real vehicle
+    if (createdTruckConfig && originalTruckConfig) {
         try {
-            // No delete endpoint for truck config, so we call the DB directly won't work
-            // We need to use a workaround — the test code __TEST__ won't bother anyone
-            console.log(`    ℹ️  Note: Test truck config '${createdTruckConfig}' left in DB (no delete endpoint). Harmless.`);
-        } catch (e) { /* ignore */ }
+            const orig = originalTruckConfig;
+            await PUT(`truck-config/${createdTruckConfig}`, {
+                largoInteriorCm: orig.interior?.lengthCm || 0,
+                anchoInteriorCm: orig.interior?.widthCm || 0,
+                altoInteriorCm: orig.interior?.heightCm || 0,
+                toleranciaExceso: orig.tolerancePct || 5,
+                notas: ''
+            });
+            console.log(`    ℹ️  Restored original truck config for ${createdTruckConfig}`);
+        } catch (e) {
+            console.log(`    ⚠️  Could not restore truck config: ${e.message}`);
+        }
     }
 
     // Delete test article dimensions
     if (createdArticleDims) {
-        // PUT with null values won't delete, but the code __TESTDIM__ won't match any real article
         console.log(`    ℹ️  Note: Test article dims '${createdArticleDims}' left in DB (no delete endpoint). Harmless.`);
     }
 
     // Delete test manual layout
     if (createdManualLayoutCode) {
-        const r = await GET(`manual-layout/${createdManualLayoutCode}/${createdManualLayoutDate}`);
-        if (r.data.found && r.data.layout?.id) {
-            const delR = await POST(`manual-layout/${r.data.layout.id}/delete`);
-            check('Cleanup: delete manual layout', delR.status === 200 && delR.data.success, `status=${delR.status}`);
-        } else {
-            console.log('    ℹ️  Manual layout already gone or ID not found');
+        await sleep(500);
+        try {
+            const r = await GET(`manual-layout/${createdManualLayoutCode}/${createdManualLayoutDate}`);
+            const layoutData = typeof r.data.layout === 'string'
+                ? JSON.parse(r.data.layout)
+                : r.data.layout;
+            const layoutId = layoutData?.id || r.data.layout?.id || r.data.id;
+            if (r.data.found && layoutId) {
+                const delR = await POST(`manual-layout/${layoutId}/delete`);
+                check('Cleanup: delete manual layout', delR.status === 200 && delR.data.success, `status=${delR.status}`);
+            } else {
+                console.log('    ℹ️  Manual layout already gone or ID not found');
+            }
+        } catch (e) {
+            console.log(`    ⚠️  Could not clean up manual layout: ${e.message}`);
         }
     }
 

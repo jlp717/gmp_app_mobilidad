@@ -371,9 +371,166 @@ class AppTheme {
   static const double paddingL = 24.0;
   static const double paddingXL = 32.0;
   
-  // NEW: Animation durations
+  // Animation durations
   static const Duration animFast = Duration(milliseconds: 150);
   static const Duration animNormal = Duration(milliseconds: 300);
   static const Duration animSlow = Duration(milliseconds: 500);
   static const Duration animPulse = Duration(milliseconds: 1500);
+
+  // ============================================================================
+  // GLASSMORPHISM HELPERS
+  // ============================================================================
+
+  /// Premium frosted glass container decoration.
+  /// [blur] controls the backdrop blur intensity.
+  /// [opacity] controls background transparency.
+  static BoxDecoration glassMorphismPremium({
+    Color? color,
+    double blur = 20.0,
+    double opacity = 0.6,
+    double borderRadius = 16.0,
+    Color? borderColor,
+    double borderWidth = 1.0,
+    Color? glowColor,
+    double glowBlur = 16.0,
+  }) {
+    return BoxDecoration(
+      color: (color ?? darkCard).withOpacity(opacity),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(
+        color: (borderColor ?? neonBlue).withOpacity(0.2),
+        width: borderWidth,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: (glowColor ?? neonBlue).withOpacity(0.08),
+          blurRadius: glowBlur,
+        ),
+        BoxShadow(
+          color: Colors.black.withOpacity(0.3),
+          blurRadius: 8,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
+
+  /// Gradient card with directional color flow.
+  static BoxDecoration gradientCard({
+    required Color startColor,
+    required Color endColor,
+    double borderRadius = 14.0,
+    double borderOpacity = 0.25,
+    AlignmentGeometry begin = Alignment.topLeft,
+    AlignmentGeometry end = Alignment.bottomRight,
+  }) {
+    return BoxDecoration(
+      gradient: LinearGradient(
+        begin: begin,
+        end: end,
+        colors: [
+          startColor.withOpacity(0.15),
+          endColor.withOpacity(0.05),
+        ],
+      ),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(
+        color: startColor.withOpacity(borderOpacity),
+        width: 1,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: startColor.withOpacity(0.06),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================================
+  // ELEVATION/SHADOW SYSTEM
+  // ============================================================================
+
+  static List<BoxShadow> elevation1 = [
+    BoxShadow(
+      color: Colors.black.withOpacity(0.15),
+      blurRadius: 4,
+      offset: const Offset(0, 2),
+    ),
+  ];
+
+  static List<BoxShadow> elevation2 = [
+    BoxShadow(
+      color: Colors.black.withOpacity(0.2),
+      blurRadius: 8,
+      offset: const Offset(0, 4),
+    ),
+    BoxShadow(
+      color: neonBlue.withOpacity(0.05),
+      blurRadius: 16,
+    ),
+  ];
+
+  static List<BoxShadow> elevation3 = [
+    BoxShadow(
+      color: Colors.black.withOpacity(0.25),
+      blurRadius: 16,
+      offset: const Offset(0, 8),
+    ),
+    BoxShadow(
+      color: neonBlue.withOpacity(0.08),
+      blurRadius: 24,
+    ),
+  ];
+
+  // ============================================================================
+  // TEXT SCALE HELPERS
+  // ============================================================================
+
+  /// Display title (largest, e.g. vehicle name in header)
+  static const TextStyle displayTitle = TextStyle(
+    color: textPrimary,
+    fontSize: 18,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.3,
+  );
+
+  /// Section headline
+  static const TextStyle headline = TextStyle(
+    color: textPrimary,
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.2,
+  );
+
+  /// Body label
+  static const TextStyle bodyLabel = TextStyle(
+    color: textSecondary,
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+  );
+
+  /// Caption / tertiary text
+  static const TextStyle captionText = TextStyle(
+    color: textTertiary,
+    fontSize: 11,
+    fontWeight: FontWeight.w400,
+  );
+
+  /// Metric value (numbers in dashboards)
+  static const TextStyle metricValue = TextStyle(
+    color: textPrimary,
+    fontSize: 20,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.5,
+  );
+
+  /// Metric label (below metric value)
+  static const TextStyle metricLabel = TextStyle(
+    color: textTertiary,
+    fontSize: 10,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0.5,
+  );
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -63,7 +64,14 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
       builder: (context, provider, _) {
         return Container(
           decoration: BoxDecoration(
-            color: AppTheme.darkSurface,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppTheme.darkSurface,
+                AppTheme.darkBase.withOpacity(0.95),
+              ],
+            ),
             border: Border(
               left: BorderSide(
                 color: AppTheme.neonBlue.withOpacity(0.15),
@@ -85,64 +93,92 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               // Sort dropdown
               _buildSortRow(),
 
-              // Tabs
-              TabBar(
-                controller: _tabController,
-                labelColor: AppTheme.neonBlue,
-                unselectedLabelColor: AppTheme.textTertiary,
-                indicatorColor: AppTheme.neonBlue,
-                indicatorWeight: 2,
-                labelStyle: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+              // Premium pill tabs
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkCard.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.borderColor.withOpacity(0.15),
+                    width: 1,
+                  ),
                 ),
-                tabs: [
-                  Tab(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.people, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Clientes (${provider.clientSummaries.length})',
-                        ),
-                      ],
+                child: TabBar(
+                  controller: _tabController,
+                  labelColor: AppTheme.neonBlue,
+                  unselectedLabelColor: AppTheme.textTertiary,
+                  indicator: BoxDecoration(
+                    color: AppTheme.neonBlue.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.neonBlue.withOpacity(0.25),
+                      width: 1,
                     ),
                   ),
-                  Tab(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.inventory_2, size: 14),
-                        const SizedBox(width: 4),
-                        Text('Cajas (${provider.placedBoxes.length})'),
-                      ],
-                    ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  dividerColor: Colors.transparent,
+                  splashFactory: NoSplash.splashFactory,
+                  labelStyle: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
-                  Tab(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.warning_rounded,
-                          size: 14,
-                          color: provider.overflowBoxes.isNotEmpty
-                              ? AppTheme.error
-                              : null,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Fuera (${provider.overflowBoxes.length})',
-                          style: TextStyle(
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  tabs: [
+                    Tab(
+                      height: 30,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.people_rounded, size: 13),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Clientes (${provider.clientSummaries.length})',
+                          ),
+                        ],
+                      ),
+                    ),
+                    Tab(
+                      height: 30,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.inventory_2_rounded, size: 13),
+                          const SizedBox(width: 4),
+                          Text('Cajas (${provider.placedBoxes.length})'),
+                        ],
+                      ),
+                    ),
+                    Tab(
+                      height: 30,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.warning_rounded,
+                            size: 13,
                             color: provider.overflowBoxes.isNotEmpty
                                 ? AppTheme.error
                                 : null,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 4),
+                          Text(
+                            'Fuera (${provider.overflowBoxes.length})',
+                            style: TextStyle(
+                              color: provider.overflowBoxes.isNotEmpty
+                                  ? AppTheme.error
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
 
               // Tab content
@@ -166,30 +202,56 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-      child: TextField(
-        onChanged: (v) => setState(() => _searchQuery = v.toLowerCase().trim()),
-        style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
-        decoration: InputDecoration(
-          hintText: 'Buscar articulo, cliente, pedido...',
-          hintStyle: TextStyle(
-            color: AppTheme.textTertiary.withOpacity(0.5),
-            fontSize: 12,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppTheme.neonBlue.withOpacity(0.1),
+            width: 1,
           ),
-          prefixIcon: const Icon(Icons.search, size: 18),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear, size: 16),
-                  onPressed: () => setState(() => _searchQuery = ''),
-                )
-              : null,
-          isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          filled: true,
-          fillColor: AppTheme.darkCard.withOpacity(0.5),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.neonBlue.withOpacity(0.03),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        child: TextField(
+          onChanged: (v) => setState(() => _searchQuery = v.toLowerCase().trim()),
+          style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Buscar artículo, cliente, pedido...',
+            hintStyle: TextStyle(
+              color: AppTheme.textTertiary.withOpacity(0.4),
+              fontSize: 12,
+            ),
+            prefixIcon: Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: AppTheme.neonBlue.withOpacity(0.5),
+            ),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear_rounded, size: 16),
+                    onPressed: () => setState(() => _searchQuery = ''),
+                  )
+                : null,
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            filled: true,
+            fillColor: AppTheme.darkCard.withOpacity(0.3),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: AppTheme.neonBlue.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
           ),
         ),
       ),
@@ -541,17 +603,29 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.inbox_outlined,
-            size: 32,
-            color: AppTheme.textTertiary.withOpacity(0.3),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.darkCard.withOpacity(0.2),
+              border: Border.all(
+                color: AppTheme.borderColor.withOpacity(0.15),
+                width: 1,
+              ),
+            ),
+            child: Icon(
+              Icons.inbox_outlined,
+              size: 28,
+              color: AppTheme.textTertiary.withOpacity(0.3),
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             message,
             style: TextStyle(
               color: AppTheme.textTertiary.withOpacity(0.5),
               fontSize: 13,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -581,19 +655,34 @@ class _MiniActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isEnabled = onPressed != null;
     return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      onTap: () {
+        if (isEnabled) {
+          HapticFeedback.lightImpact();
+          onPressed!();
+        }
+      },
+      child: AnimatedContainer(
+        duration: AppTheme.animFast,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: isEnabled
-              ? color.withOpacity(0.1)
-              : AppTheme.darkCard.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(6),
+              ? color.withOpacity(0.08)
+              : AppTheme.darkCard.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isEnabled
-                ? color.withOpacity(0.3)
-                : AppTheme.borderColor.withOpacity(0.1),
+                ? color.withOpacity(0.25)
+                : AppTheme.borderColor.withOpacity(0.08),
+            width: 1,
           ),
+          boxShadow: isEnabled
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.06),
+                    blurRadius: 8,
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -602,7 +691,7 @@ class _MiniActionButton extends StatelessWidget {
             Icon(
               icon,
               size: 13,
-              color: isEnabled ? color : AppTheme.textTertiary.withOpacity(0.4),
+              color: isEnabled ? color : AppTheme.textTertiary.withOpacity(0.3),
             ),
             const SizedBox(width: 4),
             Text(
@@ -611,7 +700,8 @@ class _MiniActionButton extends StatelessWidget {
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color:
-                    isEnabled ? color : AppTheme.textTertiary.withOpacity(0.4),
+                    isEnabled ? color : AppTheme.textTertiary.withOpacity(0.3),
+                letterSpacing: 0.2,
               ),
             ),
           ],
@@ -637,16 +727,30 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => onSelected(!selected),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onSelected(!selected);
+      },
+      child: AnimatedContainer(
+        duration: AppTheme.animFast,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          color: selected ? color.withOpacity(0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selected ? color.withOpacity(0.5) : AppTheme.borderColor.withOpacity(0.3),
+            color: selected
+                ? color.withOpacity(0.4)
+                : AppTheme.borderColor.withOpacity(0.2),
             width: 1,
           ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.08),
+                    blurRadius: 6,
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
@@ -654,6 +758,7 @@ class _FilterChip extends StatelessWidget {
             fontSize: 10,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             color: selected ? color : AppTheme.textTertiary,
+            letterSpacing: 0.1,
           ),
         ),
       ),
@@ -679,8 +784,12 @@ class _ClientRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard.withOpacity(0.4),
-          borderRadius: BorderRadius.circular(8),
+          color: AppTheme.darkCard.withOpacity(0.25),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppTheme.borderColor.withOpacity(0.1),
+            width: 1,
+          ),
         ),
         child: Row(
           children: [
@@ -809,16 +918,22 @@ class _OrderRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Opacity(
-        opacity: isExcluded ? 0.4 : 1.0,
+      child: AnimatedOpacity(
+        duration: AppTheme.animFast,
+        opacity: isExcluded ? 0.35 : 1.0,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: AppTheme.darkCard.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(8),
-            border: isExcluded
-                ? Border.all(color: AppTheme.error.withOpacity(0.3), width: 1)
-                : null,
+            color: isExcluded
+                ? AppTheme.darkCard.withOpacity(0.15)
+                : AppTheme.darkCard.withOpacity(0.25),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isExcluded
+                  ? AppTheme.error.withOpacity(0.25)
+                  : AppTheme.borderColor.withOpacity(0.1),
+              width: 1,
+            ),
           ),
           child: Row(
             children: [
