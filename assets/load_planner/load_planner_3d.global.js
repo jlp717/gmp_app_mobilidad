@@ -1,1221 +1,1135 @@
-(function() {
+(function () {
 'use strict';
+
 var THREE = window.THREE;
 var OrbitControls = window.OrbitControls;
-var CSS2DRenderer = window.CSS2DRenderer;
-var CSS2DObject = window.CSS2DObject;
 
-/**
- * Load Planner 3D — Premium Three.js Scene (Global build)
+/* ═══════════════════════════════════════════════════════════════════════════════
+ *  Load Planner 3D — High-Performance Engine v2
  *
- * Procedural box truck (cab, cargo, wheels, rear doors),
- * 3-point PBR lighting, gradient skybox environment,
- * animated selection glow, smooth wall transitions,
- * glassmorphism CSS2D labels, LOD fade,
- * Flutter bidirectional bridge.
- */
+ *  Performance first:
+ *    • On-demand rendering (dirty flag — GPU idle when nothing changes)
+ *    • MeshPhongMaterial (≈50 % cheaper than MeshStandard PBR)
+ *    • No CSS2DRenderer  (eliminates DOM layout pass per frame)
+ *    • No per-box wireframes / AO planes (draw calls reduced 3×)
+ *    • Shadow map 1024 (−75 % fill vs 2048)
+ *    • Pixel-ratio capped at 1.5 for tablets
+ *    • Geometry + material dispose on clear (no GPU memory leaks)
+ *
+ *  Visual quality:
+ *    • Procedural truck (cab, container, wheels, rear doors)
+ *    • Bright edge wireframe on cargo container (clearly visible)
+ *    • Professional color palette with per-mode gradients
+ *    • Emissive glow for selection / collision
+ *    • Smooth camera transitions (sine easing)
+ *
+ *  Functional:
+ *    • Client-side gravity settling  (boxes rest on surfaces)
+ *    • Client-side 3D bin packing    (Extreme-Point heuristic)
+ *    • Full Flutter bridge compatibility
+ * ═══════════════════════════════════════════════════════════════════════════════ */
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 
-var COLORS = {
-  background:       0x0A0E1A,
-  groundColor:      0x080C14,
-  floor:            0x151D2E,
-  floorAccent:      0x1E293B,
-  gridMinor:        0x00D4FF,
-  gridMajor:        0x00D4FF,
-  wallColor:        0x00B4D8,
-  wallEdge:         0x00D4FF,
-  edgeColor:        0x00D4FF,
-  selectedEmissive: 0x00D4FF,
-  collisionEmissive:0xFF3B5C,
-  cabBodyColor:     0x2A3A5C,
-  cabWindowColor:   0x4488CC,
-  containerColor:   0x1E293B,
-  containerEdge:    0x334155,
-  wheelColor:       0x1A1A2E,
-  wheelRimColor:    0x3A3A5C,
-  rearDoorColor:    0x253348,
-  rearMarker:       0x22C55E,
-  mudguardColor:    0x15202E,
-  fogColor:         0x0A0E1A,
-  envTop:           0x1A2540,
-  envBottom:        0x050810,
+var CM = 0.01; // cm → metres
+
+var COL = {
+  bg:       0x12161e,
+  ground:   0x0e1118,
+  floor:    0x1a2540,
+  gridMin:  0x2a4070,
+  gridMaj:  0x3a5090,
+  wall:     0x2a5a8a,
+  edge:     0x4cc8e8,
+  cab:      0x1e3050,
+  glass:    0x3a6699,
+  wheel:    0x181820,
+  rim:      0x383848,
+  door:     0x253348,
+  rail:     0x182030,
+  sel:      0x00ccff,
+  hit:      0xff3344,
+  marker:   0x22bb55,
 };
 
-var BOX_PALETTE = [
-  0xFF6B6B, 0x4ECDC4, 0x45B7D1, 0xFFA07A,
-  0x98D8C8, 0xF06292, 0x81C784, 0xFFD54F,
-  0x7986CB, 0xE57373, 0x66BB6A, 0x42A5F5,
-  0xAB47BC, 0x26A69A, 0xFF7043, 0xFFA726,
+var WALL_ALPHA  = 0.14;
+var EDGE_ALPHA  = 0.60;
+var WALL_ANIM   = 350;   // ms
+
+var PALETTE = [
+  0x5B8DEF, 0x2EC4A0, 0xF06292, 0xFFB74D,
+  0x81C784, 0x9575CD, 0x4DD0E1, 0xE57373,
+  0xAED581, 0x7986CB, 0xFFD54F, 0x4DB6AC,
+  0xBA68C8, 0xFF8A65, 0x64B5F6, 0xA1887F,
 ];
 
-var WEIGHT_GRADIENT = [
-  { t: 0.0,  r: 0.18, g: 0.55, b: 0.95 },
-  { t: 0.33, r: 0.13, g: 0.85, b: 0.45 },
-  { t: 0.66, r: 0.95, g: 0.85, b: 0.15 },
-  { t: 1.0,  r: 0.95, g: 0.22, b: 0.22 },
+var WT_GRAD = [
+  { t: 0.00, r: 0.36, g: 0.55, b: 0.94 },
+  { t: 0.33, r: 0.18, g: 0.77, b: 0.63 },
+  { t: 0.66, r: 1.00, g: 0.84, b: 0.33 },
+  { t: 1.00, r: 0.90, g: 0.26, b: 0.26 },
 ];
 
-var DELIVERY_GRADIENT = [
-  { t: 0.0, r: 0.13, g: 0.77, b: 0.37 },
-  { t: 0.5, r: 0.95, g: 0.85, b: 0.15 },
-  { t: 1.0, r: 0.95, g: 0.22, b: 0.22 },
+var DLV_GRAD = [
+  { t: 0.0, r: 0.18, g: 0.77, b: 0.63 },
+  { t: 0.5, r: 1.00, g: 0.84, b: 0.33 },
+  { t: 1.0, r: 0.90, g: 0.26, b: 0.26 },
 ];
 
 var MAX_WEIGHT_KG = 30;
-var CM_TO_M = 0.01;
-var MAX_VISIBLE_LABELS = 30;
-var SELECTION_PULSE_SPEED = 2.0;
-var SELECTION_PULSE_INTENSITY = 0.15;
-var WALL_ANIM_DURATION = 400;
-var WALL_OPACITY = 0.06;
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 // STATE
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 
-var scene, camera, renderer, css2dRenderer, controls;
-var truckGroup, boxesGroup, wallsGroup, environmentGroup;
+var scene, camera, renderer, controls;
+var truckGroup, boxGroup;
 var raycaster, pointer;
-var boxMeshes = [];
-var boxesData = [];
-var truckDims = null;
-var colorMode = 'product';
-var selectedIndex = null;
-var isDragging = false;
-var dragIndex = -1;
-var dragPlane = null;
-var dragOffset = new THREE.Vector3();
-var pointerDownTime = 0;
-var pointerDownPos = { x: 0, y: 0 };
-var animationId = null;
-var wallMeshes = [];
-var wallsVisible = true;
-var clock = null;
-var selectionTime = 0;
+var meshes   = [];   // [{ mesh, data }]
+var boxData  = [];   // raw box data array
+var truck    = null; // { lengthCm, widthCm, heightCm, maxPayloadKg }
+var cMode    = 'product';
+var selIdx   = null;
+var wallList = [];
+var wallsOn  = true;
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// INITIALIZATION
-// ═══════════════════════════════════════════════════════════════════════════════
+// Drag state
+var dragging  = false;
+var dIdx      = -1;
+var dPlane, dOff;
+var downTime  = 0;
+var downPos   = { x: 0, y: 0 };
+
+// On-demand rendering
+var dirty = true;
+function markDirty() { dirty = true; }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
 
 function init() {
-  clock = new THREE.Clock();
-
+  // Scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(COLORS.background);
-  scene.fog = new THREE.FogExp2(COLORS.fogColor, 0.055);
+  scene.background = new THREE.Color(COL.bg);
 
-  camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 200);
+  // Camera
+  camera = new THREE.PerspectiveCamera(
+    38, window.innerWidth / window.innerHeight, 0.1, 80
+  );
   camera.position.set(6, 5, 8);
-  camera.lookAt(0, 0, 0);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  // Renderer — performance-optimised
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance',
+    stencil: false,
+  });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.4;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.toneMapping = THREE.LinearToneMapping;
+  renderer.toneMappingExposure = 1.0;
   if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = 'srgb';
   document.body.appendChild(renderer.domElement);
 
-  css2dRenderer = new CSS2DRenderer();
-  css2dRenderer.setSize(window.innerWidth, window.innerHeight);
-  css2dRenderer.domElement.style.position = 'absolute';
-  css2dRenderer.domElement.style.top = '0';
-  css2dRenderer.domElement.style.left = '0';
-  css2dRenderer.domElement.style.pointerEvents = 'none';
-  document.body.appendChild(css2dRenderer.domElement);
-
+  // Controls
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.dampingFactor = 0.06;
-  controls.minDistance = 1;
-  controls.maxDistance = 30;
-  controls.maxPolarAngle = Math.PI * 0.48;
+  controls.dampingFactor = 0.08;
+  controls.minDistance   = 1;
+  controls.maxDistance   = 20;
+  controls.maxPolarAngle = Math.PI * 0.47;
   controls.minPolarAngle = 0.05;
-  controls.target.set(0, 0, 0);
-  controls.update();
+  controls.addEventListener('change', markDirty);
 
+  // Lights & environment
   setupLights();
-  setupEnvironment();
+  setupGround();
 
-  raycaster = new THREE.Raycaster();
-  pointer = new THREE.Vector2();
-
+  // Groups
   truckGroup = new THREE.Group();
-  boxesGroup = new THREE.Group();
-  wallsGroup = new THREE.Group();
+  boxGroup   = new THREE.Group();
   scene.add(truckGroup);
-  scene.add(boxesGroup);
+  scene.add(boxGroup);
 
-  dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  // Raycaster
+  raycaster = new THREE.Raycaster();
+  pointer   = new THREE.Vector2();
+  dPlane    = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  dOff      = new THREE.Vector3();
 
-  renderer.domElement.addEventListener('pointerdown', onPointerDown);
-  renderer.domElement.addEventListener('pointermove', onPointerMove);
-  renderer.domElement.addEventListener('pointerup', onPointerUp);
-  renderer.domElement.addEventListener('pointercancel', onPointerCancel);
+  // Events
+  var el = renderer.domElement;
+  el.addEventListener('pointerdown',   onPointerDown);
+  el.addEventListener('pointermove',   onPointerMove);
+  el.addEventListener('pointerup',     onPointerUp);
+  el.addEventListener('pointercancel', onPointerCancel);
   window.addEventListener('resize', onResize);
 
+  // Render loop
   animate();
 
-  document.getElementById('loading').classList.add('hidden');
+  // Signal Flutter
+  hideLoading();
   window._sceneInitDone = true;
   sendToFlutter('sceneReady', {});
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// LIGHTING — Premium 3-Point + Environment
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// LIGHTING — 3 lights total (ambient + hemisphere + 1 directional)
+// ─────────────────────────────────────────────────────────────────────────────
 
 function setupLights() {
-  // Soft ambient (SSAO-like)
-  var ambient = new THREE.AmbientLight(0x6070A0, 0.35);
-  scene.add(ambient);
+  scene.add(new THREE.AmbientLight(0x404860, 0.55));
 
-  // Hemisphere — sky/ground bounce
-  var hemi = new THREE.HemisphereLight(0x5580BB, 0x101830, 0.45);
+  var hemi = new THREE.HemisphereLight(0x5588bb, 0x182030, 0.35);
   hemi.position.set(0, 20, 0);
   scene.add(hemi);
 
-  // KEY light (warm white, strong shadows)
-  var keyLight = new THREE.DirectionalLight(0xFFF5E8, 1.0);
-  keyLight.position.set(6, 10, 5);
-  keyLight.castShadow = true;
-  keyLight.shadow.mapSize.width = 2048;
-  keyLight.shadow.mapSize.height = 2048;
-  keyLight.shadow.camera.near = 0.5;
-  keyLight.shadow.camera.far = 40;
-  keyLight.shadow.camera.left = -12;
-  keyLight.shadow.camera.right = 12;
-  keyLight.shadow.camera.top = 12;
-  keyLight.shadow.camera.bottom = -12;
-  keyLight.shadow.bias = -0.0003;
-  if (keyLight.shadow.normalBias !== undefined) keyLight.shadow.normalBias = 0.02;
-  scene.add(keyLight);
-
-  // FILL light (cooler, opposite side)
-  var fillLight = new THREE.DirectionalLight(0x8AADD4, 0.4);
-  fillLight.position.set(-5, 6, -3);
-  scene.add(fillLight);
-
-  // RIM light (neon accent)
-  var rimLight = new THREE.PointLight(0x00D4FF, 0.5, 25);
-  rimLight.position.set(-4, 7, -5);
-  scene.add(rimLight);
-
-  // Subtle warm accent from front
-  var frontAccent = new THREE.PointLight(0xFFAA44, 0.15, 15);
-  frontAccent.position.set(0, 3, 8);
-  scene.add(frontAccent);
+  var dir = new THREE.DirectionalLight(0xffeedd, 0.95);
+  dir.position.set(5, 10, 4);
+  dir.castShadow = true;
+  dir.shadow.mapSize.set(1024, 1024);
+  dir.shadow.camera.near   = 0.5;
+  dir.shadow.camera.far    = 30;
+  dir.shadow.camera.left   = -10;
+  dir.shadow.camera.right  =  10;
+  dir.shadow.camera.top    =  10;
+  dir.shadow.camera.bottom = -10;
+  dir.shadow.bias = -0.001;
+  scene.add(dir);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ENVIRONMENT — Ground, Grid, Gradient Skybox
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// GROUND
+// ─────────────────────────────────────────────────────────────────────────────
 
-function setupEnvironment() {
-  environmentGroup = new THREE.Group();
-  scene.add(environmentGroup);
-
-  // Infinite ground plane
-  var groundGeo = new THREE.PlaneGeometry(200, 200);
-  var groundMat = new THREE.MeshStandardMaterial({
-    color: COLORS.groundColor,
-    roughness: 0.95,
-    metalness: 0.0,
-    side: THREE.DoubleSide,
-  });
-  var ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.01;
-  ground.receiveShadow = true;
-  environmentGroup.add(ground);
-
-  // Subtle world grid
-  var gridSize = 40;
-  var gridStep = 2.0;
-  var gridMat = new THREE.LineBasicMaterial({
-    color: COLORS.gridMinor,
-    opacity: 0.025,
-    transparent: true,
-  });
-  var x, z;
-  for (x = -gridSize; x <= gridSize; x += gridStep) {
-    var geo1 = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(x, 0.001, -gridSize),
-      new THREE.Vector3(x, 0.001, gridSize),
-    ]);
-    environmentGroup.add(new THREE.Line(geo1, gridMat));
-  }
-  for (z = -gridSize; z <= gridSize; z += gridStep) {
-    var geo2 = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-gridSize, 0.001, z),
-      new THREE.Vector3(gridSize, 0.001, z),
-    ]);
-    environmentGroup.add(new THREE.Line(geo2, gridMat));
-  }
-
-  // Procedural gradient skybox
-  var skyGeo = new THREE.SphereGeometry(80, 32, 16);
-  var skyMat = new THREE.ShaderMaterial({
-    uniforms: {
-      topColor:    { value: new THREE.Color(COLORS.envTop) },
-      bottomColor: { value: new THREE.Color(COLORS.envBottom) },
-      offset:      { value: 10 },
-      exponent:    { value: 0.8 },
-    },
-    vertexShader: [
-      'varying vec3 vWorldPosition;',
-      'void main() {',
-      '  vec4 worldPos = modelMatrix * vec4(position, 1.0);',
-      '  vWorldPosition = worldPos.xyz;',
-      '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
-      '}'
-    ].join('\n'),
-    fragmentShader: [
-      'uniform vec3 topColor;',
-      'uniform vec3 bottomColor;',
-      'uniform float offset;',
-      'uniform float exponent;',
-      'varying vec3 vWorldPosition;',
-      'void main() {',
-      '  float h = normalize(vWorldPosition + offset).y;',
-      '  gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);',
-      '}'
-    ].join('\n'),
-    side: THREE.BackSide,
-    depthWrite: false,
-  });
-  var sky = new THREE.Mesh(skyGeo, skyMat);
-  environmentGroup.add(sky);
+function setupGround() {
+  var geo = new THREE.PlaneGeometry(80, 80);
+  var mat = new THREE.MeshPhongMaterial({ color: COL.ground });
+  var gnd = new THREE.Mesh(geo, mat);
+  gnd.rotation.x   = -Math.PI / 2;
+  gnd.position.y    = -0.02;
+  gnd.receiveShadow = true;
+  scene.add(gnd);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRUCK MODEL — Procedural Box Truck
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// TRUCK MODEL — procedural box truck
+// ─────────────────────────────────────────────────────────────────────────────
 
 function buildTruck(dims) {
-  truckGroup.clear();
-  wallMeshes = [];
-  truckDims = dims;
+  disposeGroup(truckGroup);
+  wallList = [];
+  truck = dims;
 
-  var L = dims.lengthCm * CM_TO_M;
-  var W = dims.widthCm * CM_TO_M;
-  var H = dims.heightCm * CM_TO_M;
-  var halfL = L / 2;
-  var halfW = W / 2;
+  var L  = dims.lengthCm * CM;
+  var W  = dims.widthCm  * CM;
+  var H  = dims.heightCm * CM;
+  var hL = L / 2;
+  var hW = W / 2;
 
-  buildCargoContainer(L, W, H, halfL, halfW);
-  buildCab(L, W, H, halfL, halfW);
-  buildWheels(L, W, H, halfL, halfW);
-  buildRearDoor(L, W, H, halfL, halfW);
+  buildContainer(L, W, H, hL, hW);
+  buildCab(L, W, H, hL, hW);
+  buildWheels(L, W, hL, hW);
+  buildRearDoors(L, W, H, hL, hW);
 
-  // Dimension labels
-  addDimLabel(L.toFixed(1) + 'm', new THREE.Vector3(0, -0.2, halfW + 0.25));
-  addDimLabel(W.toFixed(1) + 'm', new THREE.Vector3(halfL + 0.25, -0.2, 0));
-  addDimLabel(H.toFixed(1) + 'm', new THREE.Vector3(halfL + 0.25, H / 2, halfW + 0.25));
-
-  // Camera framing
-  var maxDim = Math.max(L, W, H);
-  camera.position.set(L * 0.9, maxDim * 1.1, W * 1.5);
+  // Frame camera
+  var maxD = Math.max(L, W, H);
+  camera.position.set(L * 0.9, maxD * 1.1, W * 1.5);
   controls.target.set(0, H * 0.35, 0);
   controls.update();
 
-  // Shadow camera
-  var shadowCam = null;
-  for (var ci = 0; ci < scene.children.length; ci++) {
-    if (scene.children[ci].isDirectionalLight && scene.children[ci].castShadow) {
-      shadowCam = scene.children[ci].shadow.camera;
-      break;
+  // Fit shadow camera
+  scene.traverse(function (c) {
+    if (c.isDirectionalLight && c.castShadow) {
+      var s = maxD * 1.3;
+      c.shadow.camera.left   = -s;
+      c.shadow.camera.right  =  s;
+      c.shadow.camera.top    =  s;
+      c.shadow.camera.bottom = -s;
+      c.shadow.camera.updateProjectionMatrix();
     }
-  }
-  if (shadowCam) {
-    var ext = maxDim * 1.5;
-    shadowCam.left = -ext;
-    shadowCam.right = ext;
-    shadowCam.top = ext;
-    shadowCam.bottom = -ext;
-    shadowCam.updateProjectionMatrix();
-  }
+  });
+
+  markDirty();
 }
 
-function buildCargoContainer(L, W, H, halfL, halfW) {
-  var WT = 0.035; // wall thickness
+// — Cargo container (floor + grid + walls + edges) —————————————————————————
+
+function buildContainer(L, W, H, hL, hW) {
+  var WT = 0.035;
 
   // Floor slab
-  var floorGeo = new THREE.BoxGeometry(L + 0.02, WT, W + 0.02);
-  var floorMat = new THREE.MeshStandardMaterial({
-    color: COLORS.floor, roughness: 0.85, metalness: 0.05,
-  });
-  var floor = new THREE.Mesh(floorGeo, floorMat);
+  var floorMat = new THREE.MeshPhongMaterial({ color: COL.floor });
+  var floor = new THREE.Mesh(
+    new THREE.BoxGeometry(L + 0.02, WT, W + 0.02), floorMat
+  );
   floor.position.set(0, -WT / 2 + 0.001, 0);
   floor.receiveShadow = true;
-  floor.castShadow = true;
-  floor.name = 'truck-floor';
+  floor.castShadow    = true;
   truckGroup.add(floor);
 
-  // Floor detail grid
-  var gridGroup = new THREE.Group();
-  var minorStep = 0.5;
-  var minorMat = new THREE.LineBasicMaterial({ color: COLORS.gridMinor, opacity: 0.07, transparent: true });
+  // Floor grid — visible 0.5 m minor, 1 m major
+  var gMinor = new THREE.LineBasicMaterial({ color: COL.gridMin, opacity: 0.12, transparent: true });
+  var gMajor = new THREE.LineBasicMaterial({ color: COL.gridMaj, opacity: 0.22, transparent: true });
   var xi, zi;
-  for (xi = -halfL; xi <= halfL + 0.001; xi += minorStep) {
-    gridGroup.add(new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(xi, 0.003, -halfW),
-        new THREE.Vector3(xi, 0.003, halfW),
-      ]), minorMat));
+  for (xi = -hL; xi <= hL + 0.001; xi += 0.5) {
+    var isMaj = Math.abs(xi % 1.0) < 0.01;
+    addLine(xi, 0.003, -hW, xi, 0.003, hW, isMaj ? gMajor : gMinor);
   }
-  for (zi = -halfW; zi <= halfW + 0.001; zi += minorStep) {
-    gridGroup.add(new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-halfL, 0.003, zi),
-        new THREE.Vector3(halfL, 0.003, zi),
-      ]), minorMat));
+  for (zi = -hW; zi <= hW + 0.001; zi += 0.5) {
+    var isMaj2 = Math.abs(zi % 1.0) < 0.01;
+    addLine(-hL, 0.003, zi, hL, 0.003, zi, isMaj2 ? gMajor : gMinor);
   }
-  var majorStep = 1.0;
-  var majorMat = new THREE.LineBasicMaterial({ color: COLORS.gridMajor, opacity: 0.14, transparent: true });
-  for (xi = -halfL; xi <= halfL + 0.001; xi += majorStep) {
-    gridGroup.add(new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(xi, 0.004, -halfW),
-        new THREE.Vector3(xi, 0.004, halfW),
-      ]), majorMat));
-  }
-  for (zi = -halfW; zi <= halfW + 0.001; zi += majorStep) {
-    gridGroup.add(new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-halfL, 0.004, zi),
-        new THREE.Vector3(halfL, 0.004, zi),
-      ]), majorMat));
-  }
-  truckGroup.add(gridGroup);
 
-  // Walls (semi-transparent with thickness)
-  var wallMat = new THREE.MeshStandardMaterial({
-    color: COLORS.wallColor,
-    transparent: true,
-    opacity: WALL_OPACITY,
-    side: THREE.DoubleSide,
-    roughness: 0.3,
-    metalness: 0.2,
-    depthWrite: false,
+  // Walls — semi-transparent with thickness
+  var wallMat = new THREE.MeshPhongMaterial({
+    color: COL.wall, transparent: true, opacity: WALL_ALPHA,
+    side: THREE.DoubleSide, depthWrite: false,
   });
 
-  // Back wall (cab end)
-  var backWall = new THREE.Mesh(new THREE.BoxGeometry(WT, H, W), wallMat.clone());
-  backWall.position.set(-halfL - WT / 2, H / 2, 0);
-  backWall.castShadow = true;
-  truckGroup.add(backWall);
-  wallMeshes.push(backWall);
+  // Back wall (cab side)
+  var backW = makeMesh(new THREE.BoxGeometry(WT, H, W), wallMat.clone());
+  backW.position.set(-hL - WT / 2, H / 2, 0);
+  backW.castShadow = true;
+  truckGroup.add(backW);
+  wallList.push(backW);
 
   // Left wall
-  var leftWall = new THREE.Mesh(new THREE.BoxGeometry(L + WT * 2, H, WT), wallMat.clone());
-  leftWall.position.set(0, H / 2, -halfW - WT / 2);
-  leftWall.castShadow = true;
-  truckGroup.add(leftWall);
-  wallMeshes.push(leftWall);
+  var leftW = makeMesh(new THREE.BoxGeometry(L + WT * 2, H, WT), wallMat.clone());
+  leftW.position.set(0, H / 2, -hW - WT / 2);
+  leftW.castShadow = true;
+  truckGroup.add(leftW);
+  wallList.push(leftW);
 
   // Right wall
-  var rightWall = new THREE.Mesh(new THREE.BoxGeometry(L + WT * 2, H, WT), wallMat.clone());
-  rightWall.position.set(0, H / 2, halfW + WT / 2);
-  rightWall.castShadow = true;
-  truckGroup.add(rightWall);
-  wallMeshes.push(rightWall);
+  var rightW = makeMesh(new THREE.BoxGeometry(L + WT * 2, H, WT), wallMat.clone());
+  rightW.position.set(0, H / 2, hW + WT / 2);
+  rightW.castShadow = true;
+  truckGroup.add(rightW);
+  wallList.push(rightW);
 
   // Ceiling
-  var ceilingMat = wallMat.clone();
-  ceilingMat.opacity = 0.03;
-  var ceiling = new THREE.Mesh(
-    new THREE.BoxGeometry(L + WT * 2, WT, W + WT * 2),
-    ceilingMat
-  );
-  ceiling.position.set(0, H + WT / 2, 0);
-  truckGroup.add(ceiling);
-  wallMeshes.push(ceiling);
+  var ceilMat = wallMat.clone();
+  ceilMat.opacity = 0.06;
+  var ceil = makeMesh(new THREE.BoxGeometry(L + WT * 2, WT, W + WT * 2), ceilMat);
+  ceil.position.set(0, H + WT / 2, 0);
+  truckGroup.add(ceil);
+  wallList.push(ceil);
 
-  // Edge wireframe (neon glow)
-  var edgeMat = new THREE.LineBasicMaterial({ color: COLORS.edgeColor, opacity: 0.4, transparent: true });
+  // Cargo edge wireframe — bright and visible
+  var edgeMat = new THREE.LineBasicMaterial({
+    color: COL.edge, opacity: EDGE_ALPHA, transparent: true,
+  });
   var edgeGeo = new THREE.BoxGeometry(L, H, W);
-  var edgeLines = new THREE.LineSegments(new THREE.EdgesGeometry(edgeGeo), edgeMat);
-  edgeLines.position.set(0, H / 2, 0);
-  truckGroup.add(edgeLines);
+  var edges   = new THREE.LineSegments(new THREE.EdgesGeometry(edgeGeo), edgeMat);
+  edges.position.set(0, H / 2, 0);
+  truckGroup.add(edges);
 
   // Bottom frame rails
-  var railMat = new THREE.MeshStandardMaterial({ color: 0x15202E, roughness: 0.7, metalness: 0.3 });
-  var railH = 0.08, railW2 = 0.04;
-  var leftRail = new THREE.Mesh(new THREE.BoxGeometry(L + 0.2, railH, railW2), railMat);
-  leftRail.position.set(0, -railH / 2 - 0.02, -halfW + 0.1);
-  leftRail.castShadow = true;
-  truckGroup.add(leftRail);
-  var rightRail = new THREE.Mesh(new THREE.BoxGeometry(L + 0.2, railH, railW2), railMat);
-  rightRail.position.set(0, -railH / 2 - 0.02, halfW - 0.1);
-  rightRail.castShadow = true;
-  truckGroup.add(rightRail);
+  var railMat = new THREE.MeshPhongMaterial({ color: COL.rail, shininess: 5 });
+  var rH = 0.08, rW = 0.04;
+  var lRail = makeMesh(new THREE.BoxGeometry(L + 0.2, rH, rW), railMat);
+  lRail.position.set(0, -rH / 2 - 0.02, -hW + 0.1);
+  lRail.castShadow = true;
+  truckGroup.add(lRail);
+
+  var rRail = makeMesh(new THREE.BoxGeometry(L + 0.2, rH, rW), railMat);
+  rRail.position.set(0, -rH / 2 - 0.02, hW - 0.1);
+  rRail.castShadow = true;
+  truckGroup.add(rRail);
 
   // Cross members
-  var crossCount = Math.max(2, Math.floor(L / 0.8));
-  for (var ci = 0; ci < crossCount; ci++) {
-    var cx = -halfL + (L / (crossCount - 1)) * ci;
-    var cross = new THREE.Mesh(new THREE.BoxGeometry(railW2, railH * 0.6, W - 0.1), railMat);
-    cross.position.set(cx, -railH / 2 - 0.02, 0);
+  var crossN = Math.max(2, Math.floor(L / 0.8));
+  for (var ci = 0; ci < crossN; ci++) {
+    var cx = -hL + (L / (crossN - 1)) * ci;
+    var cross = makeMesh(new THREE.BoxGeometry(rW, rH * 0.6, W - 0.1), railMat);
+    cross.position.set(cx, -rH / 2 - 0.02, 0);
     truckGroup.add(cross);
   }
 }
 
-function buildCab(L, W, H, halfL, halfW) {
+// — Cab —————————————————————————————————————————————————————————————————————
+
+function buildCab(L, W, H, hL, hW) {
   var cabL = Math.min(W * 0.7, 1.5);
-  var cabH = H * 0.75;
+  var cabH = H * 0.78;
   var cabW = W + 0.08;
 
-  // Body
-  var cabBodyMat = new THREE.MeshStandardMaterial({
-    color: COLORS.cabBodyColor, roughness: 0.4, metalness: 0.3,
-  });
-  var cabBody = new THREE.Mesh(new THREE.BoxGeometry(cabL, cabH, cabW), cabBodyMat);
-  cabBody.position.set(-halfL - cabL / 2 - 0.04, cabH / 2, 0);
-  cabBody.castShadow = true;
-  cabBody.receiveShadow = true;
-  truckGroup.add(cabBody);
+  var cabMat = new THREE.MeshPhongMaterial({ color: COL.cab, shininess: 20 });
+  var body = makeMesh(new THREE.BoxGeometry(cabL, cabH, cabW), cabMat);
+  body.position.set(-hL - cabL / 2 - 0.04, cabH / 2, 0);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  truckGroup.add(body);
 
   // Windshield
-  var windshieldH = cabH * 0.5;
-  var windshieldW = cabW - 0.15;
-  var windshieldMat = new THREE.MeshStandardMaterial({
-    color: COLORS.cabWindowColor, transparent: true, opacity: 0.35,
-    roughness: 0.1, metalness: 0.5, side: THREE.DoubleSide,
+  var glassMat = new THREE.MeshPhongMaterial({
+    color: COL.glass, transparent: true, opacity: 0.4,
+    shininess: 90, side: THREE.DoubleSide,
   });
-  var windshield = new THREE.Mesh(new THREE.PlaneGeometry(windshieldW, windshieldH), windshieldMat);
-  windshield.position.set(-halfL - cabL - 0.04, cabH * 0.6, 0);
-  windshield.rotation.y = Math.PI / 2;
-  windshield.rotation.x = -0.15;
-  truckGroup.add(windshield);
+  var ws = makeMesh(new THREE.PlaneGeometry(cabW - 0.15, cabH * 0.5), glassMat);
+  ws.position.set(-hL - cabL - 0.04, cabH * 0.6, 0);
+  ws.rotation.y = Math.PI / 2;
+  ws.rotation.x = -0.12;
+  truckGroup.add(ws);
 
   // Side windows
-  var sideWindowGeo = new THREE.PlaneGeometry(cabL * 0.5, windshieldH * 0.7);
-  var sideWindowMat = windshieldMat.clone();
-  sideWindowMat.opacity = 0.25;
-  var leftWindow = new THREE.Mesh(sideWindowGeo, sideWindowMat);
-  leftWindow.position.set(-halfL - cabL * 0.5 - 0.04, cabH * 0.58, -cabW / 2 - 0.01);
-  truckGroup.add(leftWindow);
-  var rightWindow = new THREE.Mesh(sideWindowGeo, sideWindowMat);
-  rightWindow.position.set(-halfL - cabL * 0.5 - 0.04, cabH * 0.58, cabW / 2 + 0.01);
-  truckGroup.add(rightWindow);
+  var swGeo = new THREE.PlaneGeometry(cabL * 0.5, cabH * 0.35);
+  var swMat = glassMat.clone(); swMat.opacity = 0.3;
+  var swL = makeMesh(swGeo, swMat);
+  swL.position.set(-hL - cabL * 0.5 - 0.04, cabH * 0.6, -cabW / 2 - 0.01);
+  truckGroup.add(swL);
+  var swR = makeMesh(swGeo.clone(), swMat.clone());
+  swR.position.set(-hL - cabL * 0.5 - 0.04, cabH * 0.6, cabW / 2 + 0.01);
+  truckGroup.add(swR);
 
   // Headlights
-  var headlightGeo = new THREE.CircleGeometry(0.06, 16);
-  var headlightMat = new THREE.MeshStandardMaterial({
-    color: 0xFFFFCC, emissive: 0xFFFFCC, emissiveIntensity: 0.5, roughness: 0.1,
+  var hlMat = new THREE.MeshPhongMaterial({
+    color: 0xFFFFCC, emissive: 0xFFFFCC, emissiveIntensity: 0.5,
+    shininess: 80,
   });
-  var hlLeft = new THREE.Mesh(headlightGeo, headlightMat);
-  hlLeft.position.set(-halfL - cabL - 0.045, cabH * 0.3, -cabW / 2 + 0.2);
-  hlLeft.rotation.y = Math.PI / 2;
-  truckGroup.add(hlLeft);
-  var hlRight = new THREE.Mesh(headlightGeo, headlightMat);
-  hlRight.position.set(-halfL - cabL - 0.045, cabH * 0.3, cabW / 2 - 0.2);
-  hlRight.rotation.y = Math.PI / 2;
-  truckGroup.add(hlRight);
+  var hlGeo = new THREE.CircleGeometry(0.06, 12);
+  var hlL = makeMesh(hlGeo, hlMat);
+  hlL.position.set(-hL - cabL - 0.045, cabH * 0.3, -cabW / 2 + 0.2);
+  hlL.rotation.y = Math.PI / 2;
+  truckGroup.add(hlL);
+  var hlR = makeMesh(hlGeo.clone(), hlMat.clone());
+  hlR.position.set(-hL - cabL - 0.045, cabH * 0.3, cabW / 2 - 0.2);
+  hlR.rotation.y = Math.PI / 2;
+  truckGroup.add(hlR);
 
   // Bumper
-  var bumperMat = new THREE.MeshStandardMaterial({ color: 0x1A1A2E, roughness: 0.7, metalness: 0.4 });
-  var bumper = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, cabW + 0.05), bumperMat);
-  bumper.position.set(-halfL - cabL - 0.08, 0.12, 0);
-  bumper.castShadow = true;
-  truckGroup.add(bumper);
+  var bumpMat = new THREE.MeshPhongMaterial({ color: 0x1A1A28, shininess: 10 });
+  var bump = makeMesh(new THREE.BoxGeometry(0.08, 0.14, cabW + 0.05), bumpMat);
+  bump.position.set(-hL - cabL - 0.08, 0.14, 0);
+  bump.castShadow = true;
+  truckGroup.add(bump);
 
   // Roof
-  var roofMat = new THREE.MeshStandardMaterial({ color: 0x2A3A5C, roughness: 0.5, metalness: 0.2 });
-  var roof = new THREE.Mesh(new THREE.BoxGeometry(cabL + 0.02, 0.04, cabW + 0.04), roofMat);
-  roof.position.set(-halfL - cabL / 2 - 0.04, cabH + 0.02, 0);
+  var roofMat = new THREE.MeshPhongMaterial({ color: COL.cab, shininess: 15 });
+  var roof = makeMesh(new THREE.BoxGeometry(cabL + 0.02, 0.04, cabW + 0.04), roofMat);
+  roof.position.set(-hL - cabL / 2 - 0.04, cabH + 0.02, 0);
   roof.castShadow = true;
   truckGroup.add(roof);
 }
 
-function buildWheels(L, W, H, halfL, halfW) {
-  var wheelRadius = 0.18;
-  var wheelWidth = 0.12;
-  var cabL = Math.min(W * 0.7, 1.5);
-  var hubGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 24);
-  var tireMat = new THREE.MeshStandardMaterial({ color: COLORS.wheelColor, roughness: 0.9, metalness: 0.0 });
-  var rimMat = new THREE.MeshStandardMaterial({ color: COLORS.wheelRimColor, roughness: 0.3, metalness: 0.6 });
-  var rimGeo = new THREE.CylinderGeometry(wheelRadius * 0.5, wheelRadius * 0.5, wheelWidth + 0.02, 16);
+// — Wheels ——————————————————————────────────────────────────────────————————
 
-  var wheelPositions = [
-    { x: halfL * 0.7, z: -halfW - 0.06 },
-    { x: halfL * 0.7, z: halfW + 0.06 },
-    { x: -halfL - cabL * 0.6, z: -halfW - 0.06 },
-    { x: -halfL - cabL * 0.6, z: halfW + 0.06 },
+function buildWheels(L, W, hL, hW) {
+  var R = 0.18, ww = 0.12;
+  var cabL = Math.min(W * 0.7, 1.5);
+  var tireGeo = new THREE.CylinderGeometry(R, R, ww, 16);
+  var tireMat = new THREE.MeshPhongMaterial({ color: COL.wheel, shininess: 2 });
+  var rimGeo  = new THREE.CylinderGeometry(R * 0.5, R * 0.5, ww + 0.02, 12);
+  var rimMat  = new THREE.MeshPhongMaterial({ color: COL.rim, shininess: 40 });
+
+  var positions = [
+    { x: hL * 0.7,              z: -hW - 0.06 },
+    { x: hL * 0.7,              z:  hW + 0.06 },
+    { x: -hL - cabL * 0.6,     z: -hW - 0.06 },
+    { x: -hL - cabL * 0.6,     z:  hW + 0.06 },
   ];
 
-  var mudMat = new THREE.MeshStandardMaterial({ color: COLORS.mudguardColor, roughness: 0.7, metalness: 0.2 });
-
-  for (var wi = 0; wi < wheelPositions.length; wi++) {
-    var pos = wheelPositions[wi];
-    var tire = new THREE.Mesh(hubGeo, tireMat);
+  for (var i = 0; i < positions.length; i++) {
+    var p = positions[i];
+    var tire = makeMesh(tireGeo.clone(), tireMat.clone());
     tire.rotation.x = Math.PI / 2;
-    tire.position.set(pos.x, wheelRadius * 0.8, pos.z);
+    tire.position.set(p.x, R * 0.8, p.z);
     tire.castShadow = true;
     truckGroup.add(tire);
 
-    var rim = new THREE.Mesh(rimGeo, rimMat);
+    var rim = makeMesh(rimGeo.clone(), rimMat.clone());
     rim.rotation.x = Math.PI / 2;
-    rim.position.set(pos.x, wheelRadius * 0.8, pos.z);
+    rim.position.set(p.x, R * 0.8, p.z);
     truckGroup.add(rim);
-
-    // Mudguard
-    var archGeo = new THREE.BoxGeometry(wheelRadius * 2.5, 0.03, wheelWidth + 0.06);
-    var arch = new THREE.Mesh(archGeo, mudMat);
-    arch.position.set(pos.x, wheelRadius * 1.65, pos.z);
-    arch.castShadow = true;
-    truckGroup.add(arch);
   }
 }
 
-function buildRearDoor(L, W, H, halfL, halfW) {
-  var frameMat = new THREE.MeshStandardMaterial({
-    color: COLORS.rearDoorColor, roughness: 0.6, metalness: 0.2,
-  });
+// — Rear doors ——————————————————————————————————————————————————————————————
 
+function buildRearDoors(L, W, H, hL, hW) {
+  var doorMat = new THREE.MeshPhongMaterial({ color: COL.door, shininess: 10 });
   var doorW = W / 2 - 0.02;
-  var doorGeo = new THREE.BoxGeometry(0.02, H - 0.04, doorW);
+  var doorGeo = new THREE.BoxGeometry(0.025, H - 0.04, doorW);
 
-  var leftDoor = new THREE.Mesh(doorGeo, frameMat);
-  leftDoor.position.set(halfL + 0.01, H / 2, -doorW / 2 - 0.01);
-  leftDoor.castShadow = true;
-  truckGroup.add(leftDoor);
-  wallMeshes.push(leftDoor);
+  var dL = makeMesh(doorGeo, doorMat);
+  dL.position.set(hL + 0.013, H / 2, -doorW / 2 - 0.01);
+  dL.castShadow = true;
+  truckGroup.add(dL);
+  wallList.push(dL);
 
-  var rightDoor = new THREE.Mesh(doorGeo, frameMat);
-  rightDoor.position.set(halfL + 0.01, H / 2, doorW / 2 + 0.01);
-  rightDoor.castShadow = true;
-  truckGroup.add(rightDoor);
-  wallMeshes.push(rightDoor);
-
-  // Hinges
-  var hingeMat = new THREE.MeshStandardMaterial({ color: 0x3A4A6C, roughness: 0.5, metalness: 0.5 });
-  var hingeGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.1, 8);
-  var hPcts = [0.15, 0.5, 0.85];
-  for (var hi = 0; hi < hPcts.length; hi++) {
-    var hl = new THREE.Mesh(hingeGeo, hingeMat);
-    hl.position.set(halfL + 0.02, H * hPcts[hi], -halfW + 0.01);
-    truckGroup.add(hl);
-    var hr = new THREE.Mesh(hingeGeo, hingeMat);
-    hr.position.set(halfL + 0.02, H * hPcts[hi], halfW - 0.01);
-    truckGroup.add(hr);
-  }
-
-  // Latch bars
-  var latchMat = new THREE.MeshStandardMaterial({ color: 0x4A5A7C, roughness: 0.4, metalness: 0.6 });
-  var latchGeo = new THREE.CylinderGeometry(0.01, 0.01, H * 0.6, 8);
-  var latchL = new THREE.Mesh(latchGeo, latchMat);
-  latchL.position.set(halfL + 0.025, H * 0.5, -0.02);
-  truckGroup.add(latchL);
-  var latchR = new THREE.Mesh(latchGeo, latchMat);
-  latchR.position.set(halfL + 0.025, H * 0.5, 0.02);
-  truckGroup.add(latchR);
+  var dR = makeMesh(doorGeo.clone(), doorMat.clone());
+  dR.position.set(hL + 0.013, H / 2, doorW / 2 + 0.01);
+  dR.castShadow = true;
+  truckGroup.add(dR);
+  wallList.push(dR);
 
   // Rear marker lights
-  var markerMat = new THREE.MeshStandardMaterial({
-    color: COLORS.rearMarker, emissive: COLORS.rearMarker, emissiveIntensity: 0.3, roughness: 0.2,
+  var mkMat = new THREE.MeshPhongMaterial({
+    color: COL.marker, emissive: COL.marker, emissiveIntensity: 0.3,
+    shininess: 50,
   });
-  var markerGeo = new THREE.CircleGeometry(0.03, 12);
-  var mlLeft = new THREE.Mesh(markerGeo, markerMat);
-  mlLeft.position.set(halfL + 0.022, H * 0.1, -halfW + 0.08);
-  mlLeft.rotation.y = -Math.PI / 2;
-  truckGroup.add(mlLeft);
-  var mlRight = new THREE.Mesh(markerGeo, markerMat);
-  mlRight.position.set(halfL + 0.022, H * 0.1, halfW - 0.08);
-  mlRight.rotation.y = -Math.PI / 2;
-  truckGroup.add(mlRight);
+  var mkGeo = new THREE.CircleGeometry(0.035, 10);
+  var mkL = makeMesh(mkGeo, mkMat);
+  mkL.position.set(hL + 0.026, H * 0.1, -hW + 0.1);
+  mkL.rotation.y = -Math.PI / 2;
+  truckGroup.add(mkL);
+  var mkR = makeMesh(mkGeo.clone(), mkMat.clone());
+  mkR.position.set(hL + 0.026, H * 0.1, hW - 0.1);
+  mkR.rotation.y = -Math.PI / 2;
+  truckGroup.add(mkR);
 }
 
-function addDimLabel(text, position) {
-  var div = document.createElement('div');
-  div.className = 'dim-label';
-  div.textContent = text;
-  var label = new CSS2DObject(div);
-  label.position.copy(position);
-  truckGroup.add(label);
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// BOX RENDERING — MeshPhong, per-box color, no wireframes / labels
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// BOX RENDERING — PBR + AO + Glassmorphism Labels
-// ═══════════════════════════════════════════════════════════════════════════════
+function buildBoxMeshes(boxes) {
+  clearBoxes();
+  boxData = boxes;
+  if (!truck) return;
 
-function buildBoxes(boxes) {
-  boxesGroup.clear();
-  boxMeshes = [];
-  boxesData = boxes;
-
-  if (!truckDims) return;
-
-  var halfL = truckDims.lengthCm * CM_TO_M / 2;
-  var halfW = truckDims.widthCm * CM_TO_M / 2;
+  var hL = truck.lengthCm * CM / 2;
+  var hW = truck.widthCm  * CM / 2;
 
   for (var i = 0; i < boxes.length; i++) {
-    var b = boxes[i];
-    var bw = b.w * CM_TO_M;
-    var bd = b.d * CM_TO_M;
-    var bh = b.h * CM_TO_M;
+    var b  = boxes[i];
+    var bw = b.w * CM;
+    var bd = b.d * CM;
+    var bh = b.h * CM;
 
-    var geo = new THREE.BoxGeometry(bw, bh, bd, 2, 2, 2);
-    var color = getBoxColor(b, i);
-    var mat = new THREE.MeshStandardMaterial({
+    var color = boxColor(b, i);
+    var mat = new THREE.MeshPhongMaterial({
       color: color,
-      roughness: 0.35,
-      metalness: 0.08,
-      transparent: false,
+      shininess: 35,
+      specular: 0x222233,
     });
-
-    var mesh = new THREE.Mesh(geo, mat);
-    mesh.castShadow = true;
+    var mesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), mat);
+    mesh.castShadow    = true;
     mesh.receiveShadow = true;
 
-    var px = b.x * CM_TO_M - halfL + bw / 2;
-    var py = b.z * CM_TO_M + bh / 2;
-    var pz = b.y * CM_TO_M - halfW + bd / 2;
+    var px = b.x * CM - hL + bw / 2;
+    var py = b.z * CM + bh / 2;
+    var pz = b.y * CM - hW + bd / 2;
     mesh.position.set(px, py, pz);
-    mesh.userData = { boxIndex: i, baseScale: 1.0 };
-    boxesGroup.add(mesh);
+    mesh.userData = { idx: i };
 
-    // Edges
-    var edgeMat = new THREE.LineBasicMaterial({ color: 0xFFFFFF, opacity: 0.18, transparent: true });
-    var edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(bw, bh, bd)), edgeMat);
-    edges.position.copy(mesh.position);
-    boxesGroup.add(edges);
-
-    // AO darkening
-    var aoGeo = new THREE.PlaneGeometry(bw * 0.92, bd * 0.92);
-    var aoMat = new THREE.MeshBasicMaterial({
-      color: 0x000000, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide,
-    });
-    var aoPlane = new THREE.Mesh(aoGeo, aoMat);
-    aoPlane.rotation.x = -Math.PI / 2;
-    aoPlane.position.set(px, py + bh / 2 + 0.001, pz);
-    boxesGroup.add(aoPlane);
-
-    // Glassmorphism label
-    var labelDiv = document.createElement('div');
-    labelDiv.className = 'box-label';
-    labelDiv.innerHTML = '<span class="box-label-text">' + truncate(b.label, 16) + '</span><span class="box-label-weight">' + b.weight.toFixed(1) + 'kg</span>';
-    var label = new CSS2DObject(labelDiv);
-    label.position.set(0, bh / 2 + 0.05, 0);
-    mesh.add(label);
-
-    boxMeshes.push({ mesh: mesh, edges: edges, label: label, labelDiv: labelDiv, aoPlane: aoPlane, data: b });
+    boxGroup.add(mesh);
+    meshes.push({ mesh: mesh, data: b });
   }
 
-  updateLabelVisibility();
+  markDirty();
 }
 
-function getBoxColor(box, index) {
-  switch (colorMode) {
-    case 'client':
-      return BOX_PALETTE[hashCode(box.clientCode) % BOX_PALETTE.length];
-    case 'weight':
-      return weightToColor(box.weight);
-    case 'delivery':
-      return deliveryToColor(box.deliveryOrder, boxesData.length);
-    case 'product':
-    default:
-      return BOX_PALETTE[hashCode(box.articleCode) % BOX_PALETTE.length];
+function clearBoxes() {
+  for (var i = boxGroup.children.length - 1; i >= 0; i--) {
+    var c = boxGroup.children[i];
+    boxGroup.remove(c);
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) c.material.dispose();
+  }
+  meshes = [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLOR MODES
+// ─────────────────────────────────────────────────────────────────────────────
+
+function boxColor(box, index) {
+  switch (cMode) {
+    case 'client':   return PALETTE[hash(box.clientCode)  % PALETTE.length];
+    case 'weight':   return weightCol(box.weight);
+    case 'delivery': return deliveryCol(box.deliveryOrder, boxData.length);
+    default:         return PALETTE[hash(box.articleCode) % PALETTE.length];
   }
 }
 
-function weightToColor(weight) {
-  var t = Math.min(weight / MAX_WEIGHT_KG, 1.0);
-  return gradientColor(WEIGHT_GRADIENT, t);
+function weightCol(w) {
+  return gradCol(WT_GRAD, Math.min(w / MAX_WEIGHT_KG, 1));
 }
-
-function deliveryToColor(order, total) {
+function deliveryCol(order, total) {
   if (!order || !total || total <= 1) return new THREE.Color(0x4ECDC4);
-  var t = Math.min((order - 1) / (total - 1), 1.0);
-  return gradientColor(DELIVERY_GRADIENT, t);
+  return gradCol(DLV_GRAD, Math.min((order - 1) / (total - 1), 1));
 }
-
-function gradientColor(gradient, t) {
-  var r, g, b;
-  for (var i = 0; i < gradient.length - 1; i++) {
-    var a = gradient[i];
-    var c = gradient[i + 1];
+function gradCol(grad, t) {
+  for (var i = 0; i < grad.length - 1; i++) {
+    var a = grad[i], c = grad[i + 1];
     if (t >= a.t && t <= c.t) {
       var f = (t - a.t) / (c.t - a.t);
-      r = a.r + (c.r - a.r) * f;
-      g = a.g + (c.g - a.g) * f;
-      b = a.b + (c.b - a.b) * f;
-      return new THREE.Color(r, g, b);
+      return new THREE.Color(
+        a.r + (c.r - a.r) * f,
+        a.g + (c.g - a.g) * f,
+        a.b + (c.b - a.b) * f
+      );
     }
   }
-  var last = gradient[gradient.length - 1];
+  var last = grad[grad.length - 1];
   return new THREE.Color(last.r, last.g, last.b);
 }
 
-function hashCode(str) {
-  var hash = 0;
-  for (var i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
+function hash(s) {
+  var h = 0;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0;
+  return Math.abs(h);
+}
+
+function applyColors() {
+  for (var i = 0; i < meshes.length; i++) {
+    meshes[i].mesh.material.color = new THREE.Color(boxColor(meshes[i].data, i));
   }
-  return Math.abs(hash);
+  if (selIdx !== null) setSelected(selIdx);
+  markDirty();
 }
 
-function truncate(str, maxLen) {
-  return str.length > maxLen ? str.substring(0, maxLen - 1) + '\u2026' : str;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SELECTION & VISUAL STATES — Animated Glow
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// SELECTION & COLLISION — emissive glow
+// ─────────────────────────────────────────────────────────────────────────────
 
 function setSelected(index) {
-  selectedIndex = index;
-  selectionTime = 0;
-
-  for (var i = 0; i < boxMeshes.length; i++) {
-    var entry = boxMeshes[i];
-    var isSelected = (i === index);
-
-    if (isSelected) {
-      entry.mesh.material.emissive = new THREE.Color(COLORS.selectedEmissive);
-      entry.mesh.material.emissiveIntensity = 0.5;
-      entry.edges.material.color = new THREE.Color(COLORS.selectedEmissive);
-      entry.edges.material.opacity = 0.9;
-      // Update label style
-      entry.labelDiv.classList.add('selected-label');
+  selIdx = index;
+  for (var i = 0; i < meshes.length; i++) {
+    var m = meshes[i].mesh;
+    if (i === index) {
+      m.material.emissive = new THREE.Color(COL.sel);
+      m.material.emissiveIntensity = 0.45;
+      m.scale.setScalar(1.02);
     } else {
-      entry.mesh.material.emissive = new THREE.Color(0x000000);
-      entry.mesh.material.emissiveIntensity = 0;
-      entry.edges.material.color = new THREE.Color(0xFFFFFF);
-      entry.edges.material.opacity = 0.18;
-      entry.mesh.scale.set(1, 1, 1);
-      entry.labelDiv.classList.remove('selected-label');
+      m.material.emissive = new THREE.Color(0x000000);
+      m.material.emissiveIntensity = 0;
+      m.scale.setScalar(1);
     }
   }
+  markDirty();
 }
 
-function setCollisionState(index, hasCollision) {
-  if (index < 0 || index >= boxMeshes.length) return;
-  var entry = boxMeshes[index];
-
-  if (hasCollision) {
-    entry.mesh.material.emissive = new THREE.Color(COLORS.collisionEmissive);
-    entry.mesh.material.emissiveIntensity = 0.7;
-    entry.edges.material.color = new THREE.Color(COLORS.collisionEmissive);
-    entry.edges.material.opacity = 1.0;
-  } else if (index === selectedIndex) {
-    entry.mesh.material.emissive = new THREE.Color(COLORS.selectedEmissive);
-    entry.mesh.material.emissiveIntensity = 0.5;
-    entry.edges.material.color = new THREE.Color(COLORS.selectedEmissive);
-    entry.edges.material.opacity = 0.9;
+function setCollision(index, hasHit) {
+  if (index < 0 || index >= meshes.length) return;
+  var m = meshes[index].mesh;
+  if (hasHit) {
+    m.material.emissive = new THREE.Color(COL.hit);
+    m.material.emissiveIntensity = 0.6;
+  } else if (index === selIdx) {
+    m.material.emissive = new THREE.Color(COL.sel);
+    m.material.emissiveIntensity = 0.45;
   } else {
-    entry.mesh.material.emissive = new THREE.Color(0x000000);
-    entry.mesh.material.emissiveIntensity = 0;
-    entry.edges.material.color = new THREE.Color(0xFFFFFF);
-    entry.edges.material.opacity = 0.18;
+    m.material.emissive = new THREE.Color(0x000000);
+    m.material.emissiveIntensity = 0;
   }
+  markDirty();
 }
 
-function updateColorMode(mode) {
-  colorMode = mode;
-  for (var i = 0; i < boxMeshes.length; i++) {
-    var color = getBoxColor(boxMeshes[i].data, i);
-    boxMeshes[i].mesh.material.color = new THREE.Color(color);
-  }
-  if (selectedIndex !== null) setSelected(selectedIndex);
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// WALL TOGGLE — animated opacity
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// LABEL LOD — Smooth Opacity Fade
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function updateLabelVisibility() {
-  if (!camera) return;
-
-  for (var i = 0; i < boxMeshes.length; i++) {
-    var entry = boxMeshes[i];
-    var dist = camera.position.distanceTo(entry.mesh.position);
-    var params = entry.mesh.geometry.parameters;
-    var size = params ? Math.max(params.width || 0.3, params.depth || 0.3) : 0.3;
-    var screenSize = (size / dist) * window.innerHeight * 0.5;
-
-    if (screenSize < 15) {
-      entry.labelDiv.style.opacity = '0';
-    } else if (screenSize < 30) {
-      entry.labelDiv.style.opacity = String(((screenSize - 15) / 15).toFixed(2));
-    } else {
-      entry.labelDiv.style.opacity = '1';
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// WALL TOGGLE — Animated Opacity
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function animateWallToggle(visible) {
-  wallsVisible = visible;
-  var target = visible ? WALL_OPACITY : 0.0;
-  var startOpacities = [];
-  for (var i = 0; i < wallMeshes.length; i++) {
-    startOpacities.push(wallMeshes[i].material.opacity);
-  }
-  var startTime = performance.now();
+function animateWalls(visible) {
+  wallsOn = visible;
+  var target = visible ? WALL_ALPHA : 0;
+  var starts = [];
+  for (var i = 0; i < wallList.length; i++) starts.push(wallList[i].material.opacity);
+  var t0 = performance.now();
 
   function step(now) {
-    var t = Math.min((now - startTime) / WALL_ANIM_DURATION, 1.0);
-    var ease = 1 - Math.pow(1 - t, 3);
-
-    for (var j = 0; j < wallMeshes.length; j++) {
-      wallMeshes[j].material.opacity = startOpacities[j] + (target - startOpacities[j]) * ease;
-      wallMeshes[j].material.transparent = true;
-      wallMeshes[j].visible = wallMeshes[j].material.opacity > 0.001;
+    var p = Math.min((now - t0) / WALL_ANIM, 1);
+    var e = 1 - Math.pow(1 - p, 3); // ease-out cubic
+    for (var j = 0; j < wallList.length; j++) {
+      wallList[j].material.opacity = starts[j] + (target - starts[j]) * e;
+      wallList[j].material.transparent = true;
+      wallList[j].visible = wallList[j].material.opacity > 0.002;
     }
-    if (t < 1.0) requestAnimationFrame(step);
+    markDirty();
+    if (p < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CAMERA PRESETS — Smooth Sine Easing
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMERA PRESETS — smooth sine transitions
+// ─────────────────────────────────────────────────────────────────────────────
 
-function setViewMode(mode) {
-  if (!truckDims) return;
+function setView(mode) {
+  if (!truck) return;
+  var L = truck.lengthCm * CM;
+  var W = truck.widthCm  * CM;
+  var H = truck.heightCm * CM;
+  var mx = Math.max(L, W, H);
 
-  var L = truckDims.lengthCm * CM_TO_M;
-  var W = truckDims.widthCm * CM_TO_M;
-  var H = truckDims.heightCm * CM_TO_M;
-  var maxDim = Math.max(L, W, H);
-
-  var duration = 800;
-  var startPos = camera.position.clone();
-  var startTarget = controls.target.clone();
-  var endPos, endTarget;
-
+  var endPos, endTgt;
   switch (mode) {
     case 'top':
-      endPos = new THREE.Vector3(0, maxDim * 2.2, 0.001);
-      endTarget = new THREE.Vector3(0, 0, 0);
+      endPos = new THREE.Vector3(0, mx * 2.2, 0.001);
+      endTgt = new THREE.Vector3(0, 0, 0);
       break;
     case 'front':
-      endPos = new THREE.Vector3(0, H * 0.5, maxDim * 2.2);
-      endTarget = new THREE.Vector3(0, H * 0.35, 0);
+      endPos = new THREE.Vector3(0, H * 0.5, mx * 2.2);
+      endTgt = new THREE.Vector3(0, H * 0.35, 0);
       break;
-    case 'perspective':
-    default:
-      endPos = new THREE.Vector3(L * 0.9, maxDim * 1.1, W * 1.5);
-      endTarget = new THREE.Vector3(0, H * 0.35, 0);
+    default: // perspective
+      endPos = new THREE.Vector3(L * 0.9, mx * 1.1, W * 1.5);
+      endTgt = new THREE.Vector3(0, H * 0.35, 0);
       break;
   }
 
-  var startTime = performance.now();
+  var sPos = camera.position.clone();
+  var sTgt = controls.target.clone();
+  var dur  = 700;
+  var t0   = performance.now();
+
   function step(now) {
-    var t = Math.min((now - startTime) / duration, 1.0);
-    var ease = -(Math.cos(Math.PI * t) - 1) / 2;
-
-    camera.position.lerpVectors(startPos, endPos, ease);
-    controls.target.lerpVectors(startTarget, endTarget, ease);
+    var t = Math.min((now - t0) / dur, 1);
+    var e = -(Math.cos(Math.PI * t) - 1) / 2;
+    camera.position.lerpVectors(sPos, endPos, e);
+    controls.target.lerpVectors(sTgt, endTgt, e);
     controls.update();
-
-    if (t < 1.0) requestAnimationFrame(step);
+    markDirty();
+    if (t < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// POINTER EVENTS (tap, long-press drag, orbit)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// POINTER EVENTS — tap / long-press drag / orbit
+// ─────────────────────────────────────────────────────────────────────────────
 
-function getPointerNDC(event) {
-  var rect = renderer.domElement.getBoundingClientRect();
+function ndc(ev) {
+  var r = renderer.domElement.getBoundingClientRect();
   return new THREE.Vector2(
-    ((event.clientX - rect.left) / rect.width) * 2 - 1,
-    -((event.clientY - rect.top) / rect.height) * 2 + 1
+    ((ev.clientX - r.left) / r.width)  * 2 - 1,
+   -((ev.clientY - r.top)  / r.height) * 2 + 1
   );
 }
 
-function onPointerDown(event) {
-  if (event.pointerType === 'touch' && event.isPrimary === false) return;
-
-  pointerDownTime = performance.now();
-  pointerDownPos = { x: event.clientX, y: event.clientY };
-  pointer.copy(getPointerNDC(event));
-
-  raycaster.setFromCamera(pointer, camera);
-  var meshes = [];
-  for (var i = 0; i < boxMeshes.length; i++) meshes.push(boxMeshes[i].mesh);
-  var intersects = raycaster.intersectObjects(meshes);
-
-  if (intersects.length > 0) {
-    dragIndex = intersects[0].object.userData.boxIndex;
-  }
+function hitBoxes(pt) {
+  raycaster.setFromCamera(pt, camera);
+  var arr = [];
+  for (var i = 0; i < meshes.length; i++) arr.push(meshes[i].mesh);
+  return raycaster.intersectObjects(arr);
 }
 
-function onPointerMove(event) {
-  if (dragIndex < 0) return;
+function onPointerDown(ev) {
+  if (ev.pointerType === 'touch' && !ev.isPrimary) return;
+  downTime = performance.now();
+  downPos  = { x: ev.clientX, y: ev.clientY };
+  pointer.copy(ndc(ev));
 
-  var dx = event.clientX - pointerDownPos.x;
-  var dy = event.clientY - pointerDownPos.y;
+  var hits = hitBoxes(pointer);
+  dIdx = hits.length > 0 ? hits[0].object.userData.idx : -1;
+}
+
+function onPointerMove(ev) {
+  if (dIdx < 0) return;
+  var dx = ev.clientX - downPos.x;
+  var dy = ev.clientY - downPos.y;
   var dist = Math.sqrt(dx * dx + dy * dy);
-  var elapsed = performance.now() - pointerDownTime;
+  var elapsed = performance.now() - downTime;
 
-  if (!isDragging && elapsed > 200 && dist > 5) {
-    isDragging = true;
+  // Start drag after long press + small movement
+  if (!dragging && elapsed > 200 && dist > 5) {
+    dragging = true;
     controls.enabled = false;
-
-    pointer.copy(getPointerNDC(event));
+    pointer.copy(ndc(ev));
     raycaster.setFromCamera(pointer, camera);
-    var intersection = new THREE.Vector3();
-    raycaster.ray.intersectPlane(dragPlane, intersection);
-
-    var mesh = boxMeshes[dragIndex].mesh;
-    dragOffset.subVectors(mesh.position, intersection);
-    dragOffset.y = 0;
-
-    mesh.material.transparent = true;
-    mesh.material.opacity = 0.7;
-    sendToFlutter('boxDragStart', { index: dragIndex });
+    var pt = new THREE.Vector3();
+    raycaster.ray.intersectPlane(dPlane, pt);
+    dOff.subVectors(meshes[dIdx].mesh.position, pt);
+    dOff.y = 0;
+    meshes[dIdx].mesh.material.transparent = true;
+    meshes[dIdx].mesh.material.opacity = 0.7;
+    sendToFlutter('boxDragStart', { index: dIdx });
   }
 
-  if (isDragging && dragIndex >= 0) {
-    pointer.copy(getPointerNDC(event));
+  if (dragging && dIdx >= 0 && truck) {
+    pointer.copy(ndc(ev));
     raycaster.setFromCamera(pointer, camera);
-    var intersection2 = new THREE.Vector3();
-    raycaster.ray.intersectPlane(dragPlane, intersection2);
+    var pt2 = new THREE.Vector3();
+    raycaster.ray.intersectPlane(dPlane, pt2);
+    if (!pt2) return;
+    var np = pt2.add(dOff);
 
-    if (intersection2) {
-      var newPos = intersection2.add(dragOffset);
-      var mesh = boxMeshes[dragIndex].mesh;
+    var hL = truck.lengthCm * CM / 2;
+    var hW = truck.widthCm  * CM / 2;
+    var params = meshes[dIdx].mesh.geometry.parameters;
+    var bwH = (params ? params.width  : 0.3) / 2;
+    var bdH = (params ? params.depth  : 0.3) / 2;
+    np.x = clamp(np.x, -hL + bwH, hL - bwH);
+    np.z = clamp(np.z, -hW + bdH, hW - bdH);
 
-      if (truckDims) {
-        var halfL = truckDims.lengthCm * CM_TO_M / 2;
-        var halfW = truckDims.widthCm * CM_TO_M / 2;
-        var params = mesh.geometry.parameters;
-        var bwHalf = (params ? params.width : 0.3) / 2;
-        var bdHalf = (params ? params.depth : 0.3) / 2;
+    meshes[dIdx].mesh.position.x = np.x;
+    meshes[dIdx].mesh.position.z = np.z;
+    markDirty();
 
-        newPos.x = Math.max(-halfL + bwHalf, Math.min(halfL - bwHalf, newPos.x));
-        newPos.z = Math.max(-halfW + bdHalf, Math.min(halfW - bdHalf, newPos.z));
-      }
-
-      mesh.position.x = newPos.x;
-      mesh.position.z = newPos.z;
-      boxMeshes[dragIndex].edges.position.x = newPos.x;
-      boxMeshes[dragIndex].edges.position.z = newPos.z;
-      if (boxMeshes[dragIndex].aoPlane) {
-        boxMeshes[dragIndex].aoPlane.position.x = newPos.x;
-        boxMeshes[dragIndex].aoPlane.position.z = newPos.z;
-      }
-
-      var halfL2 = truckDims.lengthCm * CM_TO_M / 2;
-      var halfW2 = truckDims.widthCm * CM_TO_M / 2;
-      var params2 = mesh.geometry.parameters;
-      var bwHalf2 = (params2 ? params2.width : 0.3) / 2;
-      var bdHalf2 = (params2 ? params2.depth : 0.3) / 2;
-      var dataX = (newPos.x + halfL2 - bwHalf2) / CM_TO_M;
-      var dataY = (newPos.z + halfW2 - bdHalf2) / CM_TO_M;
-
-      sendToFlutter('boxDragMove', {
-        index: dragIndex,
-        x: Math.round(dataX * 10) / 10,
-        y: Math.round(dataY * 10) / 10,
-      });
-    }
-  }
-}
-
-function onPointerUp(event) {
-  if (isDragging && dragIndex >= 0) {
-    var mesh = boxMeshes[dragIndex].mesh;
-    mesh.material.transparent = false;
-    mesh.material.opacity = 1.0;
-
-    var halfL = truckDims.lengthCm * CM_TO_M / 2;
-    var halfW = truckDims.widthCm * CM_TO_M / 2;
-    var params = mesh.geometry.parameters;
-    var bwHalf = (params ? params.width : 0.3) / 2;
-    var bdHalf = (params ? params.depth : 0.3) / 2;
-    var dataX = (mesh.position.x + halfL - bwHalf) / CM_TO_M;
-    var dataY = (mesh.position.z + halfW - bdHalf) / CM_TO_M;
-
-    sendToFlutter('boxDragEnd', {
-      index: dragIndex,
+    // Convert back to API coords
+    var dataX = (np.x + hL - bwH) / CM;
+    var dataY = (np.z + hW - bdH) / CM;
+    sendToFlutter('boxDragMove', {
+      index: dIdx,
       x: Math.round(dataX * 10) / 10,
       y: Math.round(dataY * 10) / 10,
     });
+  }
+}
 
-    isDragging = false;
+function onPointerUp(ev) {
+  if (dragging && dIdx >= 0 && truck) {
+    var m = meshes[dIdx].mesh;
+    m.material.transparent = false;
+    m.material.opacity = 1;
+    var hL = truck.lengthCm * CM / 2;
+    var hW = truck.widthCm  * CM / 2;
+    var params = m.geometry.parameters;
+    var bwH = (params ? params.width  : 0.3) / 2;
+    var bdH = (params ? params.depth  : 0.3) / 2;
+    sendToFlutter('boxDragEnd', {
+      index: dIdx,
+      x: Math.round((m.position.x + hL - bwH) / CM * 10) / 10,
+      y: Math.round((m.position.z + hW - bdH) / CM * 10) / 10,
+    });
+    dragging = false;
     controls.enabled = true;
-  } else if (dragIndex >= 0) {
-    var elapsed = performance.now() - pointerDownTime;
-    var dx = event.clientX - pointerDownPos.x;
-    var dy = event.clientY - pointerDownPos.y;
-    var dist = Math.sqrt(dx * dx + dy * dy);
-    if (elapsed < 300 && dist < 10) {
-      sendToFlutter('boxSelected', { index: dragIndex });
+    markDirty();
+  } else if (dIdx >= 0) {
+    var el2 = performance.now() - downTime;
+    var dx2 = ev.clientX - downPos.x;
+    var dy2 = ev.clientY - downPos.y;
+    if (el2 < 300 && Math.sqrt(dx2 * dx2 + dy2 * dy2) < 10) {
+      sendToFlutter('boxSelected', { index: dIdx });
     }
   } else {
-    var elapsed2 = performance.now() - pointerDownTime;
-    var dx2 = event.clientX - pointerDownPos.x;
-    var dy2 = event.clientY - pointerDownPos.y;
-    var dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-    if (elapsed2 < 300 && dist2 < 10) {
+    var el3 = performance.now() - downTime;
+    var dx3 = ev.clientX - downPos.x;
+    var dy3 = ev.clientY - downPos.y;
+    if (el3 < 300 && Math.sqrt(dx3 * dx3 + dy3 * dy3) < 10) {
       sendToFlutter('canvasTapped', {});
     }
   }
-
-  dragIndex = -1;
-  isDragging = false;
+  dIdx = -1;
+  dragging = false;
 }
 
 function onPointerCancel() {
-  if (isDragging && dragIndex >= 0) {
-    var mesh = boxMeshes[dragIndex].mesh;
-    mesh.material.transparent = false;
-    mesh.material.opacity = 1.0;
+  if (dragging && dIdx >= 0) {
+    meshes[dIdx].mesh.material.transparent = false;
+    meshes[dIdx].mesh.material.opacity = 1;
   }
-  dragIndex = -1;
-  isDragging = false;
+  dIdx = -1;
+  dragging = false;
   controls.enabled = true;
+  markDirty();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// GRAVITY SETTLING — ensure boxes rest on surfaces
+// ─────────────────────────────────────────────────────────────────────────────
+
+function settleGravity(boxes) {
+  // Sort by z ascending (process from floor up)
+  var sorted = [];
+  for (var i = 0; i < boxes.length; i++) sorted.push(i);
+  sorted.sort(function (a, b) { return boxes[a].z - boxes[b].z; });
+
+  for (var si = 0; si < sorted.length; si++) {
+    var idx = sorted[si];
+    var b = boxes[idx];
+    var supportZ = 0; // floor
+
+    for (var j = 0; j < boxes.length; j++) {
+      if (j === idx) continue;
+      var o = boxes[j];
+      // Only consider boxes already at or below this one
+      if (o.z + o.h > b.z + 0.1) continue;
+      // Check XY overlap (with 0.5cm tolerance)
+      if (b.x < o.x + o.w - 0.5 && b.x + b.w > o.x + 0.5 &&
+          b.y < o.y + o.d - 0.5 && b.y + b.d > o.y + 0.5) {
+        supportZ = Math.max(supportZ, o.z + o.h);
+      }
+    }
+
+    boxes[idx] = assign(b, { z: supportZ });
+  }
+  return boxes;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3D BIN PACKING — Extreme-Point heuristic
+// ─────────────────────────────────────────────────────────────────────────────
+
+function repackBoxes() {
+  if (!truck || boxData.length === 0) return;
+  var L = truck.lengthCm;
+  var W = truck.widthCm;
+  var H = truck.heightCm;
+
+  // Sort by volume descending
+  var items = boxData.map(function (b, i) { return assign({}, b); });
+  items.sort(function (a, b) {
+    return (b.w * b.d * b.h) - (a.w * a.d * a.h);
+  });
+
+  var eps = [{ x: 0, y: 0, z: 0 }]; // extreme points
+  var placed  = [];
+  var overflow = [];
+
+  for (var i = 0; i < items.length; i++) {
+    var box = items[i];
+    var best = null;
+    var bestScore = Infinity;
+    var bestW = box.w, bestD = box.d;
+
+    // Try both orientations (swap w, d)
+    var orients = [[box.w, box.d], [box.d, box.w]];
+
+    for (var oi = 0; oi < orients.length; oi++) {
+      var ow = orients[oi][0];
+      var od = orients[oi][1];
+
+      for (var ei = 0; ei < eps.length; ei++) {
+        var ep = eps[ei];
+        if (ep.x + ow > L + 0.5 || ep.y + od > W + 0.5 || ep.z + box.h > H + 0.5) continue;
+
+        // Check overlap with placed boxes
+        var ok = true;
+        for (var pi = 0; pi < placed.length; pi++) {
+          var p = placed[pi];
+          if (ep.x < p.x + p.w - 0.5 && ep.x + ow > p.x + 0.5 &&
+              ep.y < p.y + p.d - 0.5 && ep.y + od > p.y + 0.5 &&
+              ep.z < p.z + p.h - 0.5 && ep.z + box.h > p.z + 0.5) {
+            ok = false;
+            break;
+          }
+        }
+        if (!ok) continue;
+
+        // Score: bottom → back → left
+        var score = ep.z * 10000 + ep.x * 100 + ep.y;
+        if (score < bestScore) {
+          bestScore = score;
+          best = ep;
+          bestW = ow;
+          bestD = od;
+        }
+      }
+    }
+
+    if (best) {
+      var nb = assign({}, box, { x: best.x, y: best.y, z: best.z, w: bestW, d: bestD });
+      placed.push(nb);
+
+      // New extreme points
+      eps.push({ x: best.x + bestW, y: best.y, z: best.z });
+      eps.push({ x: best.x, y: best.y + bestD, z: best.z });
+      eps.push({ x: best.x, y: best.y, z: best.z + box.h });
+
+      // Remove used EP
+      var epIdx = eps.indexOf(best);
+      if (epIdx >= 0) eps.splice(epIdx, 1);
+
+      // Purge EPs inside the new box
+      eps = eps.filter(function (e) {
+        return !(e.x >= nb.x && e.x < nb.x + nb.w &&
+                 e.y >= nb.y && e.y < nb.y + nb.d &&
+                 e.z >= nb.z && e.z < nb.z + nb.h);
+      });
+    } else {
+      overflow.push(box);
+    }
+  }
+
+  // Apply gravity settle on packed result
+  placed = settleGravity(placed);
+
+  // Update scene
+  boxData = placed;
+  buildBoxMeshes(placed);
+  if (selIdx !== null) setSelected(selIdx);
+
+  // Notify Flutter
+  sendToFlutter('boxesRepacked', {
+    placed:   placed.map(function (b) { return { id: b.id, x: b.x, y: b.y, z: b.z, w: b.w, d: b.d, h: b.h }; }),
+    overflow: overflow.map(function (b) { return { id: b.id }; }),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER LOOP — on-demand (GPU idle when nothing changes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update(); // required for damping — fires 'change' if camera moves
+  if (dirty) {
+    renderer.render(scene, camera);
+    dirty = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // RESIZE
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
 
 function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  css2dRenderer.setSize(window.innerWidth, window.innerHeight);
+  markDirty();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ANIMATION LOOP — Selection Pulse
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function animate() {
-  animationId = requestAnimationFrame(animate);
-
-  var delta = clock.getDelta();
-  controls.update();
-
-  // Selection pulse
-  if (selectedIndex !== null && selectedIndex >= 0 && selectedIndex < boxMeshes.length) {
-    selectionTime += delta * SELECTION_PULSE_SPEED;
-    var pulse = Math.sin(selectionTime * Math.PI) * SELECTION_PULSE_INTENSITY;
-    var entry = boxMeshes[selectedIndex];
-    var s = 1.0 + Math.abs(pulse) * 0.03;
-    entry.mesh.scale.set(s, s, s);
-    entry.mesh.material.emissiveIntensity = 0.4 + Math.abs(pulse) * 0.3;
-  }
-
-  updateLabelVisibility();
-  renderer.render(scene, camera);
-  css2dRenderer.render(scene, camera);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// FLUTTER BRIDGE
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
 
 function sendToFlutter(type, payload) {
   try {
     if (window.FlutterBridge) {
-      window.FlutterBridge.postMessage(JSON.stringify({ type: type, ...payload }));
+      var msg = assign({ type: type }, payload);
+      window.FlutterBridge.postMessage(JSON.stringify(msg));
     }
-  } catch (e) {
-    console.warn('FlutterBridge send failed:', e);
+  } catch (e) { console.warn('Bridge error:', e); }
+}
+
+function hideLoading() {
+  var el = document.getElementById('loading');
+  if (el) el.classList.add('hidden');
+}
+
+function makeMesh(geo, mat) { return new THREE.Mesh(geo, mat); }
+
+function addLine(x1, y1, z1, x2, y2, z2, mat) {
+  var g = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(x1, y1, z1),
+    new THREE.Vector3(x2, y2, z2),
+  ]);
+  truckGroup.add(new THREE.Line(g, mat));
+}
+
+function disposeGroup(group) {
+  while (group.children.length > 0) {
+    var c = group.children[0];
+    group.remove(c);
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) {
+      if (Array.isArray(c.material)) {
+        for (var mi = 0; mi < c.material.length; mi++) c.material[mi].dispose();
+      } else {
+        c.material.dispose();
+      }
+    }
+    // Recurse for sub-groups
+    if (c.children && c.children.length > 0) disposeGroup(c);
   }
 }
 
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function assign(target) {
+  for (var i = 1; i < arguments.length; i++) {
+    var src = arguments[i];
+    if (src) for (var k in src) { if (src.hasOwnProperty(k)) target[k] = src[k]; }
+  }
+  return target;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FLUTTER BRIDGE — bidirectional API
+// ─────────────────────────────────────────────────────────────────────────────
+
 window.ThreeBridge = {
-  loadScene: function(truckJson, boxesJson) {
+
+  loadScene: function (truckJson, boxesJson) {
     try {
-      var truck = typeof truckJson === 'string' ? JSON.parse(truckJson) : truckJson;
-      var boxes = typeof boxesJson === 'string' ? JSON.parse(boxesJson) : boxesJson;
-      buildTruck(truck);
-      buildBoxes(boxes);
-    } catch (e) {
-      console.error('loadScene error:', e);
-    }
+      var t = typeof truckJson === 'string' ? JSON.parse(truckJson) : truckJson;
+      var b = typeof boxesJson === 'string' ? JSON.parse(boxesJson) : boxesJson;
+      buildTruck(t);
+      // Settle gravity before rendering
+      b = settleGravity(b);
+      buildBoxMeshes(b);
+      // Report settled positions back
+      sendToFlutter('boxesSettled', {
+        boxes: b.map(function (bx) { return { id: bx.id, x: bx.x, y: bx.y, z: bx.z }; }),
+      });
+    } catch (e) { console.error('loadScene:', e); }
   },
 
-  updateBoxes: function(boxesJson) {
+  updateBoxes: function (boxesJson) {
     try {
-      var boxes = typeof boxesJson === 'string' ? JSON.parse(boxesJson) : boxesJson;
-      buildBoxes(boxes);
-      if (selectedIndex !== null) setSelected(selectedIndex);
-    } catch (e) {
-      console.error('updateBoxes error:', e);
-    }
+      var b = typeof boxesJson === 'string' ? JSON.parse(boxesJson) : boxesJson;
+      b = settleGravity(b);
+      buildBoxMeshes(b);
+      if (selIdx !== null) setSelected(selIdx);
+      sendToFlutter('boxesSettled', {
+        boxes: b.map(function (bx) { return { id: bx.id, x: bx.x, y: bx.y, z: bx.z }; }),
+      });
+    } catch (e) { console.error('updateBoxes:', e); }
   },
 
-  updateBoxPosition: function(index, x, y, z) {
-    if (index < 0 || index >= boxMeshes.length || !truckDims) return;
-    var entry = boxMeshes[index];
-    var halfL = truckDims.lengthCm * CM_TO_M / 2;
-    var halfW = truckDims.widthCm * CM_TO_M / 2;
+  updateBoxPosition: function (index, x, y, z) {
+    if (index < 0 || index >= meshes.length || !truck) return;
+    var entry = meshes[index];
+    var hL = truck.lengthCm * CM / 2;
+    var hW = truck.widthCm  * CM / 2;
     var params = entry.mesh.geometry.parameters;
-    var bwHalf = (params ? params.width : 0.3) / 2;
-    var bdHalf = (params ? params.depth : 0.3) / 2;
-    var bhHalf = (params ? params.height : 0.3) / 2;
-
-    var px = x * CM_TO_M - halfL + bwHalf;
-    var py = z * CM_TO_M + bhHalf;
-    var pz = y * CM_TO_M - halfW + bdHalf;
-
-    entry.mesh.position.set(px, py, pz);
-    entry.edges.position.set(px, py, pz);
-    if (entry.aoPlane) entry.aoPlane.position.set(px, py + bhHalf + 0.001, pz);
+    var bwH = (params ? params.width  : 0.3) / 2;
+    var bdH = (params ? params.depth  : 0.3) / 2;
+    var bhH = (params ? params.height : 0.3) / 2;
+    entry.mesh.position.set(
+      x * CM - hL + bwH,
+      z * CM + bhH,
+      y * CM - hW + bdH
+    );
+    markDirty();
   },
 
-  selectBox: function(index) {
+  selectBox: function (index) {
     setSelected(index === null || index === undefined || index < 0 ? null : index);
   },
 
-  setViewMode: function(mode) {
-    setViewMode(mode);
-  },
+  setViewMode: function (mode) { setView(mode); },
 
-  setColorMode: function(mode) {
-    updateColorMode(mode);
-  },
+  setColorMode: function (mode) { cMode = mode; applyColors(); },
 
-  setCollisionState: function(index, hasCollision) {
-    setCollisionState(index, hasCollision);
-  },
+  setCollisionState: function (index, hasCollision) { setCollision(index, hasCollision); },
 
-  toggleWalls: function(visible) {
-    animateWallToggle(visible);
-  },
+  toggleWalls: function (visible) { animateWalls(visible); },
 
-  highlightOverflow: function(orderNumbers) {
-    var overflowSet = {};
+  highlightOverflow: function (orderNumbers) {
+    var set = {};
     if (orderNumbers) {
-      for (var k = 0; k < orderNumbers.length; k++) overflowSet[orderNumbers[k]] = true;
+      for (var k = 0; k < orderNumbers.length; k++) set[orderNumbers[k]] = true;
     }
-    for (var i = 0; i < boxMeshes.length; i++) {
-      var mesh = boxMeshes[i].mesh;
-      var isOverflow = !!overflowSet[boxMeshes[i].data.orderNumber];
-      if (isOverflow) {
-        mesh.material.opacity = 0.3;
-        mesh.material.transparent = true;
+    for (var i = 0; i < meshes.length; i++) {
+      var m = meshes[i].mesh;
+      if (set[meshes[i].data.orderNumber]) {
+        m.material.opacity = 0.3;
+        m.material.transparent = true;
       } else {
-        mesh.material.opacity = 1.0;
-        mesh.material.transparent = false;
+        m.material.opacity = 1;
+        m.material.transparent = false;
       }
     }
+    markDirty();
+  },
+
+  repack: function () { repackBoxes(); },
+
+  settleGravityVisual: function () {
+    if (boxData.length === 0) return;
+    boxData = settleGravity(boxData);
+    buildBoxMeshes(boxData);
+    if (selIdx !== null) setSelected(selIdx);
+    sendToFlutter('boxesSettled', {
+      boxes: boxData.map(function (b) { return { id: b.id, x: b.x, y: b.y, z: b.z }; }),
+    });
   },
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// INIT
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// BOOTSTRAP
+// ─────────────────────────────────────────────────────────────────────────────
 
 init();
 

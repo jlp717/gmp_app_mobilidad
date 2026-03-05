@@ -478,6 +478,89 @@ class LoadPlannerProvider extends ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // JS ENGINE UPDATES — gravity settle & repack results
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Apply positions settled by the JS gravity engine.
+  /// Matches boxes by ID and updates their z position silently (no re-push).
+  void applySettledPositions(List<Map<String, dynamic>> settledBoxes) {
+    if (settledBoxes.isEmpty) return;
+    final idToPos = <int, Map<String, dynamic>>{};
+    for (final s in settledBoxes) {
+      final id = (s['id'] as num?)?.toInt();
+      if (id != null) idToPos[id] = s;
+    }
+    bool changed = false;
+    for (int i = 0; i < _placedBoxes.length; i++) {
+      final pos = idToPos[_placedBoxes[i].id];
+      if (pos == null) continue;
+      final newZ = (pos['z'] as num?)?.toDouble();
+      if (newZ != null && (newZ - _placedBoxes[i].z).abs() > 0.01) {
+        _placedBoxes[i] = _placedBoxes[i].copyWith(z: newZ);
+        changed = true;
+      }
+    }
+    if (changed) {
+      _recalculateMetrics();
+      // Don't schedule auto-save for gravity settle (cosmetic only)
+    }
+  }
+
+  /// Apply the result of JS client-side bin packing.
+  void applyRepackResult(
+    List<Map<String, dynamic>> placedJson,
+    List<Map<String, dynamic>> overflowJson,
+  ) {
+    _pushUndo();
+
+    // Build ID → new position map
+    final idToNew = <int, Map<String, dynamic>>{};
+    for (final p in placedJson) {
+      final id = (p['id'] as num?)?.toInt();
+      if (id != null) idToNew[id] = p;
+    }
+    final overflowIds = <int>{};
+    for (final o in overflowJson) {
+      final id = (o['id'] as num?)?.toInt();
+      if (id != null) overflowIds.add(id);
+    }
+
+    // Update placed box positions
+    for (int i = 0; i < _placedBoxes.length; i++) {
+      final pos = idToNew[_placedBoxes[i].id];
+      if (pos != null) {
+        _placedBoxes[i] = _placedBoxes[i].copyWith(
+          x: (pos['x'] as num?)?.toDouble() ?? _placedBoxes[i].x,
+          y: (pos['y'] as num?)?.toDouble() ?? _placedBoxes[i].y,
+          z: (pos['z'] as num?)?.toDouble() ?? _placedBoxes[i].z,
+          w: (pos['w'] as num?)?.toDouble() ?? _placedBoxes[i].w,
+          d: (pos['d'] as num?)?.toDouble() ?? _placedBoxes[i].d,
+          h: (pos['h'] as num?)?.toDouble() ?? _placedBoxes[i].h,
+        );
+      }
+    }
+
+    // Move overflow boxes
+    if (overflowIds.isNotEmpty) {
+      final toMove = <LoadBox>[];
+      _placedBoxes.removeWhere((b) {
+        if (overflowIds.contains(b.id)) {
+          toMove.add(b);
+          _excludedOrders.add(b.orderNumber);
+          return true;
+        }
+        return false;
+      });
+      _overflowBoxes.addAll(toMove);
+    }
+
+    _hasManualChanges = true;
+    _recalculateMetrics();
+    _scheduleAutoSave();
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // EXCLUDE / INCLUDE ORDERS
   // ═══════════════════════════════════════════════════════════════════════════
 

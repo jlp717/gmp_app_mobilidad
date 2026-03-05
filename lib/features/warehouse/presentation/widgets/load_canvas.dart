@@ -139,6 +139,30 @@ class LoadCanvasState extends State<LoadCanvas> {
           // After drag ends, sync positions back (provider may have reverted)
           _pushBoxes(provider);
           break;
+
+        case 'boxesSettled':
+          // JS engine settled gravity — update provider positions
+          final settledBoxes = data['boxes'] as List?;
+          if (settledBoxes != null) {
+            provider.applySettledPositions(
+              settledBoxes.cast<Map<String, dynamic>>(),
+            );
+            _lastBoxCount = provider.placedBoxes.length;
+          }
+          break;
+
+        case 'boxesRepacked':
+          // JS engine repacked — update provider
+          final placedList = data['placed'] as List?;
+          final overflowList = data['overflow'] as List?;
+          if (placedList != null) {
+            provider.applyRepackResult(
+              placedList.cast<Map<String, dynamic>>(),
+              overflowList?.cast<Map<String, dynamic>>() ?? [],
+            );
+            _lastBoxCount = provider.placedBoxes.length;
+          }
+          break;
       }
     } catch (e) {
       debugPrint('JS message parse error: $e');
@@ -157,6 +181,11 @@ class LoadCanvasState extends State<LoadCanvas> {
   /// Toggle wall visibility from outside (toolbar button)
   void toggleWalls(bool visible) {
     _runJs('ThreeBridge.toggleWalls($visible)');
+  }
+
+  /// Trigger client-side 3D bin packing in JS
+  void repackBoxes() {
+    _runJs('ThreeBridge.repack()');
   }
 
   void _pushFullState(LoadPlannerProvider provider) {

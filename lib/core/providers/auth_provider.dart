@@ -5,6 +5,7 @@ import '../api/api_config.dart';
 import '../models/user_model.dart';
 import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../cache/cache_service.dart';
 import '../services/cache_prewarmer.dart';
 
 /// Authentication provider with role detection
@@ -155,15 +156,30 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// Logout — clears only auth-related data (not all preferences)
+  /// Logout — clears auth data AND all cached data (defense-in-depth)
+  /// Ensures no data from a previous user leaks to the next user on shared devices
   Future<void> logout() async {
     _currentUser = null;
     _vendedorCodes = [];
     ApiClient.clearAuthToken();
+
+    // Clear auth tokens from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('user_token');
     await prefs.remove('user_data');
     await prefs.remove('vendedor_codes');
+
+    // CRITICAL: Clear ALL cached API data (Hive + memory)
+    // This prevents data from leaking between users on shared tablets
+    try {
+      await CacheService.clearAll();
+      CacheService.clearMemoryCache();
+      CachePreWarmer.reset();
+      debugPrint('[AuthProvider] 🧹 All caches cleared on logout');
+    } catch (e) {
+      debugPrint('[AuthProvider] ⚠️ Cache clear error: $e');
+    }
+
     notifyListeners();
   }
 

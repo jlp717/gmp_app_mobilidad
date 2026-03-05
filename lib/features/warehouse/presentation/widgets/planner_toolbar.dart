@@ -9,8 +9,9 @@ import '../../domain/models/load_planner_models.dart';
 /// Premium floating-pill toolbar with animated highlight indicators.
 class PlannerToolbar extends StatelessWidget {
   final VoidCallback? onToggleWalls;
+  final VoidCallback? onRepack;
 
-  const PlannerToolbar({super.key, this.onToggleWalls});
+  const PlannerToolbar({super.key, this.onToggleWalls, this.onRepack});
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +79,19 @@ class PlannerToolbar extends StatelessWidget {
                   provider.runProfitOptimizer();
                 },
                 color: AppTheme.neonGreen,
+              ),
+              const SizedBox(width: 2),
+
+              // Client-side 3D repack
+              _GlowToolButton(
+                icon: Icons.view_in_ar_rounded,
+                tooltip: 'Reordenar cajas (bin packing 3D)',
+                enabled: onRepack != null && provider.placedBoxes.isNotEmpty,
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  onRepack?.call();
+                },
+                color: AppTheme.neonBlue,
               ),
               const SizedBox(width: 2),
 

@@ -80,6 +80,10 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
               setState(() => _wallsVisible = !_wallsVisible);
               _canvasKey.currentState?.toggleWalls(_wallsVisible);
             },
+            onRepack: () {
+              HapticFeedback.mediumImpact();
+              _canvasKey.currentState?.repackBoxes();
+            },
           ),
 
           // Metrics

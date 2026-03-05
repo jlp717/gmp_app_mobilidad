@@ -4,6 +4,7 @@ import 'isolate_transformer.dart';
 import 'api_config.dart';
 import '../cache/cache_service.dart';
 import '../services/network_service.dart';
+import '../services/device_fingerprint.dart';
 
 /// API Client for all backend communications
 /// Enhanced with automatic server detection and fallback
@@ -25,6 +26,8 @@ class ApiClient {
     if (_isInitialized) return;
     
     try {
+      // Collect device fingerprint for audit traceability
+      await DeviceFingerprint.initialize();
       // Inicializar NetworkService para detectar servidor automáticamente
       await ApiConfig.initialize();
       _isInitialized = true;
@@ -57,6 +60,8 @@ class ApiClient {
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip, deflate', // Enable gzip compression
         'Connection': 'keep-alive', // Connection pooling
+        // AUDIT: Device fingerprint on every request
+        ...DeviceFingerprint.headers,
       },
       // Enable response compression
       responseType: ResponseType.json,

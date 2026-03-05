@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query, queryWithParams, getPool } = require('../config/db');
 const logger = require('../middleware/logger');
+const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
 const { redisCache, TTL } = require('../services/redis-cache');
@@ -711,6 +712,13 @@ router.get('/summary', async (req, res) => {
         await ensureExcludedVendorsLoaded();
         logger.info(`[COMMISSIONS] /summary request: vendedorCode=${safeVendorCode}, year=${year}`);
 
+        // AUDIT: Log exactly what data this user is requesting
+        auditDataAccess(req, 'COMMISSIONS_VIEW', {
+            requestedVendorCode: safeVendorCode,
+            requestedYear: year || new Date().getFullYear(),
+            authenticatedUser: req.user?.code || 'anonymous',
+        });
+
         // Parse Years (Multi-Select) with bounds validation
         const currentYear = new Date().getFullYear();
         const yearParam = year ? year.toString().replace(/[^0-9,]/g, '') : currentYear.toString();
@@ -972,10 +980,23 @@ router.get('/summary', async (req, res) => {
             }
         }
 
-        return res.json({
-            success: true,
-            ...aggregatedResult
+        // AUDIT: Log what data the server actually returned (proof of response)
+        const crypto = require('crypto');
+        const responsePayload = { success: true, ...aggregatedResult };
+        const responseHash = crypto.createHash('sha256')
+            .update(JSON.stringify(responsePayload))
+            .digest('hex')
+            .substring(0, 16); // Short hash for readability
+
+        auditDataAccess(req, 'COMMISSIONS_RESPONSE', {
+            requestedVendorCode: safeVendorCode,
+            returnedVendor: aggregatedResult?.vendor || safeVendorCode,
+            grandTotalCommission: aggregatedResult?.grandTotalCommission?.toFixed(2) || '0',
+            totalPaid: aggregatedResult?.payments?.total?.toFixed(2) || '0',
+            responseHash,
         });
+
+        return res.json(responsePayload);
 
     } catch (error) {
         logger.error(`Commissions error: ${error.message}`);
