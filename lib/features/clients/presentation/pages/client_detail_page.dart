@@ -9,6 +9,7 @@ import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/clients_service.dart';
 import '../../../sales_history/presentation/widgets/sales_summary_header.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 
 /// Client Detail Page - Shows comprehensive client information from DB2
 class ClientDetailPage extends StatefulWidget {
@@ -127,7 +128,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
       children: [
         // Client Header Card
         _buildClientHeader(client, summary, payments),
-        
+
+        // KPI Alerts
+        ClientAlertsWidget(clientId: widget.clientCode),
+
         // Tab Bar
         Container(
           color: AppTheme.surfaceColor,

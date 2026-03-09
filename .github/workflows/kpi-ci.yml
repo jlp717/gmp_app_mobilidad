@@ -1,0 +1,86 @@
+# kpi-ci.yml: CI/CD pipeline para el módulo KPI Glacius
+name: KPI Glacius CI
+
+on:
+  push:
+    paths:
+      - 'backend/kpi/**'
+      - '.github/workflows/kpi-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/kpi/**'
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kpi_glacius_test
+          POSTGRES_USER: kpi_user
+          POSTGRES_PASSWORD: kpi_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kpi_user -d kpi_glacius_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install KPI dependencies
+        working-directory: backend
+        run: npm install csv-parse ssh2-sftp-client pg --save
+
+      - name: Run schema migration
+        working-directory: backend
+        env:
+          KPI_DATABASE_URL: postgresql://kpi_user:kpi_pass@localhost:5432/kpi_glacius_test
+        run: |
+          PGPASSWORD=kpi_pass psql -h localhost -U kpi_user -d kpi_glacius_test -f kpi/schema.sql
+
+      - name: Run KPI tests
+        working-directory: backend
+        env:
+          KPI_DATABASE_URL: postgresql://kpi_user:kpi_pass@localhost:5432/kpi_glacius_test
+          REDIS_URL: redis://localhost:6379
+        run: npx jest kpi/__tests__/ --verbose --forceExit --passWithNoTests
+
+  build-docker:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        working-directory: backend
+        run: docker build -f kpi/Dockerfile -t kpi-glacius:latest .
+
+      - name: Verify image
+        run: docker images kpi-glacius

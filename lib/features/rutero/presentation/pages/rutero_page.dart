@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/providers/auth_provider.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 
 /// Rutero Page - Premium Design with Visit/Delivery Toggle
 /// Shows clients to visit/deliver each day with YoY comparison
@@ -1569,6 +1570,11 @@ class _ClientCard extends StatelessWidget {
                           style: TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
                         ),
                       ),
+                    // KPI Alert Badges (compact)
+                    ClientAlertsWidget(
+                      clientId: code,
+                      compact: true,
+                    ),
                     const SizedBox(height: 6),
                     if (address.isNotEmpty || city.isNotEmpty)
                       Row(

@@ -132,6 +132,11 @@ class ApiConfig {
   // Export Endpoints
   static const String exportClientReport = '/export/client-report';
 
+  // KPI Glacius Endpoints
+  static const String kpiAlerts = '/kpi/alerts';
+  static const String kpiEtl = '/kpi/etl';
+  static const String kpiHealth = '/kpi/health';
+
   // Health Check
   static const String health = '/health';
 

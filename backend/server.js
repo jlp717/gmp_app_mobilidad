@@ -33,7 +33,7 @@ const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
-  userActionsRoutes, facturasRoutes, warehouseRoutes;
+  userActionsRoutes, facturasRoutes, warehouseRoutes, kpiModule;
 
 if (USE_TS_ROUTES) {
   // ==================== COMPILED TYPESCRIPT ROUTES ====================
@@ -91,6 +91,12 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
   warehouseRoutes = require('./routes/warehouse');
+  // Módulo KPI Glacius (DB2/ODBC + Redis)
+  try {
+    kpiModule = require('./kpi');
+  } catch (err) {
+    logger.warn(`⚠️ KPI module not available: ${err.message}`);
+  }
 }
 
 const app = express();
@@ -181,6 +187,11 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/logs', userActionsRoutes);
   app.use('/api/facturas', facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);
+  // KPI Glacius module (DB2/ODBC-backed alerts)
+  if (kpiModule) {
+    app.use('/api/kpi', kpiModule.kpiRoutes);
+    logger.info('✅ KPI Glacius routes mounted at /api/kpi');
+  }
 }
 
 // Start server
@@ -266,6 +277,16 @@ async function startServer() {
     logger.info(`✅ Metadata cache ready (${Date.now() - cacheStart}ms total)`);
   } catch (err) {
     logger.warn(`⚠️ Metadata cache error (non-fatal): ${err.message}`);
+  }
+
+  // ─── PHASE 3.5: Initialize KPI Glacius module (DB2/ODBC + Redis) ───
+  if (kpiModule) {
+    try {
+      await kpiModule.initKpiModule();
+      logger.info('✅ KPI Glacius module initialized');
+    } catch (kpiErr) {
+      logger.warn(`⚠️ KPI module init error (non-fatal): ${kpiErr.message}`);
+    }
   }
 
   // ─── PHASE 4: Start server (schema ready + caches warm) ───────────────
