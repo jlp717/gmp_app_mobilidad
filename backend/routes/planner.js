@@ -18,6 +18,7 @@ const {
     getTotalClientsFromCache,
     getClientsForDay: getClientsForDayService,
     reloadRuteroConfig,
+    loadLaclaeCache,
     getClientCurrentDay,
     getNaturalOrder
 } = require('../services/laclae');
@@ -781,6 +782,23 @@ router.get('/rutero/positions/:day', async (req, res) => {
     } catch (error) {
         logger.error(`Rutero positions error: ${error.message}`);
         res.status(500).json({ error: 'Error obteniendo posiciones' });
+    }
+});
+
+// =============================================================================
+// RUTERO FULL CACHE RELOAD (CDVI + LACLAE + RUTERO_CONFIG)
+// =============================================================================
+router.post('/rutero/reload-cache', async (req, res) => {
+    try {
+        logger.info(`[CACHE RELOAD] Full cache reload requested by ${req.user ? req.user.codigovendedor : 'unknown'}`);
+        const start = Date.now();
+        await loadLaclaeCache();
+        const duration = Date.now() - start;
+        logger.info(`[CACHE RELOAD] Complete in ${duration}ms`);
+        res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG recargada' });
+    } catch (error) {
+        logger.error(`[CACHE RELOAD] Failed: ${error.message}`);
+        res.status(500).json({ error: 'Error recargando caché', details: error.message });
     }
 });
 

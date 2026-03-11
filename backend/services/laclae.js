@@ -96,6 +96,12 @@ async function loadLaclaeCache() {
                 JOIN DSEDAC.CLI K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE  -- Join CLI to check ANOBAJA
                 WHERE (C.MARCAACTUALIZACION <> 'B' OR C.MARCAACTUALIZACION IS NULL OR TRIM(C.MARCAACTUALIZACION) = '')
                   AND (K.ANOBAJA = 0 OR K.ANOBAJA IS NULL) -- EXCLUDE BAJAS
+                  AND (  -- EXCLUDE zombie entries with NO visit days assigned
+                    TRIM(C.DIAVISITALUNESSN) = 'S' OR TRIM(C.DIAVISITAMARTESSN) = 'S' OR
+                    TRIM(C.DIAVISITAMIERCOLESSN) = 'S' OR TRIM(C.DIAVISITAJUEVESSN) = 'S' OR
+                    TRIM(C.DIAVISITAVIERNESSN) = 'S' OR TRIM(C.DIAVISITASABADOSN) = 'S' OR
+                    TRIM(C.DIAVISITADOMINGOSN) = 'S'
+                  )
             `);
 
             const dayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
@@ -500,19 +506,27 @@ function getClientDays(vendorCode, clientCode) {
         }
     }
 
-    // Search all vendors
+    // Search all vendors — prefer entries with actual visit days over empty ones
+    let fallbackResult = null;
     for (const [vCode, vendorData] of Object.entries(laclaeCache)) {
         if (vendorData[trimmedClient]) {
             const data = vendorData[trimmedClient];
-            return {
+            const result = {
                 visitDays: data.visitDays || [],
                 deliveryDays: data.deliveryDays || [],
                 visitDaysShort: (data.visitDays || []).map(d => dayLabels[d] || d).join(''),
                 deliveryDaysShort: (data.deliveryDays || []).map(d => dayLabels[d] || d).join(''),
                 foundVendor: vCode
             };
+            // Return immediately if this vendor has actual visit days
+            if (data.visitDays && data.visitDays.length > 0) {
+                return result;
+            }
+            // Otherwise keep as fallback (e.g. delivery-only entries from LACLAE)
+            if (!fallbackResult) fallbackResult = result;
         }
     }
+    if (fallbackResult) return fallbackResult;
 
     return null;
 }
