@@ -793,9 +793,17 @@ router.post('/rutero/reload-cache', async (req, res) => {
         logger.info(`[CACHE RELOAD] Full cache reload requested by ${req.user ? req.user.codigovendedor : 'unknown'}`);
         const start = Date.now();
         await loadLaclaeCache();
+        // Also invalidate Redis query caches so clients/rutero queries use fresh data
+        try {
+            await deleteCachePattern('clients:*');
+            await deleteCachePattern('rutero:*');
+            logger.info('[CACHE RELOAD] Redis query caches invalidated (clients + rutero)');
+        } catch (redisErr) {
+            logger.warn(`[CACHE RELOAD] Redis invalidation failed (non-blocking): ${redisErr.message}`);
+        }
         const duration = Date.now() - start;
         logger.info(`[CACHE RELOAD] Complete in ${duration}ms`);
-        res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG recargada' });
+        res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG + Redis recargada' });
     } catch (error) {
         logger.error(`[CACHE RELOAD] Failed: ${error.message}`);
         res.status(500).json({ error: 'Error recargando caché', details: error.message });

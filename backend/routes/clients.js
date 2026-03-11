@@ -83,7 +83,7 @@ const getClientsHandler = async (req, res) => {
         LV.LAST_VENDOR as vendorCode
       FROM DSEDAC.CLI C
       LEFT JOIN (
-        SELECT 
+        SELECT
           LCCDCL as CLIENT_CODE,
           SUM(LCIMVT) as TOTAL_PURCHASES,
           SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
@@ -95,15 +95,16 @@ const getClientsHandler = async (req, res) => {
           AND LCTPVT IN ('CC', 'VC')
           AND LCCLLN IN ('AB', 'VT')
           AND LCSRAB NOT IN ('N', 'Z')
-          ${vendedorFilter.replace(/L\./g, '')}
+          ${clientCodesFilter ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL') : vendedorFilter.replace(/L\./g, '')}
         GROUP BY LCCDCL
       ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-      -- FIX: Get vendor from most recent transaction (DB2 compatible)
-      -- Previously MAX(LCCDVD) returned alphabetically highest, not chronologically last
+      -- Get vendor from most recent transaction (DB2 compatible)
+      -- When cache is active, use C.CODIGOCLIENTE (always resolves, even without matching sales)
+      -- When no cache (fallback), use S.CLIENT_CODE (only resolves for clients with vendor-filtered sales)
       LEFT JOIN LATERAL (
         SELECT LCCDVD as LAST_VENDOR
         FROM DSED.LACLAE
-        WHERE LCCDCL = S.CLIENT_CODE
+        WHERE LCCDCL = ${clientCodesFilter ? 'C.CODIGOCLIENTE' : 'S.CLIENT_CODE'}
           AND LCAADC >= ${MIN_YEAR}
           AND TPDC = 'LAC'
           AND LCTPVT IN ('CC', 'VC')

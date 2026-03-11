@@ -93,6 +93,16 @@ async function preloadCache(port = 3000) {
     logger.info('🚀 Starting System Preload...');
 
     try {
+        // 0. Invalidate stale Redis query caches from previous session
+        try {
+            const { deleteCachePattern } = require('./redis-cache');
+            await deleteCachePattern('clients:*');
+            await deleteCachePattern('rutero:*');
+            logger.info('🧹 Stale Redis query caches invalidated on startup');
+        } catch (redisErr) {
+            logger.warn(`Redis invalidation on startup failed (non-blocking): ${redisErr.message}`);
+        }
+
         // 1. Critical: Load LACLAE Memory Cache (blocking — Rutero depends on it)
         await loadLaclaeCache();
 
