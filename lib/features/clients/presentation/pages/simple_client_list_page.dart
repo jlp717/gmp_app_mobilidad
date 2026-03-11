@@ -14,6 +14,7 @@ import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 
 /// Simple Clients List Page with debounced search
 class SimpleClientListPage extends StatefulWidget {
@@ -561,6 +562,10 @@ class _ClientCard extends StatelessWidget {
                 ],
               ),
               
+              // KPI Glacius badges
+              if (code.isNotEmpty)
+                ClientAlertsWidget(clientId: code, compact: true),
+
               // Route & Days Badges
               _buildRouteDaysRow(),
             ],

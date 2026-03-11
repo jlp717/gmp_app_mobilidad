@@ -9,6 +9,7 @@ import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../features/sales_history/presentation/widgets/sales_summary_header.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 
 /// Enhanced Client Matrix Page v6 - Professional design, no overflow
 class EnhancedClientMatrixPage extends StatefulWidget {
@@ -306,6 +307,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         ],
                       ),
                     ),
+                  // KPI Glacius alerts
+                  ClientAlertsWidget(clientId: widget.clientCode),
                   if (_showFilters) _buildFilters(),
                   _buildSummaryRow(),
                   _buildMonthlyRow(),

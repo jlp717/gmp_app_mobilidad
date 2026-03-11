@@ -18,6 +18,7 @@ import '../../../../core/widgets/pdf_preview_screen.dart';
 import '../../../../core/widgets/email_form_modal.dart';
 import '../../../../core/widgets/whatsapp_form_modal.dart';
 import '../../../entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 
 /// Rutero Detail Modal - Futuristic Redesign v2
 /// Features:
@@ -617,6 +618,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 ),
               ),
             ],
+          ),
+          // KPI Glacius compact badges
+          ClientAlertsWidget(
+            clientId: widget.albaran.codigoCliente,
+            compact: true,
           ),
         ],
       ),
