@@ -61,23 +61,23 @@ class KpiAlert {
     }
   }
 
-  /// Etiqueta legible según tipo de alerta
+  /// Etiqueta legible según tipo de alerta (nombres del PDF Glacius)
   String get typeLabel {
     switch (type) {
       case 'DESVIACION_VENTAS':
-        return 'Ventas';
+        return 'Desviación Ventas';
       case 'CUOTA_SIN_COMPRA':
-        return 'Cuota';
+        return 'Cuota Sin Compra';
       case 'DESVIACION_REFERENCIACION':
-        return 'Referencias';
+        return 'Desviación Referenciación';
       case 'PROMOCION':
-        return 'Promo';
+        return 'Promociones';
       case 'ALTA_CLIENTE':
-        return 'Captación';
+        return 'Alta Cliente';
       case 'AVISO':
-        return 'Aviso';
+        return 'Avisos';
       case 'MEDIOS_CLIENTE':
-        return 'Medios';
+        return 'Medios del Cliente';
       default:
         return type;
     }
