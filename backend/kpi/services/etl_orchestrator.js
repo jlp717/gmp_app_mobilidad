@@ -95,8 +95,9 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     [currentLoadId, filesList, globalHash]
   );
 
-  // 5. Desactivar alertas anteriores (1=active, 0=inactive en DB2)
+  // 5. Desactivar alertas anteriores y limpiar alertas expiradas
   await kpiQuery('UPDATE JAVIER.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1');
+  await kpiQuery('DELETE FROM JAVIER.KPI_ALERTS WHERE EXPIRES_AT IS NOT NULL AND EXPIRES_AT < CURRENT TIMESTAMP');
 
   // 6. Procesar cada CSV
   const fileResults = [];
@@ -198,8 +199,8 @@ async function runETL({ localDir, loadId, force = false } = {}) {
  */
 async function insertAlertsBatch(loadId, alerts) {
   const sql = `INSERT INTO JAVIER.KPI_ALERTS
-    (LOAD_ID, CLIENT_CODE, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA, SOURCE_FILE)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    (LOAD_ID, CLIENT_CODE, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA, SOURCE_FILE, EXPIRES_AT)
+    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP + 7 DAYS)`;
 
   for (const alert of alerts) {
     await kpiQuery(sql, [

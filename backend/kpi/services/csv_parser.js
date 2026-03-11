@@ -5,6 +5,14 @@ const fs = require('fs');
 const { parse } = require('csv-parse/sync');
 const logger = require('../../middleware/logger');
 
+/**
+ * Normaliza una cadena: minúsculas + quita acentos/diacríticos.
+ * Así "Cód.Interno" matchea con "Cod.Interno".
+ */
+function normalizeStr(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 // Marcadores de header por tipo de CSV para detección automática
 const HEADER_MARKERS = {
   'Desviacion_Ventas.csv':           ['Periodo', 'CodigoInterno', 'Desviaci'],
@@ -156,10 +164,11 @@ function parseNumber(val) {
  * @returns {string|null}
  */
 function getColumnValue(record, headers, columnLetter, headerNames = []) {
-  // Primero intentar por nombre de header
+  // Primero intentar por nombre de header (con normalización de acentos)
   for (const name of headerNames) {
+    const nameNorm = normalizeStr(name);
     for (const h of headers) {
-      if (h.toLowerCase().includes(name.toLowerCase())) {
+      if (normalizeStr(h).includes(nameNorm)) {
         return record[h] !== undefined ? record[h] : null;
       }
     }
@@ -178,6 +187,7 @@ module.exports = {
   parseCSV,
   parseNumber,
   getColumnValue,
+  normalizeStr,
   detectDelimiter,
   findHeaderLine,
 };

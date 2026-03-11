@@ -226,6 +226,20 @@ router.get('/etl/status', async (req, res) => {
 router.get('/health', async (req, res) => {
   const dbHealth = await kpiHealthCheck();
   const redis = getRedisStatus();
+  const scheduler = getSchedulerStatus();
+
+  // Count active alerts
+  let alertStats = { activeAlerts: 0, activeClients: 0 };
+  try {
+    const statsResult = await kpiQuery(
+      `SELECT COUNT(*) AS TOTAL_ALERTS, COUNT(DISTINCT CLIENT_CODE) AS TOTAL_CLIENTS
+       FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1`
+    );
+    if (statsResult.rows[0]) {
+      alertStats.activeAlerts = parseInt(statsResult.rows[0].TOTAL_ALERTS || 0);
+      alertStats.activeClients = parseInt(statsResult.rows[0].TOTAL_CLIENTS || 0);
+    }
+  } catch (_) { /* non-critical */ }
 
   const status = dbHealth.status === 'ok' ? 'ok' : 'degraded';
 
@@ -234,6 +248,8 @@ router.get('/health', async (req, res) => {
     status,
     database: dbHealth,
     redis,
+    scheduler,
+    alerts: alertStats,
     timestamp: new Date().toISOString(),
   });
 });
