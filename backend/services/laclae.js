@@ -364,6 +364,9 @@ function getTotalClientsFromCache(vendedorCodes, role = 'comercial') {
 }
 
 // Get client codes from cache (for optimization)
+// Only returns clients with actual visit days assigned to this vendor.
+// Delivery-only entries (from LACLAE history) are excluded — those clients
+// belong to another vendor for sales purposes and only appear in repartidor views.
 function getClientCodesFromCache(vendedorCodes) {
     if (!laclaeCacheReady) return null;
 
@@ -373,8 +376,10 @@ function getClientCodesFromCache(vendedorCodes) {
 
     vendedors.forEach(vendedor => {
         const vendorClients = laclaeCache[vendedor] || {};
-        Object.keys(vendorClients).forEach(clientCode => {
-            allClients.add(clientCode);
+        Object.entries(vendorClients).forEach(([clientCode, data]) => {
+            if (data.visitDays && data.visitDays.length > 0) {
+                allClients.add(clientCode);
+            }
         });
     });
 
