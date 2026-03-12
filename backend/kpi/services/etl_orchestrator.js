@@ -147,8 +147,8 @@ async function runETL({ localDir, loadId, force = false } = {}) {
        (LOAD_ID, FILENAME, FILE_SIZE, FILE_HASH, ROWS_TOTAL, ROWS_PARSED, ROWS_SKIPPED, ALERTS_GENERATED, PARSE_ERRORS)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [currentLoadId, file.name, file.size, file.hash,
-       rows.length + skippedLines, rows.length, skippedLines, alerts.length,
-       JSON.stringify(parseErrors)]
+        rows.length + skippedLines, rows.length, skippedLines, alerts.length,
+        JSON.stringify(parseErrors)]
     );
 
     fileResults.push({
@@ -203,14 +203,20 @@ async function insertAlertsBatch(loadId, alerts) {
     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP + 7 DAYS)`;
 
   for (const alert of alerts) {
+    const safeClient = alert.clientCode ? String(alert.clientCode).substring(0, 20) : 'UNKNOWN';
+    const safeType = alert.alertType ? String(alert.alertType).substring(0, 40) : 'UNKNOWN';
+    const safeSev = alert.severity ? String(alert.severity).substring(0, 10) : 'info';
+    const safeMsg = alert.message ? String(alert.message).substring(0, 2048) : '';
+    const safeSrc = alert.sourceFile ? String(alert.sourceFile).substring(0, 100) : 'unknown';
+
     await kpiQuery(sql, [
       loadId,
-      alert.clientCode,
-      alert.alertType,
-      alert.severity,
-      alert.message,
+      safeClient,
+      safeType,
+      safeSev,
+      safeMsg,
       JSON.stringify(alert.rawData || {}),
-      alert.sourceFile,
+      safeSrc,
     ]);
   }
 }

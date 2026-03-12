@@ -15,13 +15,13 @@ function normalizeStr(s) {
 
 // Marcadores de header por tipo de CSV para detección automática
 const HEADER_MARKERS = {
-  'Desviacion_Ventas.csv':           ['Periodo', 'CodigoInterno', 'Desviaci'],
-  'Clientes_ConCuotaSinCompra.csv':  ['Semana', 'CodigoInterno', 'Cuota'],
-  'Desviacion_Referenciacion.csv':   ['Periodo', 'CodigoInterno', 'Desviaci'],
-  'Mensaje_Promociones.csv':         ['Periodo', 'Cod.Interno', 'Msg.Marketing'],
-  'Altas_Clientes.csv':              ['Periodo', 'CodigoInterno', 'Desviaci'],
-  'Mensajes_Clientes.csv':           ['Periodo', 'CodigoInterno', 'AVISO', 'Aviso'],
-  'Medios_Clientes.csv':             ['C.Ofi', 'Interno', 'Total Medios'],
+  'Desviacion_Ventas.csv': ['Periodo', 'CodigoInterno', 'Desviaci'],
+  'Clientes_ConCuotaSinCompra.csv': ['Semana', 'CodigoInterno', 'Cuota'],
+  'Desviacion_Referenciacion.csv': ['Periodo', 'CodigoInterno', 'Desviaci'],
+  'Mensaje_Promociones.csv': ['Periodo', 'Cod.Interno', 'Msg.Marketing'],
+  'Altas_Clientes.csv': ['Periodo', 'CodigoInterno', 'Desviaci'],
+  'Mensajes_Clientes.csv': ['Periodo', 'CodigoInterno', 'AVISO', 'Aviso'],
+  'Medios_Clientes.csv': ['C.Ofi', 'Interno', 'Total Medios'],
 };
 
 /**
@@ -73,6 +73,7 @@ function parseCSV(filePath, fileName) {
       columns: true,
       skip_empty_lines: true,
       relax_column_count: true,
+      relax_quotes: true,
       trim: true,
       cast: false, // Hacemos cast manual para manejar comas decimales
       on_record: (record, context) => {
