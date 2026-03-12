@@ -148,7 +148,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [currentLoadId, file.name, file.size, file.hash,
         rows.length + skippedLines, rows.length, skippedLines, alerts.length,
-        JSON.stringify(parseErrors)]
+        sanitizeForDb2(JSON.stringify(parseErrors))]
     );
 
     fileResults.push({
@@ -167,7 +167,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
   await kpiQuery(
     `UPDATE JAVIER.KPI_LOADS SET STATUS = 'COMPLETED', TOTAL_ALERTS = ?, COMPLETED_AT = CURRENT TIMESTAMP, ERRORS = ?
      WHERE LOAD_ID = ?`,
-    [totalAlerts, JSON.stringify(errors), currentLoadId]
+    [totalAlerts, sanitizeForDb2(JSON.stringify(errors)), currentLoadId]
   );
 
   // 8. Actualizar cache Redis por cliente
@@ -195,6 +195,26 @@ async function runETL({ localDir, loadId, force = false } = {}) {
 }
 
 /**
+ * Sanitiza texto para DB2 EBCDIC (CCSID 1234).
+ * Reemplaza caracteres problemáticos que no existen en CCSID 1234:
+ * - € → EUR
+ * - Tildes → sin tilde (á→a, é→e, í→i, ó→o, ú→u, ñ→n, ü→u)
+ * - Cualquier otro carácter fuera de ASCII imprimible → ''
+ */
+function sanitizeForDb2(str) {
+  if (!str) return str;
+  return str
+    .replace(/€/g, 'EUR')
+    .replace(/[áàâä]/gi, (c) => c === c.toUpperCase() ? 'A' : 'a')
+    .replace(/[éèêë]/gi, (c) => c === c.toUpperCase() ? 'E' : 'e')
+    .replace(/[íìîï]/gi, (c) => c === c.toUpperCase() ? 'I' : 'i')
+    .replace(/[óòôö]/gi, (c) => c === c.toUpperCase() ? 'O' : 'o')
+    .replace(/[úùûü]/gi, (c) => c === c.toUpperCase() ? 'U' : 'u')
+    .replace(/ñ/g, 'n').replace(/Ñ/g, 'N')
+    .replace(/[^\x20-\x7E\n\r\t]/g, '');  // Solo ASCII imprimible + whitespace
+}
+
+/**
  * Inserta alertas una por una (DB2 ODBC no soporta multi-row INSERT con params).
  */
 async function insertAlertsBatch(loadId, alerts) {
@@ -206,12 +226,12 @@ async function insertAlertsBatch(loadId, alerts) {
 
   let inserted = 0;
   for (const alert of alerts) {
-    const safeClient = alert.clientCode ? String(alert.clientCode).substring(0, 20) : 'UNKNOWN';
-    const safeType = alert.alertType ? String(alert.alertType).substring(0, 40) : 'UNKNOWN';
-    const safeSev = alert.severity ? String(alert.severity).substring(0, 10) : 'info';
-    const safeMsg = alert.message ? String(alert.message).substring(0, 2048) : '';
-    const safeSrc = alert.sourceFile ? String(alert.sourceFile).substring(0, 100) : 'unknown';
-    const safeRaw = JSON.stringify(alert.rawData || {}).substring(0, 65000);
+    const safeClient = alert.clientCode ? sanitizeForDb2(String(alert.clientCode)).substring(0, 20) : 'UNKNOWN';
+    const safeType = alert.alertType ? sanitizeForDb2(String(alert.alertType)).substring(0, 40) : 'UNKNOWN';
+    const safeSev = alert.severity ? sanitizeForDb2(String(alert.severity)).substring(0, 10) : 'info';
+    const safeMsg = alert.message ? sanitizeForDb2(String(alert.message)).substring(0, 2048) : '';
+    const safeSrc = alert.sourceFile ? sanitizeForDb2(String(alert.sourceFile)).substring(0, 100) : 'unknown';
+    const safeRaw = sanitizeForDb2(JSON.stringify(alert.rawData || {})).substring(0, 65000);
 
     try {
       await kpiQuery(sql, [

@@ -44,7 +44,7 @@ function processDesviacionVentas(rows, headers) {
         alertType: 'DESVIACION_VENTAS',
         severity: desviacionEur !== null && Math.abs(desviacionEur) > 1000 ? 'critical'
                 : desviacionEur !== null && Math.abs(desviacionEur) > 500 ? 'warning' : 'info',
-        message: `Desviado en Ventas: ${eurFormatted}€ / ${pctFormatted}%`,
+        message: `Desviado en Ventas: ${eurFormatted}EUR / ${pctFormatted}%`,
         rawData: { cuotaAnual, desviacionEur, desviacionPct, ...extractCommonFields(row, headers) },
         sourceFile: 'Desviacion_Ventas.csv',
       });
@@ -188,7 +188,7 @@ function processAltasClientes(rows, headers) {
         alertType: 'ALTA_CLIENTE',
         severity: desviacionEur !== null && desviacionEur < -500 ? 'critical'
                 : desviacionEur !== null && desviacionEur < 0 ? 'warning' : 'info',
-        message: `Evolución Captación: ${eurFormatted}€ / ${pctFormatted}%`,
+        message: `Evolucion Captacion: ${eurFormatted}EUR / ${pctFormatted}%`,
         rawData: { desviacionEur, desviacionPct, ...extractCommonFields(row, headers) },
         sourceFile: 'Altas_Clientes.csv',
       });
