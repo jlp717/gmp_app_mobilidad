@@ -28,12 +28,12 @@ async function initKpiModule() {
       logger.warn(`[kpi] DB2 KPI no disponible: ${dbHealth.error}. Módulo en modo degradado.`);
     }
 
-    // 4. Iniciar scheduler ETL semanal (solo si KPI_SCHEDULER_ENABLED=true)
-    if (process.env.KPI_SCHEDULER_ENABLED === 'true') {
+    // 4. Iniciar scheduler ETL diario (activo por defecto, desactivar con KPI_SCHEDULER_ENABLED=false)
+    if (process.env.KPI_SCHEDULER_ENABLED !== 'false') {
       startScheduler();
-      logger.info('[kpi] Scheduler ETL iniciado');
+      logger.info('[kpi] Scheduler ETL iniciado (L-V 7:00 AM Europe/Madrid)');
     } else {
-      logger.info('[kpi] Scheduler ETL deshabilitado (KPI_SCHEDULER_ENABLED != true)');
+      logger.info('[kpi] Scheduler ETL deshabilitado (KPI_SCHEDULER_ENABLED=false)');
     }
 
     logger.info('[kpi] Módulo KPI Glacius inicializado correctamente');

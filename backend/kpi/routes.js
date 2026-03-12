@@ -167,14 +167,9 @@ router.get('/alerts/summary', async (req, res) => {
 // ============================================================
 router.post('/etl/run', async (req, res) => {
   try {
-    // Validar rol admin (JEFE_VENTAS)
-    if (req.user && req.user.role !== 'JEFE_VENTAS') {
-      return res.status(403).json({ success: false, error: 'Solo JEFE_VENTAS puede ejecutar ETL' });
-    }
-
     const { localDir, force } = req.body || {};
 
-    logger.info(`[kpi:api] ETL manual solicitado por ${req.user?.vendedor || 'unknown'}`);
+    logger.info(`[kpi:api] ETL manual solicitado por ${req.user?.code || 'unknown'}`);
 
     const result = await runETL({ localDir, force: force === true });
 
