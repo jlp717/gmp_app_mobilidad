@@ -69,33 +69,40 @@ function processDesviacionVentas(rows, headers) {
 
       if (desviacionEur === null || desviacionEur === 0) {
         // Sin datos o desviación cero
-        message = 'Nestle Helados: sin ventas registradas en este periodo';
+        message = 'Nestle: Sin compras registradas en este periodo.';
         severity = 'warning';
       } else if (desviacionEur < 0) {
         // Por debajo del objetivo
-        message = `Nestle Helados: ventas ${fmtEur(desviacionEur)}EUR por debajo del objetivo`;
+        let pctMsg = '';
+        if (desviacionPct !== null) {
+          pctMsg = ` (un ${Math.abs(desviacionPct)}% MENOS de lo esperado a estas alturas del año)`;
+        }
+        message = `Nestle: Llevamos vendiendo ${fmtEur(desviacionEur)}EUR menos que el objetivo asignado${pctMsg}.`;
         severity = Math.abs(desviacionEur) > 1000 ? 'critical' : Math.abs(desviacionEur) > 500 ? 'warning' : 'info';
       } else {
         // Por encima del objetivo
-        message = `Nestle Helados: ventas +${fmtEur(desviacionEur)}EUR por encima del objetivo`;
+        let pctMsg = '';
+        if (desviacionPct !== null) {
+          pctMsg = ` (un ${Math.abs(desviacionPct)}% por encima de lo esperado)`;
+        }
+        message = `Nestle: ¡Buena evolución! Ventas +${fmtEur(desviacionEur)}EUR por encima del objetivo${pctMsg}.`;
         severity = 'info';
       }
 
       // Línea de contexto con cifras
       const contexto = [];
-      if (cuotaAnual !== null) contexto.push(`Cuota anual: ${fmtEur(cuotaAnual)}EUR`);
-      if (vtaActual !== null) contexto.push(`Vendido: ${fmtEur(vtaActual)}EUR`);
-      if (pctCumplido !== null) contexto.push(`${pctCumplido}% cumplido`);
-      if (contexto.length > 0) message += '\n' + contexto.join(' | ');
+      if (cuotaAnual !== null) contexto.push(`Objetivo anual: ${fmtEur(cuotaAnual)}EUR`);
+      if (vtaActual !== null) contexto.push(`Vendido actual: ${fmtEur(vtaActual)}EUR`);
+      if (contexto.length > 0) message += '\n' + contexto.join('  |  ');
 
       // Línea de comparativa con año anterior
       if (vtaAnterior !== null) {
-        message += `\nAno anterior: ${fmtEur(vtaAnterior)}EUR`;
+        message += `\nEl año pasado por estas fechas llevaba: ${fmtEur(vtaAnterior)}EUR.`;
       }
 
       // Última compra
       if (ultCompra && ultCompra.trim()) {
-        message += ` | Ult. compra: ${ultCompra.trim()}`;
+        message += `\nÚltima compra de helados: ${ultCompra.trim()}`;
       }
 
       alerts.push({
@@ -141,20 +148,22 @@ function processCuotaSinCompra(rows, headers) {
       const difCum = parseNumber(getColumnValue(row, headers, 'N', ['Dif. Cum', 'Dif Cum']));
 
       // Canal formateado limpio
-      const canalLabel = canal.trim().charAt(0).toUpperCase() + canal.trim().slice(1).toLowerCase();
+      const canalLabel = canal.trim().toUpperCase() === 'HELADO' ? 'Helados' :
+        canal.trim().toUpperCase() === 'FROZEN FOOD' ? 'Frozen Food (Congelados)' :
+          canal.trim().charAt(0).toUpperCase() + canal.trim().slice(1).toLowerCase();
 
-      let message = `Nestle ${canalLabel}: tiene cuota asignada pero NO ha comprado`;
+      let message = `Nestle: Este cliente tiene un objetivo asignado para la familia [${canalLabel}], pero todavía NO HA HECHO NI UN SOLO PEDIDO en todo el año.`;
 
       // Cuota anual
       if (cuotaAnual !== null) {
-        message += `\nCuota anual: ${fmtEur(cuotaAnual)}EUR`;
+        message += `\nSu objetivo anual para ${canalLabel} es de ${fmtEur(cuotaAnual)}EUR.`;
       }
 
       // Pendiente acumulado
       if (difCum !== null && difCum > 0) {
-        message += ` | Pendiente acumulado: ${fmtEur(difCum)}EUR`;
+        message += `\nPara ir bien, a estas alturas ya debería haber pedido al menos ${fmtEur(difCum)}EUR acumulados.`;
       } else if (cuotaCum !== null) {
-        message += ` | Acumulado sin cubrir: ${fmtEur(cuotaCum)}EUR`;
+        message += `\nPara ir bien, a estas alturas ya debería haber pedido al menos ${fmtEur(cuotaCum)}EUR acumulados.`;
       }
 
       // Severidad basada en cuota
@@ -210,22 +219,22 @@ function processDesviacionReferenciacion(rows, headers) {
       // Mensaje principal con conteo claro
       let message;
       if (faltantes > 0 && esperados > 0) {
-        message = `Nestle: compra ${fmtInt(actuales)} productos de los ${fmtInt(esperados)} esperados (faltan ${fmtInt(faltantes)})`;
+        message = `Nestle: Debería estar comprando ${fmtInt(esperados)} productos distintos, pero solo compra ${fmtInt(actuales)} (Le faltan ${fmtInt(faltantes)} productos vitales).`;
       } else if (faltantes > 0) {
-        message = `Nestle: le faltan ${fmtInt(faltantes)} productos por comprar`;
+        message = `Nestle: A este cliente le faltan ${fmtInt(faltantes)} productos clave por comprar.`;
       } else {
-        message = 'Nestle: desviacion en productos referenciados';
+        message = 'Nestle: Desviación en productos referenciados.';
       }
 
       // Lista de productos sugeridos
       if (refs.length > 0) {
-        message += '\nProductos que deberia comprar y no compra:';
+        message += '\nEl sistema de Nestlé nos sugiere que le ofrezcamos principalmente estos:';
         refs.forEach((r) => {
-          message += `\n  · ${r.trim()}`;
+          message += `\n  👉 ${r.trim()}`;
         });
         // Si faltan más de los 3 que muestra el CSV
         if (faltantes > refs.length) {
-          message += `\n  ... y ${faltantes - refs.length} producto${faltantes - refs.length > 1 ? 's' : ''} mas`;
+          message += `\n  ... (y otros ${faltantes - refs.length} productos más)`;
         }
       }
 
@@ -263,7 +272,7 @@ function processPromociones(rows, headers) {
       const msgMarketing = getColumnValue(row, headers, 'O', ['Msg.Marketing', 'MsgMarketing', 'Marketing']);
       if (!msgMarketing || msgMarketing.trim().length === 0) continue;
 
-      const message = `Promocion Nestle disponible: ${msgMarketing.trim()}\nOfrecer esta promocion al cliente en la proxima visita`;
+      const message = `Nestle nos indica que este cliente es candidato ideal para la siguiente promoción:\n\n👉 [${msgMarketing.trim()}]\n\n¡Recuerda ofrecérsela en tu próxima visita!`;
 
       alerts.push({
         clientCode: String(clientCode).trim(),
@@ -314,29 +323,28 @@ function processAltasClientes(rows, headers) {
       let severity;
 
       if (desviacionEur !== null && desviacionEur < 0) {
-        message = `Cliente nuevo Nestle: ventas ${fmtEur(desviacionEur)}EUR por debajo del objetivo`;
+        message = `Cliente nuevo Nestle: Su arranque es lento, lleva ${fmtEur(desviacionEur)}EUR vendidos POR DEBAJO de su objetivo.`;
         severity = Math.abs(desviacionEur) > 500 ? 'critical' : 'warning';
       } else if (desviacionEur !== null && desviacionEur > 0) {
-        message = `Cliente nuevo Nestle: buena evolucion, +${fmtEur(desviacionEur)}EUR por encima`;
+        message = `Cliente nuevo Nestle: ¡Gran arranque! Lleva +${fmtEur(desviacionEur)}EUR POR ENCIMA de su objetivo.`;
         severity = 'info';
       } else {
-        message = 'Cliente nuevo Nestle: sin datos de evolucion aun';
+        message = 'Cliente nuevo Nestle: Sin datos de evolución todavía.';
         severity = 'info';
       }
 
       // Contexto
       const contexto = [];
-      if (cuotaAnual !== null) contexto.push(`Cuota anual: ${fmtEur(cuotaAnual)}EUR`);
-      if (vtaActual !== null) contexto.push(`Vendido: ${fmtEur(vtaActual)}EUR`);
-      if (pctCumplido !== null) contexto.push(`${pctCumplido}% cumplido`);
-      if (contexto.length > 0) message += '\n' + contexto.join(' | ');
+      if (cuotaAnual !== null) contexto.push(`Objetivo anual: ${fmtEur(cuotaAnual)}EUR`);
+      if (vtaActual !== null) contexto.push(`Vendido actual: ${fmtEur(vtaActual)}EUR`);
+      if (contexto.length > 0) message += '\n' + contexto.join('  |  ');
 
       // Fecha de alta
       if (fechaAlta && fechaAlta.trim()) {
-        message += `\nDado de alta: ${fechaAlta.trim()}`;
+        message += `\nDado de alta el: ${fechaAlta.trim()}`;
       }
       if (ultCompra && ultCompra.trim()) {
-        message += ` | Ult. compra: ${ultCompra.trim()}`;
+        message += ` | Última compra: ${ultCompra.trim()}`;
       }
 
       alerts.push({
@@ -378,7 +386,7 @@ function processMensajesClientes(rows, headers) {
       if (!aviso || aviso.trim().length === 0) continue;
 
       const avisoClean = aviso.trim();
-      const message = `Aviso Nestle: ${avisoClean}\nRevisar situacion en la proxima visita`;
+      const message = `Nestle ha detectado una incidencia operativa:\n\n👉 [${avisoClean}]\n\nPor favor, revísalo o soluciónalo en tu próxima visita al cliente.`;
 
       alerts.push({
         clientCode: String(clientCode).trim(),
@@ -425,14 +433,14 @@ function processMediosClientes(rows, headers) {
       const ultCompra = getColumnValue(row, headers, 'M', ['Ult.Comp.Helados', 'Ult. Comp']);
 
       // Mensaje principal
-      let message = `Equipamiento Nestle instalado: ${Math.round(totalMedios)} equipo${totalMedios > 1 ? 's' : ''} en total`;
+      let message = `El cliente dispone del siguiente equipamiento frío cedido por Nestle (${Math.round(totalMedios)} en total):`;
 
       // Desglose detallado
       const desglose = [];
-      if (armarios && armarios > 0) desglose.push(`  · ${armarios} armario${armarios > 1 ? 's' : ''} congelador${armarios > 1 ? 'es' : ''}`);
-      if (conservadoras && conservadoras > 0) desglose.push(`  · ${conservadoras} conservadora${conservadoras > 1 ? 's' : ''}`);
-      if (vitrinas && vitrinas > 0) desglose.push(`  · ${vitrinas} vitrina${vitrinas > 1 ? 's' : ''} expositor${vitrinas > 1 ? 'as' : 'a'}`);
-      if (otros && otros > 0) desglose.push(`  · ${otros} otro${otros > 1 ? 's' : ''} equipo${otros > 1 ? 's' : ''}`);
+      if (armarios && armarios > 0) desglose.push(`  ❄️ ${armarios} Armario${armarios > 1 ? 's' : ''} (Congelador vertical acristalado)`);
+      if (conservadoras && conservadoras > 0) desglose.push(`  🧊 ${conservadoras} Conservadora${conservadoras > 1 ? 's' : ''} (Arcón horizontal)`);
+      if (vitrinas && vitrinas > 0) desglose.push(`  🍨 ${vitrinas} Vitrina${vitrinas > 1 ? 's' : ''} (Expositor abierto)`);
+      if (otros && otros > 0) desglose.push(`  🔧 ${otros} Otro${otros > 1 ? 's' : ''} equipo${otros > 1 ? 's' : ''} auxiliar${otros > 1 ? 'es' : ''}`);
 
       if (desglose.length > 0) {
         message += '\n' + desglose.join('\n');
@@ -440,11 +448,10 @@ function processMediosClientes(rows, headers) {
 
       // Contexto del punto de venta
       const ctx = [];
-      if (agrupacion && agrupacion.trim()) ctx.push(agrupacion.trim());
+      if (agrupacion && agrupacion.trim()) ctx.push(`Segmento: ${agrupacion.trim()}`);
       if (tipoEstab && tipoEstab.trim()) ctx.push(tipoEstab.trim());
-      if (ultCompra && ultCompra.trim()) ctx.push(`Ult. compra: ${ultCompra.trim()}`);
       if (ctx.length > 0) {
-        message += '\n' + ctx.join(' | ');
+        message += '\n\nEstablecimiento: ' + ctx.join(' - ');
       }
 
       alerts.push({
