@@ -1,4 +1,4 @@
-// alert_rules.js: Reglas de generación de alertas por cada tipo de CSV Glacius
+// alert_rules.js: Reglas de generación de alertas por cada tipo de CSV Glacius/Nestlé
 // IMPORTANTE: Los CSVs vienen PRE-FILTRADOS por Glacius/Froneri.
 // "Es obligatorio incorporar TODOS los avisos al sistema" (doc. Glacius)
 // → NO aplicar filtros propios: cada fila del CSV genera una alerta.
@@ -12,16 +12,35 @@ const logger = require('../../middleware/logger');
  * @property {string} clientCode - CodigoInterno del cliente
  * @property {string} alertType - Tipo de alerta
  * @property {string} severity - critical | warning | info
- * @property {string} message - Mensaje formateado
+ * @property {string} message - Mensaje formateado (legible para comerciales)
  * @property {object} rawData - Datos brutos de la fila
  * @property {string} sourceFile - Nombre del CSV origen
  */
 
+/**
+ * Formatea un número con separador de miles y decimales.
+ * Ej: 1525.14 → "1.525,14"  /  -751.92 → "-751,92"
+ */
+function fmtEur(n) {
+  if (n === null || n === undefined) return '0';
+  const abs = Math.abs(n);
+  const parts = abs.toFixed(2).split('.');
+  const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${n < 0 ? '-' : ''}${intPart},${parts[1]}`;
+}
+
+/**
+ * Formatea un número sin decimales con separador de miles.
+ */
+function fmtInt(n) {
+  if (n === null || n === undefined) return '0';
+  return Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 // ============================================================
 // 1. Desviacion_Ventas.csv
-// Columnas: H=CodigoInterno, O=Cuo,Anual Helados, R=Desviación €, S=Desviación %
-// Mensaje: "Desviado en Ventas: -751.92€ / 52%"
-// Severity: critical si desviación > 1000€, warning si > 500€, info resto
+// Columnas reales: Cuo.Anual Helados, VtaBru.Cum Actual, VtaBru.Cum Anterior,
+//                  Desviacion €, Desviacion %, Agrupacion, Tipo Establecimiento
 // ============================================================
 function processDesviacionVentas(rows, headers) {
   const alerts = [];
@@ -33,19 +52,62 @@ function processDesviacionVentas(rows, headers) {
 
       const desviacionEur = parseNumber(getColumnValue(row, headers, 'R', ['Desviación €', 'Desviacion €', 'Desviacion EUR']));
       const desviacionPct = parseNumber(getColumnValue(row, headers, 'S', ['Desviación %', 'Desviacion %']));
-      const cuotaAnual = parseNumber(getColumnValue(row, headers, 'O', ['Cuo.Anual', 'Cuo,Anual', 'Cuota Anual', 'CuoAnual']));
+      const cuotaAnual = parseNumber(getColumnValue(row, headers, 'O', ['Cuo.Anual', 'Cuo,Anual', 'Cuota Anual', 'CuoAnual', 'Cuo.Anual Helados']));
+      const vtaActual = parseNumber(getColumnValue(row, headers, 'P', ['VtaBru.Cum Actual', 'VtaBru.Cum', 'Venta Actual']));
+      const vtaAnterior = parseNumber(getColumnValue(row, headers, 'Q', ['VtaBru.Cum Anterior', 'Venta Anterior']));
+      const agrupacion = getColumnValue(row, headers, 'K', ['Agrupacion', 'Agrupación']);
+      const tipoEstab = getColumnValue(row, headers, 'L', ['Tipo Establecimiento']);
+      const ultCompra = getColumnValue(row, headers, 'N', ['Ult.Comp.Helados', 'Ult. Comp']);
 
-      // Formatear mensaje según doc: "Desviado en Ventas: 500€ / 52%"
-      const eurFormatted = desviacionEur !== null ? desviacionEur.toFixed(2) : '0.00';
-      const pctFormatted = desviacionPct !== null ? Math.round(Math.abs(desviacionPct)) : 0;
+      // Calcular porcentaje cumplido real
+      const pctCumplido = cuotaAnual && cuotaAnual > 0 && vtaActual !== null
+        ? Math.round((vtaActual / cuotaAnual) * 100)
+        : (desviacionPct !== null ? Math.round(100 - Math.abs(desviacionPct)) : null);
+
+      let message;
+      let severity;
+
+      if (desviacionEur === null || desviacionEur === 0) {
+        // Sin datos o desviación cero
+        message = 'Nestle Helados: sin ventas registradas en este periodo';
+        severity = 'warning';
+      } else if (desviacionEur < 0) {
+        // Por debajo del objetivo
+        message = `Nestle Helados: ventas ${fmtEur(desviacionEur)}EUR por debajo del objetivo`;
+        severity = Math.abs(desviacionEur) > 1000 ? 'critical' : Math.abs(desviacionEur) > 500 ? 'warning' : 'info';
+      } else {
+        // Por encima del objetivo
+        message = `Nestle Helados: ventas +${fmtEur(desviacionEur)}EUR por encima del objetivo`;
+        severity = 'info';
+      }
+
+      // Línea de contexto con cifras
+      const contexto = [];
+      if (cuotaAnual !== null) contexto.push(`Cuota anual: ${fmtEur(cuotaAnual)}EUR`);
+      if (vtaActual !== null) contexto.push(`Vendido: ${fmtEur(vtaActual)}EUR`);
+      if (pctCumplido !== null) contexto.push(`${pctCumplido}% cumplido`);
+      if (contexto.length > 0) message += '\n' + contexto.join(' | ');
+
+      // Línea de comparativa con año anterior
+      if (vtaAnterior !== null) {
+        message += `\nAno anterior: ${fmtEur(vtaAnterior)}EUR`;
+      }
+
+      // Última compra
+      if (ultCompra && ultCompra.trim()) {
+        message += ` | Ult. compra: ${ultCompra.trim()}`;
+      }
 
       alerts.push({
         clientCode: String(clientCode).trim(),
         alertType: 'DESVIACION_VENTAS',
-        severity: desviacionEur !== null && Math.abs(desviacionEur) > 1000 ? 'critical'
-                : desviacionEur !== null && Math.abs(desviacionEur) > 500 ? 'warning' : 'info',
-        message: `Desviado en Ventas: ${eurFormatted}EUR / ${pctFormatted}%`,
-        rawData: { cuotaAnual, desviacionEur, desviacionPct, ...extractCommonFields(row, headers) },
+        severity,
+        message,
+        rawData: {
+          cuotaAnual, vtaActual, vtaAnterior, desviacionEur, desviacionPct,
+          pctCumplido, agrupacion, tipoEstab, ultCompra,
+          ...extractCommonFields(row, headers),
+        },
         sourceFile: 'Desviacion_Ventas.csv',
       });
     } catch (err) {
@@ -58,9 +120,9 @@ function processDesviacionVentas(rows, headers) {
 
 // ============================================================
 // 2. Clientes_ConCuotaSinCompra.csv
-// Columnas: F=CodigoInterno, G=Canal, H=Cuota Anual
-// Mensaje: "Con cuota sin compra."
-// El CSV ya contiene SOLO clientes con cuota sin compra.
+// Columnas reales: Canal (HELADO/FROZEN FOOD/BEBIBLES), Cuota Anual,
+//                  Cuota Mes, Venta Mes, Dif Mes, Cuota Cum, Venta Cum, Dif Cum
+// NOTA: Un mismo cliente puede aparecer varias veces (una por canal).
 // ============================================================
 function processCuotaSinCompra(rows, headers) {
   const alerts = [];
@@ -70,14 +132,44 @@ function processCuotaSinCompra(rows, headers) {
       const clientCode = getColumnValue(row, headers, 'F', ['CodigoInterno', 'Codigo Interno']);
       if (!clientCode) continue;
 
+      const canal = getColumnValue(row, headers, 'G', ['Canal']) || 'Helados';
       const cuotaAnual = parseNumber(getColumnValue(row, headers, 'H', ['Cuota Anual']));
+      const cuotaMes = parseNumber(getColumnValue(row, headers, 'I', ['Cuota Mes']));
+      const ventaMes = parseNumber(getColumnValue(row, headers, 'J', ['Venta Mes']));
+      const cuotaCum = parseNumber(getColumnValue(row, headers, 'L', ['Cuota Cum']));
+      const ventaCum = parseNumber(getColumnValue(row, headers, 'M', ['Venta Cum']));
+      const difCum = parseNumber(getColumnValue(row, headers, 'N', ['Dif. Cum', 'Dif Cum']));
+
+      // Canal formateado limpio
+      const canalLabel = canal.trim().charAt(0).toUpperCase() + canal.trim().slice(1).toLowerCase();
+
+      let message = `Nestle ${canalLabel}: tiene cuota asignada pero NO ha comprado`;
+
+      // Cuota anual
+      if (cuotaAnual !== null) {
+        message += `\nCuota anual: ${fmtEur(cuotaAnual)}EUR`;
+      }
+
+      // Pendiente acumulado
+      if (difCum !== null && difCum > 0) {
+        message += ` | Pendiente acumulado: ${fmtEur(difCum)}EUR`;
+      } else if (cuotaCum !== null) {
+        message += ` | Acumulado sin cubrir: ${fmtEur(cuotaCum)}EUR`;
+      }
+
+      // Severidad basada en cuota
+      const severity = cuotaAnual !== null && cuotaAnual > 2000 ? 'critical'
+        : cuotaAnual !== null && cuotaAnual > 500 ? 'warning' : 'info';
 
       alerts.push({
         clientCode: String(clientCode).trim(),
         alertType: 'CUOTA_SIN_COMPRA',
-        severity: cuotaAnual !== null && cuotaAnual > 1000 ? 'warning' : 'info',
-        message: 'Con cuota sin compra.',
-        rawData: { cuotaAnual, canal: getColumnValue(row, headers, 'G', ['Canal']), ...extractCommonFields(row, headers) },
+        severity,
+        message,
+        rawData: {
+          canal, cuotaAnual, cuotaMes, ventaMes, cuotaCum, ventaCum, difCum,
+          ...extractCommonFields(row, headers),
+        },
         sourceFile: 'Clientes_ConCuotaSinCompra.csv',
       });
     } catch (err) {
@@ -90,9 +182,8 @@ function processCuotaSinCompra(rows, headers) {
 
 // ============================================================
 // 3. Desviacion_Referenciacion.csv
-// Columnas: H=CodigoInterno, Q=Desviación, S/T/U=Refs sin compra
-// Mensaje: "Desviado en referencias: 6 menos"
-// + opcionalmente lista de refs sugeridas
+// Columnas reales: Ref.Cum Actual, Ref.Cum Anterior, Desviación,
+//                  Ref.Tot Anterior, 3x Ref.SinCompra
 // ============================================================
 function processDesviacionReferenciacion(rows, headers) {
   const alerts = [];
@@ -103,25 +194,50 @@ function processDesviacionReferenciacion(rows, headers) {
       if (!clientCode) continue;
 
       const desviacion = parseNumber(getColumnValue(row, headers, 'Q', ['Desviación', 'Desviacion']));
+      const refActual = parseNumber(getColumnValue(row, headers, 'O', ['Ref.Cum Actual', 'Ref Actual']));
+      const refAnterior = parseNumber(getColumnValue(row, headers, 'P', ['Ref.Cum Anterior', 'Ref Anterior']));
+      const refTotAnterior = parseNumber(getColumnValue(row, headers, 'R', ['Ref.Tot Anterior']));
 
       const ref1 = getColumnValue(row, headers, 'S', ['Ref.SinCompra 1', 'SinCompra 1']);
       const ref2 = getColumnValue(row, headers, 'T', ['Ref.SinCompra 2', 'SinCompra 2']);
       const ref3 = getColumnValue(row, headers, 'U', ['Ref.SinCompra 3', 'SinCompra 3']);
 
-      let message = desviacion !== null
-        ? `Desviado en referencias: ${Math.abs(desviacion)} menos`
-        : 'Desviado en referencias';
       const refs = [ref1, ref2, ref3].filter((r) => r && r.trim().length > 0);
+      const faltantes = desviacion !== null ? Math.abs(desviacion) : 0;
+      const esperados = refAnterior || refTotAnterior || 0;
+      const actuales = refActual || (esperados - faltantes);
+
+      // Mensaje principal con conteo claro
+      let message;
+      if (faltantes > 0 && esperados > 0) {
+        message = `Nestle: compra ${fmtInt(actuales)} productos de los ${fmtInt(esperados)} esperados (faltan ${fmtInt(faltantes)})`;
+      } else if (faltantes > 0) {
+        message = `Nestle: le faltan ${fmtInt(faltantes)} productos por comprar`;
+      } else {
+        message = 'Nestle: desviacion en productos referenciados';
+      }
+
+      // Lista de productos sugeridos
       if (refs.length > 0) {
-        message += '\n' + refs.map((r) => `- ${r.trim()}`).join('\n');
+        message += '\nProductos que deberia comprar y no compra:';
+        refs.forEach((r) => {
+          message += `\n  · ${r.trim()}`;
+        });
+        // Si faltan más de los 3 que muestra el CSV
+        if (faltantes > refs.length) {
+          message += `\n  ... y ${faltantes - refs.length} producto${faltantes - refs.length > 1 ? 's' : ''} mas`;
+        }
       }
 
       alerts.push({
         clientCode: String(clientCode).trim(),
         alertType: 'DESVIACION_REFERENCIACION',
-        severity: desviacion !== null && Math.abs(desviacion) >= 5 ? 'warning' : 'info',
+        severity: faltantes >= 5 ? 'warning' : 'info',
         message,
-        rawData: { desviacion, refs, ...extractCommonFields(row, headers) },
+        rawData: {
+          desviacion, refActual, refAnterior, refTotAnterior, refs,
+          ...extractCommonFields(row, headers),
+        },
         sourceFile: 'Desviacion_Referenciacion.csv',
       });
     } catch (err) {
@@ -134,8 +250,7 @@ function processDesviacionReferenciacion(rows, headers) {
 
 // ============================================================
 // 4. Mensaje_Promociones.csv
-// Columnas: H=Cod.Interno, O=Msg.Marketing
-// Mensaje: texto directo de columna O (ej: "Potencial Promo Mochila")
+// Columnas reales: Msg.Marketing (texto libre)
 // ============================================================
 function processPromociones(rows, headers) {
   const alerts = [];
@@ -148,12 +263,17 @@ function processPromociones(rows, headers) {
       const msgMarketing = getColumnValue(row, headers, 'O', ['Msg.Marketing', 'MsgMarketing', 'Marketing']);
       if (!msgMarketing || msgMarketing.trim().length === 0) continue;
 
+      const message = `Promocion Nestle disponible: ${msgMarketing.trim()}\nOfrecer esta promocion al cliente en la proxima visita`;
+
       alerts.push({
         clientCode: String(clientCode).trim(),
         alertType: 'PROMOCION',
         severity: 'info',
-        message: msgMarketing.trim(),
-        rawData: extractCommonFields(row, headers),
+        message,
+        rawData: {
+          promocion: msgMarketing.trim(),
+          ...extractCommonFields(row, headers),
+        },
         sourceFile: 'Mensaje_Promociones.csv',
       });
     } catch (err) {
@@ -166,8 +286,8 @@ function processPromociones(rows, headers) {
 
 // ============================================================
 // 5. Altas_Clientes.csv (Seguimiento Clientes Nuevos)
-// Columnas: H=CodigoInterno, R=Desviación €, S=Desviación %
-// Mensaje: "Evolución Captación: -358.67€ / 39%"
+// Columnas reales: Cuo.Anual, VtaBru.Cum Actual, Cuo.Cum,
+//                  Desviación €, Desviación %, Fecha Alta
 // ============================================================
 function processAltasClientes(rows, headers) {
   const alerts = [];
@@ -179,17 +299,56 @@ function processAltasClientes(rows, headers) {
 
       const desviacionEur = parseNumber(getColumnValue(row, headers, 'R', ['Desviación €', 'Desviacion €']));
       const desviacionPct = parseNumber(getColumnValue(row, headers, 'S', ['Desviación %', 'Desviacion %']));
+      const cuotaAnual = parseNumber(getColumnValue(row, headers, 'O', ['Cuo.Anual', 'Cuo.Anual Helados', 'Cuota Anual']));
+      const vtaActual = parseNumber(getColumnValue(row, headers, 'P', ['VtaBru.Cum Actual', 'VtaBru.Cum']));
+      const cuotaCum = parseNumber(getColumnValue(row, headers, 'Q', ['Cuo.Cum', 'Cuota Cum']));
+      const fechaAlta = getColumnValue(row, headers, 'M', ['Fecha Alta']);
+      const ultCompra = getColumnValue(row, headers, 'N', ['Ult.Comp.Helados', 'Ult. Comp']);
 
-      const eurFormatted = desviacionEur !== null ? desviacionEur.toFixed(2) : '0.00';
-      const pctFormatted = desviacionPct !== null ? Math.round(Math.abs(desviacionPct)) : 0;
+      // Calcular % cumplido
+      const pctCumplido = cuotaAnual && cuotaAnual > 0 && vtaActual !== null
+        ? Math.round((vtaActual / cuotaAnual) * 100)
+        : (desviacionPct !== null ? Math.round(100 - Math.abs(desviacionPct)) : null);
+
+      let message;
+      let severity;
+
+      if (desviacionEur !== null && desviacionEur < 0) {
+        message = `Cliente nuevo Nestle: ventas ${fmtEur(desviacionEur)}EUR por debajo del objetivo`;
+        severity = Math.abs(desviacionEur) > 500 ? 'critical' : 'warning';
+      } else if (desviacionEur !== null && desviacionEur > 0) {
+        message = `Cliente nuevo Nestle: buena evolucion, +${fmtEur(desviacionEur)}EUR por encima`;
+        severity = 'info';
+      } else {
+        message = 'Cliente nuevo Nestle: sin datos de evolucion aun';
+        severity = 'info';
+      }
+
+      // Contexto
+      const contexto = [];
+      if (cuotaAnual !== null) contexto.push(`Cuota anual: ${fmtEur(cuotaAnual)}EUR`);
+      if (vtaActual !== null) contexto.push(`Vendido: ${fmtEur(vtaActual)}EUR`);
+      if (pctCumplido !== null) contexto.push(`${pctCumplido}% cumplido`);
+      if (contexto.length > 0) message += '\n' + contexto.join(' | ');
+
+      // Fecha de alta
+      if (fechaAlta && fechaAlta.trim()) {
+        message += `\nDado de alta: ${fechaAlta.trim()}`;
+      }
+      if (ultCompra && ultCompra.trim()) {
+        message += ` | Ult. compra: ${ultCompra.trim()}`;
+      }
 
       alerts.push({
         clientCode: String(clientCode).trim(),
         alertType: 'ALTA_CLIENTE',
-        severity: desviacionEur !== null && desviacionEur < -500 ? 'critical'
-                : desviacionEur !== null && desviacionEur < 0 ? 'warning' : 'info',
-        message: `Evolucion Captacion: ${eurFormatted}EUR / ${pctFormatted}%`,
-        rawData: { desviacionEur, desviacionPct, ...extractCommonFields(row, headers) },
+        severity,
+        message,
+        rawData: {
+          desviacionEur, desviacionPct, cuotaAnual, vtaActual, cuotaCum,
+          pctCumplido, fechaAlta, ultCompra,
+          ...extractCommonFields(row, headers),
+        },
         sourceFile: 'Altas_Clientes.csv',
       });
     } catch (err) {
@@ -201,9 +360,8 @@ function processAltasClientes(rows, headers) {
 }
 
 // ============================================================
-// 6. Mensajes_Clientes.csv (Avisos)
-// Columnas: H=CodigoInterno, N=AVISO (confirmado en Excel, PDF decía O)
-// Mensaje: texto directo del aviso (ej: "Con Vitrina Sin Compra")
+// 6. Mensajes_Clientes.csv (Avisos operativos)
+// Columnas reales: AVISO (texto libre tipo "Con Vitrina Sin Compra La Lechera")
 // ============================================================
 function processMensajesClientes(rows, headers) {
   const alerts = [];
@@ -213,19 +371,24 @@ function processMensajesClientes(rows, headers) {
       const clientCode = getColumnValue(row, headers, 'H', ['CodigoInterno', 'Codigo Interno']);
       if (!clientCode) continue;
 
-      // AVISO está en columna N (confirmado en Excel). Fallback a O por si el CSV varía.
       let aviso = getColumnValue(row, headers, 'N', ['AVISO', 'Aviso']);
       if (!aviso || aviso.trim().length === 0) {
         aviso = getColumnValue(row, headers, 'O', ['AVISO', 'Aviso']);
       }
       if (!aviso || aviso.trim().length === 0) continue;
 
+      const avisoClean = aviso.trim();
+      const message = `Aviso Nestle: ${avisoClean}\nRevisar situacion en la proxima visita`;
+
       alerts.push({
         clientCode: String(clientCode).trim(),
         alertType: 'AVISO',
         severity: 'info',
-        message: aviso.trim(),
-        rawData: extractCommonFields(row, headers),
+        message,
+        rawData: {
+          aviso: avisoClean,
+          ...extractCommonFields(row, headers),
+        },
         sourceFile: 'Mensajes_Clientes.csv',
       });
     } catch (err) {
@@ -238,16 +401,15 @@ function processMensajesClientes(rows, headers) {
 
 // ============================================================
 // 7. Medios_Clientes.csv
-// Columnas: G=Cód.Interno (ojo: con tilde), N=Total Medios
-// Mensaje: "Cliente con 4 medios"
-// NOTA: Estructura diferente — no tiene columna Periodo al inicio
+// Columnas reales: Total Medios, Armarios, Conservadoras, Vitrinas, Otros,
+//                  Tipo Establecimiento, Ult.Comp.Helados
+// NOTA: No tiene Periodo — estructura diferente a los demás CSVs
 // ============================================================
 function processMediosClientes(rows, headers) {
   const alerts = [];
 
   for (const row of rows) {
     try {
-      // En Medios, Cod.Interno está en G (no H). Header real: "Cód.Interno" (con tilde)
       const clientCode = getColumnValue(row, headers, 'G', ['Cd.Interno', 'Cod.Interno', 'CodigoInterno', 'Interno']);
       if (!clientCode) continue;
 
@@ -258,17 +420,31 @@ function processMediosClientes(rows, headers) {
       const conservadoras = parseNumber(getColumnValue(row, headers, 'P', ['Conservadoras']));
       const vitrinas = parseNumber(getColumnValue(row, headers, 'Q', ['Vitrinas']));
       const otros = parseNumber(getColumnValue(row, headers, 'R', ['Otros']));
+      const tipoEstab = getColumnValue(row, headers, 'K', ['Tipo Establecimiento']);
+      const agrupacion = getColumnValue(row, headers, 'J', ['Agrupacion', 'Agrupación']);
+      const ultCompra = getColumnValue(row, headers, 'M', ['Ult.Comp.Helados', 'Ult. Comp']);
 
-      // Build detailed message
-      const details = [];
-      if (armarios && armarios > 0) details.push(`${armarios} armario${armarios > 1 ? 's' : ''}`);
-      if (conservadoras && conservadoras > 0) details.push(`${conservadoras} conservadora${conservadoras > 1 ? 's' : ''}`);
-      if (vitrinas && vitrinas > 0) details.push(`${vitrinas} vitrina${vitrinas > 1 ? 's' : ''}`);
-      if (otros && otros > 0) details.push(`${otros} otro${otros > 1 ? 's' : ''}`);
+      // Mensaje principal
+      let message = `Equipamiento Nestle instalado: ${Math.round(totalMedios)} equipo${totalMedios > 1 ? 's' : ''} en total`;
 
-      let message = `Cliente con ${Math.round(totalMedios)} medios`;
-      if (details.length > 0) {
-        message += ` (${details.join(', ')})`;
+      // Desglose detallado
+      const desglose = [];
+      if (armarios && armarios > 0) desglose.push(`  · ${armarios} armario${armarios > 1 ? 's' : ''} congelador${armarios > 1 ? 'es' : ''}`);
+      if (conservadoras && conservadoras > 0) desglose.push(`  · ${conservadoras} conservadora${conservadoras > 1 ? 's' : ''}`);
+      if (vitrinas && vitrinas > 0) desglose.push(`  · ${vitrinas} vitrina${vitrinas > 1 ? 's' : ''} expositor${vitrinas > 1 ? 'as' : 'a'}`);
+      if (otros && otros > 0) desglose.push(`  · ${otros} otro${otros > 1 ? 's' : ''} equipo${otros > 1 ? 's' : ''}`);
+
+      if (desglose.length > 0) {
+        message += '\n' + desglose.join('\n');
+      }
+
+      // Contexto del punto de venta
+      const ctx = [];
+      if (agrupacion && agrupacion.trim()) ctx.push(agrupacion.trim());
+      if (tipoEstab && tipoEstab.trim()) ctx.push(tipoEstab.trim());
+      if (ultCompra && ultCompra.trim()) ctx.push(`Ult. compra: ${ultCompra.trim()}`);
+      if (ctx.length > 0) {
+        message += '\n' + ctx.join(' | ');
       }
 
       alerts.push({
@@ -278,6 +454,7 @@ function processMediosClientes(rows, headers) {
         message,
         rawData: {
           totalMedios, armarios, conservadoras, vitrinas, otros,
+          agrupacion, tipoEstab, ultCompra,
           ...extractCommonFields(row, headers),
         },
         sourceFile: 'Medios_Clientes.csv',
@@ -294,13 +471,13 @@ function processMediosClientes(rows, headers) {
 // Mapa de procesadores por nombre de archivo
 // ============================================================
 const PROCESSORS = {
-  'Desviacion_Ventas.csv':           processDesviacionVentas,
-  'Clientes_ConCuotaSinCompra.csv':  processCuotaSinCompra,
-  'Desviacion_Referenciacion.csv':   processDesviacionReferenciacion,
-  'Mensaje_Promociones.csv':         processPromociones,
-  'Altas_Clientes.csv':              processAltasClientes,
-  'Mensajes_Clientes.csv':           processMensajesClientes,
-  'Medios_Clientes.csv':             processMediosClientes,
+  'Desviacion_Ventas.csv': processDesviacionVentas,
+  'Clientes_ConCuotaSinCompra.csv': processCuotaSinCompra,
+  'Desviacion_Referenciacion.csv': processDesviacionReferenciacion,
+  'Mensaje_Promociones.csv': processPromociones,
+  'Altas_Clientes.csv': processAltasClientes,
+  'Mensajes_Clientes.csv': processMensajesClientes,
+  'Medios_Clientes.csv': processMediosClientes,
 };
 
 /**
@@ -309,7 +486,7 @@ const PROCESSORS = {
 function extractCommonFields(row, headers) {
   return {
     nombreComercial: getColumnValue(row, headers, 'G', ['Nombre Comercial']) ||
-                     getColumnValue(row, headers, 'F', ['Nombre Comercial']),
+      getColumnValue(row, headers, 'F', ['Nombre Comercial']),
     agrupacion: getColumnValue(row, headers, 'K', ['Agrupación', 'Agrupacion']),
     tipoEstablecimiento: getColumnValue(row, headers, 'L', ['Tipo Establecimiento']),
   };

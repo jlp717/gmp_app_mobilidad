@@ -322,16 +322,34 @@ router.get('/loads/:loadId/audit', async (req, res) => {
  */
 function formatAlert(row) {
   // DB2 devuelve columnas en UPPERCASE
+  const type = row.ALERT_TYPE || row.alert_type || '';
   return {
     id: row.ID || row.id,
     clientCode: row.CLIENT_CODE || row.client_code,
-    type: row.ALERT_TYPE || row.alert_type,
+    type,
     severity: row.SEVERITY || row.severity,
     message: row.MESSAGE || row.message,
     rawData: parseRawData(row.RAW_DATA || row.raw_data),
     sourceFile: row.SOURCE_FILE || row.source_file,
     createdAt: row.CREATED_AT || row.created_at,
+    typeExplanation: getTypeExplanation(type),
   };
+}
+
+/**
+ * Devuelve una explicación breve de cada tipo de alerta para la UI.
+ */
+function getTypeExplanation(type) {
+  const explanations = {
+    DESVIACION_VENTAS: 'Ventas Nestle vs objetivo anual asignado',
+    CUOTA_SIN_COMPRA: 'Cuota Nestle asignada sin pedidos realizados',
+    DESVIACION_REFERENCIACION: 'Productos Nestle que deberia estar comprando',
+    PROMOCION: 'Promocion Nestle disponible para ofrecer',
+    ALTA_CLIENTE: 'Seguimiento de cliente nuevo en Nestle',
+    AVISO: 'Aviso operativo de Nestle/Froneri',
+    MEDIOS_CLIENTE: 'Equipamiento Nestle en el punto de venta',
+  };
+  return explanations[type] || '';
 }
 
 /**

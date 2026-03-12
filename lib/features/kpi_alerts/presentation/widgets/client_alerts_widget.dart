@@ -146,7 +146,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'KPIs Glacius',
+                  'Alertas Nestle (Glacius)',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -157,8 +157,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                 const SizedBox(height: 2),
                 Text(
                   _hasError
-                      ? 'Servicio no disponible — pendiente de despliegue'
-                      : 'Sin alertas activas para este cliente',
+                      ? 'Servicio no disponible'
+                      : 'Sin alertas Nestle para este cliente',
                   style: TextStyle(
                     fontSize: 11,
                     color: _hasError
@@ -212,12 +212,12 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
               ),
             ),
             child: const Text(
-              'KPI',
+              'Nestle',
               style: TextStyle(
-                fontSize: 8,
+                fontSize: 7,
                 fontWeight: FontWeight.w800,
                 color: AppTheme.neonPurple,
-                letterSpacing: 0.8,
+                letterSpacing: 0.5,
               ),
             ),
           ),
@@ -374,7 +374,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'KPIs Glacius',
+                          'Alertas Nestle',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -393,8 +393,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                     ),
                   ),
                   // Severity counters
-                  if (criticalCount > 0) _buildSeverityChip(criticalCount, _severityColor('critical'), 'CRIT'),
-                  if (warningCount > 0) _buildSeverityChip(warningCount, _severityColor('warning'), 'WARN'),
+                  if (criticalCount > 0) _buildSeverityChip(criticalCount, _severityColor('critical'), 'URG'),
+                  if (warningCount > 0) _buildSeverityChip(warningCount, _severityColor('warning'), 'ATEN'),
                   if (infoCount > 0) _buildSeverityChip(infoCount, _severityColor('info'), 'INFO'),
                   const SizedBox(width: 8),
                   // Refresh + expand
@@ -453,7 +453,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
   }
 
   // ============================================================
-  // GRUPO de alertas por tipo (Desviación Ventas, Cuota, etc.)
+  // ============================================================
+  // GRUPO de alertas por tipo (Ventas vs Objetivo, Sin Compras, etc.)
   // ============================================================
   Widget _buildAlertGroup(String type, List<KpiAlert> alerts, bool isJefe) {
     final config = _typeConfig(type);
@@ -494,14 +495,27 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                 Icon(config.icon, size: 14, color: config.color),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Text(
-                    config.label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: config.color,
-                      letterSpacing: 0.2,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        config.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: config.color,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      if (alerts.first.typeExplanation.isNotEmpty)
+                        Text(
+                          alerts.first.typeExplanation,
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AppTheme.textTertiary,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 Container(
@@ -712,8 +726,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 
   String _severityLabel(String severity) {
     switch (severity) {
-      case 'critical': return 'CRIT';
-      case 'warning': return 'WARN';
+      case 'critical': return 'URGENTE';
+      case 'warning': return 'ATENCION';
       case 'info': return 'INFO';
       default: return severity.toUpperCase();
     }
@@ -723,21 +737,21 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
     switch (type) {
       case 'DESVIACION_VENTAS':
         return _AlertTypeConfig(
-          label: 'Desviación Ventas',
+          label: 'Ventas vs Objetivo',
           icon: Icons.trending_down_rounded,
           color: AppTheme.error,
         );
       case 'CUOTA_SIN_COMPRA':
         return _AlertTypeConfig(
-          label: 'Cuota Sin Compra',
+          label: 'Sin Compras',
           icon: Icons.remove_shopping_cart_rounded,
           color: AppTheme.warning,
         );
       case 'DESVIACION_REFERENCIACION':
         return _AlertTypeConfig(
-          label: 'Desviación Referenciación',
+          label: 'Productos Pendientes',
           icon: Icons.inventory_2_rounded,
-          color: const Color(0xFFFF6B9D), // neonPink
+          color: const Color(0xFFFF6B9D),
         );
       case 'PROMOCION':
         return _AlertTypeConfig(
@@ -747,7 +761,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         );
       case 'ALTA_CLIENTE':
         return _AlertTypeConfig(
-          label: 'Captación / Alta Cliente',
+          label: 'Cliente Nuevo',
           icon: Icons.person_add_rounded,
           color: AppTheme.neonBlue,
         );
@@ -759,7 +773,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         );
       case 'MEDIOS_CLIENTE':
         return _AlertTypeConfig(
-          label: 'Medios del Cliente',
+          label: 'Equipamiento',
           icon: Icons.kitchen_rounded,
           color: AppTheme.neonTeal,
         );
@@ -825,7 +839,7 @@ class _KpiLoadingShimmer extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Text(
-            'Cargando KPIs...',
+            'Cargando alertas Nestle (Glacius)...',
             style: TextStyle(
               fontSize: 12,
               color: AppTheme.textTertiary.withValues(alpha: 0.7),

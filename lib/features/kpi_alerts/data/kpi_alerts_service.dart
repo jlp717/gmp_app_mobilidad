@@ -18,6 +18,7 @@ class KpiAlert {
     this.rawData,
     required this.sourceFile,
     required this.createdAt,
+    this.typeExplanation = '',
   });
 
   factory KpiAlert.fromJson(Map<String, dynamic> json) {
@@ -35,6 +36,7 @@ class KpiAlert {
             json['createdAt']?.toString() ?? '',
           ) ??
           DateTime.now(),
+      typeExplanation: json['typeExplanation']?.toString() ?? '',
     );
   }
 
@@ -46,6 +48,7 @@ class KpiAlert {
   final Map<String, dynamic>? rawData;
   final String sourceFile;
   final DateTime createdAt;
+  final String typeExplanation;
 
   /// Prioridad numérica para ordenación (menor = más urgente)
   int get priorityOrder {
@@ -61,23 +64,23 @@ class KpiAlert {
     }
   }
 
-  /// Etiqueta legible según tipo de alerta (nombres del PDF Glacius)
+  /// Etiqueta legible según tipo de alerta
   String get typeLabel {
     switch (type) {
       case 'DESVIACION_VENTAS':
-        return 'Desviación Ventas';
+        return 'Ventas vs Objetivo';
       case 'CUOTA_SIN_COMPRA':
-        return 'Cuota Sin Compra';
+        return 'Sin Compras';
       case 'DESVIACION_REFERENCIACION':
-        return 'Desviación Referenciación';
+        return 'Productos Pendientes';
       case 'PROMOCION':
         return 'Promociones';
       case 'ALTA_CLIENTE':
-        return 'Alta Cliente';
+        return 'Cliente Nuevo';
       case 'AVISO':
         return 'Avisos';
       case 'MEDIOS_CLIENTE':
-        return 'Medios del Cliente';
+        return 'Equipamiento';
       default:
         return type;
     }

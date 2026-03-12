@@ -131,7 +131,23 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     }
 
     // Aplicar reglas
-    const alerts = processor(rows, headers);
+    let alerts = processor(rows, headers);
+
+    // Deduplicar: para la mayoría de tipos, conservar solo la alerta con mayor
+    // severidad por clientCode + alertType. Excepción: CUOTA_SIN_COMPRA puede
+    // tener múltiples alertas legítimas por canal (HELADO, FROZEN FOOD, BEBIBLES).
+    if (alerts.length > 0 && alerts[0]?.alertType !== 'CUOTA_SIN_COMPRA') {
+      const sevOrder = { critical: 0, warning: 1, info: 2 };
+      const deduped = new Map();
+      for (const a of alerts) {
+        const key = `${a.clientCode}::${a.alertType}`;
+        const existing = deduped.get(key);
+        if (!existing || (sevOrder[a.severity] || 3) < (sevOrder[existing.severity] || 3)) {
+          deduped.set(key, a);
+        }
+      }
+      alerts = Array.from(deduped.values());
+    }
 
     // Insertar alertas una por una (DB2 ODBC no soporta multi-row VALUES con params)
     if (alerts.length > 0) {
