@@ -1,24 +1,23 @@
-// sftp_client.js: Cliente SFTP con reintentos, timeouts y descarga segura de CSVs
+// sftp_client.js: Cliente FTPS (FTP sobre TLS implícito, puerto 990) para CSVs Glacius
 'use strict';
 
-const SftpClient = require('ssh2-sftp-client');
+const ftp = require('basic-ftp');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const logger = require('../../middleware/logger');
 
-const SFTP_CONFIG = {
+const FTP_CONFIG = {
   host: process.env.KPI_SFTP_HOST,
   port: parseInt(process.env.KPI_SFTP_PORT || '990', 10),
-  username: process.env.KPI_SFTP_USER,
+  user: process.env.KPI_SFTP_USER,
   password: process.env.KPI_SFTP_PASS,
-  readyTimeout: parseInt(process.env.KPI_SFTP_TIMEOUT || '20000', 10),
-  retries: 3,
-  retry_factor: 2,
-  retry_minTimeout: 2000,
+  secure: 'implicit', // Puerto 990 = FTPS implícito (TLS desde el inicio)
+  timeout: parseInt(process.env.KPI_SFTP_TIMEOUT || '30000', 10),
 };
 
 const REMOTE_FOLDER = process.env.KPI_SFTP_FOLDER || '/IN';
+const MAX_RETRIES = 3;
 
 const EXPECTED_FILES = [
   'Desviacion_Ventas.csv',
@@ -31,10 +30,7 @@ const EXPECTED_FILES = [
 ];
 
 /**
- * Descarga todos los CSVs esperados del SFTP a un directorio local temporal.
- * Retorna la ruta del directorio y metadatos por archivo.
- * @param {string} [localDir] - Ruta local de destino (si se omite, usa tmp)
- * @returns {Promise<{dir: string, files: Array<{name: string, localPath: string, size: number, hash: string}>}>}
+ * Descarga todos los CSVs esperados del FTPS a un directorio local temporal.
  */
 async function fetchCSVsFromSFTP(localDir) {
   const downloadDir = localDir || path.join(
@@ -46,39 +42,43 @@ async function fetchCSVsFromSFTP(localDir) {
     fs.mkdirSync(downloadDir, { recursive: true });
   }
 
-  const sftp = new SftpClient();
   const downloadedFiles = [];
   let attempt = 0;
-  const maxRetries = SFTP_CONFIG.retries;
 
-  while (attempt < maxRetries) {
+  while (attempt < MAX_RETRIES) {
+    const client = new ftp.Client(FTP_CONFIG.timeout);
+    // client.ftp.verbose = true; // Uncomment for debug
+
     try {
       attempt++;
-      logger.info(`[kpi:sftp] Conectando a ${SFTP_CONFIG.host}:${SFTP_CONFIG.port} (intento ${attempt}/${maxRetries})`);
+      logger.info(`[kpi:ftps] Conectando a ${FTP_CONFIG.host}:${FTP_CONFIG.port} (intento ${attempt}/${MAX_RETRIES})`);
 
-      await sftp.connect({
-        host: SFTP_CONFIG.host,
-        port: SFTP_CONFIG.port,
-        username: SFTP_CONFIG.username,
-        password: SFTP_CONFIG.password,
-        readyTimeout: SFTP_CONFIG.readyTimeout,
+      await client.access({
+        host: FTP_CONFIG.host,
+        port: FTP_CONFIG.port,
+        user: FTP_CONFIG.user,
+        password: FTP_CONFIG.password,
+        secure: FTP_CONFIG.secure,
+        secureOptions: { rejectUnauthorized: false }, // Accept self-signed certs
       });
 
-      logger.info(`[kpi:sftp] Conectado. Listando ${REMOTE_FOLDER}...`);
-      const remoteFiles = await sftp.list(REMOTE_FOLDER);
+      logger.info(`[kpi:ftps] Conectado. Listando ${REMOTE_FOLDER}...`);
+      await client.cd(REMOTE_FOLDER);
+      const remoteFiles = await client.list();
       const remoteNames = new Set(remoteFiles.map((f) => f.name));
+
+      logger.info(`[kpi:ftps] ${remoteFiles.length} archivos encontrados en ${REMOTE_FOLDER}`);
 
       for (const expectedFile of EXPECTED_FILES) {
         if (!remoteNames.has(expectedFile)) {
-          logger.warn(`[kpi:sftp] Archivo no encontrado: ${expectedFile} — se omite`);
+          logger.warn(`[kpi:ftps] Archivo no encontrado: ${expectedFile} — se omite`);
           continue;
         }
 
-        const remotePath = `${REMOTE_FOLDER}/${expectedFile}`;
         const localPath = path.join(downloadDir, expectedFile);
 
-        logger.info(`[kpi:sftp] Descargando ${expectedFile}...`);
-        await sftp.fastGet(remotePath, localPath);
+        logger.info(`[kpi:ftps] Descargando ${expectedFile}...`);
+        await client.downloadTo(localPath, expectedFile);
 
         const stats = fs.statSync(localPath);
         const hash = computeFileHash(localPath);
@@ -90,31 +90,31 @@ async function fetchCSVsFromSFTP(localDir) {
           hash,
         });
 
-        logger.info(`[kpi:sftp] ${expectedFile} descargado (${stats.size} bytes, SHA256: ${hash.substring(0, 16)}...)`);
+        logger.info(`[kpi:ftps] ${expectedFile} descargado (${stats.size} bytes, SHA256: ${hash.substring(0, 16)}...)`);
       }
 
-      await sftp.end();
-      break; // Éxito, salir del bucle de reintentos
+      client.close();
+      break; // Success
 
     } catch (err) {
-      logger.error(`[kpi:sftp] Error en intento ${attempt}: ${err.message}`);
-      try { await sftp.end(); } catch (_) { /* ignore */ }
+      logger.error(`[kpi:ftps] Error en intento ${attempt}: ${err.message}`);
+      client.close();
 
-      if (attempt >= maxRetries) {
-        throw new Error(`SFTP falló tras ${maxRetries} intentos: ${err.message}`);
+      if (attempt >= MAX_RETRIES) {
+        throw new Error(`FTPS falló tras ${MAX_RETRIES} intentos: ${err.message}`);
       }
 
-      const delay = SFTP_CONFIG.retry_minTimeout * Math.pow(SFTP_CONFIG.retry_factor, attempt - 1);
-      logger.info(`[kpi:sftp] Reintentando en ${delay}ms...`);
+      const delay = 2000 * Math.pow(2, attempt - 1);
+      logger.info(`[kpi:ftps] Reintentando en ${delay}ms...`);
       await new Promise((r) => setTimeout(r, delay));
     }
   }
 
   if (downloadedFiles.length === 0) {
-    throw new Error('No se descargó ningún archivo CSV del SFTP');
+    throw new Error('No se descargó ningún archivo CSV del FTPS');
   }
 
-  logger.info(`[kpi:sftp] ${downloadedFiles.length}/${EXPECTED_FILES.length} archivos descargados en ${downloadDir}`);
+  logger.info(`[kpi:ftps] ${downloadedFiles.length}/${EXPECTED_FILES.length} archivos descargados en ${downloadDir}`);
   return { dir: downloadDir, files: downloadedFiles };
 }
 
