@@ -42,8 +42,16 @@ router.get('/alerts', async (req, res) => {
     const params = [];
 
     if (clientId) {
-      conditions.push('a.CLIENT_CODE = ?');
-      params.push(clientId);
+      // Buscar con ambos formatos: completo GMP y corto Glacius
+      const codesToTry = [clientId];
+      if (/^4300\d{6}$/.test(clientId)) {
+        codesToTry.push(clientId.slice(4).replace(/^0+/, '') || '0');
+      }
+      if (/^\d{1,6}$/.test(clientId) && !clientId.startsWith('4300')) {
+        codesToTry.push('4300' + clientId.padStart(6, '0'));
+      }
+      conditions.push(`(${codesToTry.map(() => 'a.CLIENT_CODE = ?').join(' OR ')})`);
+      params.push(...codesToTry);
     }
     if (type) {
       conditions.push('a.ALERT_TYPE = ?');
@@ -98,29 +106,50 @@ router.get('/alerts', async (req, res) => {
 // ============================================================
 // GET /api/kpi/alerts/client/:clientId
 // Endpoint optimizado para la ficha de cliente en la app
+// Busca tanto con código GMP completo (4300XXXXXX) como con código corto Glacius
 // ============================================================
 router.get('/alerts/client/:clientId', async (req, res) => {
   try {
     const { clientId } = req.params;
 
-    // Intentar cache primero
-    const cached = await getCachedClientAlerts(clientId);
-    if (cached) {
-      return res.json({ success: true, source: 'cache', clientId, alerts: cached });
+    // Construir variantes de código: completo GMP + corto numérico
+    const codesToTry = [clientId];
+    // Si es código GMP 4300XXXXXX, añadir variante corta (quitar 4300 y ceros iniciales)
+    if (/^4300\d{6}$/.test(clientId)) {
+      const shortCode = clientId.slice(4).replace(/^0+/, '') || '0';
+      codesToTry.push(shortCode);
+    }
+    // Si es código corto, añadir variante GMP
+    if (/^\d{1,6}$/.test(clientId) && !clientId.startsWith('4300')) {
+      codesToTry.push('4300' + clientId.padStart(6, '0'));
     }
 
-    // Fallback a DB
+    // Intentar cache primero (con todas las variantes)
+    for (const code of codesToTry) {
+      const cached = await getCachedClientAlerts(code);
+      if (cached && cached.length > 0) {
+        return res.json({ success: true, source: 'cache', clientId, alerts: cached });
+      }
+    }
+
+    // Fallback a DB con OR para ambos formatos
+    const placeholders = codesToTry.map(() => 'CLIENT_CODE = ?').join(' OR ');
     const result = await kpiQuery(
       `SELECT ID, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA, SOURCE_FILE, CREATED_AT
        FROM JAVIER.KPI_ALERTS
-       WHERE CLIENT_CODE = ? AND IS_ACTIVE = 1
+       WHERE (${placeholders}) AND IS_ACTIVE = 1
        ORDER BY
          CASE SEVERITY WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 END,
          CREATED_AT DESC`,
-      [clientId]
+      codesToTry
     );
 
     const alerts = result.rows.map(formatAlert);
+
+    // Log para diagnóstico
+    if (alerts.length === 0) {
+      logger.info(`[kpi:api] 0 alertas para ${clientId} (variantes: ${codesToTry.join(', ')})`);
+    }
 
     res.json({ success: true, source: 'db', clientId, alerts });
   } catch (err) {
@@ -317,5 +346,42 @@ function parseRawData(val) {
     return {};
   }
 }
+
+// ============================================================
+// GET /api/kpi/debug/db-status
+// Diagnóstico: muestra contenido real de la tabla KPI_ALERTS
+// ============================================================
+router.get('/debug/db-status', async (req, res) => {
+  try {
+    const countResult = await kpiQuery(
+      `SELECT COUNT(*) AS TOTAL, COUNT(CASE WHEN IS_ACTIVE = 1 THEN 1 END) AS ACTIVE
+       FROM JAVIER.KPI_ALERTS`
+    );
+
+    const sampleCodes = await kpiQuery(
+      `SELECT DISTINCT CLIENT_CODE FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1 FETCH FIRST 20 ROWS ONLY`
+    );
+
+    const lastLoad = await kpiQuery(
+      `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, STARTED_AT, COMPLETED_AT FROM JAVIER.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 3 ROWS ONLY`
+    );
+
+    const byType = await kpiQuery(
+      `SELECT ALERT_TYPE, COUNT(*) AS CNT FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1 GROUP BY ALERT_TYPE`
+    );
+
+    res.json({
+      success: true,
+      total: parseInt(countResult.rows[0]?.TOTAL || 0),
+      active: parseInt(countResult.rows[0]?.ACTIVE || 0),
+      sampleClientCodes: sampleCodes.rows.map(r => r.CLIENT_CODE),
+      alertsByType: byType.rows,
+      recentLoads: lastLoad.rows,
+    });
+  } catch (err) {
+    logger.error(`[kpi:api] Error en debug/db-status: ${err.message}`);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 module.exports = router;

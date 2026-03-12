@@ -195,6 +195,29 @@ async function runETL({ localDir, loadId, force = false } = {}) {
 }
 
 /**
+ * Normaliza un código de cliente Glacius (corto, ej: '871') al formato GMP completo (10 dígitos, ej: '4300000871').
+ * Los CSVs de Glacius/Froneri usan 'CodigoInterno' que es el código interno del distribuidor SIN el prefijo '4300'.
+ * El sistema GMP usa códigos de 10 caracteres: '4300' + 6 dígitos con ceros a la izquierda.
+ */
+function normalizeGmpClientCode(code) {
+  if (!code) return code;
+  const s = String(code).trim();
+
+  // Ya está en formato completo 4300XXXXXX
+  if (/^4300\d{6}$/.test(s)) return s;
+
+  // Es numérico puro → prefijar con 4300 y rellenar con ceros hasta 10 dígitos
+  const numeric = s.replace(/^0+/, '') || '0'; // quitar ceros iniciales del CSV
+  if (/^\d+$/.test(numeric) && numeric.length <= 6) {
+    return '4300' + numeric.padStart(6, '0');
+  }
+
+  // Formato desconocido: devolver como está (log para debug)
+  logger.warn(`[kpi:etl] Código cliente no normalizable: '${s}' — se inserta tal cual`);
+  return s;
+}
+
+/**
  * Sanitiza texto para DB2 EBCDIC (CCSID 1234).
  * Reemplaza caracteres problemáticos que no existen en CCSID 1234:
  * - € → EUR
@@ -226,7 +249,8 @@ async function insertAlertsBatch(loadId, alerts) {
 
   let inserted = 0;
   for (const alert of alerts) {
-    const safeClient = alert.clientCode ? sanitizeForDb2(String(alert.clientCode)).substring(0, 20) : 'UNKNOWN';
+    const normalizedCode = normalizeGmpClientCode(alert.clientCode);
+    const safeClient = normalizedCode ? sanitizeForDb2(String(normalizedCode)).substring(0, 20) : 'UNKNOWN';
     const safeType = alert.alertType ? sanitizeForDb2(String(alert.alertType)).substring(0, 40) : 'UNKNOWN';
     const safeSev = alert.severity ? sanitizeForDb2(String(alert.severity)).substring(0, 10) : 'info';
     const safeMsg = alert.message ? sanitizeForDb2(String(alert.message)).substring(0, 2048) : '';
@@ -260,10 +284,11 @@ async function updateRedisCache(alerts) {
   try {
     const byClient = {};
     for (const alert of alerts) {
-      if (!byClient[alert.clientCode]) {
-        byClient[alert.clientCode] = [];
+      const normalizedCode = normalizeGmpClientCode(alert.clientCode);
+      if (!byClient[normalizedCode]) {
+        byClient[normalizedCode] = [];
       }
-      byClient[alert.clientCode].push({
+      byClient[normalizedCode].push({
         type: alert.alertType,
         severity: alert.severity,
         message: alert.message,
