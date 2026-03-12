@@ -29,6 +29,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
   List<KpiAlert> _alerts = [];
   bool _loading = true;
   bool _expanded = true;
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -57,7 +58,12 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _hasError = true;
+        });
+      }
     }
   }
 
@@ -81,9 +87,99 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
             );
     }
 
-    if (_alerts.isEmpty) return const SizedBox.shrink();
+    if (_alerts.isEmpty) {
+      // Compact: hide completely when no alerts
+      if (widget.compact) return const SizedBox.shrink();
+      // Full: show panel with empty/error state
+      return _buildEmptyPanel();
+    }
 
     return widget.compact ? _buildCompactView() : _buildFullView();
+  }
+
+  // ============================================================
+  // EMPTY/ERROR PANEL — visible siempre en modo completo
+  // ============================================================
+  Widget _buildEmptyPanel() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.darkSurface,
+            AppTheme.neonPurple.withValues(alpha: 0.04),
+            AppTheme.darkSurface,
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.neonPurple.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.neonPurple.withValues(alpha: 0.2),
+                  AppTheme.neonBlue.withValues(alpha: 0.1),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.insights_rounded,
+              size: 16,
+              color: AppTheme.neonPurple,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'KPIs Glacius',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _hasError
+                      ? 'Servicio no disponible — pendiente de despliegue'
+                      : 'Sin alertas activas para este cliente',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _hasError
+                        ? AppTheme.warning.withValues(alpha: 0.7)
+                        : AppTheme.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          InkWell(
+            onTap: _loadAlerts,
+            child: const Icon(
+              Icons.refresh_rounded,
+              size: 16,
+              color: AppTheme.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ============================================================
