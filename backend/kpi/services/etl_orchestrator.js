@@ -198,27 +198,39 @@ async function runETL({ localDir, loadId, force = false } = {}) {
  * Inserta alertas una por una (DB2 ODBC no soporta multi-row INSERT con params).
  */
 async function insertAlertsBatch(loadId, alerts) {
+  // CAST(? AS CLOB(64K)) es necesario porque DB2 ODBC no soporta
+  // bindear parámetros string directamente a columnas CLOB
   const sql = `INSERT INTO JAVIER.KPI_ALERTS
     (LOAD_ID, CLIENT_CODE, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA, SOURCE_FILE, EXPIRES_AT)
-    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP + 7 DAYS)`;
+    VALUES (?, ?, ?, ?, ?, CAST(? AS CLOB(64K)), ?, CURRENT TIMESTAMP + 7 DAYS)`;
 
+  let inserted = 0;
   for (const alert of alerts) {
     const safeClient = alert.clientCode ? String(alert.clientCode).substring(0, 20) : 'UNKNOWN';
     const safeType = alert.alertType ? String(alert.alertType).substring(0, 40) : 'UNKNOWN';
     const safeSev = alert.severity ? String(alert.severity).substring(0, 10) : 'info';
     const safeMsg = alert.message ? String(alert.message).substring(0, 2048) : '';
     const safeSrc = alert.sourceFile ? String(alert.sourceFile).substring(0, 100) : 'unknown';
+    const safeRaw = JSON.stringify(alert.rawData || {}).substring(0, 65000);
 
-    await kpiQuery(sql, [
-      loadId,
-      safeClient,
-      safeType,
-      safeSev,
-      safeMsg,
-      JSON.stringify(alert.rawData || {}),
-      safeSrc,
-    ]);
+    try {
+      await kpiQuery(sql, [
+        loadId,
+        safeClient,
+        safeType,
+        safeSev,
+        safeMsg,
+        safeRaw,
+        safeSrc,
+      ]);
+      inserted++;
+    } catch (err) {
+      const odbcDetail = (err.odbcErrors || []).map(e => `state=${e.state} code=${e.code} msg=${e.message}`).join('; ');
+      logger.error(`[kpi:etl] Error insertando alerta #${inserted + 1} (client=${safeClient}, type=${safeType}): ${err.message}${odbcDetail ? ' | ODBC: ' + odbcDetail : ''}`);
+      throw err;
+    }
   }
+  logger.info(`[kpi:etl] ${inserted}/${alerts.length} alertas insertadas`);
 }
 
 /**
