@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -412,7 +413,14 @@ class _MainShellState extends State<MainShell> {
       label: 'Facturas',
       color: Colors.teal,
     ));
-    
+
+    items.add(_NavItem(
+      icon: Icons.ac_unit_outlined,
+      selectedIcon: Icons.ac_unit,
+      label: 'Glacius',
+      color: Colors.lightBlueAccent,
+    ));
+
     items.add(_NavItem(
       icon: Icons.smart_toy_outlined,
       selectedIcon: Icons.smart_toy,
@@ -1336,8 +1344,7 @@ class _MainShellState extends State<MainShell> {
     }
     
     // ===============================================
-    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Chat
-    // (Cobros removido - ahora exclusivo de Repartidor)
+    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Facturas, 6=Glacius, 7=Chat
     // ===============================================
     if (isJefeVentas) {
       switch (_currentIndex) {
@@ -1361,6 +1368,8 @@ class _MainShellState extends State<MainShell> {
         case 5:
           return const FacturasPage();
         case 6:
+          return const KpiDashboardPage();
+        case 7:
           return const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
             subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
@@ -1373,7 +1382,7 @@ class _MainShellState extends State<MainShell> {
     }
     
     // ===============================================
-    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Facturas, 5=Chat
+    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Facturas, 5=Glacius, 6=Chat
     // ===============================================
     switch (_currentIndex) {
       case 0:
@@ -1387,6 +1396,8 @@ class _MainShellState extends State<MainShell> {
       case 4:
         return const FacturasPage();
       case 5:
+        return const KpiDashboardPage();
+      case 6:
         return const ComingSoonPlaceholder(
           title: 'Nexus AI — Asistente Comercial',
           subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',

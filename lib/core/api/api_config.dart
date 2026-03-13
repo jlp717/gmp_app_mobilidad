@@ -134,6 +134,7 @@ class ApiConfig {
 
   // KPI Glacius Endpoints
   static const String kpiAlerts = '/kpi/alerts';
+  static const String kpiDashboard = '/kpi/dashboard';
   static const String kpiEtl = '/kpi/etl';
   static const String kpiHealth = '/kpi/health';
 

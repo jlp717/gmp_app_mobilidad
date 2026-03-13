@@ -59,7 +59,7 @@ async function fetchCSVsFromSFTP(localDir) {
         user: FTP_CONFIG.user,
         password: FTP_CONFIG.password,
         secure: FTP_CONFIG.secure,
-        secureOptions: { rejectUnauthorized: false }, // Accept self-signed certs
+        secureOptions: { rejectUnauthorized: process.env.KPI_SFTP_REJECT_UNAUTHORIZED !== 'false' },
       });
 
       logger.info(`[kpi:ftps] Conectado. Listando ${REMOTE_FOLDER}...`);

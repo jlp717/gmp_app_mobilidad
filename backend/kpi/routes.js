@@ -402,4 +402,119 @@ router.get('/debug/db-status', async (req, res) => {
   }
 });
 
+// ============================================================
+// GET /api/kpi/dashboard?vendorCode=V01
+// Panel resumen Glacius para la app Flutter
+// JEFE_VENTAS: todos los clientes | COMERCIAL: solo los suyos
+// ============================================================
+router.get('/dashboard', async (req, res) => {
+  try {
+    const { vendorCode } = req.query;
+
+    // 1. Resumen por tipo y severidad
+    const summaryResult = await kpiQuery(`
+      SELECT ALERT_TYPE, SEVERITY, COUNT(*) AS CNT
+      FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1
+      GROUP BY ALERT_TYPE, SEVERITY ORDER BY ALERT_TYPE, SEVERITY
+    `);
+
+    // 2. Totales globales
+    const totalsResult = await kpiQuery(`
+      SELECT COUNT(*) AS TOTAL_ALERTS,
+             COUNT(DISTINCT CLIENT_CODE) AS TOTAL_CLIENTS,
+             COUNT(CASE WHEN SEVERITY = 'critical' THEN 1 END) AS CRITICAL,
+             COUNT(CASE WHEN SEVERITY = 'warning' THEN 1 END) AS WARNING,
+             COUNT(CASE WHEN SEVERITY = 'info' THEN 1 END) AS INFO
+      FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1
+    `);
+
+    // 3. Top clientes por severidad (los que mas alertas criticas/warning tienen)
+    let topClientsQuery = `
+      SELECT a.CLIENT_CODE,
+             COUNT(*) AS TOTAL_ALERTS,
+             COUNT(CASE WHEN a.SEVERITY = 'critical' THEN 1 END) AS CRITICAL,
+             COUNT(CASE WHEN a.SEVERITY = 'warning' THEN 1 END) AS WARNING
+      FROM JAVIER.KPI_ALERTS a
+      WHERE a.IS_ACTIVE = 1`;
+    const topParams = [];
+
+    // Si hay vendorCode, filtrar por clientes de ese vendedor
+    if (vendorCode && vendorCode !== 'ALL') {
+      topClientsQuery += ` AND a.CLIENT_CODE IN (
+        SELECT TRIM(CDCL) FROM JAVIER.LACLAE WHERE TRIM(CDVI) = ?
+      )`;
+      topParams.push(vendorCode.trim());
+    }
+
+    topClientsQuery += `
+      GROUP BY a.CLIENT_CODE
+      ORDER BY CRITICAL DESC, WARNING DESC, TOTAL_ALERTS DESC
+      FETCH FIRST 30 ROWS ONLY`;
+
+    const topClientsResult = await kpiQuery(topClientsQuery, topParams);
+
+    // 4. Ultima carga
+    const lastLoadResult = await kpiQuery(
+      `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, COMPLETED_AT
+       FROM JAVIER.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
+    );
+
+    // 5. Nombres comerciales de los top clientes (si existen en LACLAE)
+    const clientCodes = topClientsResult.rows.map(r => r.CLIENT_CODE);
+    let clientNames = {};
+    if (clientCodes.length > 0) {
+      try {
+        const placeholders = clientCodes.map(() => '?').join(',');
+        const namesResult = await kpiQuery(
+          `SELECT TRIM(CDCL) AS CDCL, TRIM(NMCL) AS NMCL
+           FROM JAVIER.LACLAE
+           WHERE TRIM(CDCL) IN (${placeholders})
+           FETCH FIRST ${clientCodes.length} ROWS ONLY`,
+          clientCodes
+        );
+        for (const row of namesResult.rows) {
+          clientNames[row.CDCL] = row.NMCL;
+        }
+      } catch (_) {
+        // LACLAE puede no tener todos los codigos
+      }
+    }
+
+    const totals = totalsResult.rows[0] || {};
+    const lastLoad = lastLoadResult.rows[0] || null;
+
+    res.json({
+      success: true,
+      totals: {
+        alerts: parseInt(totals.TOTAL_ALERTS || 0),
+        clients: parseInt(totals.TOTAL_CLIENTS || 0),
+        critical: parseInt(totals.CRITICAL || 0),
+        warning: parseInt(totals.WARNING || 0),
+        info: parseInt(totals.INFO || 0),
+      },
+      byType: summaryResult.rows.map(r => ({
+        type: r.ALERT_TYPE,
+        severity: r.SEVERITY,
+        count: parseInt(r.CNT),
+      })),
+      topClients: topClientsResult.rows.map(r => ({
+        clientCode: r.CLIENT_CODE,
+        clientName: clientNames[r.CLIENT_CODE] || null,
+        totalAlerts: parseInt(r.TOTAL_ALERTS),
+        critical: parseInt(r.CRITICAL),
+        warning: parseInt(r.WARNING),
+      })),
+      lastLoad: lastLoad ? {
+        loadId: lastLoad.LOAD_ID,
+        status: lastLoad.STATUS,
+        totalAlerts: parseInt(lastLoad.TOTAL_ALERTS || 0),
+        completedAt: lastLoad.COMPLETED_AT,
+      } : null,
+    });
+  } catch (err) {
+    logger.error(`[kpi:api] Error en GET /dashboard: ${err.message}`);
+    res.status(500).json({ success: false, error: 'Error obteniendo dashboard KPI' });
+  }
+});
+
 module.exports = router;

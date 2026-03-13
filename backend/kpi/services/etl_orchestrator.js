@@ -10,6 +10,7 @@ const { PROCESSORS } = require('./alert_rules');
 const { kpiQuery } = require('../config/db');
 const { invalidateKpiCache, cacheClientAlerts } = require('./redis_cache');
 const { recordETLRun, incrementMetric, setMetric } = require('./metrics');
+const { sendKpiDigest, getConfiguredRecipients } = require('./email_notification');
 const logger = require('../../middleware/logger');
 
 /**
@@ -207,6 +208,20 @@ async function runETL({ localDir, loadId, force = false } = {}) {
 
   logger.info(`[kpi:etl] ETL completado: load_id=${currentLoadId}, ${totalAlerts} alertas de ${fileResults.length} archivos (${etlDuration}ms)`);
 
+  // 11. Enviar resumen por email (no bloquea el resultado del ETL)
+  const emailRecipients = getConfiguredRecipients();
+  if (emailRecipients.length > 0) {
+    try {
+      const summaryResult = await kpiQuery(
+        `SELECT ALERT_TYPE, SEVERITY, COUNT(*) AS CNT FROM JAVIER.KPI_ALERTS
+         WHERE IS_ACTIVE = 1 GROUP BY ALERT_TYPE, SEVERITY ORDER BY ALERT_TYPE`
+      );
+      await sendKpiDigest(emailRecipients, { loadId: currentLoadId, totalAlerts, fileResults }, summaryResult.rows);
+    } catch (emailErr) {
+      logger.warn(`[kpi:etl] Error enviando email (no critico): ${emailErr.message}`);
+    }
+  }
+
   return { loadId: currentLoadId, totalAlerts, fileResults, skipped: false };
 }
 
@@ -244,6 +259,12 @@ function sanitizeForDb2(str) {
   if (!str) return str;
   return str
     .replace(/€/g, 'EUR')
+    // Emojis usados en alertas KPI → equivalentes ASCII legibles
+    .replace(/\u{1F449}/gu, '>')           // 👉 → >
+    .replace(/\u2744\uFE0F?/g, '[F]')      // ❄️ → [F] (Freezer/Armario)
+    .replace(/\u{1F9CA}/gu, '[C]')         // 🧊 → [C] (Conservadora)
+    .replace(/\u{1F368}/gu, '[V]')         // 🍨 → [V] (Vitrina)
+    .replace(/\u{1F527}/gu, '[O]')         // 🔧 → [O] (Otros)
     .replace(/[áàâä]/gi, (c) => c === c.toUpperCase() ? 'A' : 'a')
     .replace(/[éèêë]/gi, (c) => c === c.toUpperCase() ? 'E' : 'e')
     .replace(/[íìîï]/gi, (c) => c === c.toUpperCase() ? 'I' : 'i')
