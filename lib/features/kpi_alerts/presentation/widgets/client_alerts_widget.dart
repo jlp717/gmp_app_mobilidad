@@ -374,7 +374,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Alertas Nestle',
+                          'Alertas Nestle (Glacius)',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,

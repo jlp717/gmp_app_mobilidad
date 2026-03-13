@@ -37,6 +37,10 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   Timer? _debounceTimer;
   final TextEditingController _searchController = TextEditingController();
 
+  String _selectedAlertType = 'ALL';
+  bool _onlyWithAlerts = false;
+  List<String>? _clientsWithAlertsCodes;
+
   List<Map<String, dynamic>> _availableVendors = [];
   String? _selectedVendorCode = ''; // Default to empty string (All) for Manager view, so it matches dropdown item
 
@@ -89,8 +93,23 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
         search: query,
       );
 
+      // Apply KPI Alerts filtering
+      List<Map<String, dynamic>> filteredResults = results;
+      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+        final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
+          vendedorCodes: codesToPass,
+          type: _selectedAlertType,
+        );
+        
+        final codesSet = alertCodes.toSet();
+        filteredResults = results.where((c) {
+          final code = c['code']?.toString() ?? '';
+          return codesSet.contains(code);
+        }).toList();
+      }
+
       setState(() {
-        _clients = results;
+        _clients = filteredResults;
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
@@ -305,6 +324,9 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
           ),
         ),
 
+        // KPI Filters Bar
+        _buildKpiFilters(),
+
         // Search Bar
         Padding(
           padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16)),
@@ -392,6 +414,111 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
             onWhatsAppTap: () => _openWhatsApp(client),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildKpiFilters() {
+    final alertTypes = {
+      'ALL': 'Todas las Alertas',
+      'DESVIACION_VENTAS': 'Ventas vs Objetivo',
+      'CUOTA_SIN_COMPRA': 'Sin Compras',
+      'DESVIACION_REFERENCIACION': 'Productos Pendientes',
+      'PROMOCION': 'Promociones',
+      'ALTA_CLIENTE': 'Cliente Nuevo',
+      'AVISO': 'Avisos',
+      'MEDIOS_CLIENTE': 'Equipamiento',
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _selectedAlertType != 'ALL' ? AppTheme.neonPink : AppTheme.borderColor,
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedAlertType,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceColor,
+                      icon: const Icon(Icons.filter_list, size: 20),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _selectedAlertType != 'ALL' ? AppTheme.neonPink : AppTheme.textPrimary,
+                        fontWeight: _selectedAlertType != 'ALL' ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      items: alertTypes.entries.map((e) => DropdownMenuItem(
+                        value: e.key,
+                        child: Text(e.value),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedAlertType = value);
+                          _loadClients(query: _searchQuery);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilterChip(
+                label: const Text('Con Alertas'),
+                selected: _onlyWithAlerts,
+                selectedColor: AppTheme.neonPink.withOpacity(0.2),
+                checkmarkColor: AppTheme.neonPink,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  color: _onlyWithAlerts ? AppTheme.neonPink : AppTheme.textSecondary,
+                  fontWeight: _onlyWithAlerts ? FontWeight.bold : FontWeight.normal,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: _onlyWithAlerts ? AppTheme.neonPink : AppTheme.borderColor,
+                  ),
+                ),
+                onSelected: (val) {
+                  setState(() => _onlyWithAlerts = val);
+                  _loadClients(query: _searchQuery);
+                },
+              ),
+            ],
+          ),
+          if (_selectedAlertType != 'ALL' || _onlyWithAlerts)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 4),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedAlertType = 'ALL';
+                    _onlyWithAlerts = false;
+                  });
+                  _loadClients(query: _searchQuery);
+                },
+                child: const Text(
+                  'Limpiar filtros KPI',
+                  style: TextStyle(
+                    color: AppTheme.neonPink,
+                    fontSize: 11,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

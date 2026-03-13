@@ -191,6 +191,57 @@ router.get('/alerts/summary', async (req, res) => {
 });
 
 // ============================================================
+// GET /api/kpi/alerts/clients
+// Retorna un array de códigos de clientes que tienen ciertas alertas,
+// opcionalmente filtrado por vendedor(es), tipo y severidad.
+// Útil para filtros locales en la app Flutter (Rutero / Clientes)
+// ============================================================
+router.get('/alerts/clients', async (req, res) => {
+  try {
+    const vendorCodesStr = req.query.vendedorCodes || req.query.vendorCodes || req.query.vendorCode;
+    const { type, severity } = req.query;
+
+    let queryStr = `
+      SELECT DISTINCT a.CLIENT_CODE
+      FROM JAVIER.KPI_ALERTS a
+      WHERE a.IS_ACTIVE = 1
+    `;
+    const params = [];
+
+    if (vendorCodesStr && vendorCodesStr !== 'ALL') {
+      const codes = vendorCodesStr.split(',').map(c => c.trim()).filter(Boolean);
+      if (codes.length > 0) {
+        const placeholders = codes.map(() => '?').join(',');
+        queryStr += ` AND a.CLIENT_CODE IN (
+          SELECT TRIM(CDCL) FROM JAVIER.LACLAE WHERE TRIM(CDVI) IN (${placeholders})
+        )`;
+        params.push(...codes);
+      }
+    }
+
+    if (type) {
+      queryStr += ` AND a.ALERT_TYPE = ?`;
+      params.push(type);
+    }
+
+    if (severity) {
+      queryStr += ` AND a.SEVERITY = ?`;
+      params.push(severity);
+    }
+
+    const result = await kpiQuery(queryStr, params);
+
+    res.json({
+      success: true,
+      clientCodes: result.rows.map(r => r.CLIENT_CODE.trim()),
+    });
+  } catch (err) {
+    logger.error(`[kpi:api] Error en GET /alerts/clients: ${err.message}`);
+    res.status(500).json({ success: false, error: 'Error obteniendo clientes con alertas' });
+  }
+});
+
+// ============================================================
 // POST /api/kpi/etl/run
 // Dispara el ETL manualmente (admin only)
 // ============================================================

@@ -37,7 +37,7 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
     try {
       final auth = context.read<AuthProvider>();
       final vendorCode =
-          auth.role == 'JEFE_VENTAS' ? null : auth.vendorCode;
+          auth.isDirector ? null : auth.currentUser?.vendedorCode;
 
       String url = ApiConfig.kpiDashboard;
       if (vendorCode != null && vendorCode != 'ALL') {

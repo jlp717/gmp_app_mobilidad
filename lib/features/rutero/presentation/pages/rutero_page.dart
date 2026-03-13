@@ -43,6 +43,9 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   DateTime? _lastFetchTime; // Track last sync
   final TextEditingController _searchController = TextEditingController();
   
+  String _selectedAlertType = 'ALL';
+  bool _onlyWithAlerts = false;
+  Set<String> _kpiFilteredCodes = {};
   // Sort mode options - Professional labels
   static const Map<String, String> _sortModeLabels = {
     'sales_desc': 'Mayor Acumulado',
@@ -265,6 +268,17 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     });
 
     try {
+      // If KPI filters are active, fetch the codes first
+      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+        final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
+          vendedorCodes: _activeVendedorCode,
+          type: _selectedAlertType,
+        );
+        _kpiFilteredCodes = alertCodes.toSet();
+      } else {
+        _kpiFilteredCodes = {};
+      }
+
       final response = await ApiClient.get(
         '${ApiConfig.ruteroDay}/$_selectedDay',
         queryParameters: {
@@ -341,6 +355,9 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             
             // Unified Compact Header Region
             _buildUnifiedHeader(isSmallScreen),
+            
+            // KPI Filters (Compact)
+            _buildKpiFilters(),
             
             // Search Bar (dense)
             _buildSearchBar(isSmallScreen: isSmallScreen),
@@ -689,13 +706,24 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     }
 
     // Filter clients based on search query
-    List<Map<String, dynamic>> filteredClients = _searchQuery.isEmpty
-        ? List<Map<String, dynamic>>.from(_dayClients)
-        : _dayClients.where((client) {
-            final code = (client['code'] as String? ?? '').toLowerCase();
-            final name = (client['name'] as String? ?? '').toLowerCase();
-            return code.contains(_searchQuery) || name.contains(_searchQuery);
-          }).toList();
+    List<Map<String, dynamic>> filteredClients = _dayClients.where((client) {
+      final code = (client['code'] as String? ?? '').toLowerCase();
+      final name = (client['name'] as String? ?? '').toLowerCase();
+      
+      // Basic search match
+      bool matchesSearch = _searchQuery.isEmpty || 
+                          code.contains(_searchQuery) || 
+                          name.contains(_searchQuery);
+      
+      if (!matchesSearch) return false;
+      
+      // KPI Alerts Filter
+      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+        return _kpiFilteredCodes.contains(client['code']?.toString() ?? '');
+      }
+      
+      return true;
+    }).toList();
 
     // Apply sorting based on _sortMode
     switch (_sortMode) {
@@ -1226,6 +1254,93 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             );
           }
       }
+  }
+
+  Widget _buildKpiFilters() {
+    final alertTypes = {
+      'ALL': 'Filtro Alertas: Todas',
+      'DESVIACION_VENTAS': 'Ventas vs Objetivo',
+      'CUOTA_SIN_COMPRA': 'Sin Compras',
+      'DESVIACION_REFERENCIACION': 'Productos Pendientes',
+      'PROMOCION': 'Promociones',
+      'ALTA_CLIENTE': 'Cliente Nuevo',
+      'AVISO': 'Avisos',
+      'MEDIOS_CLIENTE': 'Equipamiento',
+    };
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _selectedAlertType != 'ALL' ? AppTheme.neonPink : AppTheme.borderColor,
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedAlertType,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceColor,
+                      icon: Icon(Icons.bolt, size: 14, color: _selectedAlertType != 'ALL' ? AppTheme.neonPink : AppTheme.textSecondary),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _selectedAlertType != 'ALL' ? AppTheme.neonPink : AppTheme.textPrimary,
+                        fontWeight: _selectedAlertType != 'ALL' ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      items: alertTypes.entries.map((e) => DropdownMenuItem(
+                        value: e.key,
+                        child: Text(e.value),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedAlertType = value);
+                          _loadDayClients();
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 32,
+                child: FilterChip(
+                  label: const Text('Con Alertas'),
+                  selected: _onlyWithAlerts,
+                  selectedColor: AppTheme.neonPink.withOpacity(0.2),
+                  checkmarkColor: AppTheme.neonPink,
+                  padding: EdgeInsets.zero,
+                  labelStyle: TextStyle(
+                    fontSize: 10,
+                    color: _onlyWithAlerts ? AppTheme.neonPink : AppTheme.textSecondary,
+                    fontWeight: _onlyWithAlerts ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: _onlyWithAlerts ? AppTheme.neonPink : AppTheme.borderColor,
+                    ),
+                  ),
+                  onSelected: (val) {
+                    setState(() => _onlyWithAlerts = val);
+                    _loadDayClients();
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

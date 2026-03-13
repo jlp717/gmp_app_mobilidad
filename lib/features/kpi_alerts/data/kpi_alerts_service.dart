@@ -162,6 +162,40 @@ class KpiAlertsService {
     return null;
   }
 
+  /// Obtiene una lista de códigos de clientes que tienen alertas activas,
+  /// permitiendo filtrar por tipo de alerta y/o severidad.
+  Future<List<String>> getClientsWithAlerts({
+    String? vendedorCodes,
+    String? type,
+    String? severity,
+  }) async {
+    try {
+      final params = <String, dynamic>{};
+      if (vendedorCodes != null && vendedorCodes.isNotEmpty) {
+        params['vendedorCodes'] = vendedorCodes;
+      }
+      if (type != null && type.isNotEmpty && type != 'ALL') {
+        params['type'] = type;
+      }
+      if (severity != null && severity.isNotEmpty && severity != 'ALL') {
+        params['severity'] = severity;
+      }
+
+      final response = await ApiClient.get(
+        '${ApiConfig.kpiAlerts}/clients',
+        queryParameters: params,
+      );
+
+      if (response['success'] == true) {
+        final codes = List<String>.from(response['clientCodes'] ?? []);
+        return codes;
+      }
+    } catch (e) {
+      debugPrint('[KpiAlerts] Error fetching clients with alerts: $e');
+    }
+    return [];
+  }
+
   /// Inicia polling periódico para un cliente
   void startPolling(
     String clientId, {
