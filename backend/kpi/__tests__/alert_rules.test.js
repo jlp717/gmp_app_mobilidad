@@ -25,7 +25,6 @@ describe('processDesviacionVentas', () => {
 
   test('genera alertas para todas las filas del CSV (sin filtro propio)', () => {
     const alerts = processDesviacionVentas(rows, headers);
-    // Glacius pre-filtra: cada fila genera alerta
     expect(alerts.length).toBe(rows.length);
 
     for (const alert of alerts) {
@@ -37,27 +36,28 @@ describe('processDesviacionVentas', () => {
     }
   });
 
-  test('mensajes negativos incluyen texto pedagogico con EUR', () => {
+  test('mensajes negativos incluyen texto pedagogico con accion sugerida', () => {
     const alerts = processDesviacionVentas(rows, headers);
     const negativos = alerts.filter(a => a.rawData.desviacionEur < 0);
     for (const alert of negativos) {
-      expect(alert.message).toMatch(/Nestle:.*vendiendo.*EUR.*menos.*objetivo/i);
+      expect(alert.message).toMatch(/POR DEBAJO/);
+      expect(alert.message).toMatch(/Que hacer:/);
     }
   });
 
-  test('genera alerta critical para desviación > 1000EUR', () => {
+  test('genera alerta critical para desviacion > 1000EUR', () => {
     const alerts = processDesviacionVentas(rows, headers);
-    const critical = alerts.find(a => a.clientCode === '11305'); // -3802.02
+    const critical = alerts.find(a => a.clientCode === '11305');
     expect(critical).toBeDefined();
     expect(critical.severity).toBe('critical');
   });
 
-  test('incluye contexto con objetivo anual y vendido actual', () => {
+  test('incluye contexto con objetivo anual y comprado hasta hoy', () => {
     const alerts = processDesviacionVentas(rows, headers);
     const withCtx = alerts.filter(a => a.rawData.cuotaAnual !== null && a.rawData.vtaActual !== null);
     for (const alert of withCtx) {
-      expect(alert.message).toMatch(/Objetivo anual:.*EUR/);
-      expect(alert.message).toMatch(/Vendido actual:.*EUR/);
+      expect(alert.message).toMatch(/Objetivo anual Nestle:.*EUR/);
+      expect(alert.message).toMatch(/Comprado hasta hoy:.*EUR/);
     }
   });
 });
@@ -70,7 +70,8 @@ describe('processCuotaSinCompra', () => {
     expect(alerts.length).toBeGreaterThan(0);
     for (const alert of alerts) {
       expect(alert.alertType).toBe('CUOTA_SIN_COMPRA');
-      expect(alert.message).toMatch(/NO HA HECHO NI UN SOLO PEDIDO/);
+      expect(alert.message).toMatch(/NINGUN PEDIDO/);
+      expect(alert.message).toMatch(/Que hacer:/);
       expect(['critical', 'warning', 'info']).toContain(alert.severity);
     }
   });
@@ -94,10 +95,18 @@ describe('processDesviacionReferenciacion', () => {
     for (const alert of alerts) {
       expect(alert.alertType).toBe('DESVIACION_REFERENCIACION');
       expect(alert.message).toMatch(/Nestle:/);
-      // Alertas con refs deben incluir lista de productos sugeridos
+      // Alertas con refs deben incluir lista numerada de productos
       if (alert.rawData.refs && alert.rawData.refs.length > 0) {
-        expect(alert.message).toMatch(/👉/);
+        expect(alert.message).toMatch(/\d\./);
       }
+    }
+  });
+
+  test('incluye accion sugerida', () => {
+    const result = parseCSV(path.join(SAMPLES_DIR, 'Desviacion_Referenciacion.csv'), 'Desviacion_Referenciacion.csv');
+    const alerts = processDesviacionReferenciacion(result.rows, result.headers);
+    for (const alert of alerts) {
+      expect(alert.message).toMatch(/Que hacer:/);
     }
   });
 });
@@ -111,8 +120,8 @@ describe('processPromociones', () => {
     for (const alert of alerts) {
       expect(alert.alertType).toBe('PROMOCION');
       expect(alert.severity).toBe('info');
-      expect(alert.message).toMatch(/Nestle nos indica.*promoción/i);
-      expect(alert.message).toMatch(/👉/);
+      expect(alert.message).toMatch(/Nestle:.*candidato.*promocion/i);
+      expect(alert.message).toMatch(/Que hacer:/);
     }
   });
 });
@@ -126,7 +135,6 @@ describe('processAltasClientes', () => {
     for (const alert of alerts) {
       expect(alert.alertType).toBe('ALTA_CLIENTE');
       expect(alert.message).toMatch(/Cliente nuevo Nestle:/);
-      expect(alert.message).toMatch(/EUR/);
       expect(['critical', 'warning', 'info']).toContain(alert.severity);
     }
   });
@@ -138,8 +146,8 @@ describe('processMensajesClientes', () => {
     const alerts = processMensajesClientes(result.rows, result.headers);
 
     expect(alerts.length).toBeGreaterThanOrEqual(5);
-    expect(alerts[0].message).toMatch(/incidencia operativa/i);
-    expect(alerts[0].message).toMatch(/👉/);
+    expect(alerts[0].message).toMatch(/Aviso operativo/i);
+    expect(alerts[0].message).toMatch(/Que hacer:/);
     for (const alert of alerts) {
       expect(alert.alertType).toBe('AVISO');
       expect(alert.severity).toBe('info');
@@ -156,13 +164,21 @@ describe('processMediosClientes', () => {
     for (const alert of alerts) {
       expect(alert.alertType).toBe('MEDIOS_CLIENTE');
       expect(alert.severity).toBe('info');
-      expect(alert.message).toMatch(/equipamiento.*Nestle/i);
+      expect(alert.message).toMatch(/equipo.*frio.*Nestle/i);
       expect(alert.rawData.totalMedios).toBeGreaterThan(0);
     }
-    // Verificar que tiene desglose con iconos
+    // Verificar que tiene desglose con listado
     const withArmarios = alerts.find(a => a.rawData.armarios > 0);
     if (withArmarios) {
-      expect(withArmarios.message).toMatch(/❄️/);
+      expect(withArmarios.message).toMatch(/Armario/);
+    }
+  });
+
+  test('incluye recordatorio de verificacion', () => {
+    const result = parseCSV(path.join(SAMPLES_DIR, 'Medios_Clientes.csv'), 'Medios_Clientes.csv');
+    const alerts = processMediosClientes(result.rows, result.headers);
+    for (const alert of alerts) {
+      expect(alert.message).toMatch(/Recordatorio:/);
     }
   });
 });

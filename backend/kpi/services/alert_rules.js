@@ -37,6 +37,17 @@ function fmtInt(n) {
   return Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+/**
+ * Calcula el porcentaje del anyo transcurrido hasta hoy.
+ * Util para contextualizar si un cliente va bien o mal en su objetivo anual.
+ */
+function pctAnioTranscurrido() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const end = new Date(now.getFullYear(), 11, 31);
+  return Math.round(((now - start) / (end - start)) * 100);
+}
+
 // ============================================================
 // 1. Desviacion_Ventas.csv
 // Columnas reales: Cuo.Anual Helados, VtaBru.Cum Actual, VtaBru.Cum Anterior,
@@ -64,45 +75,60 @@ function processDesviacionVentas(rows, headers) {
         ? Math.round((vtaActual / cuotaAnual) * 100)
         : (desviacionPct !== null ? Math.round(100 - Math.abs(desviacionPct)) : null);
 
+      const pctAnio = pctAnioTranscurrido();
       let message;
       let severity;
 
       if (desviacionEur === null || desviacionEur === 0) {
-        // Sin datos o desviación cero
-        message = 'Nestle: Sin compras registradas en este periodo.';
+        message = `Nestle: Este cliente no tiene compras registradas en el periodo actual. Llevamos un ${pctAnio}% del anio transcurrido y aun no ha realizado ningun pedido de Nestle.`;
         severity = 'warning';
       } else if (desviacionEur < 0) {
-        // Por debajo del objetivo
-        let pctMsg = '';
-        if (desviacionPct !== null) {
-          pctMsg = ` (un ${Math.abs(desviacionPct)}% MENOS de lo esperado a estas alturas del año)`;
+        const pctMsg = desviacionPct !== null
+          ? ` Esto supone un ${Math.abs(desviacionPct)}% MENOS de lo que deberia llevar comprado a estas alturas del anio (${pctAnio}% transcurrido).`
+          : '';
+        message = `Nestle: Este cliente lleva ${fmtEur(Math.abs(desviacionEur))}EUR POR DEBAJO del objetivo de ventas que Nestle le ha asignado.${pctMsg}`;
+        if (pctCumplido !== null) {
+          message += `\nSolo ha cumplido el ${pctCumplido}% de su objetivo anual.`;
         }
-        message = `Nestle: Llevamos vendiendo ${fmtEur(desviacionEur)}EUR menos que el objetivo asignado${pctMsg}.`;
         severity = Math.abs(desviacionEur) > 1000 ? 'critical' : Math.abs(desviacionEur) > 500 ? 'warning' : 'info';
       } else {
-        // Por encima del objetivo
-        let pctMsg = '';
-        if (desviacionPct !== null) {
-          pctMsg = ` (un ${Math.abs(desviacionPct)}% por encima de lo esperado)`;
+        const pctMsg = desviacionPct !== null
+          ? ` (un ${Math.abs(desviacionPct)}% por encima de lo esperado)`
+          : '';
+        message = `Nestle: Buena evolucion! Este cliente lleva +${fmtEur(desviacionEur)}EUR POR ENCIMA del objetivo de ventas${pctMsg}.`;
+        if (pctCumplido !== null && pctCumplido > 100) {
+          message += ` Ya ha superado el ${pctCumplido}% de su cuota anual.`;
         }
-        message = `Nestle: ¡Buena evolución! Ventas +${fmtEur(desviacionEur)}EUR por encima del objetivo${pctMsg}.`;
         severity = 'info';
       }
 
-      // Línea de contexto con cifras
+      // Cifras de contexto
       const contexto = [];
-      if (cuotaAnual !== null) contexto.push(`Objetivo anual: ${fmtEur(cuotaAnual)}EUR`);
-      if (vtaActual !== null) contexto.push(`Vendido actual: ${fmtEur(vtaActual)}EUR`);
-      if (contexto.length > 0) message += '\n' + contexto.join('  |  ');
+      if (cuotaAnual !== null) contexto.push(`Objetivo anual Nestle: ${fmtEur(cuotaAnual)}EUR`);
+      if (vtaActual !== null) contexto.push(`Comprado hasta hoy: ${fmtEur(vtaActual)}EUR`);
+      if (contexto.length > 0) message += '\n' + contexto.join(' | ');
 
-      // Línea de comparativa con año anterior
+      // Comparativa interanual
       if (vtaAnterior !== null) {
-        message += `\nEl año pasado por estas fechas llevaba: ${fmtEur(vtaAnterior)}EUR.`;
+        const diffInteranual = vtaActual !== null ? vtaActual - vtaAnterior : null;
+        message += `\nEl anio pasado por estas fechas llevaba: ${fmtEur(vtaAnterior)}EUR`;
+        if (diffInteranual !== null) {
+          message += diffInteranual >= 0
+            ? ` (va ${fmtEur(diffInteranual)}EUR mejor que el anio pasado).`
+            : ` (va ${fmtEur(Math.abs(diffInteranual))}EUR peor que el anio pasado).`;
+        } else {
+          message += '.';
+        }
       }
 
-      // Última compra
+      // Ultima compra
       if (ultCompra && ultCompra.trim()) {
-        message += `\nÚltima compra de helados: ${ultCompra.trim()}`;
+        message += `\nUltima compra de helados: ${ultCompra.trim()}.`;
+      }
+
+      // Accion sugerida
+      if (desviacionEur !== null && desviacionEur < 0) {
+        message += `\n> Que hacer: Revisar surtido y frecuencia de pedido. Ofrecer productos que no esta comprando.`;
       }
 
       alerts.push({
@@ -152,19 +178,27 @@ function processCuotaSinCompra(rows, headers) {
         canal.trim().toUpperCase() === 'FROZEN FOOD' ? 'Frozen Food (Congelados)' :
           canal.trim().charAt(0).toUpperCase() + canal.trim().slice(1).toLowerCase();
 
-      let message = `Nestle: Este cliente tiene un objetivo asignado para la familia [${canalLabel}], pero todavía NO HA HECHO NI UN SOLO PEDIDO en todo el año.`;
+      const pctAnio = pctAnioTranscurrido();
+      let message = `Nestle: Este cliente tiene un objetivo asignado de ${canalLabel}, pero NO HA REALIZADO NINGUN PEDIDO en lo que va de anio (${pctAnio}% transcurrido).`;
 
       // Cuota anual
       if (cuotaAnual !== null) {
-        message += `\nSu objetivo anual para ${canalLabel} es de ${fmtEur(cuotaAnual)}EUR.`;
+        message += `\nSu objetivo anual para ${canalLabel}: ${fmtEur(cuotaAnual)}EUR.`;
       }
 
       // Pendiente acumulado
       if (difCum !== null && difCum > 0) {
-        message += `\nPara ir bien, a estas alturas ya debería haber pedido al menos ${fmtEur(difCum)}EUR acumulados.`;
+        message += `\nPara ir al dia, ya deberia haber comprado al menos ${fmtEur(difCum)}EUR acumulados a estas alturas.`;
       } else if (cuotaCum !== null) {
-        message += `\nPara ir bien, a estas alturas ya debería haber pedido al menos ${fmtEur(cuotaCum)}EUR acumulados.`;
+        message += `\nPara ir al dia, ya deberia haber comprado al menos ${fmtEur(cuotaCum)}EUR acumulados a estas alturas.`;
       }
+
+      // Cuota del mes actual
+      if (cuotaMes !== null && cuotaMes > 0) {
+        message += `\nObjetivo solo de este mes: ${fmtEur(cuotaMes)}EUR.`;
+      }
+
+      message += `\n> Que hacer: Contactar al cliente y conseguir un primer pedido de ${canalLabel}. Cualquier venta cuenta.`;
 
       // Severidad basada en cuota
       const severity = cuotaAnual !== null && cuotaAnual > 2000 ? 'critical'
@@ -219,24 +253,33 @@ function processDesviacionReferenciacion(rows, headers) {
       // Mensaje principal con conteo claro
       let message;
       if (faltantes > 0 && esperados > 0) {
-        message = `Nestle: Debería estar comprando ${fmtInt(esperados)} productos distintos, pero solo compra ${fmtInt(actuales)} (Le faltan ${fmtInt(faltantes)} productos vitales).`;
+        message = `Nestle: Este cliente deberia estar comprando ${fmtInt(esperados)} productos distintos de Nestle, pero actualmente solo compra ${fmtInt(actuales)}. Le faltan ${fmtInt(faltantes)} producto${faltantes !== 1 ? 's' : ''} por incorporar a su surtido.`;
       } else if (faltantes > 0) {
-        message = `Nestle: A este cliente le faltan ${fmtInt(faltantes)} productos clave por comprar.`;
+        message = `Nestle: A este cliente le faltan ${fmtInt(faltantes)} producto${faltantes !== 1 ? 's' : ''} clave de Nestle por comprar.`;
       } else {
-        message = 'Nestle: Desviación en productos referenciados.';
+        message = 'Nestle: Desviacion en productos referenciados respecto al anio anterior.';
+      }
+
+      // Comparativa interanual de referencias
+      if (refActual !== null && refAnterior !== null && refAnterior > 0) {
+        const diff = refActual - refAnterior;
+        if (diff < 0) {
+          message += `\nEl anio pasado compraba ${fmtInt(refAnterior)} referencias y ahora solo ${fmtInt(refActual)}.`;
+        }
       }
 
       // Lista de productos sugeridos
       if (refs.length > 0) {
-        message += '\nEl sistema de Nestlé nos sugiere que le ofrezcamos principalmente estos:';
-        refs.forEach((r) => {
-          message += `\n  👉 ${r.trim()}`;
+        message += '\nNestle recomienda ofrecerle estos productos que no esta comprando:';
+        refs.forEach((r, i) => {
+          message += `\n  ${i + 1}. ${r.trim()}`;
         });
-        // Si faltan más de los 3 que muestra el CSV
         if (faltantes > refs.length) {
-          message += `\n  ... (y otros ${faltantes - refs.length} productos más)`;
+          message += `\n  ... y ${faltantes - refs.length} producto${(faltantes - refs.length) !== 1 ? 's' : ''} mas.`;
         }
       }
+
+      message += `\n> Que hacer: En la proxima visita, llevar muestras o argumentario de estos productos.`;
 
       alerts.push({
         clientCode: String(clientCode).trim(),
@@ -272,7 +315,7 @@ function processPromociones(rows, headers) {
       const msgMarketing = getColumnValue(row, headers, 'O', ['Msg.Marketing', 'MsgMarketing', 'Marketing']);
       if (!msgMarketing || msgMarketing.trim().length === 0) continue;
 
-      const message = `Nestle nos indica que este cliente es candidato ideal para la siguiente promoción:\n\n👉 [${msgMarketing.trim()}]\n\n¡Recuerda ofrecérsela en tu próxima visita!`;
+      const message = `Nestle: Este cliente es candidato para una promocion especial.\n\nPromocion: ${msgMarketing.trim()}\n\n> Que hacer: Ofrecer esta promocion en la proxima visita. Los clientes que aprovechan promociones tienen mayor fidelizacion.`;
 
       alerts.push({
         clientCode: String(clientCode).trim(),
@@ -323,28 +366,40 @@ function processAltasClientes(rows, headers) {
       let severity;
 
       if (desviacionEur !== null && desviacionEur < 0) {
-        message = `Cliente nuevo Nestle: Su arranque es lento, lleva ${fmtEur(desviacionEur)}EUR vendidos POR DEBAJO de su objetivo.`;
+        message = `Cliente nuevo Nestle: Su arranque esta siendo lento. Lleva ${fmtEur(Math.abs(desviacionEur))}EUR POR DEBAJO de su objetivo de ventas.`;
+        if (pctCumplido !== null) {
+          message += ` Solo ha alcanzado el ${pctCumplido}% de su cuota.`;
+        }
+        message += `\nLos primeros meses son criticos para fidelizar a un cliente nuevo.`;
         severity = Math.abs(desviacionEur) > 500 ? 'critical' : 'warning';
       } else if (desviacionEur !== null && desviacionEur > 0) {
-        message = `Cliente nuevo Nestle: ¡Gran arranque! Lleva +${fmtEur(desviacionEur)}EUR POR ENCIMA de su objetivo.`;
+        message = `Cliente nuevo Nestle: Gran arranque! Lleva +${fmtEur(desviacionEur)}EUR POR ENCIMA de su objetivo.`;
+        if (pctCumplido !== null) {
+          message += ` Ya ha cumplido el ${pctCumplido}% de su cuota anual.`;
+        }
         severity = 'info';
       } else {
-        message = 'Cliente nuevo Nestle: Sin datos de evolución todavía.';
+        message = `Cliente nuevo Nestle: Aun no hay datos de evolucion. Hay que asegurar que empiece a pedir cuanto antes.`;
         severity = 'info';
       }
 
       // Contexto
       const contexto = [];
       if (cuotaAnual !== null) contexto.push(`Objetivo anual: ${fmtEur(cuotaAnual)}EUR`);
-      if (vtaActual !== null) contexto.push(`Vendido actual: ${fmtEur(vtaActual)}EUR`);
-      if (contexto.length > 0) message += '\n' + contexto.join('  |  ');
+      if (vtaActual !== null) contexto.push(`Comprado hasta hoy: ${fmtEur(vtaActual)}EUR`);
+      if (contexto.length > 0) message += '\n' + contexto.join(' | ');
 
       // Fecha de alta
       if (fechaAlta && fechaAlta.trim()) {
-        message += `\nDado de alta el: ${fechaAlta.trim()}`;
+        message += `\nDado de alta: ${fechaAlta.trim()}`;
       }
       if (ultCompra && ultCompra.trim()) {
-        message += ` | Última compra: ${ultCompra.trim()}`;
+        message += ` | Ultima compra: ${ultCompra.trim()}`;
+      }
+
+      // Accion
+      if (desviacionEur !== null && desviacionEur < 0) {
+        message += `\n> Que hacer: Programar visita frecuente y asegurar pedidos regulares para consolidar la relacion.`;
       }
 
       alerts.push({
@@ -386,7 +441,7 @@ function processMensajesClientes(rows, headers) {
       if (!aviso || aviso.trim().length === 0) continue;
 
       const avisoClean = aviso.trim();
-      const message = `Nestle ha detectado una incidencia operativa:\n\n👉 [${avisoClean}]\n\nPor favor, revísalo o soluciónalo en tu próxima visita al cliente.`;
+      const message = `Nestle: Aviso operativo detectado para este cliente.\n\nDetalle: ${avisoClean}\n\n> Que hacer: Revisar o solucionar esta incidencia en la proxima visita al punto de venta.`;
 
       alerts.push({
         clientCode: String(clientCode).trim(),
@@ -433,14 +488,14 @@ function processMediosClientes(rows, headers) {
       const ultCompra = getColumnValue(row, headers, 'M', ['Ult.Comp.Helados', 'Ult. Comp']);
 
       // Mensaje principal
-      let message = `El cliente dispone del siguiente equipamiento frío cedido por Nestle (${Math.round(totalMedios)} en total):`;
+      let message = `Nestle: Este cliente tiene ${Math.round(totalMedios)} equipo${totalMedios > 1 ? 's' : ''} de frio cedido${totalMedios > 1 ? 's' : ''} por Nestle en su punto de venta:`;
 
       // Desglose detallado
       const desglose = [];
-      if (armarios && armarios > 0) desglose.push(`  ❄️ ${armarios} Armario${armarios > 1 ? 's' : ''} (Congelador vertical acristalado)`);
-      if (conservadoras && conservadoras > 0) desglose.push(`  🧊 ${conservadoras} Conservadora${conservadoras > 1 ? 's' : ''} (Arcón horizontal)`);
-      if (vitrinas && vitrinas > 0) desglose.push(`  🍨 ${vitrinas} Vitrina${vitrinas > 1 ? 's' : ''} (Expositor abierto)`);
-      if (otros && otros > 0) desglose.push(`  🔧 ${otros} Otro${otros > 1 ? 's' : ''} equipo${otros > 1 ? 's' : ''} auxiliar${otros > 1 ? 'es' : ''}`);
+      if (armarios && armarios > 0) desglose.push(`  - ${armarios} Armario${armarios > 1 ? 's' : ''} (congelador vertical acristalado)`);
+      if (conservadoras && conservadoras > 0) desglose.push(`  - ${conservadoras} Conservadora${conservadoras > 1 ? 's' : ''} (arcon horizontal)`);
+      if (vitrinas && vitrinas > 0) desglose.push(`  - ${vitrinas} Vitrina${vitrinas > 1 ? 's' : ''} (expositor abierto)`);
+      if (otros && otros > 0) desglose.push(`  - ${otros} Otro${otros > 1 ? 's' : ''} equipo${otros > 1 ? 's' : ''}`);
 
       if (desglose.length > 0) {
         message += '\n' + desglose.join('\n');
@@ -451,8 +506,15 @@ function processMediosClientes(rows, headers) {
       if (agrupacion && agrupacion.trim()) ctx.push(`Segmento: ${agrupacion.trim()}`);
       if (tipoEstab && tipoEstab.trim()) ctx.push(tipoEstab.trim());
       if (ctx.length > 0) {
-        message += '\n\nEstablecimiento: ' + ctx.join(' - ');
+        message += '\nEstablecimiento: ' + ctx.join(' - ');
       }
+
+      // Ultima compra
+      if (ultCompra && ultCompra.trim()) {
+        message += `\nUltima compra de helados: ${ultCompra.trim()}.`;
+      }
+
+      message += `\n> Recordatorio: Verificar que el equipamiento esta en buen estado y bien ubicado en el punto de venta.`;
 
       alerts.push({
         clientCode: String(clientCode).trim(),

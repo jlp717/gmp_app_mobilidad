@@ -192,9 +192,9 @@ router.get('/alerts/summary', async (req, res) => {
 
 // ============================================================
 // GET /api/kpi/alerts/clients
-// Retorna un array de códigos de clientes que tienen ciertas alertas,
-// opcionalmente filtrado por vendedor(es), tipo y severidad.
-// Útil para filtros locales en la app Flutter (Rutero / Clientes)
+// Retorna códigos de clientes con alertas activas,
+// filtrable por vendedor(es), tipo y severidad.
+// Usado por Flutter para filtros en Rutero/Clientes.
 // ============================================================
 router.get('/alerts/clients', async (req, res) => {
   try {
@@ -213,7 +213,7 @@ router.get('/alerts/clients', async (req, res) => {
       if (codes.length > 0) {
         const placeholders = codes.map(() => '?').join(',');
         queryStr += ` AND a.CLIENT_CODE IN (
-          SELECT TRIM(LCCDCL) FROM DSED.LACLAE WHERE TRIM(R1_T8CDVD) IN (${placeholders})
+          SELECT TRIM(CDCL) FROM JAVIER.LACLAE WHERE TRIM(CDVI) IN (${placeholders})
         )`;
         params.push(...codes);
       }
@@ -233,7 +233,7 @@ router.get('/alerts/clients', async (req, res) => {
 
     res.json({
       success: true,
-      clientCodes: result.rows.map(r => (r.CLIENT_CODE || r.client_code || '').trim()),
+      clientCodes: result.rows.map(r => (r.CLIENT_CODE || '').trim()),
     });
   } catch (err) {
     logger.error(`[kpi:api] Error en GET /alerts/clients: ${err.message}`);
@@ -473,9 +473,9 @@ router.get('/dashboard', async (req, res) => {
     const totalsResult = await kpiQuery(`
       SELECT COUNT(*) AS TOTAL_ALERTS,
              COUNT(DISTINCT CLIENT_CODE) AS TOTAL_CLIENTS,
-             SUM(CASE WHEN SEVERITY = 'critical' THEN 1 ELSE 0 END) AS CRITICAL,
-             SUM(CASE WHEN SEVERITY = 'warning' THEN 1 ELSE 0 END) AS WARNING,
-             SUM(CASE WHEN SEVERITY = 'info' THEN 1 ELSE 0 END) AS INFO
+             COUNT(CASE WHEN SEVERITY = 'critical' THEN 1 END) AS CRITICAL,
+             COUNT(CASE WHEN SEVERITY = 'warning' THEN 1 END) AS WARNING,
+             COUNT(CASE WHEN SEVERITY = 'info' THEN 1 END) AS INFO
       FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1
     `);
 
@@ -483,8 +483,8 @@ router.get('/dashboard', async (req, res) => {
     let topClientsQuery = `
       SELECT a.CLIENT_CODE,
              COUNT(*) AS TOTAL_ALERTS,
-             SUM(CASE WHEN a.SEVERITY = 'critical' THEN 1 ELSE 0 END) AS CRITICAL,
-             SUM(CASE WHEN a.SEVERITY = 'warning' THEN 1 ELSE 0 END) AS WARNING
+             COUNT(CASE WHEN a.SEVERITY = 'critical' THEN 1 END) AS CRITICAL,
+             COUNT(CASE WHEN a.SEVERITY = 'warning' THEN 1 END) AS WARNING
       FROM JAVIER.KPI_ALERTS a
       WHERE a.IS_ACTIVE = 1`;
     const topParams = [];
@@ -492,7 +492,7 @@ router.get('/dashboard', async (req, res) => {
     // Si hay vendorCode, filtrar por clientes de ese vendedor
     if (vendorCode && vendorCode !== 'ALL') {
       topClientsQuery += ` AND a.CLIENT_CODE IN (
-        SELECT TRIM(LCCDCL) FROM DSED.LACLAE WHERE TRIM(R1_T8CDVD) = ?
+        SELECT TRIM(CDCL) FROM JAVIER.LACLAE WHERE TRIM(CDVI) = ?
       )`;
       topParams.push(vendorCode.trim());
     }
@@ -510,23 +510,21 @@ router.get('/dashboard', async (req, res) => {
        FROM JAVIER.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
     );
 
-    // 5. Nombres comerciales de los top clientes (de MASTER DSEDAC.CLI)
-    const clientCodes = topClientsResult.rows.map(r => r.CLIENT_CODE || r.client_code);
+    // 5. Nombres comerciales de los top clientes (si existen en LACLAE)
+    const clientCodes = topClientsResult.rows.map(r => r.CLIENT_CODE);
     let clientNames = {};
     if (clientCodes.length > 0) {
       try {
         const placeholders = clientCodes.map(() => '?').join(',');
         const namesResult = await kpiQuery(
-          `SELECT TRIM(CODIGOCLIENTE) AS LCCDCL, TRIM(NOMBRECLIENTE) AS NMCL
-           FROM DSEDAC.CLI
-           WHERE TRIM(CODIGOCLIENTE) IN (${placeholders})
+          `SELECT TRIM(CDCL) AS CDCL, TRIM(NMCL) AS NMCL
+           FROM JAVIER.LACLAE
+           WHERE TRIM(CDCL) IN (${placeholders})
            FETCH FIRST ${clientCodes.length} ROWS ONLY`,
           clientCodes
         );
         for (const row of namesResult.rows) {
-          const code = (row.LCCDCL || row.lccdcl || '').trim();
-          const name = (row.NMCL || row.nmcl || '').trim();
-          if (code) clientNames[code] = name;
+          clientNames[row.CDCL] = row.NMCL;
         }
       } catch (_) {
         // LACLAE puede no tener todos los codigos
