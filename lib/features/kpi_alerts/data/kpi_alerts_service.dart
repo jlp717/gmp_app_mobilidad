@@ -258,6 +258,20 @@ class KpiAlertsService {
   void invalidateAllCache() {
     _cache.clear();
   }
+
+  /// Label legible para tipos de alerta
+  String getKpiAlertTypeName(String type) {
+    switch (type) {
+      case 'DESVIACION_VENTAS': return 'Ventas vs Objetivo';
+      case 'CUOTA_SIN_COMPRA': return 'Sin Compras';
+      case 'DESVIACION_REFERENCIACION': return 'Productos Pendientes';
+      case 'PROMOCION': return 'Promociones';
+      case 'ALTA_CLIENTE': return 'Cliente Nuevo';
+      case 'AVISO': return 'Avisos';
+      case 'MEDIOS_CLIENTE': return 'Equipamiento';
+      default: return type;
+    }
+  }
 }
 
 class _CacheEntry {

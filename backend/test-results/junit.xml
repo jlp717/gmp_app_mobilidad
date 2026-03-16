@@ -1,39 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="GMP Backend Tests" tests="29" failures="0" errors="0" time="2.55">
-  <testsuite name="processDesviacionVentas" errors="0" failures="0" skipped="0" timestamp="2026-03-16T07:08:11" time="1.265" tests="13">
-    <testcase classname="processDesviacionVentas" name="genera alertas para todas las filas del CSV (sin filtro propio)" time="0.01">
+<testsuites name="GMP Backend Tests" tests="29" failures="0" errors="0" time="2.636">
+  <testsuite name="processDesviacionVentas" errors="0" failures="0" skipped="0" timestamp="2026-03-16T07:38:49" time="1.378" tests="13">
+    <testcase classname="processDesviacionVentas" name="genera alertas para todas las filas del CSV (sin filtro propio)" time="0.009">
     </testcase>
     <testcase classname="processDesviacionVentas" name="mensajes negativos incluyen texto pedagogico con accion sugerida" time="0.003">
     </testcase>
-    <testcase classname="processDesviacionVentas" name="genera alerta critical para desviacion &gt; 1000EUR" time="0.002">
+    <testcase classname="processDesviacionVentas" name="genera alerta critical para desviacion &gt; 1000EUR" time="0.001">
     </testcase>
     <testcase classname="processDesviacionVentas" name="incluye contexto con objetivo anual y comprado hasta hoy" time="0.002">
     </testcase>
-    <testcase classname="processCuotaSinCompra" name="genera alertas para todas las filas con mensaje pedagogico" time="0.005">
+    <testcase classname="processCuotaSinCompra" name="genera alertas para todas las filas con mensaje pedagogico" time="0.006">
     </testcase>
     <testcase classname="processCuotaSinCompra" name="severity critical para cuota &gt; 2000EUR" time="0.003">
     </testcase>
-    <testcase classname="processDesviacionReferenciacion" name="genera alertas con lista de productos faltantes" time="0.006">
+    <testcase classname="processDesviacionReferenciacion" name="genera alertas con lista de productos faltantes" time="0.005">
     </testcase>
-    <testcase classname="processDesviacionReferenciacion" name="incluye accion sugerida" time="0.002">
+    <testcase classname="processDesviacionReferenciacion" name="incluye accion sugerida" time="0.003">
     </testcase>
-    <testcase classname="processPromociones" name="genera alertas con mensaje de promocion Nestle" time="0.005">
+    <testcase classname="processPromociones" name="genera alertas con mensaje de promocion Nestle" time="0.003">
     </testcase>
-    <testcase classname="processAltasClientes" name="genera alertas de seguimiento de clientes nuevos" time="0.004">
+    <testcase classname="processAltasClientes" name="genera alertas de seguimiento de clientes nuevos" time="0.003">
     </testcase>
-    <testcase classname="processMensajesClientes" name="genera alertas con texto de avisos operativos Nestle" time="0.003">
+    <testcase classname="processMensajesClientes" name="genera alertas con texto de avisos operativos Nestle" time="0.004">
     </testcase>
-    <testcase classname="processMediosClientes" name="genera alertas con detalle de equipamiento frio" time="0.005">
+    <testcase classname="processMediosClientes" name="genera alertas con detalle de equipamiento frio" time="0.006">
     </testcase>
     <testcase classname="processMediosClientes" name="incluye recordatorio de verificacion" time="0.003">
     </testcase>
   </testsuite>
-  <testsuite name="parseNumber" errors="0" failures="0" skipped="0" timestamp="2026-03-16T07:08:12" time="0.428" tests="16">
-    <testcase classname="parseNumber" name="parsea enteros" time="0.002">
+  <testsuite name="parseNumber" errors="0" failures="0" skipped="0" timestamp="2026-03-16T07:38:51" time="0.465" tests="16">
+    <testcase classname="parseNumber" name="parsea enteros" time="0.001">
     </testcase>
-    <testcase classname="parseNumber" name="parsea decimales con punto" time="0">
+    <testcase classname="parseNumber" name="parsea decimales con punto" time="0.001">
     </testcase>
-    <testcase classname="parseNumber" name="parsea decimales con coma (formato español)" time="0">
+    <testcase classname="parseNumber" name="parsea decimales con coma (formato español)" time="0.001">
     </testcase>
     <testcase classname="parseNumber" name="parsea miles con punto y decimal con coma" time="0.001">
     </testcase>
@@ -41,17 +41,17 @@
     </testcase>
     <testcase classname="parseNumber" name="ignora símbolo %" time="0.001">
     </testcase>
-    <testcase classname="parseNumber" name="retorna null para vacío" time="0.002">
+    <testcase classname="parseNumber" name="retorna null para vacío" time="0.001">
     </testcase>
-    <testcase classname="parseNumber" name="retorna null para texto no numérico" time="0.001">
+    <testcase classname="parseNumber" name="retorna null para texto no numérico" time="0.005">
     </testcase>
     <testcase classname="parseNumber" name="parsea negativos" time="0.002">
     </testcase>
     <testcase classname="detectDelimiter" name="detecta punto y coma" time="0.003">
     </testcase>
-    <testcase classname="detectDelimiter" name="detecta coma" time="0.003">
+    <testcase classname="detectDelimiter" name="detecta coma" time="0.007">
     </testcase>
-    <testcase classname="findHeaderLine" name="encuentra header por marcadores" time="0.008">
+    <testcase classname="findHeaderLine" name="encuentra header por marcadores" time="0.002">
     </testcase>
     <testcase classname="parseCSV - Desviacion_Ventas" name="parsea correctamente el CSV de ejemplo" time="0.007">
     </testcase>

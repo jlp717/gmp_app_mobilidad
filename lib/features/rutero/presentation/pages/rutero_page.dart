@@ -698,29 +698,31 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             ),
             const SizedBox(height: 8),
             Text(
-              'Selecciona otro día',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              'Prueba a cambiar de día o sincronizar',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
           ],
         ),
       );
     }
 
-    // Filter clients based on search query
-    List<Map<String, dynamic>> filteredClients = _dayClients.where((client) {
-      final code = (client['code'] as String? ?? '').toLowerCase();
-      final name = (client['name'] as String? ?? '').toLowerCase();
+    // Filter clients based on search query AND KPI alerts
+    final filteredClients = _dayClients.where((client) {
+      final code = (client['code'] as String?) ?? '';
       
-      // Basic search match
-      bool matchesSearch = _searchQuery.isEmpty || 
-                          code.contains(_searchQuery) || 
-                          name.contains(_searchQuery);
-      
-      if (!matchesSearch) return false;
-      
-      // KPI Alerts Filter
+      // 1. KPI Filter (Alerts)
       if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
-        return _kpiFilteredCodes.contains(client['code']?.toString() ?? '');
+        if (!_kpiFilteredCodes.contains(code)) return false;
+      }
+
+      // 2. Search Filter
+      if (_searchQuery.isNotEmpty) {
+        final name = (client['name'] as String?)?.toLowerCase() ?? '';
+        final address = (client['address'] as String?)?.toLowerCase() ?? '';
+        final city = (client['city'] as String?)?.toLowerCase() ?? '';
+        
+        final q = _searchQuery.toLowerCase();
+        return name.contains(q) || code.contains(q) || address.contains(q) || city.contains(q);
       }
       
       return true;
@@ -743,21 +745,14 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
         });
         break;
       case 'route':
-        // Original route order (no user customizations) - use original API order
-        // Already sorted by API default order (no-op)
+        // Already sorted by API order
         break;
       case 'custom':
       default:
-        // Custom order - use 'order' field set by user
         filteredClients.sort((a, b) {
           final orderA = (a['order'] as int?) ?? 9999;
           final orderB = (b['order'] as int?) ?? 9999;
-          
-          if (orderA != orderB) {
-            return orderA.compareTo(orderB);
-          }
-          
-          // Secondary tie-breaker by Name (to match planner.js fix)
+          if (orderA != orderB) return orderA.compareTo(orderB);
           final nameA = (a['name'] as String?) ?? '';
           final nameB = (b['name'] as String?) ?? '';
           return nameA.compareTo(nameB);
@@ -765,25 +760,55 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
         break;
     }
 
+    // --- Empty States for Filtered Results ---
+    
+    // Case A: No results due to Alert filters
+    if (filteredClients.isEmpty && (_onlyWithAlerts || _selectedAlertType != 'ALL')) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.notifications_off_outlined, size: 60, color: AppTheme.neonPink.withOpacity(0.3)),
+            const SizedBox(height: 16),
+            Text(
+              'Sin clientes con alertas',
+              style: TextStyle(fontSize: 18, color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectedAlertType == 'ALL' 
+                ? 'Este día no tiene alertas detectadas'
+                : 'No hay alertas de tipo\n"${KpiAlertsService.instance.getKpiAlertTypeName(_selectedAlertType)}"',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+            ),
+            const SizedBox(height: 24),
+            TextButton.icon(
+              onPressed: () => setState(() { _onlyWithAlerts = false; _selectedAlertType = 'ALL'; }),
+              icon: const Icon(Icons.filter_list_off),
+              label: const Text('Limpiar filtros de KPI'),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.neonPink),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Case B: No results due to Search query
     if (filteredClients.isEmpty && _searchQuery.isNotEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 48, color: AppTheme.neonPink.withOpacity(0.4)),
+            Icon(Icons.search_off, size: 48, color: AppTheme.neonPink.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
             Text(
-              'No se encontraron clientes para "$_searchQuery"',
+              'No se encontró ningún cliente para "$_searchQuery"',
               style: TextStyle(color: Colors.grey.shade400),
             ),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  _searchController.clear();
-                  _searchQuery = '';
-                });
-              },
+              onPressed: () => setState(() { _searchController.clear(); _searchQuery = ''; }),
               child: Text('Limpiar búsqueda', style: TextStyle(color: AppTheme.neonPink)),
             ),
           ],

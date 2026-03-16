@@ -203,41 +203,46 @@ router.get('/alerts/clients', async (req, res) => {
     const { type, severity } = req.query;
 
     let queryStr = `
-      SELECT DISTINCT a.CLIENT_CODE
-      FROM JAVIER.KPI_ALERTS a
-      WHERE a.IS_ACTIVE = 1
+      SELECT DISTINCT CLIENT_CODE
+      FROM JAVIER.KPI_ALERTS
+      WHERE IS_ACTIVE = 1
     `;
     const params = [];
+
+    if (type && type !== 'ALL') {
+      queryStr += ` AND ALERT_TYPE = ?`;
+      params.push(type);
+    }
+
+    if (severity && severity !== 'ALL') {
+      queryStr += ` AND SEVERITY = ?`;
+      params.push(severity);
+    }
+
+    const result = await kpiQuery(queryStr, params);
+    let clientCodes = result.rows.map(r => (r.CLIENT_CODE || '').trim());
 
     if (vendorCodesStr && vendorCodesStr !== 'ALL') {
       const codes = vendorCodesStr.split(',').map(c => c.trim()).filter(Boolean);
       if (codes.length > 0) {
         const placeholders = codes.map(() => '?').join(',');
-        queryStr += ` AND a.CLIENT_CODE IN (
-          SELECT DISTINCT TRIM(LCCDCL) FROM DSED.LACLAE
+        const vendorQuery = `
+          SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
+          FROM DSED.LACLAE
           WHERE TRIM(LCCDVD) IN (${placeholders})
-            AND LCAADC = YEAR(CURRENT_DATE)
+            AND LCAADC >= YEAR(CURRENT_DATE) - 1
             AND LCTPLN = 'T' AND LCCLLG = 'VT'
-        )`;
-        params.push(...codes);
+        `;
+        const vendorClientsResult = await kpiQuery(vendorQuery, codes);
+        const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
+
+        clientCodes = clientCodes.filter(c => validCodes.has(c));
       }
     }
 
-    if (type && type !== 'ALL') {
-      queryStr += ` AND a.ALERT_TYPE = ?`;
-      params.push(type);
-    }
-
-    if (severity && severity !== 'ALL') {
-      queryStr += ` AND a.SEVERITY = ?`;
-      params.push(severity);
-    }
-
-    const result = await kpiQuery(queryStr, params);
-
     res.json({
       success: true,
-      clientCodes: result.rows.map(r => (r.CLIENT_CODE || '').trim()),
+      clientCodes,
     });
   } catch (err) {
     logger.error(`[kpi:api] Error en GET /alerts/clients: ${err.message}`);
@@ -492,43 +497,51 @@ router.get('/dashboard', async (req, res) => {
       GROUP BY ALERT_TYPE, SEVERITY ORDER BY ALERT_TYPE, SEVERITY
     `);
 
-    // 2. Totales globales
-    const totalsResult = await kpiQuery(`
-      SELECT COUNT(*) AS TOTAL_ALERTS,
-             COUNT(DISTINCT CLIENT_CODE) AS TOTAL_CLIENTS,
-             SUM(CASE WHEN SEVERITY = 'critical' THEN 1 ELSE 0 END) AS CRITICAL,
-             SUM(CASE WHEN SEVERITY = 'warning' THEN 1 ELSE 0 END) AS WARNING,
-             SUM(CASE WHEN SEVERITY = 'info' THEN 1 ELSE 0 END) AS INFO
+    // 2. Fetch raw active alerts and group in Node (prevents 42S22 errors in DB2)
+    const allAlertsResult = await kpiQuery(`
+      SELECT CLIENT_CODE, SEVERITY
       FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1
     `);
 
-    // 3. Top clientes por severidad (los que mas alertas criticas/warning tienen)
-    let topClientsQuery = `
-      SELECT a.CLIENT_CODE,
-             COUNT(*) AS TOTAL_ALERTS,
-             SUM(CASE WHEN a.SEVERITY = 'critical' THEN 1 ELSE 0 END) AS CRITICAL,
-             SUM(CASE WHEN a.SEVERITY = 'warning' THEN 1 ELSE 0 END) AS WARNING
-      FROM JAVIER.KPI_ALERTS a
-      WHERE a.IS_ACTIVE = 1`;
-    const topParams = [];
+    let filteredAlerts = allAlertsResult.rows;
 
     // Si hay vendorCode, filtrar por clientes de ese vendedor
     if (vendorCode && vendorCode !== 'ALL') {
-      topClientsQuery += ` AND a.CLIENT_CODE IN (
-        SELECT DISTINCT TRIM(LCCDCL) FROM DSED.LACLAE
-        WHERE TRIM(LCCDVD) = ?
-          AND LCAADC = YEAR(CURRENT_DATE)
-          AND LCTPLN = 'T' AND LCCLLG = 'VT'
-      )`;
-      topParams.push(vendorCode.trim());
+      const vendorClientsQuery = `
+        SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
+        FROM DSED.LACLAE 
+        WHERE TRIM(LCCDVD) = ? AND LCAADC = YEAR(CURRENT_DATE) AND LCTPLN = 'T' AND LCCLLG = 'VT'`;
+      const vendorClientsResult = await kpiQuery(vendorClientsQuery, [vendorCode.trim()]);
+      const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
+
+      filteredAlerts = filteredAlerts.filter(a => validCodes.has((a.CLIENT_CODE || '').trim()));
     }
 
-    topClientsQuery += `
-      GROUP BY a.CLIENT_CODE
-      ORDER BY CRITICAL DESC, WARNING DESC, TOTAL_ALERTS DESC
-      FETCH FIRST 30 ROWS ONLY`;
+    const calcTotals = { TOTAL_ALERTS: 0, TOTAL_CLIENTS: new Set(), CRITICAL: 0, WARNING: 0, INFO: 0 };
+    const clientsMap = {};
 
-    const topClientsResult = await kpiQuery(topClientsQuery, topParams);
+    for (const row of filteredAlerts) {
+      const code = (row.CLIENT_CODE || '').trim();
+      const sev = (row.SEVERITY || '').toLowerCase();
+
+      calcTotals.TOTAL_ALERTS++;
+      calcTotals.TOTAL_CLIENTS.add(code);
+      if (sev === 'critical') calcTotals.CRITICAL++;
+      if (sev === 'warning') calcTotals.WARNING++;
+      if (sev === 'info') calcTotals.INFO++;
+
+      if (!clientsMap[code]) clientsMap[code] = { CLIENT_CODE: code, TOTAL_ALERTS: 0, CRITICAL: 0, WARNING: 0 };
+      clientsMap[code].TOTAL_ALERTS++;
+      if (sev === 'critical') clientsMap[code].CRITICAL++;
+      if (sev === 'warning') clientsMap[code].WARNING++;
+    }
+
+    // Convert to top clients array and sort
+    const topClientsResult = {
+      rows: Object.values(clientsMap)
+        .sort((a, b) => b.CRITICAL - a.CRITICAL || b.WARNING - a.WARNING || b.TOTAL_ALERTS - a.TOTAL_ALERTS)
+        .slice(0, 30) // FETCH FIRST 30 ROWS ONLY
+    };
 
     // 4. Ultima carga
     const lastLoadResult = await kpiQuery(
@@ -561,17 +574,16 @@ router.get('/dashboard', async (req, res) => {
       }
     }
 
-    const totals = totalsResult.rows[0] || {};
     const lastLoad = lastLoadResult.rows[0] || null;
 
     res.json({
       success: true,
       totals: {
-        alerts: parseInt(totals.TOTAL_ALERTS || 0),
-        clients: parseInt(totals.TOTAL_CLIENTS || 0),
-        critical: parseInt(totals.CRITICAL || 0),
-        warning: parseInt(totals.WARNING || 0),
-        info: parseInt(totals.INFO || 0),
+        alerts: calcTotals.TOTAL_ALERTS,
+        clients: calcTotals.TOTAL_CLIENTS.size,
+        critical: calcTotals.CRITICAL,
+        warning: calcTotals.WARNING,
+        info: calcTotals.INFO,
       },
       byType: summaryResult.rows.map(r => ({
         type: r.ALERT_TYPE,
