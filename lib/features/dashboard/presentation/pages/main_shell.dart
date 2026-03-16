@@ -1368,7 +1368,7 @@ class _MainShellState extends State<MainShell> {
         case 5:
           return const FacturasPage();
         case 6:
-          return const KpiDashboardPage();
+          return KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
         case 7:
           return const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
@@ -1380,7 +1380,7 @@ class _MainShellState extends State<MainShell> {
           return const Center(child: Text('Página no encontrada'));
       }
     }
-    
+
     // ===============================================
     // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Facturas, 5=Glacius, 6=Chat
     // ===============================================
@@ -1396,7 +1396,7 @@ class _MainShellState extends State<MainShell> {
       case 4:
         return const FacturasPage();
       case 5:
-        return const KpiDashboardPage();
+        return KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
       case 6:
         return const ComingSoonPlaceholder(
           title: 'Nexus AI — Asistente Comercial',

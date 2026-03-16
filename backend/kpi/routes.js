@@ -222,9 +222,11 @@ router.get('/alerts/clients', async (req, res) => {
     const result = await kpiQuery(queryStr, params);
     let clientCodes = result.rows.map(r => (r.CLIENT_CODE || '').trim());
 
+    // Vendor filter: only apply for a small set of codes (1 comercial or a few)
+    // If > 15 codes, it's a jefe seeing "all" → skip the expensive LACLAE query
     if (vendorCodesStr && vendorCodesStr !== 'ALL') {
       const codes = vendorCodesStr.split(',').map(c => c.trim()).filter(Boolean);
-      if (codes.length > 0) {
+      if (codes.length > 0 && codes.length <= 15) {
         const placeholders = codes.map(() => '?').join(',');
         const vendorQuery = `
           SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
@@ -235,9 +237,9 @@ router.get('/alerts/clients', async (req, res) => {
         `;
         const vendorClientsResult = await kpiQuery(vendorQuery, codes);
         const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
-
         clientCodes = clientCodes.filter(c => validCodes.has(c));
       }
+      // else: > 15 codes = jefe with all vendors, no filtering needed
     }
 
     res.json({
@@ -498,6 +500,12 @@ router.get('/dashboard', async (req, res) => {
 
     let filteredAlerts = allAlertsResult.rows;
 
+    logger.info(`[kpi:dashboard] Active alerts in DB: ${allAlertsResult.rows.length}, vendorCode=${vendorCode || 'ALL'}`);
+    if (allAlertsResult.rows.length > 0) {
+      const sampleCodes = [...new Set(allAlertsResult.rows.slice(0, 5).map(r => r.CLIENT_CODE))];
+      logger.info(`[kpi:dashboard] Sample alert client codes: ${sampleCodes.join(', ')}`);
+    }
+
     // 2. Vendor filter: restrict to this vendor's clients
     if (vendorCode && vendorCode !== 'ALL') {
       const vendorClientsQuery = `
@@ -508,7 +516,10 @@ router.get('/dashboard', async (req, res) => {
       const vendorClientsResult = await kpiQuery(vendorClientsQuery, [vendorCode.trim()]);
       const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
 
+      logger.info(`[kpi:dashboard] LACLAE clients for vendor ${vendorCode}: ${validCodes.size}, sample: ${[...validCodes].slice(0, 5).join(', ')}`);
+
       filteredAlerts = filteredAlerts.filter(a => validCodes.has((a.CLIENT_CODE || '').trim()));
+      logger.info(`[kpi:dashboard] After vendor filter: ${filteredAlerts.length} alerts`);
     }
 
     // 3. Compute totals, byType, and clientsMap — all from the SAME filtered data

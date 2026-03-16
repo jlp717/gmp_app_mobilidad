@@ -6,10 +6,19 @@ import 'package:provider/provider.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_provider.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class KpiDashboardPage extends StatefulWidget {
-  const KpiDashboardPage({super.key});
+  final String employeeCode;
+  final bool isJefeVentas;
+
+  const KpiDashboardPage({
+    super.key,
+    required this.employeeCode,
+    required this.isJefeVentas,
+  });
 
   @override
   State<KpiDashboardPage> createState() => _KpiDashboardPageState();
@@ -26,25 +35,38 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
     _loadDashboard();
   }
 
+  /// Resolves the vendorCode to use for the API call:
+  /// - JEFE with FilterProvider selection → that vendor
+  /// - JEFE with no filter → null (all clients)
+  /// - COMERCIAL → their own vendorCode always
+  String? _resolveVendorCode() {
+    if (widget.isJefeVentas) {
+      // Jefe: use the global filter selector
+      final filterCode =
+          context.read<FilterProvider>().selectedVendor;
+      return filterCode; // null = all, or specific vendor
+    }
+    // Comercial: always their own code
+    return context.read<AuthProvider>().currentUser?.vendedorCode;
+  }
+
   Future<void> _loadDashboard() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      final auth = context.read<AuthProvider>();
-      final vendorCode =
-          auth.isDirector ? null : auth.currentUser?.vendedorCode;
+      final vendorCode = _resolveVendorCode();
 
       String url = ApiConfig.kpiDashboard;
-      if (vendorCode != null) {
-        if (vendorCode != 'ALL') {
-          url += '?vendorCode=$vendorCode';
-        }
+      if (vendorCode != null && vendorCode.isNotEmpty) {
+        url += '?vendorCode=$vendorCode';
       }
 
       final data = await ApiClient.get(url);
+      if (!mounted) return;
       if (data != null && data['success'] == true) {
         setState(() {
           _data = data;
@@ -57,8 +79,10 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = 'Error de conexion. Comprueba tu red e intentalo de nuevo.';
+        _error =
+            'Error de conexion. Comprueba tu red e intentalo de nuevo.';
         _loading = false;
       });
     }
@@ -78,11 +102,24 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildContent(),
+      body: Column(
+        children: [
+          // Vendor selector for JEFE_VENTAS
+          if (widget.isJefeVentas)
+            GlobalVendorSelector(
+              isJefeVentas: true,
+              onChanged: _loadDashboard,
+            ),
+          // Content
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? _buildError()
+                    : _buildContent(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -151,7 +188,10 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
           ],
 
           // Empty state
-          if (totalAlerts == 0) _buildEmptyState(),
+          if (totalAlerts == 0)
+            _buildEmptyState(
+              lastLoad?['totalAlerts'] as num?,
+            ),
 
           const SizedBox(height: 40),
         ],
@@ -592,17 +632,29 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
 
   // ─── EMPTY STATE ────────────────────────────────────────────
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(num? globalAlerts) {
+    final hasGlobalData =
+        globalAlerts != null && globalAlerts.toInt() > 0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Column(
         children: [
-          Icon(Icons.check_circle_outline_rounded,
-              size: 56, color: Colors.greenAccent[400]),
+          Icon(
+            hasGlobalData
+                ? Icons.filter_list_off_rounded
+                : Icons.check_circle_outline_rounded,
+            size: 56,
+            color: hasGlobalData
+                ? Colors.orangeAccent
+                : Colors.greenAccent[400],
+          ),
           const SizedBox(height: 12),
-          const Text(
-            'Sin alertas de Nestle',
-            style: TextStyle(
+          Text(
+            hasGlobalData
+                ? 'Sin alertas para tus clientes'
+                : 'Sin alertas de Nestle',
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -610,7 +662,11 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Todos tus clientes estan al dia con sus objetivos',
+            hasGlobalData
+                ? 'Hay ${globalAlerts.toInt()} alertas globales '
+                    'pero ninguna afecta a tus clientes'
+                : 'Todos tus clientes estan al dia '
+                    'con sus objetivos',
             style: TextStyle(color: Colors.grey[500], fontSize: 13),
             textAlign: TextAlign.center,
           ),
