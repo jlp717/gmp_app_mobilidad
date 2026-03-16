@@ -35,7 +35,7 @@ class FacturasService {
         CAC.IMPORTEIVA1 + CAC.IMPORTEIVA2 + CAC.IMPORTEIVA3 as IVA
       FROM DSEDAC.CAC CAC
       LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
-      WHERE CAC.NUMEROFACTURA > 0
+      WHERE CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000
     `;
 
         if (!isAll) {
@@ -112,6 +112,14 @@ class FacturasService {
             const invoiceMap = new Map();
             for (const row of rows) {
                 const key = `${row.SERIE}-${row.NUMERO}-${row.EJERCICIO}`;
+                // AUDIT FIX: Sanitize sentinel values and normalize -0
+                const sanitize = (v) => {
+                    const n = parseFloat(v) || 0;
+                    if (Object.is(n, -0)) return 0;
+                    if (Math.abs(n) >= 900000) return 0;
+                    return n;
+                };
+
                 if (!invoiceMap.has(key)) {
                     invoiceMap.set(key, {
                         id: key,
@@ -121,16 +129,16 @@ class FacturasService {
                         fecha: `${String(row.DIA).padStart(2, '0')}/${String(row.MES).padStart(2, '0')}/${row.ANO}`,
                         clienteId: row.CODIGO_CLIENTE,
                         clienteNombre: row.NOMBRE_CLIENTE || `Cliente ${row.CODIGO_CLIENTE}`,
-                        total: parseFloat(row.TOTAL) || 0,
-                        base: parseFloat(row.BASE) || 0,
-                        iva: parseFloat(row.IVA) || 0
+                        total: sanitize(row.TOTAL),
+                        base: sanitize(row.BASE),
+                        iva: sanitize(row.IVA)
                     });
                 } else {
                     // Same invoice, different albarán → accumulate amounts
                     const existing = invoiceMap.get(key);
-                    existing.total += parseFloat(row.TOTAL) || 0;
-                    existing.base += parseFloat(row.BASE) || 0;
-                    existing.iva += parseFloat(row.IVA) || 0;
+                    existing.total += sanitize(row.TOTAL);
+                    existing.base += sanitize(row.BASE);
+                    existing.iva += sanitize(row.IVA);
                 }
             }
 
@@ -152,7 +160,7 @@ class FacturasService {
         let sql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
       FROM DSEDAC.CAC
-      WHERE NUMEROFACTURA > 0
+      WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
     `;
         if (!isAll) {
             sql += ` AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
@@ -185,7 +193,7 @@ class FacturasService {
         SUM(IMPORTEBASEIMPONIBLE1 + IMPORTEBASEIMPONIBLE2 + IMPORTEBASEIMPONIBLE3) as BASE,
         SUM(IMPORTEIVA1 + IMPORTEIVA2 + IMPORTEIVA3) as IVA
       FROM DSEDAC.CAC
-      WHERE NUMEROFACTURA > 0
+      WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
     `;
 
         if (!isAll) {
@@ -229,6 +237,11 @@ class FacturasService {
     }
 
     async getFacturaDetail(serie, numero, ejercicio) {
+        // AUDIT FIX: Block sentinel invoice numbers
+        if (numero >= 900000 || numero <= 0) {
+            throw new Error('Factura no encontrada');
+        }
+
         // FIX: Aggregate across all albaranes for same invoice.
         // A single invoice can span multiple albaranes (e.g., F-750 has 5 albaranes = 581.34€).
         // Previously used FETCH FIRST 1 ROWS ONLY which only got the first albarán (218.65€).

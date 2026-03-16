@@ -205,6 +205,13 @@ async function generateInvoicePDF(facturaData) {
         const lines = facturaData.lines || [];
         const ivaBreakdown = header.IVA_BREAKDOWN || null;
 
+        // AUDIT FIX: Guard against corrupted/sentinel data reaching PDF
+        const checkTotal = parseFloat(header.TOTALFACTURA || header.IMPORTETOTAL || 0);
+        if (Math.abs(checkTotal) >= 900000) {
+            logger.warn(`⚠️ PDF blocked: sentinel total ${checkTotal}`);
+            throw new Error('Documento con datos anómalos — importe no válido');
+        }
+
         // Detect document type: albaran vs factura
         const isAlbaran = facturaData.documentType === 'albaran' || 
             (!facturaData.documentType && (!header.NUMEROFACTURA || parseInt(header.NUMEROFACTURA) === 0));

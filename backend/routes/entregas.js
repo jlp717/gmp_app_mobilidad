@@ -381,7 +381,11 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             };
 
             // Use IMPORTETOTAL (correct final amount incl. IVA) instead of IMPORTEBRUTO (gross pre-discount)
-            const importeTotal = parseMoney(row.IMPORTETOTAL);
+            let importeTotal = parseMoney(row.IMPORTETOTAL);
+            // AUDIT FIX: Sanitize sentinel amounts
+            if (Math.abs(importeTotal) >= 900000 || Object.is(importeTotal, -0)) {
+                importeTotal = 0;
+            }
             const importeBruto = parseMoney(row.IMPORTEBRUTO);
 
             // IVA breakdown from CPC (up to 3 tax bases)
@@ -750,6 +754,13 @@ router.post('/update', async (req, res) => {
         }
 
         // Upsert into JAVIER.DELIVERY_STATUS
+        // AUDIT FIX: Save old state for recovery before delete
+        let previousState = null;
+        try {
+            const prev = await query(`SELECT * FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
+            if (prev.length > 0) previousState = prev[0];
+        } catch (_) {}
+
         // 1. Delete existing (if any)
         await query(`DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
 
@@ -776,7 +787,30 @@ router.post('/update', async (req, res) => {
             VALUES ('${itemId}', '${status}', '${obsSafe}', '${firmaSafe}', ${lat}, ${lon}, '${inspectorId}', CURRENT TIMESTAMP)
         `;
 
-        await query(insertSql, false);
+        try {
+            await query(insertSql, false);
+        } catch (insertErr) {
+            // AUDIT FIX: Restore previous state if INSERT fails after DELETE
+            logger.error(`[ENTREGAS] INSERT failed for ${itemId}: ${insertErr.message}`);
+            if (previousState) {
+                try {
+                    const restoreSql = `
+                        INSERT INTO JAVIER.DELIVERY_STATUS
+                        (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT)
+                        VALUES ('${previousState.ID}', '${previousState.STATUS}',
+                                '${(previousState.OBSERVACIONES || '').replace(/'/g, "''")}',
+                                '${previousState.FIRMA_PATH || ''}',
+                                ${previousState.LATITUD || 0}, ${previousState.LONGITUD || 0},
+                                '${previousState.REPARTIDOR_ID || ''}', CURRENT TIMESTAMP)
+                    `;
+                    await query(restoreSql, false);
+                    logger.warn(`[ENTREGAS] Restored previous state for ${itemId}`);
+                } catch (restoreErr) {
+                    logger.error(`[ENTREGAS] CRITICAL: Could not restore ${itemId}: ${restoreErr.message}`);
+                }
+            }
+            throw insertErr;
+        }
         logger.info(`[ENTREGAS] ✅ Delivery ${itemId} updated to ${status} by ${inspectorId} (ReqRep: ${repartidorId})`);
 
         res.json({ success: true, message: 'Estado actualizado correctamente' });

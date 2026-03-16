@@ -378,7 +378,9 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
                 // 1. Sum the monetary amounts
                 existing.IMPORTETOTAL = (parseFloat(existing.IMPORTETOTAL) || 0) + (parseFloat(row.IMPORTETOTAL) || 0);
-                existing.IMPORTE_PENDIENTE = (parseFloat(existing.IMPORTE_PENDIENTE) || 0) + (parseFloat(row.IMPORTE_PENDIENTE) || 0);
+                // AUDIT FIX: Do NOT sum CVC pendiente across albaranes — produces misleading
+                // aggregated amounts (e.g. 16.539,32€ for F-14678). Pendiente is per-albarán in CVC.
+                existing.IMPORTE_PENDIENTE = 0;
 
                 // 2. Keep the latest albaran number for display/status purposes
                 if ((row.NUMEROALBARAN || 0) > (existing.NUMEROALBARAN || 0)) {
@@ -413,10 +415,16 @@ router.get('/history/documents/:clientId', async (req, res) => {
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const docDate = new Date(row.ANO, row.MES - 1, row.DIA);
 
-            if (appStatus === 'delivered') {
+            // AUDIT FIX: Match both English ('delivered') and Spanish ('entregado') values.
+            // Flutter writes 'ENTREGADO' to DELIVERY_STATUS, not 'delivered'.
+            if (appStatus === 'delivered' || appStatus === 'entregado') {
                 status = 'delivered';
-            } else if (appStatus === 'no_delivered' || appStatus === 'absent') {
+            } else if (appStatus === 'no_delivered' || appStatus === 'no_entregado' || appStatus === 'absent' || appStatus === 'rechazado') {
                 status = 'no_delivered';
+            } else if (appStatus === 'en_ruta') {
+                status = 'en_ruta';
+            } else if (appStatus === 'parcial') {
+                status = 'partial';
             } else {
                 // 2. Legacy ERP Status
                 if (legacyStatus === 'F' || legacyStatus === 'R') {
@@ -453,7 +461,10 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 const mm = hStr.substring(2, 4);
                 timeFormatted = `${hh}:${mm}`;
             }
-            if (pendiente > 0 && pendiente < importe) status = 'partial';
+            // AUDIT FIX: For factura-type docs (multi-albarán), don't expose
+            // aggregated CVC pendiente — it's misleading (e.g. 16.539,32€ for F-14678).
+            // Only use pendiente for partial status on individual albaranes.
+            if (!isFactura && pendiente > 0 && pendiente < importe) status = 'partial';
 
             const serie = (row.SERIEALBARAN || 'A').trim();
 
@@ -473,7 +484,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                     ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
                     : null,
                 amount: importe,
-                pending: pendiente,
+                pending: isFactura ? 0 : pendiente,
                 status,
                 hasSignature: hasFirmaPath || hasLegacySig,
                 signaturePath: row.FIRMA_PATH || null,
