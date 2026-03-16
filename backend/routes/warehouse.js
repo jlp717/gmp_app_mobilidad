@@ -136,10 +136,50 @@ async function initWarehouseTables() {
                 CREATED_AT     TIMESTAMP      DEFAULT CURRENT TIMESTAMP,
                 UPDATED_AT     TIMESTAMP      DEFAULT CURRENT TIMESTAMP
             )` },
+        {
+            name: 'JAVIER.ALMACEN_CONFIG_GLOBAL', ddl: `
+            CREATE TABLE JAVIER.ALMACEN_CONFIG_GLOBAL (
+                CLAVE         VARCHAR(50) NOT NULL PRIMARY KEY,
+                VALOR         VARCHAR(200) NOT NULL DEFAULT '',
+                DESCRIPCION   VARCHAR(200) DEFAULT '',
+                UPDATED_AT    TIMESTAMP DEFAULT CURRENT TIMESTAMP,
+                UPDATED_BY    VARCHAR(20) DEFAULT 'SYSTEM'
+            )` },
     ];
 
     for (const t of tables) {
         await safeCreateTable(t.name, t.ddl);
+    }
+
+    // ── Safe ALTER TABLE for new columns ──
+    const alterCols = [
+        { table: 'JAVIER.ALMACEN_ART_DIMENSIONES', col: 'FRAGIL', ddl: `ALTER TABLE JAVIER.ALMACEN_ART_DIMENSIONES ADD COLUMN FRAGIL CHAR(1) DEFAULT 'N'` },
+        { table: 'JAVIER.ALMACEN_ART_DIMENSIONES', col: 'APILABLE', ddl: `ALTER TABLE JAVIER.ALMACEN_ART_DIMENSIONES ADD COLUMN APILABLE CHAR(1) DEFAULT 'S'` },
+        { table: 'JAVIER.ALMACEN_ART_DIMENSIONES', col: 'TEMPERATURA', ddl: `ALTER TABLE JAVIER.ALMACEN_ART_DIMENSIONES ADD COLUMN TEMPERATURA VARCHAR(10) DEFAULT 'AMBIENTE'` },
+        { table: 'JAVIER.ALMACEN_ART_DIMENSIONES', col: 'MAX_APILADO', ddl: `ALTER TABLE JAVIER.ALMACEN_ART_DIMENSIONES ADD COLUMN MAX_APILADO INTEGER DEFAULT 3` },
+    ];
+    for (const ac of alterCols) {
+        const pool = getPool();
+        if (!pool) continue;
+        let conn;
+        try {
+            conn = await pool.connect();
+            await conn.query(`SELECT ${ac.col} FROM ${ac.table} FETCH FIRST 1 ROWS ONLY`);
+        } catch (probeErr) {
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = null;
+            try {
+                conn = await pool.connect();
+                await conn.query(ac.ddl);
+                logger.info(`✅ Added column ${ac.col} to ${ac.table}`);
+            } catch (alterErr) {
+                if (!(alterErr.message || '').includes('SQL0601') && !(alterErr.message || '').includes('already exists')) {
+                    logger.warn(`⚠️ Could not add ${ac.col} to ${ac.table}: ${alterErr.message}`);
+                }
+            }
+        } finally {
+            if (conn) try { await conn.close(); } catch (_) { }
+        }
     }
 
     logger.info('✅ Warehouse: table check complete');
@@ -305,6 +345,49 @@ router.post('/load-plan/optimize', async (req, res) => {
     } catch (error) {
         logger.error(`Optimize load error: ${error.message}`);
         res.status(500).json({ error: 'Error optimizando carga', details: error.message });
+    }
+});
+
+/**
+ * POST /warehouse/load-plan/smart-optimize
+ * Body: { vehicleCode, year, month, day, mustDeliverOrders?: number[] }
+ * Optimización inteligente: must-deliver + máximo margen EUR
+ */
+router.post('/load-plan/smart-optimize', async (req, res) => {
+    try {
+        const { vehicleCode, year, month, day, mustDeliverOrders } = req.body;
+        if (!vehicleCode) {
+            return res.status(400).json({ error: 'vehicleCode es obligatorio' });
+        }
+        const now = new Date();
+        const y = parseInt(year) || now.getFullYear();
+        const m = parseInt(month) || (now.getMonth() + 1);
+        const d = parseInt(day) || now.getDate();
+
+        const result = await loadPlanner.smartOptimize(vehicleCode, y, m, d, mustDeliverOrders || []);
+        res.json(result);
+    } catch (error) {
+        logger.error(`Smart optimize error: ${error.message}`);
+        res.status(500).json({ error: 'Error en optimización inteligente', details: error.message });
+    }
+});
+
+/**
+ * POST /warehouse/load-plan/axle-balance
+ * Body: { placed: [...], interior: { lengthCm, widthCm, heightCm } }
+ * Calcula equilibrio de ejes a partir de cajas colocadas
+ */
+router.post('/load-plan/axle-balance', async (req, res) => {
+    try {
+        const { placed, interior } = req.body;
+        if (!placed || !interior) {
+            return res.status(400).json({ error: 'placed e interior son obligatorios' });
+        }
+        const result = loadPlanner.calculateAxleBalance(placed, interior);
+        res.json(result);
+    } catch (error) {
+        logger.error(`Axle balance error: ${error.message}`);
+        res.status(500).json({ error: 'Error calculando equilibrio de ejes', details: error.message });
     }
 });
 
@@ -1019,6 +1102,117 @@ router.post('/manual-layout/:id/delete', async (req, res) => {
         }
         logger.error(`Delete manual layout error: ${error.message}`);
         res.status(500).json({ error: 'Error eliminando layout', details: error.message });
+    }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CONFIGURACIÓN GLOBAL DEL ALMACÉN
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /warehouse/config
+ * Devuelve toda la configuración global del almacén
+ */
+router.get('/config', async (req, res) => {
+    try {
+        const rows = await query('SELECT CLAVE, VALOR, DESCRIPCION FROM JAVIER.ALMACEN_CONFIG_GLOBAL ORDER BY CLAVE');
+        const config = {};
+        for (const r of rows) {
+            config[(r.CLAVE || '').trim()] = {
+                value: (r.VALOR || '').trim(),
+                description: (r.DESCRIPCION || '').trim(),
+            };
+        }
+        res.json({ config });
+    } catch (error) {
+        if (isTableNotFound(error)) {
+            return res.json({ config: {} });
+        }
+        logger.error(`Config get error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo configuración', details: error.message });
+    }
+});
+
+/**
+ * PUT /warehouse/config
+ * Body: { updates: { CLAVE: VALOR, ... } }
+ * Actualiza configuración global (upsert por clave)
+ */
+router.put('/config', async (req, res) => {
+    try {
+        const { updates } = req.body;
+        if (!updates || typeof updates !== 'object') {
+            return res.status(400).json({ error: 'updates es obligatorio (objeto clave:valor)' });
+        }
+        const user = (req.user?.code || 'SYSTEM').replace(/'/g, "''");
+        for (const [key, value] of Object.entries(updates)) {
+            const k = key.replace(/'/g, "''").substring(0, 50);
+            const v = String(value).replace(/'/g, "''").substring(0, 200);
+            try {
+                const upd = await query(
+                    `UPDATE JAVIER.ALMACEN_CONFIG_GLOBAL SET VALOR = '${v}', UPDATED_AT = CURRENT_TIMESTAMP, UPDATED_BY = '${user}' WHERE CLAVE = '${k}'`
+                );
+                // Si no actualizó filas, insertar
+                if (!upd || (Array.isArray(upd) && upd.length === 0)) {
+                    await query(
+                        `INSERT INTO JAVIER.ALMACEN_CONFIG_GLOBAL (CLAVE, VALOR, UPDATED_BY) VALUES ('${k}', '${v}', '${user}')`
+                    );
+                }
+            } catch (upsertErr) {
+                // El UPDATE puede fallar si no existe → intentar INSERT
+                try {
+                    await query(
+                        `INSERT INTO JAVIER.ALMACEN_CONFIG_GLOBAL (CLAVE, VALOR, UPDATED_BY) VALUES ('${k}', '${v}', '${user}')`
+                    );
+                } catch (insErr) {
+                    if (!(insErr.message || '').includes('SQL0803')) {
+                        logger.warn(`Config upsert failed for ${k}: ${insErr.message}`);
+                    }
+                }
+            }
+        }
+        res.json({ success: true });
+    } catch (error) {
+        logger.error(`Config update error: ${error.message}`);
+        res.status(500).json({ error: 'Error actualizando configuración', details: error.message });
+    }
+});
+
+/**
+ * POST /warehouse/config/seed
+ * Inserta valores por defecto si no existen (idempotente)
+ */
+router.post('/config/seed', async (req, res) => {
+    try {
+        const defaults = [
+            { key: 'MAX_ALTURA_APILADO_CM', value: '150', desc: 'Altura máxima de apilado en cm' },
+            { key: 'MARGEN_LATERAL_CM', value: '2', desc: 'Margen mínimo entre cajas y pared lateral' },
+            { key: 'EQUILIBRIO_EJES', value: 'S', desc: 'Activar verificación de equilibrio de ejes' },
+            { key: 'PCT_MAX_EJE_TRASERO', value: '60', desc: 'Peso máximo eje trasero (porcentaje)' },
+            { key: 'HUECO_ENTRE_CAJAS_CM', value: '1', desc: 'Separación mínima entre cajas' },
+            { key: 'PRIORIDAD_OPTIMIZAR', value: 'MARGEN', desc: 'Criterio auto-organizar: MARGEN, PESO o VOLUMEN' },
+            { key: 'MUST_DELIVER_SIEMPRE', value: 'S', desc: 'Respetar siempre pedidos must-deliver' },
+            { key: 'TOLERANCIA_GLOBAL_PCT', value: '5', desc: 'Tolerancia exceso global (porcentaje)' },
+            { key: 'RESERVA_RETORNOS_PCT', value: '10', desc: 'Espacio reservado para retornos (porcentaje)' },
+        ];
+        let inserted = 0;
+        for (const d of defaults) {
+            try {
+                await query(
+                    `INSERT INTO JAVIER.ALMACEN_CONFIG_GLOBAL (CLAVE, VALOR, DESCRIPCION, UPDATED_BY) VALUES ('${d.key}', '${d.value}', '${d.desc}', 'SYSTEM')`
+                );
+                inserted++;
+            } catch (e) {
+                // Ya existe — ignorar (SQL0803 duplicate key)
+            }
+        }
+        res.json({ success: true, inserted, total: defaults.length });
+    } catch (error) {
+        if (isTableNotFound(error)) {
+            return res.status(503).json({ error: 'Tabla ALMACEN_CONFIG_GLOBAL no disponible. Reinicia el servidor.' });
+        }
+        logger.error(`Config seed error: ${error.message}`);
+        res.status(500).json({ error: 'Error sembrando configuración', details: error.message });
     }
 });
 

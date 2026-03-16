@@ -347,3 +347,78 @@ class CargoColors {
     return Colors.redAccent;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AXLE BALANCE HELPERS — Center of gravity calculations for placed boxes
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class AxleBalanceHelper {
+  /// Calculate center of gravity from placed boxes
+  static Map<String, double> centerOfGravity(List<PlacedBox> boxes) {
+    if (boxes.isEmpty) return {'x': 0, 'y': 0, 'z': 0};
+    double totalW = 0, wx = 0, wy = 0, wz = 0;
+    for (final b in boxes) {
+      totalW += b.weight;
+      wx += (b.x + b.w / 2) * b.weight;
+      wy += (b.y + b.d / 2) * b.weight;
+      wz += (b.z + b.h / 2) * b.weight;
+    }
+    if (totalW == 0) return {'x': 0, 'y': 0, 'z': 0};
+    return {
+      'x': wx / totalW,
+      'y': wy / totalW,
+      'z': wz / totalW,
+    };
+  }
+
+  /// Calculate front/rear weight distribution (percentage)
+  /// containerLength is the total length of the container in cm
+  static Map<String, double> axleDistribution(
+      List<PlacedBox> boxes, double containerLength) {
+    if (boxes.isEmpty || containerLength <= 0) {
+      return {'frontPct': 50, 'rearPct': 50};
+    }
+    final cog = centerOfGravity(boxes);
+    final cogY = cog['y']!;
+    // Front = closer to cab (higher Y), Rear = closer to doors (lower Y)
+    final rearPct = containerLength > 0
+        ? ((1 - cogY / containerLength) * 100).clamp(0.0, 100.0)
+        : 50.0;
+    return {
+      'frontPct': 100.0 - rearPct,
+      'rearPct': rearPct,
+    };
+  }
+
+  /// Calculate left/right weight distribution (percentage)
+  static Map<String, double> lateralDistribution(
+      List<PlacedBox> boxes, double containerWidth) {
+    if (boxes.isEmpty || containerWidth <= 0) {
+      return {'leftPct': 50, 'rightPct': 50};
+    }
+    final cog = centerOfGravity(boxes);
+    final cogX = cog['x']!;
+    final rightPct = containerWidth > 0
+        ? ((cogX / containerWidth) * 100).clamp(0.0, 100.0)
+        : 50.0;
+    return {
+      'leftPct': 100.0 - rightPct,
+      'rightPct': rightPct,
+    };
+  }
+
+  /// Check if balance is within tolerance
+  static bool isBalanced(
+    List<PlacedBox> boxes,
+    double containerLength,
+    double containerWidth, {
+    double maxRearPct = 65,
+    double maxLateralSkew = 60,
+  }) {
+    final axle = axleDistribution(boxes, containerLength);
+    final lateral = lateralDistribution(boxes, containerWidth);
+    return axle['rearPct']! <= maxRearPct &&
+        lateral['leftPct']! <= maxLateralSkew &&
+        lateral['rightPct']! <= maxLateralSkew;
+  }
+}

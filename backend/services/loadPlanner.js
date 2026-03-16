@@ -722,10 +722,215 @@ async function optimizeForProfit(vehicleCode, year, month, day) {
     };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SMART OPTIMIZER — Must-deliver + margin maximization + client completeness
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Optimización inteligente de carga:
+ * 1. Pedidos must-deliver SIEMPRE se incluyen primero
+ * 2. Restantes ordenados por margen EUR / volumen (densidad de valor)
+ * 3. Penalización si un cliente queda con carga parcial
+ * 4. Respeta capacidad con tolerancia configurada
+ *
+ * @param {string} vehicleCode
+ * @param {number} year
+ * @param {number} month
+ * @param {number} day
+ * @param {number[]} mustDeliverOrders - orderNumbers que DEBEN ir sí o sí
+ * @returns {object} { included, excluded, mustDeliverCount, totalValue, ... }
+ */
+async function smartOptimize(vehicleCode, year, month, day, mustDeliverOrders = []) {
+    const start = Date.now();
+    const truck = await getTruckConfig(vehicleCode);
+    if (!truck) throw new Error(`Vehículo '${vehicleCode}' no encontrado`);
+
+    const orders = await getOrdersForVehicle(vehicleCode, year, month, day);
+    if (!orders.length) {
+        return {
+            included: [], excluded: [], mustDeliverCount: 0,
+            totalValue: 0, totalWeight: 0, totalVolume: 0,
+            capacityUsedPct: { weight: 0, volume: 0 }, elapsed: 0,
+        };
+    }
+
+    const articleCodes = [...new Set(orders.map(o => o.articleCode).filter(Boolean))];
+    const dimensions = await getArticleDimensions(articleCodes);
+    const mustSet = new Set(mustDeliverOrders.map(n => Number(n)));
+
+    // ── Aggregate order lines by orderNumber ──────────────────────────
+    const orderAgg = {};
+    for (const order of orders) {
+        const dim = dimensions[order.articleCode];
+        const fallbackDims = estimateBoxDimensions(
+            order.weightPerUnit || DEFAULT_WEIGHT_PER_BOX, 1,
+            dim ? dim.name : ''
+        );
+        const d = dim || {
+            largoCm: fallbackDims.largo, anchoCm: fallbackDims.ancho,
+            altoCm: fallbackDims.alto, weightKg: DEFAULT_WEIGHT_PER_BOX,
+        };
+
+        const numBoxes = order.boxes > 0 ? Math.round(order.boxes) : 1;
+        const lineWeight = order.units > 0
+            ? order.units * (d.weightKg || DEFAULT_WEIGHT_PER_BOX)
+            : numBoxes * (d.weightKg || DEFAULT_WEIGHT_PER_BOX);
+        const lineVolume = (d.largoCm * d.anchoCm * d.altoCm) * numBoxes;
+        // Proxy valor: peso × 2.5 EUR/kg (sustituir por IMPORTELINEAALBARAN cuando esté disponible)
+        const lineValue = lineWeight * 2.5;
+
+        if (!orderAgg[order.orderNumber]) {
+            orderAgg[order.orderNumber] = {
+                orderNumber: order.orderNumber,
+                clientCode: order.clientCode,
+                weight: 0, volume: 0, value: 0, boxCount: 0,
+                mustDeliver: mustSet.has(order.orderNumber),
+            };
+        }
+        const agg = orderAgg[order.orderNumber];
+        agg.weight += lineWeight;
+        agg.volume += lineVolume;
+        agg.value += lineValue;
+        agg.boxCount += numBoxes;
+    }
+
+    const orderList = Object.values(orderAgg);
+    const maxWeight = truck.maxPayloadKg;
+    const maxVolume = truck.interior.lengthCm * truck.interior.widthCm * truck.interior.heightCm;
+    const tolFactor = 1 + (truck.tolerancePct || 5) / 100;
+
+    // ── Paso 1: Must-deliver siempre primero ──────────────────────────
+    let usedWeight = 0, usedVolume = 0, totalValue = 0;
+    const included = [];
+    const excluded = [];
+
+    const mustOrders = orderList.filter(o => o.mustDeliver);
+    const optionalOrders = orderList.filter(o => !o.mustDeliver);
+
+    for (const o of mustOrders) {
+        included.push(o.orderNumber);
+        usedWeight += o.weight;
+        usedVolume += o.volume;
+        totalValue += o.value;
+    }
+
+    if (usedWeight > maxWeight * tolFactor || usedVolume > maxVolume * tolFactor) {
+        logger.warn(`Smart optimize ${vehicleCode}: must-deliver alone exceeds capacity! weight=${usedWeight.toFixed(0)}/${maxWeight}`);
+    }
+
+    // ── Paso 2: Agrupar opcionales por cliente → penalizar incompletos ─
+    const clientOrders = {};
+    for (const o of optionalOrders) {
+        if (!clientOrders[o.clientCode]) clientOrders[o.clientCode] = [];
+        clientOrders[o.clientCode].push(o);
+    }
+
+    for (const o of optionalOrders) {
+        const clientCount = clientOrders[o.clientCode].length;
+        const baseDensity = o.volume > 0 ? o.value / o.volume : 0;
+        // Penalizar clientes con muchos pedidos (mejor todo o nada)
+        o.density = baseDensity * (clientCount > 3 ? 0.85 : 1.0);
+    }
+    optionalOrders.sort((a, b) => b.density - a.density);
+
+    // ── Paso 3: Greedy fill por densidad ──────────────────────────────
+    for (const o of optionalOrders) {
+        const newWeight = usedWeight + o.weight;
+        const newVolume = usedVolume + o.volume;
+        if (newWeight <= maxWeight * tolFactor && newVolume <= maxVolume * tolFactor) {
+            included.push(o.orderNumber);
+            usedWeight = newWeight;
+            usedVolume = newVolume;
+            totalValue += o.value;
+        } else {
+            excluded.push(o.orderNumber);
+        }
+    }
+
+    const elapsed = Date.now() - start;
+    logger.info(`Smart optimize ${vehicleCode}: ${included.length} included (${mustOrders.length} must-deliver), ${excluded.length} excluded, value=${totalValue.toFixed(1)}EUR, time=${elapsed}ms`);
+
+    return {
+        included,
+        excluded,
+        mustDeliverCount: mustOrders.length,
+        totalValue: Math.round(totalValue * 100) / 100,
+        totalWeight: Math.round(usedWeight * 100) / 100,
+        totalVolume: Math.round(usedVolume),
+        capacityUsedPct: {
+            weight: maxWeight > 0 ? Math.round(usedWeight / maxWeight * 10000) / 100 : 0,
+            volume: maxVolume > 0 ? Math.round(usedVolume / maxVolume * 10000) / 100 : 0,
+        },
+        elapsed,
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AXLE BALANCE — Calculate weight distribution front/rear and left/right
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calcula el balance de ejes a partir de las cajas colocadas.
+ * Devuelve centro de gravedad + porcentajes por eje.
+ */
+function calculateAxleBalance(placed, interior) {
+    if (!placed.length) {
+        return {
+            centerOfGravity: { x: 0, y: 0, z: 0 },
+            axleBalance: { frontPct: 50, rearPct: 50, leftPct: 50, rightPct: 50 },
+            balanced: true,
+        };
+    }
+
+    let totalWeight = 0, wx = 0, wy = 0, wz = 0;
+    for (const b of placed) {
+        const w = b.weight || 0;
+        totalWeight += w;
+        wx += (b.x + b.w / 2) * w;
+        wy += (b.y + b.d / 2) * w;
+        wz += (b.z + b.h / 2) * w;
+    }
+
+    if (totalWeight === 0) {
+        return {
+            centerOfGravity: { x: 0, y: 0, z: 0 },
+            axleBalance: { frontPct: 50, rearPct: 50, leftPct: 50, rightPct: 50 },
+            balanced: true,
+        };
+    }
+
+    const cgX = wx / totalWeight;
+    const cgY = wy / totalWeight;
+    const cgZ = wz / totalWeight;
+
+    const midW = interior.widthCm / 2;
+    const midD = interior.lengthCm / 2;
+
+    // Rear = close to cab (high Y), Front = close to door (low Y)
+    const rearPct = midD > 0 ? Math.round((cgY / interior.lengthCm) * 100) : 50;
+    const frontPct = 100 - rearPct;
+    const rightPct = midW > 0 ? Math.round((cgX / interior.widthCm) * 100) : 50;
+    const leftPct = 100 - rightPct;
+
+    const balanced = rearPct <= 65 && rearPct >= 35 && rightPct <= 60 && rightPct >= 40;
+
+    return {
+        centerOfGravity: {
+            x: Math.round(cgX * 10) / 10,
+            y: Math.round(cgY * 10) / 10,
+            z: Math.round(cgZ * 10) / 10,
+        },
+        axleBalance: { frontPct, rearPct, leftPct, rightPct },
+        balanced,
+    };
+}
+
 module.exports = {
     planLoad,
     planLoadManual,
     optimizeForProfit,
+    smartOptimize,
+    calculateAxleBalance,
     getTruckConfig,
     getArticleDimensions,
     getOrdersForVehicle,

@@ -40,6 +40,8 @@ class LoadPlannerPanel extends StatefulWidget {
   final ValueChanged<int> onRemoveOrder;
   final ValueChanged<int> onRestoreOrder;
   final ValueChanged<TruckOrder>? onDragStarted;
+  final VoidCallback? onSmartOptimize;
+  final bool optimizing;
 
   const LoadPlannerPanel({
     super.key,
@@ -54,6 +56,8 @@ class LoadPlannerPanel extends StatefulWidget {
     required this.onRemoveOrder,
     required this.onRestoreOrder,
     this.onDragStarted,
+    this.onSmartOptimize,
+    this.optimizing = false,
   });
 
   @override
@@ -148,6 +152,52 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           _actionBtn(
               'Reset', Icons.restart_alt_rounded, Colors.amber, widget.onReset),
         ]),
+        if (widget.onSmartOptimize != null) ...[
+          const SizedBox(height: 6),
+          GestureDetector(
+            onTap: widget.optimizing ? null : widget.onSmartOptimize,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [
+                  AppTheme.neonGreen.withValues(alpha: 0.15),
+                  AppTheme.neonBlue.withValues(alpha: 0.15),
+                ]),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppTheme.neonGreen.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (widget.optimizing)
+                    const SizedBox(
+                      width: 14, height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.neonGreen,
+                      ),
+                    )
+                  else
+                    const Icon(Icons.auto_awesome_rounded,
+                        color: AppTheme.neonGreen, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    widget.optimizing
+                        ? 'Optimizando...'
+                        : 'Auto-Organizar (max margen)',
+                    style: const TextStyle(
+                      color: AppTheme.neonGreen,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 6),
         // Progress bars
         _progressBar('Peso', m.totalWeightKg, m.maxPayloadKg, 'kg', sc),
@@ -163,14 +213,17 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
   Widget _buildStatusBar(LoadMetrics m, Color sc) {
     String msg;
     if (m.status == 'EXCESO') {
-      msg =
-          'No cabe todo. ${m.placedCount} de ${m.totalBoxes} cargados — sobran ${m.overflowCount} (${m.overflowWeightKg.toStringAsFixed(0)} kg)';
+      msg = '${m.overflowCount} bultos no caben '
+          '(${m.overflowWeightKg.toStringAsFixed(0)} kg exceso). '
+          'Quita productos o usa Auto-Organizar.';
     } else if (m.status == 'OPTIMO') {
-      msg =
-          'Camion casi lleno. ${m.placedCount} bultos, ${m.totalWeightKg.toStringAsFixed(0)} kg — queda poco espacio';
+      msg = 'Carga optima: ${m.placedCount} bultos, '
+          '${m.totalWeightKg.toStringAsFixed(0)} kg. '
+          'Queda poco espacio libre.';
     } else {
-      msg =
-          'Todo cabe. ${m.placedCount} bultos, ${m.totalWeightKg.toStringAsFixed(0)} kg';
+      msg = 'Todo cabe: ${m.placedCount} bultos, '
+          '${m.totalWeightKg.toStringAsFixed(0)} kg. '
+          'Espacio disponible.';
     }
 
     return Container(

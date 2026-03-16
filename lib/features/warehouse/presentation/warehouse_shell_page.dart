@@ -9,6 +9,7 @@ import 'pages/vehicles_page.dart';
 import 'pages/articles_page.dart';
 import 'pages/load_history_page.dart';
 import 'pages/personnel_page.dart';
+import 'pages/warehouse_config_page.dart';
 
 class WarehouseShellPage extends StatefulWidget {
   const WarehouseShellPage({super.key});
@@ -26,6 +27,7 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
     ArticlesPage(),
     LoadHistoryPage(),
     PersonnelPage(),
+    WarehouseConfigPage(),
   ];
 
   @override
@@ -81,6 +83,11 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
               icon: Icon(Icons.groups_outlined),
               activeIcon: Icon(Icons.groups_rounded),
               label: 'PERSONAL',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings_outlined),
+              activeIcon: Icon(Icons.settings_rounded),
+              label: 'CONFIG',
             ),
           ],
         ),

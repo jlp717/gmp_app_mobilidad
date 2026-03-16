@@ -59,12 +59,16 @@ class CargoBoxRenderer {
       Canvas canvas, List<PlacedBox> overflow, double containerDepth) {
     if (overflow.isEmpty) return;
 
-    // Overflow label
-    final labelPos = proj.project(ox, oy - 30, oz + 30, size);
+    // Overflow banner with weight info
+    double totalOverflowKg = 0;
+    for (final b in overflow) {
+      totalOverflowKg += b.weight;
+    }
+    final labelPos = proj.project(ox, oy - 30, oz + 40, size);
     _drawText(
       canvas,
       labelPos,
-      '⚠ ${overflow.length} cajas sin espacio',
+      '${overflow.length} bultos sin espacio (${totalOverflowKg.toStringAsFixed(0)} kg)',
       const TextStyle(
         color: Color(0xFFFF6B6B),
         fontSize: 11,
@@ -73,13 +77,31 @@ class CargoBoxRenderer {
       bgColor: const Color(0xCC1A1A2E),
     );
 
-    // Render overflow boxes at the front, slightly offset
-    for (int i = 0; i < overflow.length; i++) {
+    // Render overflow boxes stacked neatly in front of truck
+    final maxShow = overflow.length > 12 ? 12 : overflow.length;
+    double stackX = 0, stackZ = 0;
+    double rowMaxH = 0;
+    for (int i = 0; i < maxShow; i++) {
       final b = overflow[i];
-      final bx = ox + b.x;
-      final by = oy - 40 - (i * 5); // Stack in front
-      final bz = oz + b.z;
+      final bx = ox + stackX;
+      final by = oy - 50;
+      final bz = oz + stackZ;
       _renderOverflowBox(canvas, b, bx, by, bz);
+      stackX += b.w + 3;
+      if (b.h > rowMaxH) rowMaxH = b.h;
+      // Wrap to next row if too wide
+      if (stackX > containerDepth * 0.6) {
+        stackX = 0;
+        stackZ += rowMaxH + 3;
+        rowMaxH = 0;
+      }
+    }
+    if (overflow.length > maxShow) {
+      final morePos = proj.project(ox, oy - 55, oz, size);
+      _drawText(canvas, morePos, '+${overflow.length - maxShow} mas',
+          const TextStyle(color: Color(0xFFFF8C8C), fontSize: 9,
+              fontWeight: FontWeight.w600),
+          bgColor: const Color(0xAA1A1A2E));
     }
   }
 
@@ -225,11 +247,18 @@ class CargoBoxRenderer {
     final faceWidth = (topPts[1] - topPts[0]).distance;
     if (faceWidth < 20) return; // Too small for labels
 
-    // Article code (main label)
-    final labelText = b.articleCode.length > 8
-        ? b.articleCode.substring(0, 8)
-        : b.articleCode;
-    
+    // Primary label: article code or client code depending on mode
+    final String labelText;
+    if (colorMode == ColorMode.client) {
+      labelText = b.clientCode.length > 8
+          ? b.clientCode.substring(0, 8)
+          : b.clientCode;
+    } else {
+      labelText = b.articleCode.length > 8
+          ? b.articleCode.substring(0, 8)
+          : b.articleCode;
+    }
+
     final fontSize = isSmall ? 8.0 : 10.0;
     final isSelected = b.id == selectedId;
 
@@ -263,6 +292,25 @@ class CargoBoxRenderer {
           fontWeight: FontWeight.w500,
         ),
         bgColor: const Color(0xAA000000),
+      );
+    }
+
+    // Order number badge (bottom-right corner, large boxes only)
+    if (!isSmall && faceWidth > 50) {
+      final orderPos = Offset(
+        topPts[1].dx - (topPts[1].dx - cx) * 0.3,
+        topPts[1].dy - (topPts[1].dy - cy) * 0.3,
+      );
+      _drawPillLabel(
+        canvas,
+        Offset(orderPos.dx, orderPos.dy + 8),
+        '#${b.orderNumber}',
+        const TextStyle(
+          color: Color(0xCCFFFFFF),
+          fontSize: 6,
+          fontWeight: FontWeight.w500,
+        ),
+        bgColor: const Color(0x80000000),
       );
     }
   }
@@ -339,12 +387,9 @@ class CargoBoxRenderer {
     final rightPts = [corners[1], corners[3], corners[7], corners[5]];
     PolyHelper.fillFaceSolid(canvas, rightPts, color, 0.45, 0.4);
 
-    // Dashed outline
-    final dashPaint = Paint()
-      ..color = const Color(0xFFFF4444)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
+    // Red outline
     PolyHelper.strokeFace(canvas, topPts, const Color(0xFFFF4444), 1.5);
+    PolyHelper.strokeFace(canvas, frontPts, const Color(0xFFFF4444), 1.0);
     
     // Label
     _drawBoxLabel(canvas, topPts, b, color, true);

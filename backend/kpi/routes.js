@@ -231,7 +231,7 @@ router.get('/alerts/clients', async (req, res) => {
           FROM DSED.LACLAE
           WHERE TRIM(LCCDVD) IN (${placeholders})
             AND LCAADC >= YEAR(CURRENT_DATE) - 1
-            AND LCTPLN = 'T' AND LCCLLG = 'VT'
+            AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')
         `;
         const vendorClientsResult = await kpiQuery(vendorQuery, codes);
         const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
@@ -510,7 +510,7 @@ router.get('/dashboard', async (req, res) => {
       const vendorClientsQuery = `
         SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
         FROM DSED.LACLAE 
-        WHERE TRIM(LCCDVD) = ? AND LCAADC = YEAR(CURRENT_DATE) AND LCTPLN = 'T' AND LCCLLG = 'VT'`;
+        WHERE TRIM(LCCDVD) = ? AND LCAADC = YEAR(CURRENT_DATE) AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')`;
       const vendorClientsResult = await kpiQuery(vendorClientsQuery, [vendorCode.trim()]);
       const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
 

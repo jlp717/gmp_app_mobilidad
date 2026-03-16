@@ -237,6 +237,45 @@ class LoadPlanResult {
   }
 }
 
+/// Resultado del cálculo de equilibrio de ejes
+class AxleBalanceResult {
+  final double cogX, cogY, cogZ;
+  final double frontPct, rearPct, leftPct, rightPct;
+  final double totalWeightKg;
+  final bool balanced;
+  final String warning;
+
+  AxleBalanceResult({
+    required this.cogX,
+    required this.cogY,
+    required this.cogZ,
+    required this.frontPct,
+    required this.rearPct,
+    required this.leftPct,
+    required this.rightPct,
+    required this.totalWeightKg,
+    required this.balanced,
+    this.warning = '',
+  });
+
+  factory AxleBalanceResult.fromJson(Map<String, dynamic> json) {
+    final cog = (json['centerOfGravity'] as Map<String, dynamic>?) ?? {};
+    final dist = (json['distribution'] as Map<String, dynamic>?) ?? {};
+    return AxleBalanceResult(
+      cogX: ((cog['x'] ?? 0) as num).toDouble(),
+      cogY: ((cog['y'] ?? 0) as num).toDouble(),
+      cogZ: ((cog['z'] ?? 0) as num).toDouble(),
+      frontPct: ((dist['frontPct'] ?? 50) as num).toDouble(),
+      rearPct: ((dist['rearPct'] ?? 50) as num).toDouble(),
+      leftPct: ((dist['leftPct'] ?? 50) as num).toDouble(),
+      rightPct: ((dist['rightPct'] ?? 50) as num).toDouble(),
+      totalWeightKg: ((json['totalWeightKg'] ?? 0) as num).toDouble(),
+      balanced: (json['balanced'] as bool?) ?? true,
+      warning: (json['warning'] as String?) ?? '',
+    );
+  }
+}
+
 /// Orden de un camión
 class TruckOrder {
   final String articleCode;
@@ -678,6 +717,75 @@ class WarehouseDataService {
   /// Delete manual layout
   static Future<void> deleteManualLayout(int id) async {
     await ApiClient.post('/warehouse/manual-layout/$id/delete', {});
+  }
+
+  /// Smart optimize — must-deliver + greedy knapsack by value density
+  static Future<LoadPlanResult> smartOptimize({
+    required String vehicleCode,
+    required int year,
+    required int month,
+    required int day,
+    List<int>? mustDeliverOrders,
+  }) async {
+    final response = await ApiClient.postWithTimeout(
+      '/warehouse/load-plan/smart-optimize',
+      {
+        'vehicleCode': vehicleCode,
+        'year': year,
+        'month': month,
+        'day': day,
+        if (mustDeliverOrders != null)
+          'mustDeliverOrders': mustDeliverOrders,
+      },
+      receiveTimeout: const Duration(seconds: 60),
+    );
+    return LoadPlanResult.fromJson(response);
+  }
+
+  /// Calculate axle balance for current load
+  static Future<AxleBalanceResult> getAxleBalance({
+    required String vehicleCode,
+    required List<Map<String, dynamic>> placedBoxes,
+  }) async {
+    final response = await ApiClient.post(
+      '/warehouse/load-plan/axle-balance',
+      {
+        'vehicleCode': vehicleCode,
+        'placed': placedBoxes,
+      },
+    );
+    return AxleBalanceResult.fromJson(response);
+  }
+
+  /// Get global warehouse config
+  static Future<Map<String, String>> getConfig() async {
+    final response = await ApiClient.get('/warehouse/config');
+    final items = (response['config'] as List?) ?? [];
+    final map = <String, String>{};
+    for (final item in items) {
+      final m = item as Map<String, dynamic>;
+      map[(m['CLAVE'] as String?) ?? ''] =
+          (m['VALOR'] as String?) ?? '';
+    }
+    return map;
+  }
+
+  /// Update a single config key
+  static Future<void> updateConfig({
+    required String key,
+    required String value,
+    String? description,
+  }) async {
+    await ApiClient.put('/warehouse/config', data: {
+      'key': key,
+      'value': value,
+      if (description != null) 'description': description,
+    });
+  }
+
+  /// Seed default config values
+  static Future<void> seedConfig() async {
+    await ApiClient.post('/warehouse/config/seed', {});
   }
 
   /// Actualizar config camión

@@ -44,6 +44,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   Set<int> _excludedIndices = {};
   bool _isManualMode = false;
   bool _recomputing = false;
+  bool _optimizing = false;
   Timer? _debounce;
 
   // 3D Camera
@@ -180,6 +181,150 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
       _animatedBoxCount = -1;
     });
     _loadPlan();
+  }
+
+  // ─── Smart optimize ──────────────────────────────────────────────────
+
+  Future<void> _smartOptimize() async {
+    if (_optimizing) return;
+    setState(() => _optimizing = true);
+    try {
+      final r = await WarehouseDataService.smartOptimize(
+        vehicleCode: widget.vehicleCode,
+        year: widget.date.year,
+        month: widget.date.month,
+        day: widget.date.day,
+      );
+      if (mounted) {
+        setState(() {
+          _result = r;
+          _selectedBoxId = null;
+          _optimizing = false;
+          _isManualMode = true;
+        });
+        _playLoadAnimation();
+        _showTruckFullModal(r);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _optimizing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al optimizar: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showTruckFullModal(LoadPlanResult r) {
+    final m = r.metrics;
+    final isFull = m.volumeOccupancyPct > 85 || m.weightOccupancyPct > 85;
+    final sc = _statusColor(m.status);
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppTheme.darkCard.withValues(alpha: 0.98),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: sc.withValues(alpha: 0.5), width: 2),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isFull
+                  ? Icons.check_circle_rounded
+                  : Icons.auto_awesome_rounded,
+              color: sc,
+              size: 48,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isFull
+                  ? 'CAMION OPTIMIZADO'
+                  : 'OPTIMIZACION COMPLETADA',
+              style: TextStyle(
+                color: sc,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _optimizeStatRow(
+              'Bultos cargados',
+              '${m.placedCount}/${m.totalBoxes}',
+              AppTheme.neonBlue,
+            ),
+            _optimizeStatRow(
+              'Volumen ocupado',
+              '${m.volumeOccupancyPct.toStringAsFixed(1)}%',
+              m.volumeOccupancyPct > 85
+                  ? Colors.amber
+                  : AppTheme.neonGreen,
+            ),
+            _optimizeStatRow(
+              'Peso cargado',
+              '${m.totalWeightKg.toStringAsFixed(0)}/'
+                  '${m.maxPayloadKg.toStringAsFixed(0)} kg',
+              m.weightOccupancyPct > 85
+                  ? Colors.amber
+                  : AppTheme.neonGreen,
+            ),
+            if (m.overflowCount > 0)
+              _optimizeStatRow(
+                'Sin espacio',
+                '${m.overflowCount} bultos '
+                    '(${m.overflowWeightKg.toStringAsFixed(0)} kg)',
+                Colors.redAccent,
+              ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(ctx),
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Cerrar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: sc.withValues(alpha: 0.2),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 30,
+                  vertical: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _optimizeStatRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ─── Loading animation ────────────────────────────────────────────────
@@ -467,12 +612,31 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               _viewModeBtn(ViewMode.front, Icons.view_agenda_rounded, 'Front'),
             ]),
           ),
+          // Smart optimize button
+          IconButton(
+            onPressed: _optimizing ? null : _smartOptimize,
+            icon: _optimizing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.neonGreen,
+                    ),
+                  )
+                : const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: AppTheme.neonGreen,
+                    size: 22,
+                  ),
+            tooltip: 'Auto-Organizar (max margen)',
+          ),
           // Play animation
           IconButton(
             onPressed: _playLoadAnimation,
             icon: const Icon(Icons.play_circle_outline_rounded,
                 color: AppTheme.neonPurple, size: 22),
-            tooltip: 'Animación de carga',
+            tooltip: 'Animacion de carga',
           ),
           if (_isManualMode)
             IconButton(
@@ -647,6 +811,8 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
       excludedIndices: _excludedIndices,
       isManualMode: _isManualMode,
       recomputing: _recomputing,
+      onSmartOptimize: _smartOptimize,
+      optimizing: _optimizing,
       onAddAll: () {
         setState(() {
           _excludedIndices.clear();

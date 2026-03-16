@@ -74,6 +74,7 @@ class TruckPainter extends CustomPainter {
       cW: cW, cD: cD, cH: cH,
       ox: ox, oy: oy, oz: oz,
       isVan: isVan,
+      matricula: t.matricula,
     );
     bodyRenderer.drawAll(canvas);
 
