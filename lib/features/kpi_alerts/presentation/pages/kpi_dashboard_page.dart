@@ -8,9 +8,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
-/// Panel resumen KPI Glacius para Jefe de Ventas y Comerciales.
 class KpiDashboardPage extends StatefulWidget {
-  /// Creates a KPI Dashboard page.
   const KpiDashboardPage({super.key});
 
   @override
@@ -40,8 +38,10 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
           auth.isDirector ? null : auth.currentUser?.vendedorCode;
 
       String url = ApiConfig.kpiDashboard;
-      if (vendorCode != null && vendorCode != 'ALL') {
-        url += '?vendorCode=$vendorCode';
+      if (vendorCode != null) {
+        if (vendorCode != 'ALL') {
+          url += '?vendorCode=$vendorCode';
+        }
       }
 
       final data = await ApiClient.get(url);
@@ -52,13 +52,13 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
         });
       } else {
         setState(() {
-          _error = 'Sin datos disponibles';
+          _error = 'No se pudieron cargar los datos de Nestle';
           _loading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = 'Error de conexion. Comprueba tu red e intentalo de nuevo.';
         _loading = false;
       });
     }
@@ -69,7 +69,7 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
       appBar: AppBar(
-        title: const Text('KPI Glacius / Nestle'),
+        title: const Text('Nestle / Glacius'),
         backgroundColor: AppTheme.darkSurface,
         actions: [
           IconButton(
@@ -88,87 +88,119 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
 
   Widget _buildError() {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.cloud_off, size: 48, color: Colors.grey[600]),
-          const SizedBox(height: 12),
-          Text(
-            _error!,
-            style: TextStyle(color: Colors.grey[500]),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _loadDashboard,
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('Reintentar'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off, size: 48, color: Colors.grey[600]),
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _loadDashboard,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildContent() {
-    final totals = _data!['totals'] as Map<String, dynamic>;
-    final byType = _data!['byType'] as List<dynamic>;
-    final topClients = _data!['topClients'] as List<dynamic>;
+    final totals = _data!['totals'] as Map<String, dynamic>? ?? {};
+    final byType = (_data!['byType'] as List<dynamic>?) ?? [];
+    final clients = (_data!['clients'] as List<dynamic>?) ?? [];
     final lastLoad = _data!['lastLoad'] as Map<String, dynamic>?;
+
+    final totalAlerts = (totals['alerts'] as num?)?.toInt() ?? 0;
 
     return RefreshIndicator(
       onRefresh: _loadDashboard,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Ultima carga
-          if (lastLoad != null) _buildLastLoadBanner(lastLoad),
+          // Last update banner
+          _buildUpdateBanner(lastLoad, totalAlerts),
           const SizedBox(height: 16),
 
-          // Cards de resumen
+          // Summary cards
           _buildSummaryCards(totals),
           const SizedBox(height: 20),
 
-          // Desglose por tipo
-          _buildTypeBreakdown(byType),
-          const SizedBox(height: 20),
+          // Type breakdown
+          if (byType.isNotEmpty) ...[
+            _buildSectionTitle('Resumen por tipo de alerta'),
+            const SizedBox(height: 8),
+            ...byType.map((t) => _buildTypeRow(t as Map<String, dynamic>)),
+            const SizedBox(height: 20),
+          ],
 
-          // Top clientes
-          _buildTopClients(topClients),
+          // Clients with alerts
+          if (clients.isNotEmpty) ...[
+            _buildSectionTitle(
+                'Clientes con alertas (${clients.length})'),
+            const SizedBox(height: 8),
+            ...clients.map(
+                (c) => _buildClientTile(c as Map<String, dynamic>)),
+          ],
+
+          // Empty state
+          if (totalAlerts == 0) _buildEmptyState(),
+
+          const SizedBox(height: 40),
         ],
       ),
     );
   }
 
-  Widget _buildLastLoadBanner(Map<String, dynamic> load) {
-    final loadId = load['loadId'] ?? '';
-    final completedAt = load['completedAt']?.toString() ?? '';
+  // ─── UPDATE BANNER ──────────────────────────────────────────
+
+  Widget _buildUpdateBanner(Map<String, dynamic>? lastLoad, int totalAlerts) {
+    String label;
+    Color dotColor;
+
+    if (lastLoad == null) {
+      label = 'Sin datos de Nestle cargados aun';
+      dotColor = Colors.orange;
+    } else {
+      final completedAt = lastLoad['completedAt']?.toString() ?? '';
+      final relativeTime = _formatRelativeTime(completedAt);
+      label = 'Datos actualizados $relativeTime';
+      dotColor = Colors.greenAccent;
+
+      if (totalAlerts > 0) {
+        label += '  ·  $totalAlerts alerta${totalAlerts == 1 ? '' : 's'} activa${totalAlerts == 1 ? '' : 's'}';
+      }
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 10,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: Colors.blueGrey.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: dotColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.check_circle,
-            color: Colors.greenAccent[400],
-            size: 20,
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Carga $loadId — $completedAt',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 13,
-              ),
+              label,
+              style: TextStyle(color: Colors.grey[300], fontSize: 13),
             ),
           ),
         ],
@@ -176,63 +208,77 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
     );
   }
 
+  String _formatRelativeTime(String dateStr) {
+    if (dateStr.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      final now = DateTime.now();
+      final diff = now.difference(date);
+
+      if (diff.inMinutes < 1) return 'ahora mismo';
+      if (diff.inMinutes < 60) return 'hace ${diff.inMinutes} min';
+      if (diff.inHours < 24) {
+        final h = diff.inHours;
+        return 'hoy hace ${h}h';
+      }
+      if (diff.inDays == 1) return 'ayer';
+      if (diff.inDays < 7) return 'hace ${diff.inDays} dias';
+      // Fallback: show date
+      return 'el ${date.day}/${date.month}/${date.year}';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  // ─── SUMMARY CARDS ──────────────────────────────────────────
+
   Widget _buildSummaryCards(Map<String, dynamic> totals) {
     return Row(
       children: [
         _buildCard(
-          'Criticas',
+          'Urgentes',
           totals['critical']?.toString() ?? '0',
           Colors.redAccent,
-          Icons.error,
+          Icons.error_rounded,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildCard(
-          'Warning',
+          'Atencion',
           totals['warning']?.toString() ?? '0',
           Colors.orangeAccent,
-          Icons.warning_amber,
+          Icons.warning_amber_rounded,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildCard(
           'Info',
           totals['info']?.toString() ?? '0',
           Colors.cyanAccent,
-          Icons.info_outline,
+          Icons.info_outline_rounded,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildCard(
           'Clientes',
           totals['clients']?.toString() ?? '0',
           Colors.blueAccent,
-          Icons.people,
+          Icons.storefront_rounded,
         ),
       ],
     );
   }
 
-  Widget _buildCard(
-    String label,
-    String value,
-    Color color,
-    IconData icon,
-  ) {
+  Widget _buildCard(String label, String value, Color color, IconData icon) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          vertical: 16,
-          horizontal: 8,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: color.withValues(alpha: 0.3),
-          ),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 6),
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 4),
             Text(
               value,
               style: TextStyle(
@@ -244,10 +290,7 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
             const SizedBox(height: 2),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[500],
-              ),
+              style: TextStyle(fontSize: 10, color: Colors.grey[500]),
             ),
           ],
         ),
@@ -255,103 +298,344 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
     );
   }
 
-  Widget _buildTypeBreakdown(List<dynamic> byType) {
-    // Agrupar por tipo
-    final Map<String, Map<String, int>> grouped = {};
-    for (final item in byType) {
-      final type = item['type']?.toString() ?? '';
-      final sev = item['severity']?.toString() ?? '';
-      final count = (item['count'] as num?)?.toInt() ?? 0;
-      grouped.putIfAbsent(type, () => {});
-      grouped[type]![sev] = count;
-    }
+  // ─── TYPE BREAKDOWN ─────────────────────────────────────────
 
-    const typeLabels = {
-      'DESVIACION_VENTAS': 'Desviacion Ventas',
-      'CUOTA_SIN_COMPRA': 'Sin Compras',
-      'DESVIACION_REFERENCIACION': 'Referenciacion',
-      'PROMOCION': 'Promociones',
-      'ALTA_CLIENTE': 'Clientes Nuevos',
-      'AVISO': 'Avisos',
-      'MEDIOS_CLIENTE': 'Equipamiento',
-    };
+  Widget _buildTypeRow(Map<String, dynamic> t) {
+    final label = t['label']?.toString() ?? '';
+    final crit = (t['critical'] as num?)?.toInt() ?? 0;
+    final warn = (t['warning'] as num?)?.toInt() ?? 0;
+    final info = (t['info'] as num?)?.toInt() ?? 0;
+    final total = (t['total'] as num?)?.toInt() ?? 0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Desglose por tipo',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
+    if (total == 0) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        ...grouped.entries.map((e) {
-          final label = typeLabels[e.key] ?? e.key;
-          final crit = e.value['critical'] ?? 0;
-          final warn = e.value['warning'] ?? 0;
-          final info = e.value['info'] ?? 0;
-          final total = crit + warn + info;
+          if (crit > 0) _buildBadge(crit, Colors.redAccent),
+          if (warn > 0) _buildBadge(warn, Colors.orangeAccent),
+          if (info > 0) _buildBadge(info, Colors.cyanAccent),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 32,
+            child: Text(
+              '$total',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 10,
-            ),
-            decoration: BoxDecoration(
-              color: AppTheme.darkSurface,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+  // ─── CLIENT TILES (expandable) ──────────────────────────────
+
+  Widget _buildClientTile(Map<String, dynamic> client) {
+    final code = client['code']?.toString() ?? '';
+    final name = client['name']?.toString() ?? '';
+    final address = client['address']?.toString() ?? '';
+    final city = client['city']?.toString() ?? '';
+    final total = (client['total'] as num?)?.toInt() ?? 0;
+    final crit = (client['critical'] as num?)?.toInt() ?? 0;
+    final warn = (client['warning'] as num?)?.toInt() ?? 0;
+    final alerts = (client['alerts'] as List<dynamic>?) ?? [];
+
+    // Short code: remove 4300 prefix for display
+    final shortCode = code.startsWith('4300')
+        ? code.substring(4).replaceFirst(RegExp(r'^0+'), '')
+        : code;
+
+    final headerColor = crit > 0
+        ? Colors.redAccent.withValues(alpha: 0.2)
+        : warn > 0
+            ? Colors.orangeAccent.withValues(alpha: 0.12)
+            : Colors.blueGrey.withValues(alpha: 0.1);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: crit > 0
+            ? Border.all(color: Colors.redAccent.withValues(alpha: 0.3))
+            : null,
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          childrenPadding:
+              const EdgeInsets.only(left: 14, right: 14, bottom: 12),
+          backgroundColor: headerColor,
+          collapsedBackgroundColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          collapsedShape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name.isNotEmpty ? name : 'Cliente $shortCode',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      [
+                        shortCode,
+                        if (city.isNotEmpty) city,
+                      ].join('  ·  '),
+                      style: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 11,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (crit > 0) _buildBadge(crit, Colors.redAccent),
+              if (warn > 0) _buildBadge(warn, Colors.orangeAccent),
+              const SizedBox(width: 4),
+              Text(
+                '$total',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          children: [
+            // Address
+            if (address.isNotEmpty) ...[
+              Row(
+                children: [
+                  Icon(Icons.location_on_outlined,
+                      size: 14, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      [address, if (city.isNotEmpty) city]
+                          .join(', '),
+                      style: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 11,
+                      ),
                     ),
                   ),
-                ),
-                if (crit > 0)
-                  _buildBadge(crit, Colors.redAccent),
-                if (warn > 0)
-                  _buildBadge(warn, Colors.orangeAccent),
-                if (info > 0)
-                  _buildBadge(info, Colors.cyanAccent),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 36,
-                  child: Text(
-                    '$total',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
+
+            // Alerts list
+            ...alerts.map(
+                (a) => _buildAlertItem(a as Map<String, dynamic>)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlertItem(Map<String, dynamic> alert) {
+    final severity = alert['severity']?.toString() ?? 'info';
+    final title = alert['title']?.toString() ?? '';
+    final summary = alert['summary']?.toString() ?? '';
+    final detail = alert['detail']?.toString() ?? '';
+    final actions = (alert['actions'] as List<dynamic>?) ?? [];
+    final uiHint = (alert['ui_hint'] as Map<String, dynamic>?) ?? {};
+
+    final colorHex = uiHint['color']?.toString() ?? '#888888';
+    final color = _parseColor(colorHex);
+
+    final sevColor = severity == 'critical'
+        ? Colors.redAccent
+        : severity == 'warning'
+            ? Colors.orangeAccent
+            : Colors.cyanAccent;
+
+    final sevLabel =
+        severity == 'critical' ? 'URG' : severity == 'warning' ? 'ATEN' : 'INFO';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppTheme.darkBase.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(
+          left: BorderSide(color: color, width: 3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title + severity badge
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: sevColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  sevLabel,
+                  style: TextStyle(
+                    color: sevColor,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+
+          // Summary
+          Text(
+            summary,
+            style: TextStyle(color: Colors.grey[300], fontSize: 12),
+          ),
+
+          // Detail (if exists)
+          if (detail.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              detail,
+              style: TextStyle(color: Colors.grey[500], fontSize: 11),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
             ),
-          );
-        }),
-      ],
+          ],
+
+          // Action chips
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: actions
+                  .take(2)
+                  .map((a) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: color.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          a.toString(),
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ─── EMPTY STATE ────────────────────────────────────────────
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Column(
+        children: [
+          Icon(Icons.check_circle_outline_rounded,
+              size: 56, color: Colors.greenAccent[400]),
+          const SizedBox(height: 12),
+          const Text(
+            'Sin alertas de Nestle',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Todos tus clientes estan al dia con sus objetivos',
+            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── HELPERS ────────────────────────────────────────────────
+
+  Widget _buildSectionTitle(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 
   Widget _buildBadge(int count, Color color) {
     return Container(
       margin: const EdgeInsets.only(left: 4),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 2,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
@@ -360,97 +644,19 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
         '$count',
         style: TextStyle(
           color: color,
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: FontWeight.bold,
         ),
       ),
     );
   }
 
-  Widget _buildTopClients(List<dynamic> clients) {
-    if (clients.isEmpty) {
-      return const SizedBox.shrink();
+  Color _parseColor(String hex) {
+    try {
+      final cleaned = hex.replaceFirst('#', '');
+      return Color(int.parse('FF$cleaned', radix: 16));
+    } catch (_) {
+      return Colors.grey;
     }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Top clientes con alertas (${clients.length})',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 10),
-        ...clients.take(20).map((c) {
-          final code = c['clientCode']?.toString() ?? '';
-          final name = c['clientName']?.toString() ?? '';
-          final crit = (c['critical'] as num?)?.toInt() ?? 0;
-          final warn = (c['warning'] as num?)?.toInt() ?? 0;
-          final total = (c['totalAlerts'] as num?)?.toInt() ?? 0;
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 10,
-            ),
-            decoration: BoxDecoration(
-              color: AppTheme.darkSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: crit > 0
-                  ? Border.all(
-                      color: Colors.redAccent
-                          .withValues(alpha: 0.3),
-                    )
-                  : null,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name.isNotEmpty ? name : code,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (name.isNotEmpty)
-                        Text(
-                          code,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 11,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                if (crit > 0)
-                  _buildBadge(crit, Colors.redAccent),
-                if (warn > 0)
-                  _buildBadge(warn, Colors.orangeAccent),
-                const SizedBox(width: 6),
-                Text(
-                  '$total',
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
   }
 }

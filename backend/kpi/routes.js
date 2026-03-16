@@ -490,39 +490,36 @@ router.get('/dashboard', async (req, res) => {
   try {
     const { vendorCode } = req.query;
 
-    // 1. Resumen por tipo y severidad
-    const summaryResult = await kpiQuery(`
-      SELECT ALERT_TYPE, SEVERITY, COUNT(*) AS CNT
-      FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1
-      GROUP BY ALERT_TYPE, SEVERITY ORDER BY ALERT_TYPE, SEVERITY
-    `);
-
-    // 2. Fetch raw active alerts and group in Node (prevents 42S22 errors in DB2)
+    // 1. Fetch ALL active alerts with type (single query, filter in Node)
     const allAlertsResult = await kpiQuery(`
-      SELECT CLIENT_CODE, SEVERITY
+      SELECT CLIENT_CODE, ALERT_TYPE, SEVERITY
       FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1
     `);
 
     let filteredAlerts = allAlertsResult.rows;
 
-    // Si hay vendorCode, filtrar por clientes de ese vendedor
+    // 2. Vendor filter: restrict to this vendor's clients
     if (vendorCode && vendorCode !== 'ALL') {
       const vendorClientsQuery = `
         SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
-        FROM DSED.LACLAE 
-        WHERE TRIM(LCCDVD) = ? AND LCAADC = YEAR(CURRENT_DATE) AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')`;
+        FROM DSED.LACLAE
+        WHERE TRIM(LCCDVD) = ? AND LCAADC = YEAR(CURRENT_DATE)
+          AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')`;
       const vendorClientsResult = await kpiQuery(vendorClientsQuery, [vendorCode.trim()]);
       const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
 
       filteredAlerts = filteredAlerts.filter(a => validCodes.has((a.CLIENT_CODE || '').trim()));
     }
 
+    // 3. Compute totals, byType, and clientsMap — all from the SAME filtered data
     const calcTotals = { TOTAL_ALERTS: 0, TOTAL_CLIENTS: new Set(), CRITICAL: 0, WARNING: 0, INFO: 0 };
+    const byTypeMap = {}; // { DESVIACION_VENTAS: { critical: 3, warning: 5, info: 2 } }
     const clientsMap = {};
 
     for (const row of filteredAlerts) {
       const code = (row.CLIENT_CODE || '').trim();
       const sev = (row.SEVERITY || '').toLowerCase();
+      const type = (row.ALERT_TYPE || '').trim();
 
       calcTotals.TOTAL_ALERTS++;
       calcTotals.TOTAL_CLIENTS.add(code);
@@ -530,51 +527,134 @@ router.get('/dashboard', async (req, res) => {
       if (sev === 'warning') calcTotals.WARNING++;
       if (sev === 'info') calcTotals.INFO++;
 
-      if (!clientsMap[code]) clientsMap[code] = { CLIENT_CODE: code, TOTAL_ALERTS: 0, CRITICAL: 0, WARNING: 0 };
-      clientsMap[code].TOTAL_ALERTS++;
-      if (sev === 'critical') clientsMap[code].CRITICAL++;
-      if (sev === 'warning') clientsMap[code].WARNING++;
+      // byType aggregation
+      if (!byTypeMap[type]) byTypeMap[type] = { critical: 0, warning: 0, info: 0 };
+      if (sev === 'critical') byTypeMap[type].critical++;
+      else if (sev === 'warning') byTypeMap[type].warning++;
+      else byTypeMap[type].info++;
+
+      // clients aggregation
+      if (!clientsMap[code]) clientsMap[code] = { code, total: 0, critical: 0, warning: 0, info: 0, types: new Set() };
+      clientsMap[code].total++;
+      if (sev === 'critical') clientsMap[code].critical++;
+      else if (sev === 'warning') clientsMap[code].warning++;
+      else clientsMap[code].info++;
+      clientsMap[code].types.add(type);
     }
 
-    // Convert to top clients array and sort
-    const topClientsResult = {
-      rows: Object.values(clientsMap)
-        .sort((a, b) => b.CRITICAL - a.CRITICAL || b.WARNING - a.WARNING || b.TOTAL_ALERTS - a.TOTAL_ALERTS)
-        .slice(0, 30) // FETCH FIRST 30 ROWS ONLY
-    };
+    // Sort clients: critical first, then warning, then total
+    const sortedClients = Object.values(clientsMap)
+      .sort((a, b) => b.critical - a.critical || b.warning - a.warning || b.total - a.total)
+      .slice(0, 50);
 
-    // 4. Ultima carga
+    // 4. Fetch client info from DSEDAC.CLI (name, address, city)
+    const clientCodes = sortedClients.map(c => c.code);
+    const clientInfo = {}; // code → { name, address, city }
+    if (clientCodes.length > 0) {
+      try {
+        const placeholders = clientCodes.map(() => '?').join(',');
+        const cliResult = await kpiQuery(
+          `SELECT TRIM(C.CODIGOCLIENTE) AS CODE,
+                  COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) AS NAME,
+                  TRIM(C.DIRECCION) AS ADDRESS, TRIM(C.POBLACION) AS CITY
+           FROM DSEDAC.CLI C
+           WHERE C.CODIGOCLIENTE IN (${placeholders})`,
+          clientCodes
+        );
+        for (const r of cliResult.rows) {
+          clientInfo[(r.CODE || '').trim()] = {
+            name: r.NAME || '',
+            address: r.ADDRESS || '',
+            city: r.CITY || '',
+          };
+        }
+      } catch (e) {
+        logger.warn(`[kpi:api] Error fetching client info: ${e.message}`);
+        // Fallback: try to get names from RAW_DATA in alerts
+        try {
+          const placeholders = clientCodes.map(() => '?').join(',');
+          const namesResult = await kpiQuery(
+            `SELECT CLIENT_CODE, RAW_DATA FROM JAVIER.KPI_ALERTS
+             WHERE CLIENT_CODE IN (${placeholders}) AND IS_ACTIVE = 1
+             FETCH FIRST ${clientCodes.length} ROWS ONLY`, clientCodes);
+          for (const row of namesResult.rows) {
+            const raw = parseRawData(row.RAW_DATA);
+            const code = (row.CLIENT_CODE || '').trim();
+            if (raw.nombreComercial && !clientInfo[code]) {
+              clientInfo[code] = { name: raw.nombreComercial, address: '', city: '' };
+            }
+          }
+        } catch (_) { /* non-critical */ }
+      }
+    }
+
+    // 5. Fetch detailed alerts per client (with transformation for compact UI)
+    const clientAlerts = {}; // code → [{ type, severity, title, summary, detail, actions, ui_hint }]
+    if (clientCodes.length > 0) {
+      try {
+        const placeholders = clientCodes.map(() => '?').join(',');
+        const alertsResult = await kpiQuery(
+          `SELECT CLIENT_CODE, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA
+           FROM JAVIER.KPI_ALERTS
+           WHERE CLIENT_CODE IN (${placeholders}) AND IS_ACTIVE = 1
+           ORDER BY CASE SEVERITY WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END`,
+          clientCodes
+        );
+        for (const row of alertsResult.rows) {
+          const code = (row.CLIENT_CODE || '').trim();
+          if (!clientAlerts[code]) clientAlerts[code] = [];
+          const rawData = parseRawData(row.RAW_DATA);
+          const compact = transformAlert({
+            alertType: row.ALERT_TYPE, severity: row.SEVERITY,
+            message: row.MESSAGE, rawData,
+          });
+          clientAlerts[code].push({
+            type: row.ALERT_TYPE,
+            severity: (row.SEVERITY || '').toLowerCase(),
+            title: compact.title || row.ALERT_TYPE,
+            summary: compact.summary || (row.MESSAGE || '').substring(0, 120),
+            detail: compact.detail || '',
+            actions: compact.actions || [],
+            ui_hint: compact.ui_hint || {},
+          });
+        }
+      } catch (e) {
+        logger.warn(`[kpi:api] Error fetching client alerts detail: ${e.message}`);
+      }
+    }
+
+    // 6. Last load info
     const lastLoadResult = await kpiQuery(
       `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, COMPLETED_AT
        FROM JAVIER.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
     );
-
-    // 5. Nombres comerciales de los top clientes (extraer de RAW_DATA de KPI_ALERTS)
-    //    LACLAE no tiene columna de nombre — usamos el nombreComercial almacenado en la alerta
-    const clientCodes = topClientsResult.rows.map(r => r.CLIENT_CODE);
-    let clientNames = {};
-    if (clientCodes.length > 0) {
-      try {
-        const placeholders = clientCodes.map(() => '?').join(',');
-        const namesResult = await kpiQuery(
-          `SELECT CLIENT_CODE, RAW_DATA
-           FROM JAVIER.KPI_ALERTS
-           WHERE CLIENT_CODE IN (${placeholders}) AND IS_ACTIVE = 1
-           FETCH FIRST ${clientCodes.length} ROWS ONLY`,
-          clientCodes
-        );
-        for (const row of namesResult.rows) {
-          const raw = parseRawData(row.RAW_DATA);
-          if (raw.nombreComercial && !clientNames[row.CLIENT_CODE]) {
-            clientNames[row.CLIENT_CODE] = raw.nombreComercial;
-          }
-        }
-      } catch (_) {
-        // Non-critical: names are optional in the dashboard
-      }
-    }
-
     const lastLoad = lastLoadResult.rows[0] || null;
+
+    // Format byType as array with labels
+    const typeLabels = {
+      DESVIACION_VENTAS: 'Desviacion Ventas',
+      CUOTA_SIN_COMPRA: 'Sin Compras',
+      DESVIACION_REFERENCIACION: 'Referenciacion',
+      PROMOCION: 'Promociones',
+      ALTA_CLIENTE: 'Clientes Nuevos',
+      AVISO: 'Avisos',
+      MEDIOS_CLIENTE: 'Equipamiento',
+    };
+
+    // Ordered consistently
+    const typeOrder = ['DESVIACION_VENTAS', 'CUOTA_SIN_COMPRA', 'DESVIACION_REFERENCIACION',
+      'ALTA_CLIENTE', 'PROMOCION', 'AVISO', 'MEDIOS_CLIENTE'];
+
+    const byType = typeOrder
+      .filter(t => byTypeMap[t])
+      .map(t => ({
+        type: t,
+        label: typeLabels[t] || t,
+        critical: byTypeMap[t].critical,
+        warning: byTypeMap[t].warning,
+        info: byTypeMap[t].info,
+        total: byTypeMap[t].critical + byTypeMap[t].warning + byTypeMap[t].info,
+      }));
 
     res.json({
       success: true,
@@ -585,18 +665,22 @@ router.get('/dashboard', async (req, res) => {
         warning: calcTotals.WARNING,
         info: calcTotals.INFO,
       },
-      byType: summaryResult.rows.map(r => ({
-        type: r.ALERT_TYPE,
-        severity: r.SEVERITY,
-        count: parseInt(r.CNT),
-      })),
-      topClients: topClientsResult.rows.map(r => ({
-        clientCode: r.CLIENT_CODE,
-        clientName: clientNames[r.CLIENT_CODE] || null,
-        totalAlerts: parseInt(r.TOTAL_ALERTS),
-        critical: parseInt(r.CRITICAL),
-        warning: parseInt(r.WARNING),
-      })),
+      byType,
+      clients: sortedClients.map(c => {
+        const info = clientInfo[c.code] || {};
+        return {
+          code: c.code,
+          name: info.name || '',
+          address: info.address || '',
+          city: info.city || '',
+          total: c.total,
+          critical: c.critical,
+          warning: c.warning,
+          info: c.info,
+          types: Array.from(c.types),
+          alerts: clientAlerts[c.code] || [],
+        };
+      }),
       lastLoad: lastLoad ? {
         loadId: lastLoad.LOAD_ID,
         status: lastLoad.STATUS,
