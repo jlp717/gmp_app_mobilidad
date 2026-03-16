@@ -415,13 +415,13 @@ function formatAlert(row) {
  */
 function getTypeExplanation(type) {
   const explanations = {
-    DESVIACION_VENTAS: 'Ventas Nestle vs objetivo anual asignado',
-    CUOTA_SIN_COMPRA: 'Cuota Nestle asignada sin pedidos realizados',
-    DESVIACION_REFERENCIACION: 'Productos Nestle que deberia estar comprando',
-    PROMOCION: 'Promocion Nestle disponible para ofrecer',
-    ALTA_CLIENTE: 'Seguimiento de cliente nuevo en Nestle',
-    AVISO: 'Aviso operativo de Nestle/Froneri',
-    MEDIOS_CLIENTE: 'Equipamiento Nestle en el punto de venta',
+    DESVIACION_VENTAS: 'Ventas vs objetivo anual asignado',
+    CUOTA_SIN_COMPRA: 'Cuota asignada sin pedidos realizados',
+    DESVIACION_REFERENCIACION: 'Productos que deberia estar comprando',
+    PROMOCION: 'Promocion disponible para ofrecer',
+    ALTA_CLIENTE: 'Seguimiento de cliente nuevo',
+    AVISO: 'Aviso operativo',
+    MEDIOS_CLIENTE: 'Equipamiento en el punto de venta',
   };
   return explanations[type] || '';
 }
@@ -446,7 +446,7 @@ function parseRawData(val) {
 router.get('/debug/db-status', async (req, res) => {
   try {
     const countResult = await kpiQuery(
-      `SELECT COUNT(*) AS TOTAL, COUNT(CASE WHEN IS_ACTIVE = 1 THEN 1 END) AS ACTIVE
+      `SELECT COUNT(*) AS TOTAL, SUM(CASE WHEN IS_ACTIVE = 1 THEN 1 ELSE 0 END) AS ACTIVE
        FROM JAVIER.KPI_ALERTS`
     );
 
@@ -496,9 +496,9 @@ router.get('/dashboard', async (req, res) => {
     const totalsResult = await kpiQuery(`
       SELECT COUNT(*) AS TOTAL_ALERTS,
              COUNT(DISTINCT CLIENT_CODE) AS TOTAL_CLIENTS,
-             COUNT(CASE WHEN SEVERITY = 'critical' THEN 1 END) AS CRITICAL,
-             COUNT(CASE WHEN SEVERITY = 'warning' THEN 1 END) AS WARNING,
-             COUNT(CASE WHEN SEVERITY = 'info' THEN 1 END) AS INFO
+             SUM(CASE WHEN SEVERITY = 'critical' THEN 1 ELSE 0 END) AS CRITICAL,
+             SUM(CASE WHEN SEVERITY = 'warning' THEN 1 ELSE 0 END) AS WARNING,
+             SUM(CASE WHEN SEVERITY = 'info' THEN 1 ELSE 0 END) AS INFO
       FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1
     `);
 
@@ -506,8 +506,8 @@ router.get('/dashboard', async (req, res) => {
     let topClientsQuery = `
       SELECT a.CLIENT_CODE,
              COUNT(*) AS TOTAL_ALERTS,
-             COUNT(CASE WHEN a.SEVERITY = 'critical' THEN 1 END) AS CRITICAL,
-             COUNT(CASE WHEN a.SEVERITY = 'warning' THEN 1 END) AS WARNING
+             SUM(CASE WHEN a.SEVERITY = 'critical' THEN 1 ELSE 0 END) AS CRITICAL,
+             SUM(CASE WHEN a.SEVERITY = 'warning' THEN 1 ELSE 0 END) AS WARNING
       FROM JAVIER.KPI_ALERTS a
       WHERE a.IS_ACTIVE = 1`;
     const topParams = [];
