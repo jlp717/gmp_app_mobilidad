@@ -19,6 +19,12 @@ class KpiAlert {
     required this.sourceFile,
     required this.createdAt,
     this.typeExplanation = '',
+    this.title = '',
+    this.summary = '',
+    this.detail = '',
+    this.actions = const [],
+    this.meta,
+    this.uiHint,
   });
 
   factory KpiAlert.fromJson(Map<String, dynamic> json) {
@@ -37,6 +43,20 @@ class KpiAlert {
           ) ??
           DateTime.now(),
       typeExplanation: json['typeExplanation']?.toString() ?? '',
+      // Compact fields from alert_transformer
+      title: json['title']?.toString() ?? '',
+      summary: json['summary']?.toString() ?? '',
+      detail: json['detail']?.toString() ?? '',
+      actions: (json['actions'] is List)
+          ? List<String>.from(
+              (json['actions'] as List).map((a) => a.toString()))
+          : const [],
+      meta: json['meta'] is Map
+          ? Map<String, dynamic>.from(json['meta'] as Map)
+          : null,
+      uiHint: json['ui_hint'] is Map
+          ? Map<String, dynamic>.from(json['ui_hint'] as Map)
+          : null,
     );
   }
 
@@ -49,6 +69,17 @@ class KpiAlert {
   final String sourceFile;
   final DateTime createdAt;
   final String typeExplanation;
+
+  // Compact fields (from alert_transformer.js)
+  final String title;      // Max 6 words, e.g. "Ventas < objetivo"
+  final String summary;    // 1-2 lines, action-oriented
+  final String detail;     // Collapsible, 1-4 lines
+  final List<String> actions; // e.g. ["Revisar surtido", "Ofrecer helados"]
+  final Map<String, dynamic>? meta; // { lastPurchase, amount, target, ... }
+  final Map<String, dynamic>? uiHint; // { color, icon }
+
+  /// Whether compact fields are available from the API
+  bool get hasCompactFields => summary.isNotEmpty;
 
   /// Prioridad numérica para ordenación (menor = más urgente)
   int get priorityOrder {

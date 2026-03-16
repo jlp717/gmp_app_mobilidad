@@ -275,7 +275,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
       grouped.putIfAbsent(alert.type, () => []).add(alert);
     }
 
-    // Orden de tipos
+    // Orden de tipos coherente
     const typeOrder = [
       'DESVIACION_VENTAS',
       'CUOTA_SIN_COMPRA',
@@ -286,7 +286,6 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
       'MEDIOS_CLIENTE',
     ];
     final sortedTypes = typeOrder.where(grouped.containsKey).toList();
-    // Add any types not in the predefined order
     for (final t in grouped.keys) {
       if (!sortedTypes.contains(t)) sortedTypes.add(t);
     }
@@ -297,6 +296,10 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      constraints: BoxConstraints(
+        // KEY: limitar altura maxima (65% viewport) para que siempre haya scroll
+        maxHeight: MediaQuery.of(context).size.height * 0.65,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -322,9 +325,10 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // Header fijo (no hace scroll)
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
@@ -343,7 +347,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
               ),
               child: Row(
                 children: [
-                  // KPI icon with glow
+                  // KPI icon
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
@@ -393,37 +397,50 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                     ),
                   ),
                   // Severity counters
-                  if (criticalCount > 0) _buildSeverityChip(criticalCount, _severityColor('critical'), 'URG'),
-                  if (warningCount > 0) _buildSeverityChip(warningCount, _severityColor('warning'), 'ATEN'),
-                  if (infoCount > 0) _buildSeverityChip(infoCount, _severityColor('info'), 'INFO'),
+                  if (criticalCount > 0)
+                    _buildSeverityChip(
+                        criticalCount, _severityColor('critical'), 'URG'),
+                  if (warningCount > 0)
+                    _buildSeverityChip(
+                        warningCount, _severityColor('warning'), 'ATEN'),
+                  if (infoCount > 0)
+                    _buildSeverityChip(
+                        infoCount, _severityColor('info'), 'INFO'),
                   const SizedBox(width: 8),
                   // Refresh + expand
                   InkWell(
                     onTap: _loadAlerts,
-                    child: const Icon(Icons.refresh_rounded, size: 16, color: AppTheme.textTertiary),
+                    child: const Icon(Icons.refresh_rounded,
+                        size: 16, color: AppTheme.textTertiary),
                   ),
                   const SizedBox(width: 4),
                   AnimatedRotation(
                     turns: _expanded ? 0.0 : -0.25,
                     duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.expand_more_rounded, size: 18, color: AppTheme.textTertiary),
+                    child: const Icon(Icons.expand_more_rounded,
+                        size: 18, color: AppTheme.textTertiary),
                   ),
                 ],
               ),
             ),
           ),
 
-          // Alert groups
+          // Area de contenido (Scrollable)
           if (_expanded)
-            AnimatedSize(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 10, top: 4),
-                child: Column(
-                  children: sortedTypes.map((type) {
-                    return _buildAlertGroup(type, grouped[type]!, isJefe);
-                  }).toList(),
+            Flexible(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                      left: 8, right: 8, bottom: 10, top: 4),
+                  child: Column(
+                    children: sortedTypes.map((type) {
+                      return _buildAlertGroupCollapsible(
+                          type, grouped[type]!, isJefe);
+                    }).toList(),
+                  ),
                 ),
               ),
             ),
@@ -453,10 +470,9 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
   }
 
   // ============================================================
+  // GRUPO de alertas por tipo (Collapsible con ExpansionTile)
   // ============================================================
-  // GRUPO de alertas por tipo (Ventas vs Objetivo, Sin Compras, etc.)
-  // ============================================================
-  Widget _buildAlertGroup(String type, List<KpiAlert> alerts, bool isJefe) {
+  Widget _buildAlertGroupCollapsible(String type, List<KpiAlert> alerts, bool isJefe) {
     final config = _typeConfig(type);
     final highestSeverity = alerts.fold<String>('info', (prev, a) {
       if (a.severity == 'critical') return 'critical';
@@ -475,161 +491,145 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
           width: 0.5,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Group header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  config.color.withValues(alpha: 0.12),
-                  Colors.transparent,
-                ],
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: alerts.any((a) => a.severity == 'critical'),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          childrenPadding: const EdgeInsets.only(bottom: 8),
+          iconColor: accentColor,
+          collapsedIconColor: accentColor.withValues(alpha: 0.7),
+          title: Row(
+            children: [
+              Icon(config.icon, size: 14, color: config.color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  config.label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: config.color,
+                    letterSpacing: 0.2,
+                  ),
+                ),
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-            ),
-            child: Row(
-              children: [
-                Icon(config.icon, size: 14, color: config.color),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        config.label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: config.color,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      if (alerts.first.typeExplanation.isNotEmpty)
-                        Text(
-                          alerts.first.typeExplanation,
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: AppTheme.textTertiary,
-                          ),
-                        ),
-                    ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${alerts.length}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: accentColor,
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${alerts.length}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: accentColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          // Individual alerts
-          ...alerts.map((alert) => _buildAlertTile(alert, config, isJefe)),
-        ],
+          children: alerts.map((a) => _buildAlertTile(a, config, isJefe)).toList(),
+        ),
       ),
     );
   }
 
+  // ============================================================
+  // TILE individual: Summary siempre visible, Detail colapsable
+  // ============================================================
   Widget _buildAlertTile(KpiAlert alert, _AlertTypeConfig config, bool isJefe) {
     final sevColor = _severityColor(alert.severity);
-    final lines = alert.message.split('\n');
-    final mainMessage = lines.first;
-    final details = lines.length > 1 ? lines.sublist(1) : <String>[];
 
-    // Role-based: hide financial details for non-jefes
+    // Preparar texto: si tenemos compact fields de la API, usarlos
+    // Si no, separar el mensaje original de forma provisional
+    String summary = '';
+    String detailInfo = '';
+
+    if (alert.hasCompactFields) {
+      summary = alert.summary;
+      detailInfo = alert.detail;
+      if (alert.actions.isNotEmpty) {
+        // En vez de mostrar los actions como lista, el detail de alert_transformer actual ya los incluye en texto,
+        // pero podemos incluirlos si se quiere o dejarlos omitidos. 
+        // El detail de alert_transformer ya dice "Que hacer: ..."
+      }
+    } else {
+      // Fallback a parser crudo local
+      final lines = alert.message.split('\n');
+      summary = lines.first;
+      detailInfo = lines.length > 1 ? lines.sublist(1).join('\n') : '';
+    }
+
+    // Role-based: hide financial details for non-jefes (usado para tags antiguos)
     final showFinancials = isJefe &&
         (alert.type == 'DESVIACION_VENTAS' || alert.type == 'ALTA_CLIENTE');
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
+        color: AppTheme.darkSurface.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(6),
         border: Border(
-          left: BorderSide(color: sevColor, width: 2.5),
+          left: BorderSide(color: sevColor, width: 3),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Severity dot
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: sevColor,
-                  boxShadow: [
-                    BoxShadow(color: sevColor.withValues(alpha: 0.5), blurRadius: 4),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              // Message
+              // Summary texto
               Expanded(
                 child: Text(
-                  mainMessage,
+                  summary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                     color: AppTheme.textPrimary,
+                    height: 1.3,
                   ),
                 ),
               ),
-              // Severity label
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: sevColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Text(
-                  _severityLabel(alert.severity),
-                  style: TextStyle(
-                    fontSize: 8,
-                    fontWeight: FontWeight.w700,
-                    color: sevColor,
-                    letterSpacing: 0.5,
+              const SizedBox(width: 8),
+              // Badge de urgencia pequeno a la derecha
+              if (alert.severity == 'critical')
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: sevColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    'URGENTE',
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      color: sevColor,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
-          // Detail lines (e.g., references sin compra)
-          if (details.isNotEmpty) ...[
-            const SizedBox(height: 3),
-            ...details.map(
-              (d) => Padding(
-                padding: const EdgeInsets.only(left: 12, top: 1),
-                child: Text(
-                  d,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ),
+          
+          // Collapsible Details
+          if (detailInfo.isNotEmpty || (showFinancials && alert.rawData != null))
+            _CollapsibleDetail(
+              detail: detailInfo,
+              sevColor: sevColor,
+              extraWidget: (showFinancials && alert.rawData != null)
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: _buildFinancialRow(alert),
+                    )
+                  : null,
             ),
-          ],
-          // Financial details for JEFE_VENTAS
-          if (showFinancials && alert.rawData != null) ...[
-            const SizedBox(height: 4),
-            _buildFinancialRow(alert),
-          ],
         ],
       ),
     );
@@ -661,13 +661,10 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 
     if (items.isEmpty) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.only(left: 12),
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 2,
-        children: items,
-      ),
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: items,
     );
   }
 
@@ -684,12 +681,12 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         children: [
           Text(
             '$label ',
-            style: TextStyle(fontSize: 9, color: AppTheme.textTertiary),
+            style: TextStyle(fontSize: 10, color: AppTheme.textTertiary),
           ),
           Text(
             value,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
               color: color,
             ),
@@ -850,3 +847,84 @@ class _KpiLoadingShimmer extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// Internal widget for collapsible detail area
+// ============================================================
+class _CollapsibleDetail extends StatefulWidget {
+  const _CollapsibleDetail({
+    required this.detail,
+    required this.sevColor,
+    this.extraWidget,
+  });
+
+  final String detail;
+  final Color sevColor;
+  final Widget? extraWidget;
+
+  @override
+  State<_CollapsibleDetail> createState() => _CollapsibleDetailState();
+}
+
+class _CollapsibleDetailState extends State<_CollapsibleDetail> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _open = !_open),
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 2, right: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _open ? Icons.expand_less : Icons.expand_more,
+                  size: 14,
+                  color: widget.sevColor.withValues(alpha: 0.8),
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  _open ? 'Ocultar detalle' : 'Ver detalle',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: widget.sevColor.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          child: _open
+              ? Padding(
+                  padding: const EdgeInsets.only(left: 14, top: 4, bottom: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.detail,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      if (widget.extraWidget != null) widget.extraWidget!,
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+}
+

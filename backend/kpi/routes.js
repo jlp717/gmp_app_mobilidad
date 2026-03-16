@@ -7,6 +7,7 @@ const { getCachedClientAlerts, getRedisStatus, getLastLoadInfo } = require('./se
 const { runETL } = require('./services/etl_orchestrator');
 const { getSchedulerStatus } = require('./services/scheduler');
 const { getPrometheusMetrics, metricsMiddleware } = require('./services/metrics');
+const { transformAlert } = require('./services/alert_transformer');
 const logger = require('../middleware/logger');
 
 const router = Router();
@@ -213,18 +214,21 @@ router.get('/alerts/clients', async (req, res) => {
       if (codes.length > 0) {
         const placeholders = codes.map(() => '?').join(',');
         queryStr += ` AND a.CLIENT_CODE IN (
-          SELECT TRIM(CDCL) FROM JAVIER.LACLAE WHERE TRIM(CDVI) IN (${placeholders})
+          SELECT DISTINCT TRIM(LCCDCL) FROM DSED.LACLAE
+          WHERE TRIM(LCCDVD) IN (${placeholders})
+            AND LCAADC = YEAR(CURRENT_DATE)
+            AND LCTPLN = 'T' AND LCCLLG = 'VT'
         )`;
         params.push(...codes);
       }
     }
 
-    if (type) {
+    if (type && type !== 'ALL') {
       queryStr += ` AND a.ALERT_TYPE = ?`;
       params.push(type);
     }
 
-    if (severity) {
+    if (severity && severity !== 'ALL') {
       queryStr += ` AND a.SEVERITY = ?`;
       params.push(severity);
     }
@@ -374,17 +378,36 @@ router.get('/loads/:loadId/audit', async (req, res) => {
 function formatAlert(row) {
   // DB2 devuelve columnas en UPPERCASE
   const type = row.ALERT_TYPE || row.alert_type || '';
-  return {
+  const rawData = parseRawData(row.RAW_DATA || row.raw_data);
+  const severity = row.SEVERITY || row.severity;
+
+  // Campos originales (retrocompatibilidad)
+  const base = {
     id: row.ID || row.id,
     clientCode: row.CLIENT_CODE || row.client_code,
     type,
-    severity: row.SEVERITY || row.severity,
+    severity,
     message: row.MESSAGE || row.message,
-    rawData: parseRawData(row.RAW_DATA || row.raw_data),
+    rawData,
     sourceFile: row.SOURCE_FILE || row.source_file,
     createdAt: row.CREATED_AT || row.created_at,
     typeExplanation: getTypeExplanation(type),
   };
+
+  // Campos compactos (nuevos — para UI colapsable)
+  try {
+    const compact = transformAlert({ alertType: type, severity, message: base.message, rawData });
+    base.title = compact.title;
+    base.summary = compact.summary;
+    base.detail = compact.detail;
+    base.actions = compact.actions;
+    base.meta = compact.meta;
+    base.ui_hint = compact.ui_hint;
+  } catch (_) {
+    // Fallback: si la transformacion falla, el frontend usa 'message'
+  }
+
+  return base;
 }
 
 /**
@@ -492,7 +515,10 @@ router.get('/dashboard', async (req, res) => {
     // Si hay vendorCode, filtrar por clientes de ese vendedor
     if (vendorCode && vendorCode !== 'ALL') {
       topClientsQuery += ` AND a.CLIENT_CODE IN (
-        SELECT TRIM(CDCL) FROM JAVIER.LACLAE WHERE TRIM(CDVI) = ?
+        SELECT DISTINCT TRIM(LCCDCL) FROM DSED.LACLAE
+        WHERE TRIM(LCCDVD) = ?
+          AND LCAADC = YEAR(CURRENT_DATE)
+          AND LCTPLN = 'T' AND LCCLLG = 'VT'
       )`;
       topParams.push(vendorCode.trim());
     }
@@ -510,24 +536,28 @@ router.get('/dashboard', async (req, res) => {
        FROM JAVIER.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
     );
 
-    // 5. Nombres comerciales de los top clientes (si existen en LACLAE)
+    // 5. Nombres comerciales de los top clientes (extraer de RAW_DATA de KPI_ALERTS)
+    //    LACLAE no tiene columna de nombre — usamos el nombreComercial almacenado en la alerta
     const clientCodes = topClientsResult.rows.map(r => r.CLIENT_CODE);
     let clientNames = {};
     if (clientCodes.length > 0) {
       try {
         const placeholders = clientCodes.map(() => '?').join(',');
         const namesResult = await kpiQuery(
-          `SELECT TRIM(CDCL) AS CDCL, TRIM(NMCL) AS NMCL
-           FROM JAVIER.LACLAE
-           WHERE TRIM(CDCL) IN (${placeholders})
+          `SELECT CLIENT_CODE, RAW_DATA
+           FROM JAVIER.KPI_ALERTS
+           WHERE CLIENT_CODE IN (${placeholders}) AND IS_ACTIVE = 1
            FETCH FIRST ${clientCodes.length} ROWS ONLY`,
           clientCodes
         );
         for (const row of namesResult.rows) {
-          clientNames[row.CDCL] = row.NMCL;
+          const raw = parseRawData(row.RAW_DATA);
+          if (raw.nombreComercial && !clientNames[row.CLIENT_CODE]) {
+            clientNames[row.CLIENT_CODE] = raw.nombreComercial;
+          }
         }
       } catch (_) {
-        // LACLAE puede no tener todos los codigos
+        // Non-critical: names are optional in the dashboard
       }
     }
 
