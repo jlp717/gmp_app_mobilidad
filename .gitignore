@@ -97,5 +97,17 @@ upload-keystore.jks
 .claude/
 .idea/
 
+# RuFlo / Claude-Flow runtime (keep config.yaml, ignore everything else)
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/metrics/
+.claude-flow/sessions/
+.claude-flow/security/
+.claude-flow/workflows/
+.claude-flow/hooks/
+.claude-flow/agents/
+.claude-flow/learning/
+.claude-flow/CAPABILITIES.md
+
 # Deprecated/test files that shouldn't be tracked
 backend/deprecated/
