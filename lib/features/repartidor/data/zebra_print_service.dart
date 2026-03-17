@@ -48,7 +48,19 @@ class ZebraPrintService {
 
   // -- Bluetooth permissions --
 
+  /// Check and request BT permissions. Skips re-request if already granted.
   static Future<bool> requestBluetoothPermissions() async {
+    // Fast path: check if already granted before triggering system dialog
+    final connectStatus = await Permission.bluetoothConnect.status;
+    final scanStatus = await Permission.bluetoothScan.status;
+    final locationStatus = await Permission.locationWhenInUse.status;
+
+    if ((connectStatus.isGranted || connectStatus.isLimited) &&
+        (scanStatus.isGranted || scanStatus.isLimited) &&
+        (locationStatus.isGranted || locationStatus.isLimited)) {
+      return true;
+    }
+
     final statuses = await [
       Permission.bluetoothConnect,
       Permission.bluetoothScan,
@@ -66,6 +78,54 @@ class ZebraPrintService {
     return allGranted;
   }
 
+  // -- Bluetooth state --
+
+  /// Check if Bluetooth adapter is enabled.
+  static Future<bool> isBluetoothEnabled() async {
+    try {
+      final state = await FlutterBluetoothPrinter.getState();
+      return state == BluetoothState.enabled ||
+          state == BluetoothState.permitted;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Test connection to the saved (or given) printer.
+  /// Returns true if the printer is reachable via BT.
+  /// Includes a 12s timeout to prevent indefinite hangs.
+  static Future<bool> testConnection({String? address}) async {
+    try {
+      final addr = address ?? await getSavedPrinterAddress();
+      if (addr == null) return false;
+
+      final granted = await requestBluetoothPermissions();
+      if (!granted) return false;
+
+      final connected = await FlutterBluetoothPrinter.connect(addr)
+          .timeout(const Duration(seconds: 12), onTimeout: () => false);
+      if (connected) {
+        await FlutterBluetoothPrinter.disconnect(addr);
+      }
+      return connected;
+    } catch (e) {
+      debugPrint('[ZEBRA] Connection test error: $e');
+      return false;
+    }
+  }
+
+  /// Global connection state notifier from the BT library.
+  static ValueNotifier<BluetoothConnectionState>
+      get connectionStateNotifier =>
+          FlutterBluetoothPrinter.connectionStateNotifier;
+
+  /// Mask a BT address for display: "AA:BB:CC:DD:EE:FF" → "AA:BB:··:··:EE:FF"
+  static String maskAddress(String address) {
+    final parts = address.split(':');
+    if (parts.length != 6) return '···';
+    return '${parts[0]}:${parts[1]}:··:··:${parts[4]}:${parts[5]}';
+  }
+
   // -- Device selection (uses built-in picker) --
 
   /// Shows the built-in Bluetooth device picker.
@@ -76,6 +136,13 @@ class ZebraPrintService {
     final granted = await requestBluetoothPermissions();
     if (!granted) return null;
     return FlutterBluetoothPrinter.selectDevice(context);
+  }
+
+  /// Clear saved printer data.
+  static Future<void> clearPrinter() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefAddress);
+    await prefs.remove(_prefName);
   }
 
   // -- ZPL generation --
@@ -243,6 +310,7 @@ class ZebraPrintService {
 
   /// Sends raw ZPL to the saved (or given) printer.
   /// Returns true on success, false on failure.
+  /// Retries once on failure with a 2s backoff.
   static Future<bool> printZpl(
     String zplData, {
     String? address,
@@ -258,14 +326,26 @@ class ZebraPrintService {
       if (!granted) return false;
 
       final bytes = Uint8List.fromList(utf8.encode(zplData));
-      final ok = await FlutterBluetoothPrinter.printBytes(
-        address: addr,
-        data: bytes,
-        keepConnected: false,
-      );
 
-      debugPrint('[ZEBRA] Print result: $ok');
-      return ok;
+      // Attempt with 1 automatic retry on failure
+      for (int attempt = 0; attempt < 2; attempt++) {
+        try {
+          final ok = await FlutterBluetoothPrinter.printBytes(
+            address: addr,
+            data: bytes,
+            keepConnected: false,
+          ).timeout(const Duration(seconds: 15), onTimeout: () => false);
+
+          debugPrint('[ZEBRA] Print attempt ${attempt + 1}: $ok');
+          if (ok) return true;
+        } catch (e) {
+          debugPrint('[ZEBRA] Print attempt ${attempt + 1} error: $e');
+        }
+        if (attempt == 0) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+        }
+      }
+      return false;
     } catch (e) {
       debugPrint('[ZEBRA] Print error: $e');
       return false;
@@ -275,7 +355,9 @@ class ZebraPrintService {
   // -- Helpers --
 
   static String _truncate(String text, int maxLen) {
+    if (maxLen <= 0) return '';
     if (text.length <= maxLen) return text;
+    if (maxLen == 1) return '~';
     return '${text.substring(0, maxLen - 1)}~';
   }
 
