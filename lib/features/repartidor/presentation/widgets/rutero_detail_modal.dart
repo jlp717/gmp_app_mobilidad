@@ -19,6 +19,7 @@ import '../../../../core/widgets/email_form_modal.dart';
 import '../../../../core/widgets/whatsapp_form_modal.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 
 /// Rutero Detail Modal - Futuristic Redesign v2
 /// Features:
@@ -70,6 +71,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool _isPaid = false;
   bool _isSubmitting = false;
   
+  // Zebra printer config
+  bool _tieneImpresora = false;
+
   // Inline validation errors (instead of snackbar)
   String? _nombreError;
   String? _dniError;
@@ -93,6 +97,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     
     _loadItems();
     _loadSignerSuggestions();
+    _loadPrinterConfig();
+  }
+
+  Future<void> _loadPrinterConfig() async {
+    final has = await ZebraPrintService.tieneImpresora();
+    if (mounted) setState(() => _tieneImpresora = has);
   }
 
   Future<void> _loadItems() async {
@@ -1579,6 +1589,56 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
           ),
 
+          const SizedBox(height: 12),
+
+          // Zebra printer toggle
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
+            ),
+            decoration: BoxDecoration(
+              color: AppTheme.darkCard,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _tieneImpresora
+                    ? AppTheme.neonCyan.withOpacity(0.4)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.print,
+                  color: _tieneImpresora
+                      ? AppTheme.neonCyan
+                      : AppTheme.textTertiary,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Imprimir ticket (Zebra)',
+                    style: TextStyle(
+                      color: _tieneImpresora
+                          ? AppTheme.textPrimary
+                          : AppTheme.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Switch(
+                  value: _tieneImpresora,
+                  activeColor: AppTheme.neonCyan,
+                  onChanged: (val) async {
+                    await ZebraPrintService.setTieneImpresora(val);
+                    setState(() => _tieneImpresora = val);
+                  },
+                ),
+              ],
+            ),
+          ),
+
           const SizedBox(height: 20),
 
           // Signature
@@ -1914,6 +1974,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         );
         widget.albaran.firma = updated.firma;
         widget.albaran.estado = EstadoEntrega.entregado;
+        // Print on Zebra if configured
+        if (_tieneImpresora) {
+          await _showZebraPrintPreview();
+        }
         // Show share dialog before closing
         await _showShareReceiptDialog();
         if (!mounted) return;
@@ -1985,6 +2049,180 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ],
         ),
         backgroundColor: AppTheme.error,
+      ),
+    );
+  }
+
+  /// Show Zebra print preview with editable observations
+  Future<void> _showZebraPrintPreview() async {
+    final obsController = TextEditingController(
+      text: _observacionesController.text.trim(),
+    );
+    bool isPrinting = false;
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final zpl = ZebraPrintService.generateDeliveryZpl(
+            albaran: widget.albaran,
+            items: _items,
+            observaciones: obsController.text.trim(),
+            receptorNombre: _nombreController.text.trim(),
+          );
+
+          return AlertDialog(
+            backgroundColor: AppTheme.darkCard,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(Icons.print, color: AppTheme.neonCyan),
+                const SizedBox(width: 12),
+                const Text('Imprimir Ticket', style: TextStyle(color: AppTheme.textPrimary)),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Preview header
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkBase,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Granja Mari Pepa S.L.',
+                              style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.albaran.numeroFactura > 0
+                                ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
+                                : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}',
+                            style: TextStyle(color: AppTheme.neonCyan, fontSize: 14),
+                          ),
+                          Text('Fecha: ${widget.albaran.fecha}',
+                              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                          const Divider(color: AppTheme.textTertiary),
+                          Text('Cliente: ${widget.albaran.nombreCliente}',
+                              style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+                          const SizedBox(height: 8),
+                          // Item summary
+                          ...(_items.take(5).map((item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(item.descripcion,
+                                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Text(
+                                      'x${item.cantidadPedida.toStringAsFixed(0)}  ${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}€',
+                                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ))),
+                          if (_items.length > 5)
+                            Text('... +${_items.length - 5} más',
+                                style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                          const Divider(color: AppTheme.textTertiary),
+                          Text('TOTAL: ${widget.albaran.importeTotal.toStringAsFixed(2)} €',
+                              style: TextStyle(
+                                  color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Editable observations
+                    Text('Observaciones (editable):',
+                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: obsController,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: 'Añadir observaciones para el ticket...',
+                        hintStyle: TextStyle(color: AppTheme.textTertiary),
+                        filled: true,
+                        fillColor: AppTheme.darkBase,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.neonCyan)),
+                      ),
+                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isPrinting ? null : () => Navigator.pop(ctx),
+                child: Text('Omitir', style: TextStyle(color: AppTheme.textTertiary)),
+              ),
+              ElevatedButton.icon(
+                onPressed: isPrinting
+                    ? null
+                    : () async {
+                        setDialogState(() => isPrinting = true);
+                        final success = await ZebraPrintService.printZpl(zpl);
+                        if (!ctx.mounted) return;
+                        setDialogState(() => isPrinting = false);
+                        if (success) {
+                          Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Row(children: [
+                                  const Icon(Icons.check_circle, color: Colors.white),
+                                  const SizedBox(width: 12),
+                                  const Text('Ticket enviado a impresora'),
+                                ]),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } else {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                              content: Row(children: [
+                                const Icon(Icons.error_outline, color: Colors.white),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                    child: Text('Error al imprimir. Verifica que la Zebra está encendida y vinculada.')),
+                              ]),
+                              backgroundColor: AppTheme.error,
+                            ),
+                          );
+                        }
+                      },
+                icon: isPrinting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.print),
+                label: Text(isPrinting ? 'Imprimiendo...' : 'Imprimir en Zebra'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.neonCyan,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

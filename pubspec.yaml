@@ -62,6 +62,10 @@ dependencies:
   package_info_plus: ^9.0.0
   device_info_plus: ^11.0.0     # Device fingerprinting for audit
 
+  # Zebra Bluetooth Printing
+  flutter_bluetooth_printer: ^2.2.0  # Raw ZPL over BT Classic (SPP/RFCOMM)
+  permission_handler: ^11.3.1        # Runtime BT permissions Android 12+
+
   # WebView (Three.js 3D visualization)
   webview_flutter: ^4.10.0
   screenshot: ^3.0.0             # Canvas screenshot capture
