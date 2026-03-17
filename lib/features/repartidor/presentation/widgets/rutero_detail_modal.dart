@@ -148,6 +148,194 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
+  /// Reusable printer config widget (toggle, status, verify, change).
+  Widget _buildPrinterConfigSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _tieneImpresora
+              ? AppTheme.neonCyan.withValues(alpha: 0.4)
+              : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.print,
+                color: _tieneImpresora
+                    ? AppTheme.neonCyan
+                    : AppTheme.textTertiary,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Imprimir ticket (Zebra)',
+                  style: TextStyle(
+                    color: _tieneImpresora
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              Switch(
+                value: _tieneImpresora,
+                activeThumbColor: AppTheme.neonCyan,
+                onChanged: (val) async {
+                  if (val && _printerAddress == null) {
+                    await _selectAndSavePrinter();
+                    if (_printerAddress == null) return;
+                  }
+                  await ZebraPrintService.setTieneImpresora(val);
+                  setState(() {
+                    _tieneImpresora = val;
+                    _lastConnectionResult = null;
+                  });
+                },
+              ),
+            ],
+          ),
+          if (_tieneImpresora) ...[
+            const SizedBox(height: 8),
+            if (_printerAddress != null) ...[
+              Row(
+                children: [
+                  Icon(
+                    Icons.bluetooth_connected,
+                    size: 14,
+                    color: _lastConnectionResult == true
+                        ? AppTheme.success
+                        : _lastConnectionResult == false
+                            ? AppTheme.error
+                            : AppTheme.textTertiary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${_printerName ?? "Zebra"} · '
+                      '${ZebraPrintService.maskAddress(_printerAddress!)}',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_lastConnectionResult != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, left: 20),
+                  child: Text(
+                    _lastConnectionResult!
+                        ? 'Conectada · Cifrado BT activo'
+                        : 'No detectada · Verifica que esté encendida',
+                    style: TextStyle(
+                      color: _lastConnectionResult!
+                          ? AppTheme.success
+                          : AppTheme.error,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 30,
+                      child: OutlinedButton.icon(
+                        onPressed: _isTestingConnection
+                            ? null
+                            : _testPrinterConnection,
+                        icon: _isTestingConnection
+                            ? const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: AppTheme.neonCyan,
+                                ),
+                              )
+                            : const Icon(Icons.wifi_find, size: 14),
+                        label: Text(
+                          _isTestingConnection
+                              ? 'Verificando...'
+                              : 'Verificar',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.neonCyan,
+                          side: BorderSide(
+                            color: AppTheme.neonCyan.withValues(alpha: 0.4),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SizedBox(
+                      height: 30,
+                      child: OutlinedButton.icon(
+                        onPressed: _selectAndSavePrinter,
+                        icon: const Icon(Icons.swap_horiz, size: 14),
+                        label: const Text(
+                          'Cambiar',
+                          style: TextStyle(fontSize: 11),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.textSecondary,
+                          side: const BorderSide(color: AppTheme.borderColor),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              SizedBox(
+                height: 32,
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _selectAndSavePrinter,
+                  icon: const Icon(Icons.bluetooth_searching, size: 16),
+                  label: const Text(
+                    'Seleccionar impresora',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.neonCyan,
+                    side: BorderSide(
+                      color: AppTheme.neonCyan.withValues(alpha: 0.4),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadItems() async {
     try {
       final provider = Provider.of<EntregasProvider>(context, listen: false);
@@ -446,7 +634,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
           ),
 
-          // Zebra print for already-completed deliveries
+          // Zebra printer section (same as finalize tab)
+          const SizedBox(height: 16),
+          _buildPrinterConfigSection(),
           if (_tieneImpresora && _items.isNotEmpty) ...[
             const SizedBox(height: 10),
             _buildShareButton(
@@ -1644,207 +1834,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
 
           const SizedBox(height: 12),
-
-          // Zebra printer section
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.darkCard,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: _tieneImpresora
-                    ? AppTheme.neonCyan.withOpacity(0.4)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Toggle row
-                Row(
-                  children: [
-                    Icon(
-                      Icons.print,
-                      color: _tieneImpresora
-                          ? AppTheme.neonCyan
-                          : AppTheme.textTertiary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Imprimir ticket (Zebra)',
-                        style: TextStyle(
-                          color: _tieneImpresora
-                              ? AppTheme.textPrimary
-                              : AppTheme.textSecondary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    Switch(
-                      value: _tieneImpresora,
-                      activeColor: AppTheme.neonCyan,
-                      onChanged: (val) async {
-                        if (val && _printerAddress == null) {
-                          // No printer saved — open picker
-                          await _selectAndSavePrinter();
-                          if (_printerAddress == null) return; // cancelled
-                        }
-                        await ZebraPrintService.setTieneImpresora(val);
-                        setState(() {
-                          _tieneImpresora = val;
-                          _lastConnectionResult = null;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-                // Printer details (when enabled)
-                if (_tieneImpresora) ...[
-                  const SizedBox(height: 8),
-                  if (_printerAddress != null) ...[
-                    // Saved printer info
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.bluetooth_connected,
-                          size: 14,
-                          color: _lastConnectionResult == true
-                              ? AppTheme.success
-                              : _lastConnectionResult == false
-                                  ? AppTheme.error
-                                  : AppTheme.textTertiary,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '${_printerName ?? "Zebra"} · ${ZebraPrintService.maskAddress(_printerAddress!)}',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    // Connection status text
-                    if (_lastConnectionResult != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 20),
-                        child: Text(
-                          _lastConnectionResult!
-                              ? 'Conectada · Cifrado BT activo'
-                              : 'No detectada · Verifica que esté encendida',
-                          style: TextStyle(
-                            color: _lastConnectionResult!
-                                ? AppTheme.success
-                                : AppTheme.error,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    // Action buttons
-                    Row(
-                      children: [
-                        // Test connection
-                        Expanded(
-                          child: SizedBox(
-                            height: 30,
-                            child: OutlinedButton.icon(
-                              onPressed: _isTestingConnection
-                                  ? null
-                                  : _testPrinterConnection,
-                              icon: _isTestingConnection
-                                  ? const SizedBox(
-                                      width: 12,
-                                      height: 12,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 1.5,
-                                        color: AppTheme.neonCyan,
-                                      ),
-                                    )
-                                  : const Icon(Icons.wifi_find, size: 14),
-                              label: Text(
-                                _isTestingConnection
-                                    ? 'Verificando...'
-                                    : 'Verificar',
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppTheme.neonCyan,
-                                side: BorderSide(
-                                  color: AppTheme.neonCyan.withOpacity(0.4),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Change printer
-                        Expanded(
-                          child: SizedBox(
-                            height: 30,
-                            child: OutlinedButton.icon(
-                              onPressed: _selectAndSavePrinter,
-                              icon: const Icon(Icons.swap_horiz, size: 14),
-                              label: const Text(
-                                'Cambiar',
-                                style: TextStyle(fontSize: 11),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppTheme.textSecondary,
-                                side: BorderSide(
-                                  color: AppTheme.borderColor,
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else ...[
-                    // No printer configured
-                    SizedBox(
-                      height: 32,
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _selectAndSavePrinter,
-                        icon: const Icon(Icons.bluetooth_searching, size: 16),
-                        label: const Text(
-                          'Seleccionar impresora',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.neonCyan,
-                          side: BorderSide(
-                            color: AppTheme.neonCyan.withOpacity(0.4),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ],
-            ),
-          ),
-
+          _buildPrinterConfigSection(),
           const SizedBox(height: 20),
 
           // Signature

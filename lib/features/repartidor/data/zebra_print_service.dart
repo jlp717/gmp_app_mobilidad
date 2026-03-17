@@ -147,6 +147,15 @@ class ZebraPrintService {
 
   // -- ZPL generation --
 
+  /// Column positions matching PDF layout:
+  /// Ptda | Artículo/Descripción | Bultos | Imp.Neto
+  static const int _colPtda = 20;
+  static const int _colDesc = 60;
+  static const int _colBult = 400;
+  static const int _colImp = 470;
+  static const int _lineW = 550;
+  static const int _xLeft = 20;
+
   static String generateDeliveryZpl({
     required AlbaranEntrega albaran,
     required List<EntregaItem> items,
@@ -154,151 +163,203 @@ class ZebraPrintService {
     String? receptorNombre,
   }) {
     final buf = StringBuffer();
-    int y = 30;
+    int y = 25;
 
-    // Header
     buf.writeln('^XA');
     buf.writeln('^CI28'); // UTF-8 for Spanish chars
-    buf.writeln('^CF0,28');
-    buf.writeln('^FO30,$y^FDGranja Mari Pepa S.L.^FS');
-    y += 30;
-    buf.writeln('^CF0,18');
-    buf.writeln(
-      '^FO30,$y^FDPol.Ind.Saprelorca-D3, 30817 Lorca^FS',
-    );
-    y += 22;
-    buf.writeln(
-      '^FO30,$y^FDCIF: B04008710  Tel: 968 47 08 80^FS',
-    );
-    y += 28;
 
-    // Separator
-    buf.writeln('^FO30,$y^GB550,2,2^FS');
-    y += 12;
-
-    // Document type
-    buf.writeln('^CF0,24');
-    final docLabel = albaran.numeroFactura > 0
-        ? 'FACTURA: ${albaran.serieFactura}/'
-            '${albaran.numeroFactura}'
-        : 'ALBARAN: ${albaran.serie}/'
-            '${albaran.numeroAlbaran}';
-    buf.writeln('^FO30,$y^FD$docLabel^FS');
-    y += 28;
-    buf.writeln('^CF0,20');
-    buf.writeln('^FO30,$y^FDFecha: ${albaran.fecha}^FS');
+    // ═══ HEADER — Company ═══
+    buf.writeln('^CF0,30');
+    buf.writeln('^FO$_xLeft,$y^FDGRANJA MARI PEPA S.L.^FS');
+    y += 34;
+    buf.writeln('^CF0,16');
+    buf.writeln(
+      '^FO$_xLeft,$y^FDPol. Ind. Saprelorca - Parcela D3^FS',
+    );
+    y += 20;
+    buf.writeln(
+      '^FO$_xLeft,$y^FD30817 Lorca (Murcia)^FS',
+    );
+    y += 20;
+    buf.writeln(
+      '^FO$_xLeft,$y^FDCIF: B04008710 · Tel: 968 47 08 80^FS',
+    );
     y += 26;
 
-    // Separator
-    buf.writeln('^FO30,$y^GB550,2,2^FS');
-    y += 12;
+    // Double separator
+    buf.writeln('^FO$_xLeft,$y^GB$_lineW,2,2^FS');
+    y += 5;
+    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
+    y += 10;
 
-    // Client
-    buf.writeln('^CF0,22');
+    // ═══ DOCUMENT TYPE + NUMBER (centered) ═══
+    final isFactura = albaran.numeroFactura > 0;
+    final docType = isFactura ? 'FACTURA' : 'ALBARAN';
+    final docNum = isFactura
+        ? '${albaran.serieFactura}/${albaran.numeroFactura}'
+        : '${albaran.serie}/${albaran.numeroAlbaran}';
+    buf.writeln('^CF0,28');
+    buf.writeln('^FO$_xLeft,$y^FD$docType: $docNum^FS');
+    y += 32;
+    buf.writeln('^CF0,18');
+    buf.writeln('^FO$_xLeft,$y^FDFecha: ${albaran.fecha}^FS');
+    y += 26;
+
+    // ═══ CLIENT INFO ═══
+    buf.writeln('^CF0,20');
     buf.writeln(
-      '^FO30,$y^FDCliente: '
-      '${_truncate(albaran.nombreCliente, 40)}^FS',
+      '^FO$_xLeft,$y^FDCliente: ${albaran.codigoCliente}^FS',
     );
     y += 24;
+    buf.writeln('^CF0,18');
+    buf.writeln(
+      '^FO$_xLeft,$y^FD${_truncate(albaran.nombreCliente, 42)}^FS',
+    );
+    y += 22;
     if (albaran.direccion.isNotEmpty) {
-      buf.writeln('^CF0,18');
+      buf.writeln('^CF0,16');
       buf.writeln(
-        '^FO30,$y^FD${_truncate(albaran.direccion, 45)}^FS',
+        '^FO$_xLeft,$y^FD${_truncate(albaran.direccion, 46)}^FS',
+      );
+      y += 20;
+    }
+    buf.writeln('^CF0,16');
+    buf.writeln(
+      '^FO$_xLeft,$y^FDForma de pago: ${albaran.formaPagoDesc}^FS',
+    );
+    y += 24;
+
+    // Separator
+    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
+    y += 8;
+
+    // ═══ PRODUCT TABLE HEADER ═══
+    buf.writeln('^CF0,16');
+    buf.writeln('^FO$_colPtda,$y^FDPtda^FS');
+    buf.writeln('^FO$_colDesc,$y^FDArticulo / Descripcion^FS');
+    buf.writeln('^FO$_colBult,$y^FDBultos^FS');
+    buf.writeln('^FO$_colImp,$y^FDImp.Neto^FS');
+    y += 20;
+    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
+    y += 6;
+
+    // ═══ PRODUCT LINES ═══
+    int totalBultos = 0;
+    for (int i = 0; i < items.length; i++) {
+      final item = items[i];
+      final partida = '${i + 1}';
+      final bultos = item.cantidadPedida.toInt();
+      totalBultos += bultos;
+      final importe = item.cantidadPedida * item.precioUnitario;
+
+      // Line 1: Ptda + article code + bultos + importe
+      buf.writeln('^CF0,16');
+      buf.writeln('^FO$_colPtda,$y^FD$partida^FS');
+      if (item.codigoArticulo.isNotEmpty) {
+        buf.writeln('^CF0,14');
+        buf.writeln(
+          '^FO$_colDesc,$y^FD${_truncate(item.codigoArticulo, 30)}^FS',
+        );
+      }
+      buf.writeln('^CF0,16');
+      buf.writeln(
+        '^FO$_colBult,$y^FD${bultos.toString().padLeft(4)}^FS',
+      );
+      buf.writeln(
+        '^FO$_colImp,$y^FD${importe.toStringAsFixed(2).padLeft(8)}^FS',
+      );
+      y += 18;
+
+      // Line 2: Description
+      buf.writeln('^CF0,16');
+      buf.writeln(
+        '^FO$_colDesc,$y^FD${_truncate(item.descripcion, 38)}^FS',
+      );
+      y += 20;
+    }
+
+    // ═══ TOTALS SECTION ═══
+    y += 4;
+    buf.writeln('^FO$_xLeft,$y^GB$_lineW,2,2^FS');
+    y += 10;
+
+    // Bultos total
+    buf.writeln('^CF0,18');
+    buf.writeln(
+      '^FO300,$y^FDBultos: $totalBultos^FS',
+    );
+    y += 22;
+
+    // Importe Neto (base sin IVA)
+    if (albaran.importeNeto > 0) {
+      buf.writeln(
+        '^FO300,$y^FDImporte Neto: '
+        '${albaran.importeNeto.toStringAsFixed(2)} EUR^FS',
       );
       y += 22;
     }
-    buf.writeln('^CF0,18');
-    buf.writeln(
-      '^FO30,$y^FDF.Pago: ${albaran.formaPagoDesc}^FS',
-    );
-    y += 26;
-
-    // Separator
-    buf.writeln('^FO30,$y^GB550,2,2^FS');
-    y += 12;
-
-    // Product header
-    buf.writeln('^CF0,18');
-    buf.writeln(
-      '^FO30,$y^FDDESCRIPCION'
-      '            CANT   IMPORTE^FS',
-    );
-    y += 22;
-    buf.writeln('^FO30,$y^GB550,1,1^FS');
-    y += 8;
-
-    // Product lines
-    buf.writeln('^CF0,18');
-    for (final item in items) {
-      final desc = _truncate(item.descripcion, 24);
-      final cant =
-          item.cantidadPedida.toStringAsFixed(0).padLeft(4);
-      final imp = (item.cantidadPedida * item.precioUnitario)
-          .toStringAsFixed(2)
-          .padLeft(8);
-      buf.writeln('^FO30,$y^FD$desc $cant $imp^FS');
-      y += 22;
-    }
-
-    // Total separator
-    y += 4;
-    buf.writeln('^FO30,$y^GB550,2,2^FS');
-    y += 12;
-
-    // Total
-    buf.writeln('^CF0,24');
-    final total = albaran.importeTotal.toStringAsFixed(2);
-    buf.writeln('^FO30,$y^FDTOTAL: $total EUR^FS');
-    y += 30;
 
     // IVA breakdown
     if (albaran.ivaBreakdown.isNotEmpty) {
-      buf.writeln('^CF0,16');
       for (final iva in albaran.ivaBreakdown) {
-        final base = iva.base.toStringAsFixed(2);
-        final pct = iva.pct.toStringAsFixed(0);
-        final amt = iva.iva.toStringAsFixed(2);
+        buf.writeln('^CF0,16');
         buf.writeln(
-          '^FO30,$y^FDBase: $base  IVA $pct%: $amt^FS',
+          '^FO300,$y^FDIVA ${iva.pct.toStringAsFixed(0)}%: '
+          '${iva.iva.toStringAsFixed(2)} EUR^FS',
         );
         y += 20;
       }
     }
 
-    // Separator
     y += 4;
-    buf.writeln('^FO30,$y^GB550,2,2^FS');
-    y += 12;
+    // TOTAL (bold/large)
+    buf.writeln('^CF0,26');
+    buf.writeln(
+      '^FO$_xLeft,$y^FDTOTAL: '
+      '${albaran.importeTotal.toStringAsFixed(2)} EUR^FS',
+    );
+    y += 32;
 
-    // Observations
-    if (observaciones.isNotEmpty) {
+    // ═══ SEPARATOR ═══
+    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
+    y += 10;
+
+    // ═══ SIGNATURE ═══
+    if (receptorNombre != null && receptorNombre.isNotEmpty) {
       buf.writeln('^CF0,18');
-      for (final line in _wrapText(observaciones, 50)) {
-        buf.writeln('^FO30,$y^FDObs: $line^FS');
-        y += 20;
+      buf.writeln(
+        '^FO$_xLeft,$y^FDFirmante: $receptorNombre^FS',
+      );
+      y += 22;
+    }
+
+    // ═══ OBSERVATIONS ═══
+    if (observaciones.isNotEmpty) {
+      buf.writeln('^CF0,16');
+      for (final line in _wrapText(observaciones, 52)) {
+        buf.writeln('^FO$_xLeft,$y^FDObs: $line^FS');
+        y += 18;
       }
       y += 4;
     }
 
-    // Receptor
-    if (receptorNombre != null && receptorNombre.isNotEmpty) {
-      buf.writeln('^CF0,20');
-      buf.writeln(
-        '^FO30,$y^FDFirmado por: $receptorNombre^FS',
-      );
-      y += 24;
-    }
-
-    // Footer
+    // ═══ FOOTER ═══
+    buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
     y += 8;
     buf.writeln('^CF0,14');
     buf.writeln(
-      '^FO30,$y^FDLa posesion de este documento '
-      'NO implica el pago^FS',
+      '^FO$_xLeft,$y^FDLa posesion de este documento '
+      'NO implica el pago de la misma^FS',
     );
-    y += 20;
+    y += 16;
     buf.writeln(
-      '^FO30,$y^FDEntregado por: '
+      '^FO$_xLeft,$y^FDNo se admiten devoluciones una vez '
+      'aceptada la recepcion^FS',
+    );
+    y += 18;
+    buf.writeln('^CF0,16');
+    buf.writeln(
+      '^FO$_xLeft,$y^FDEntregado por: '
       '${albaran.codigoRepartidor}^FS',
     );
 
