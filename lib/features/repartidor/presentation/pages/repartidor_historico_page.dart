@@ -1034,13 +1034,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isFactura && doc.facturaNumber != null && doc.facturaNumber! > 0
-                    ? '${doc.serieFactura ?? doc.serie}-${doc.facturaNumber}'
-                    : '${doc.serie}-${doc.number}',
+                  '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                if (isFactura && doc.albaranNumber != null && doc.albaranNumber != doc.number)
-                  Text('  (Alb ${doc.albaranNumber})',
-                    style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.6))),
+                if (isFactura && doc.facturaNumber != null && doc.facturaNumber! > 0)
+                  Text('  (F-${doc.facturaNumber})',
+                    style: TextStyle(fontSize: 10, color: Colors.purpleAccent.withOpacity(0.7))),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1100,18 +1098,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     ),
                   ),
                 ],
-                if (doc.pending > 0) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text('Pdte ${CurrencyFormatter.format(doc.pending)}',
-                      style: TextStyle(fontSize: 9, color: Colors.orange.shade300)),
-                  ),
-                ],
                 const Spacer(),
                 Text(CurrencyFormatter.format(doc.amount),
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
@@ -1129,7 +1115,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   void _showDocumentActions(_DocumentItem doc) {
     final isFactura = doc.type == _DocType.factura;
-    final typeLabel = isFactura ? 'Factura' : 'Albarán';
     final hasAnySignature = doc.hasSignature || doc.hasLegacySignature;
 
     showModalBottomSheet(
@@ -1170,7 +1155,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('$typeLabel #${doc.number}',
+                        Text('Albarán ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}${isFactura && doc.facturaNumber != null ? " (F-${doc.facturaNumber})" : ""}',
                           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
                         Text('${DateFormat('dd/MM/yyyy').format(doc.date)} · ${CurrencyFormatter.format(doc.amount)}',
                           style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary)),

@@ -351,6 +351,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
             ${repartidorJoin}
             ${dsJoin}
             WHERE CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
+              AND CPC.NUMEROALBARAN < 900000 AND CPC.EJERCICIOALBARAN > 0
               ${yearParam ? `AND CPC.EJERCICIOALBARAN = ${parseInt(yearParam)}` : ''}
               ${dateFilter}
             ORDER BY CPC.EJERCICIOALBARAN DESC, CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC, CPC.NUMEROALBARAN DESC
@@ -358,40 +359,18 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
         const rows = await query(sql);
 
-        // --- DEDUPLICATION v2: Group by unique albaran key AND factura key to eliminate all duplicates ---
-        // FIX: For Facturas, if multiple albaranes are part of the same invoice, SUM their amounts!
+        // --- DEDUPLICATION: Group by unique albaran key to eliminate duplicate CPC rows ---
+        // Each albaran is shown individually. Factura number is metadata, NOT a grouping key.
+        // Grouping by factura caused wrong amounts (e.g. F-560 showed 3,890€ instead of individual albaran amounts).
         const uniqueMap = new Map();
         rows.forEach(row => {
             const serie = (row.SERIEALBARAN || '').toString().trim();
-            const numFactura = parseInt(row.NUMEROFACTURA) || 0;
-            // Use factura key if this is a factura to avoid same factura appearing from different albaranes
-            const key = numFactura > 0
-                ? `FAC-${row.EJERCICIOALBARAN}-${(row.SERIEFACTURA || serie).toString().trim()}-${numFactura}`
-                : `ALB-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
+            const key = `ALB-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
 
             if (!uniqueMap.has(key)) {
-                // First time seeing this document/invoice, deep copy so we can mutate safely
                 uniqueMap.set(key, { ...row });
-            } else if (numFactura > 0) {
-                // Factura already exists, this is another albaran for the SAME invoice!
-                const existing = uniqueMap.get(key);
-
-                // 1. Sum the monetary amounts
-                existing.IMPORTETOTAL = (parseFloat(existing.IMPORTETOTAL) || 0) + (parseFloat(row.IMPORTETOTAL) || 0);
-                // AUDIT FIX: Do NOT sum CVC pendiente across albaranes — produces misleading
-                // aggregated amounts (e.g. 16.539,32€ for F-14678). Pendiente is per-albarán in CVC.
-                existing.IMPORTE_PENDIENTE = 0;
-
-                // 2. Keep the latest albaran number for display/status purposes
-                if ((row.NUMEROALBARAN || 0) > (existing.NUMEROALBARAN || 0)) {
-                    existing.NUMEROALBARAN = row.NUMEROALBARAN;
-                    // Inherit the latest status tracking info
-                    existing.DELIVERY_STATUS = row.DELIVERY_STATUS || existing.DELIVERY_STATUS;
-                    existing.FIRMA_PATH = row.FIRMA_PATH || existing.FIRMA_PATH;
-                    existing.CONFORMADOSN = row.CONFORMADOSN || existing.CONFORMADOSN;
-                    // Note: Date/Time logic usually inherits from the later drop-off or the earliest logic
-                }
             }
+            // Duplicate CPC rows for same albaran are ignored (first wins)
         });
         const uniqueRows = Array.from(uniqueMap.values());
         if (uniqueRows.length < rows.length) {
@@ -461,10 +440,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 const mm = hStr.substring(2, 4);
                 timeFormatted = `${hh}:${mm}`;
             }
-            // AUDIT FIX: For factura-type docs (multi-albarán), don't expose
-            // aggregated CVC pendiente — it's misleading (e.g. 16.539,32€ for F-14678).
-            // Only use pendiente for partial status on individual albaranes.
-            if (!isFactura && pendiente > 0 && pendiente < importe) status = 'partial';
+            // Pendiente removed from repartidor history — misleading aggregated CVC values
 
             const serie = (row.SERIEALBARAN || 'A').trim();
 
@@ -484,7 +460,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                     ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
                     : null,
                 amount: importe,
-                pending: isFactura ? 0 : pendiente,
+                pending: 0,
                 status,
                 hasSignature: hasFirmaPath || hasLegacySig,
                 signaturePath: row.FIRMA_PATH || null,

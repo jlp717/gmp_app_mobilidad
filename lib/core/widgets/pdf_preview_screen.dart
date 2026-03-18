@@ -58,6 +58,17 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     _writeTempFile();
   }
 
+  @override
+  void dispose() {
+    // Clean up temp file to prevent native PDF viewer file lock issues on reopen
+    if (_tempPath != null) {
+      try {
+        File(_tempPath!).deleteSync();
+      } catch (_) {}
+    }
+    super.dispose();
+  }
+
   Future<void> _writeTempFile() async {
     try {
       final dir = await getTemporaryDirectory();
