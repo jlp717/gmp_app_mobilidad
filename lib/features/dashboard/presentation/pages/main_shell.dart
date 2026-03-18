@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/providers/dashboard_provider.dart';
 import '../../../../core/widgets/coming_soon_placeholder.dart';
 import '../../../clients/presentation/pages/simple_client_list_page.dart';
@@ -446,7 +447,7 @@ class _MainShellState extends State<MainShell> {
 
     if (user == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: ModernLoading(message: 'Cargando...')),
       );
     }
 

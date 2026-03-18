@@ -7,6 +7,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/repartidor_data_service.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/error_state_widget.dart';
+import '../../../../core/widgets/optimized_list.dart';
 import 'repartidor_historico_page.dart';
 
 class RepartidorClientesPage extends StatefulWidget {
@@ -117,19 +120,11 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
           _buildSortBar(),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
+                ? const SkeletonList(itemCount: 6, itemHeight: 80)
                 : _error != null
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
-                            const SizedBox(height: 12),
-                            Text('Error: $_error', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                            const SizedBox(height: 12),
-                            ElevatedButton(onPressed: _loadClients, child: const Text('Reintentar')),
-                          ],
-                        ),
+                    ? ErrorStateWidget(
+                        message: 'Error: $_error',
+                        onRetry: _loadClients,
                       )
                     : RefreshIndicator(
                         onRefresh: () => _loadClients(),
@@ -142,7 +137,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                                   Center(child: Text('No se encontraron clientes', style: TextStyle(color: AppTheme.textSecondary))),
                                 ],
                               )
-                            : ListView.builder(
+                            : OptimizedListView(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 itemCount: _filteredClients.length,
                                 itemBuilder: (context, index) => _buildClientCard(_filteredClients[index]),

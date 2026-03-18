@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/warehouse_data_service.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/error_state_widget.dart';
+import '../../../../core/widgets/optimized_list.dart';
 
 class VehiclesPage extends StatefulWidget {
   const VehiclesPage({super.key});
@@ -40,19 +43,16 @@ class _VehiclesPageState extends State<VehiclesPage> {
       child: Column(children: [
         _buildHeader(),
         Expanded(child: _loading
-            ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
+            ? const SkeletonList(itemCount: 5, itemHeight: 80)
             : _error != null
-                ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.error_outline, color: Colors.redAccent, size: 40),
-                    const SizedBox(height: 8),
-                    Text(_error!, style: const TextStyle(color: Colors.white54, fontSize: 13)),
-                    const SizedBox(height: 12),
-                    TextButton(onPressed: _load, child: const Text('Reintentar')),
-                  ]))
+                ? ErrorStateWidget(
+                    message: _error!,
+                    onRetry: _load,
+                  )
                 : RefreshIndicator(
                     onRefresh: _load,
                     color: AppTheme.neonBlue,
-                    child: ListView.builder(
+                    child: OptimizedListView(
                       padding: const EdgeInsets.all(12),
                       itemCount: _vehicles.length,
                       itemBuilder: (_, i) => _vehicleCard(_vehicles[i]),

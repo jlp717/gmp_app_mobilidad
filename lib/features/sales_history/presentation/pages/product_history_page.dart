@@ -5,6 +5,8 @@ import '../../providers/sales_history_provider.dart';
 import '../../../../core/providers/auth_provider.dart';
 import 'package:intl/intl.dart';
 import '../widgets/sales_summary_header.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/error_state_widget.dart';
 
 class ProductHistoryPage extends StatefulWidget {
   final String? initialClientCode;
@@ -186,9 +188,9 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
           // Results
           Expanded(
             child: history.isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                ? const SkeletonList(itemCount: 6, itemHeight: 60)
                 : history.error != null
-                    ? Center(child: Text('Error: ${history.error}', style: const TextStyle(color: Colors.redAccent)))
+                    ? ErrorStateWidget(message: 'Error: ${history.error}')
                     : history.items.isEmpty
                         ? const Center(child: Text('No hay datos', style: TextStyle(color: Colors.white54)))
                         : SingleChildScrollView(

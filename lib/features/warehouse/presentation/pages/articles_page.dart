@@ -6,6 +6,10 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/warehouse_data_service.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/error_state_widget.dart';
+import '../../../../core/widgets/empty_state_widget.dart';
+import '../../../../core/widgets/optimized_list.dart';
 
 class ArticlesPage extends StatefulWidget {
   const ArticlesPage({super.key});
@@ -61,14 +65,15 @@ class _ArticlesPageState extends State<ArticlesPage> {
         _buildHeader(),
         _buildSearchBar(),
         Expanded(child: _loading
-            ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
+            ? const SkeletonList(itemCount: 5, itemHeight: 70)
             : _error != null
-                ? Center(child: Text(_error!, style: const TextStyle(color: Colors.white54)))
+                ? ErrorStateWidget(message: _error!, onRetry: () => _search(_searchC.text))
                 : _articles.isEmpty
-                    ? Center(child: Text(
-                        _searchC.text.isEmpty ? 'Busca un articulo por codigo o nombre' : 'Sin resultados',
-                        style: const TextStyle(color: Colors.white30, fontSize: 13)))
-                    : ListView.builder(
+                    ? EmptyStateWidget(
+                        icon: _searchC.text.isEmpty ? Icons.search : Icons.search_off,
+                        title: _searchC.text.isEmpty ? 'Busca un articulo por codigo o nombre' : 'Sin resultados',
+                      )
+                    : OptimizedListView(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         itemCount: _articles.length,
                         itemBuilder: (_, i) => _articleCard(_articles[i]),

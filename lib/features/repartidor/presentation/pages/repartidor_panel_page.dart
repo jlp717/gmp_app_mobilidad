@@ -9,6 +9,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/error_state_widget.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../data/repartidor_data_service.dart';
 
 class RepartidorPanelPage extends StatefulWidget {
@@ -98,7 +99,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           _buildHeader(),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
+                ? const SkeletonList(itemCount: 4, itemHeight: 100)
                 : _error != null
                     ? ErrorStateWidget(
                         message: 'Error: $_error',

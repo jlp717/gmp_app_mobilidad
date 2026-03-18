@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/warehouse_data_service.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/optimized_list.dart';
 
 class PersonnelPage extends StatefulWidget {
   const PersonnelPage({super.key});
@@ -197,7 +199,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
           // List
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.neonPurple))
+                ? const SkeletonList(itemCount: 4, itemHeight: 80)
                 : _personnel.isEmpty
                     ? Center(
                         child: Column(
@@ -214,7 +216,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                     : RefreshIndicator(
                         onRefresh: _load,
                         color: AppTheme.neonPurple,
-                        child: ListView.builder(
+                        child: OptimizedListView(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           itemCount: _personnel.length,
                           itemBuilder: (ctx, i) => _personCard(_personnel[i]),

@@ -13,6 +13,8 @@ import '../widgets/albaran_card.dart';
 import '../widgets/cobros_summary_card.dart';
 import '../widgets/entrega_detail_sheet.dart';
 import '../widgets/cobros_filters.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/optimized_list.dart';
 
 class CobrosPage extends StatefulWidget {
   final String employeeCode;
@@ -313,9 +315,7 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
     return Consumer<CobrosProvider>(
       builder: (context, provider, _) {
         if (provider.isLoading) {
-          return const Center(
-            child: CircularProgressIndicator(color: AppTheme.neonBlue),
-          );
+          return const SkeletonList(itemCount: 5, itemHeight: 100);
         }
 
         if (provider.error != null) {
@@ -348,7 +348,7 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
 
             final listWidget = albaranes.isEmpty
                 ? _buildEmptyState()
-                : ListView.builder(
+                : OptimizedListView(
                     padding: const EdgeInsets.all(16),
                     itemCount: albaranes.length,
                     itemBuilder: (context, index) {

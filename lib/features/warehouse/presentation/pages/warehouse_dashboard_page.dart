@@ -12,6 +12,8 @@ import '../../application/load_planner_provider.dart';
 import '../../data/warehouse_data_service.dart';
 import 'load_planner_3d_page.dart';
 import 'load_planner_v2_page.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/error_state_widget.dart';
 
 class WarehouseDashboardPage extends StatefulWidget {
   const WarehouseDashboardPage({super.key});
@@ -90,11 +92,12 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
           if (!_loading && _error == null && _trucks.isNotEmpty) _buildKpiStrip(),
           Expanded(
             child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: AppTheme.neonBlue))
+                ? const SkeletonList(itemCount: 4, itemHeight: 120)
                 : _error != null
-                    ? _buildError()
+                    ? ErrorStateWidget(
+                        message: _error!,
+                        onRetry: _loadDashboard,
+                      )
                     : _trucks.isEmpty
                         ? _buildEmpty()
                         : _buildTruckGrid(),

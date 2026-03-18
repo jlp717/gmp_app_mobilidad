@@ -8,6 +8,8 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_provider.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class KpiDashboardPage extends StatefulWidget {
@@ -113,9 +115,12 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
           // Content
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const SkeletonList(itemCount: 4, itemHeight: 120)
                 : _error != null
-                    ? _buildError()
+                    ? ErrorStateWidget(
+                        message: _error!,
+                        onRetry: _loadDashboard,
+                      )
                     : _buildContent(),
           ),
         ],
