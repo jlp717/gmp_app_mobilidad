@@ -4,6 +4,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { query, queryWithParams } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
@@ -33,15 +35,24 @@ async function getGamificationStats(repartidorId) {
     try {
         const currentYear = new Date().getFullYear();
 
-        // 1. Level: Count total deliveries this year
-        const levelSql = `
+        // Parallelize level + streak queries (independent) with cache
+        const [levelResult, streakResult] = await Promise.all([
+            cachedQuery(query, `
             SELECT COUNT(*) as TOTAL
             FROM DSEDAC.CPC
             WHERE TRIM(CODIGOREPARTIDOR) = '${repartidorId}'
               AND ANODOCUMENTO = ${currentYear}
-        `;
-        const levelResult = await query(levelSql, false);
+        `, `entregas:gamification:level:${repartidorId}:${currentYear}`, TTL.SHORT),
+            cachedQuery(query, `
+            SELECT DISTINCT DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
+            FROM DSEDAC.CPC
+            WHERE TRIM(CODIGOREPARTIDOR) = '${repartidorId}'
+              AND CONCAT(ANODOCUMENTO, CONCAT(RIGHT('0' || MESDOCUMENTO, 2), RIGHT('0' || DIADOCUMENTO, 2))) >= 
+                  '${moment().subtract(7, 'days').format('YYYYMMDD')}'
+        `, `entregas:gamification:streak:${repartidorId}`, TTL.SHORT)
+        ]);
         const totalDeliveries = levelResult[0]?.TOTAL || 0;
+        const streakDays = streakResult.length; // Approximate active days in last week
 
         let level = 'BRONCE';
         let nextLevel = 'PLATA';
@@ -64,17 +75,6 @@ async function getGamificationStats(repartidorId) {
             nextLevel = 'DIAMANTE';
             progress = 1.0;
         }
-
-        // 2. Streak: Check last 7 days activity
-        const streakSql = `
-            SELECT DISTINCT DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
-            FROM DSEDAC.CPC
-            WHERE TRIM(CODIGOREPARTIDOR) = '${repartidorId}'
-              AND CONCAT(ANODOCUMENTO, CONCAT(RIGHT('0' || MESDOCUMENTO, 2), RIGHT('0' || DIADOCUMENTO, 2))) >= 
-                  '${moment().subtract(7, 'days').format('YYYYMMDD')}'
-        `;
-        const streakResult = await query(streakSql, false);
-        const streakDays = streakResult.length; // Approximate active days in last week
 
         return { level, nextLevel, progress, streakDays, totalDeliveries };
     } catch (e) {
@@ -145,11 +145,11 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
         // Load payment conditions from JAVIER.PAYMENT_CONDITIONS table
         let paymentConditions = {};
         try {
-            const pcRows = await query(`
+            const pcRows = await cachedQuery(query, `
                 SELECT CODIGO, DESCRIPCION, TIPO, DIAS_PAGO, DEBE_COBRAR, PUEDE_COBRAR, COLOR
                 FROM JAVIER.PAYMENT_CONDITIONS
                 WHERE ACTIVO = 'S'
-            `, false);
+            `, 'entregas:paymentConditions', TTL.LONG);
 
             pcRows.forEach(pc => {
                 const code = (pc.CODIGO || '').trim();

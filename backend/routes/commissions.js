@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { query, queryWithParams, getPool } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
@@ -463,7 +464,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
         GROUP BY L.LCAADC, LCMMDC
         ORDER BY YEAR, MONTH
     `;
-    const salesRows = await query(salesQuery, false);
+    const salesRows = await cachedQuery(query, salesQuery, `commissions:sales:${vendedorCode}:${selectedYear}`, TTL.SHORT);
 
     // =====================================================================
     // INHERITED OBJECTIVES: Pre-load inherited sales for new vendors
@@ -473,11 +474,34 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     const monthsWithData = salesRows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
     const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(m => !monthsWithData.includes(m));
 
-    if (missingMonths.length > 0) {
-        // Vendor is "new" or has incomplete history - load inherited sales
-        logger.debug(`📊 Vendor ${vendedorCode} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
+    // Fire independent queries in parallel: inherited clients, fixed targets, B-sales
+    const [currentClients, fixedCommissionRows, bSalesCurrYear, bSalesPrevYear] = await Promise.all([
+        missingMonths.length > 0 ? getVendorCurrentClients(vendedorCode, selectedYear) : Promise.resolve([]),
+        (async () => {
+            try {
+                const currentMonth = new Date().getMonth() + 1;
+                const safeVendor = vendedorCode.replace(/[^a-zA-Z0-9]/g, '');
+                return await cachedQuery(query, `
+                    SELECT IMPORTE_BASE_COMISION
+                    FROM JAVIER.COMMERCIAL_TARGETS
+                    WHERE CODIGOVENDEDOR = '${safeVendor}'
+                      AND ANIO = ${parseInt(selectedYear)}
+                      AND (MES = ${parseInt(currentMonth)} OR MES IS NULL)
+                      AND ACTIVO = 1
+                    ORDER BY MES DESC
+                    FETCH FIRST 1 ROWS ONLY
+                `, `commissions:fixedTarget:${vendedorCode}:${selectedYear}`, TTL.MEDIUM);
+            } catch (err) {
+                logger.debug(`📊 [COMMISSIONS] COMMERCIAL_TARGETS lookup error: ${err.message}`);
+                return [];
+            }
+        })(),
+        getBSales(vendedorCode, selectedYear),
+        getBSales(vendedorCode, prevYear)
+    ]);
 
-        const currentClients = await getVendorCurrentClients(vendedorCode, selectedYear);
+    if (missingMonths.length > 0) {
+        logger.debug(`📊 Vendor ${vendedorCode} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
         if (currentClients.length > 0) {
             inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
             logger.debug(`📊 Found ${currentClients.length} clients. Inherited sales map: ${JSON.stringify(inheritedMonthlySales)}`);
@@ -488,35 +512,16 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS
     // =====================================================================
     let fixedCommissionBase = null;
-    try {
-        const currentMonth = new Date().getMonth() + 1;
-        const safeVendor = vendedorCode.replace(/[^a-zA-Z0-9]/g, '');
-        const fixedRows = await query(`
-            SELECT IMPORTE_BASE_COMISION
-            FROM JAVIER.COMMERCIAL_TARGETS
-            WHERE CODIGOVENDEDOR = '${safeVendor}'
-              AND ANIO = ${parseInt(selectedYear)}
-              AND (MES = ${parseInt(currentMonth)} OR MES IS NULL)
-              AND ACTIVO = 1
-            ORDER BY MES DESC
-            FETCH FIRST 1 ROWS ONLY
-        `, false);
-
-        if (fixedRows && fixedRows.length > 0) {
-            fixedCommissionBase = parseFloat(fixedRows[0].IMPORTE_BASE_COMISION) || null;
-            if (fixedCommissionBase) {
-                logger.debug(`📊 [COMMISSIONS] Vendor ${vendedorCode} has FIXED commission base: ${fixedCommissionBase}€`);
-            }
+    if (fixedCommissionRows && fixedCommissionRows.length > 0) {
+        fixedCommissionBase = parseFloat(fixedCommissionRows[0].IMPORTE_BASE_COMISION) || null;
+        if (fixedCommissionBase) {
+            logger.debug(`📊 [COMMISSIONS] Vendor ${vendedorCode} has FIXED commission base: ${fixedCommissionBase}€`);
         }
-    } catch (err) {
-        logger.debug(`📊 [COMMISSIONS] COMMERCIAL_TARGETS lookup error: ${err.message}`);
     }
 
     // =====================================================================
-    // B-SALES: Load B-sales for this vendor (from JAVIER.VENTAS_B)
+    // B-SALES: Already loaded in parallel above
     // =====================================================================
-    const bSalesCurrYear = await getBSales(vendedorCode, selectedYear);
-    const bSalesPrevYear = await getBSales(vendedorCode, prevYear);
     const currTotalBSales = Object.values(bSalesCurrYear).reduce((s, v) => s + v, 0);
     const prevTotalBSales = Object.values(bSalesPrevYear).reduce((s, v) => s + v, 0);
     if (currTotalBSales > 0 || prevTotalBSales > 0) {

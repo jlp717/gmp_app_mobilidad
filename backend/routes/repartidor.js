@@ -9,6 +9,8 @@
 const express = require('express');
 const router = express.Router();
 const { query, queryWithParams } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { generateInvoicePDF } = require('../app/services/pdfService');
@@ -305,22 +307,8 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                 CPC.ANODOCUMENTO as ANO, CPC.MESDOCUMENTO as MES, CPC.DIADOCUMENTO as DIA,
                 CPC.CODIGOCLIENTEALBARAN,
-                COALESCE((
-                    SELECT CAC_AMT.IMPORTETOTAL FROM DSEDAC.CAC CAC_AMT
-                    WHERE CAC_AMT.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-                      AND CAC_AMT.SERIEALBARAN = CPC.SERIEALBARAN
-                      AND CAC_AMT.TERMINALALBARAN = CPC.TERMINALALBARAN
-                      AND CAC_AMT.NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY
-                ), CPC.IMPORTETOTAL) as IMPORTETOTAL,
-                COALESCE((
-                    SELECT SUM(CV.IMPORTEPENDIENTE) 
-                    FROM DSEDAC.CVC CV 
-                    WHERE CV.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
-                      AND CV.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
-                      AND CV.SERIEDOCUMENTO = CPC.SERIEALBARAN
-                      AND CV.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-                ), 0) as IMPORTE_PENDIENTE,
+                COALESCE(CAC_J.IMPORTETOTAL, CPC.IMPORTETOTAL) as IMPORTETOTAL,
+                COALESCE(CVC_J.IMPORTE_PENDIENTE, 0) as IMPORTE_PENDIENTE,
                 CPC.CONFORMADOSN,
                 CPC.SITUACIONALBARAN,
                 CPC.HORALLEGADA,
@@ -329,41 +317,37 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 ${dsUpdatedCol},
                 ${dsFirmaCol},
                 ${dsObsCol},
-                COALESCE((SELECT CAC2.NUMEROFACTURA FROM DSEDAC.CAC CAC2
-                    WHERE CAC2.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND CAC2.SERIEALBARAN = CPC.SERIEALBARAN
-                      AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY), 0) as NUMEROFACTURA,
-                COALESCE((SELECT TRIM(CAC2.SERIEFACTURA) FROM DSEDAC.CAC CAC2
-                    WHERE CAC2.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND CAC2.SERIEALBARAN = CPC.SERIEALBARAN
-                      AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY), '') as SERIEFACTURA,
-                COALESCE((SELECT CAC2.EJERCICIOFACTURA FROM DSEDAC.CAC CAC2
-                    WHERE CAC2.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND CAC2.SERIEALBARAN = CPC.SERIEALBARAN
-                      AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY), 0) as EJERCICIOFACTURA,
-                COALESCE((SELECT FIRMANOMBRE FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY), '') as LEGACY_FIRMA_NOMBRE,
-                (SELECT DIA FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY) as LEGACY_DIA,
-                (SELECT MES FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY) as LEGACY_MES,
-                (SELECT ANO FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY) as LEGACY_ANO,
-                (SELECT HORA FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY) as LEGACY_HORA
+                COALESCE(CAC_J.NUMEROFACTURA, 0) as NUMEROFACTURA,
+                COALESCE(TRIM(CAC_J.SERIEFACTURA), '') as SERIEFACTURA,
+                COALESCE(CAC_J.EJERCICIOFACTURA, 0) as EJERCICIOFACTURA,
+                COALESCE(CF_J.FIRMANOMBRE, '') as LEGACY_FIRMA_NOMBRE,
+                CF_J.DIA as LEGACY_DIA,
+                CF_J.MES as LEGACY_MES,
+                CF_J.ANO as LEGACY_ANO,
+                CF_J.HORA as LEGACY_HORA
             FROM DSEDAC.CPC CPC
             ${repartidorJoin}
             ${dsJoin}
+            LEFT JOIN DSEDAC.CAC CAC_J
+                ON CAC_J.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND CAC_J.SERIEALBARAN = CPC.SERIEALBARAN
+                AND CAC_J.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND CAC_J.NUMEROALBARAN = CPC.NUMEROALBARAN
+            LEFT JOIN (
+                SELECT CV.SUBEMPRESADOCUMENTO, CV.EJERCICIODOCUMENTO, CV.SERIEDOCUMENTO, CV.NUMERODOCUMENTO,
+                       SUM(CV.IMPORTEPENDIENTE) as IMPORTE_PENDIENTE
+                FROM DSEDAC.CVC CV
+                GROUP BY CV.SUBEMPRESADOCUMENTO, CV.EJERCICIODOCUMENTO, CV.SERIEDOCUMENTO, CV.NUMERODOCUMENTO
+            ) CVC_J
+                ON CVC_J.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+                AND CVC_J.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+                AND CVC_J.SERIEDOCUMENTO = CPC.SERIEALBARAN
+                AND CVC_J.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+            LEFT JOIN DSEDAC.CACFIRMAS CF_J
+                ON CF_J.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND TRIM(CF_J.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
+                AND CF_J.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND CF_J.NUMEROALBARAN = CPC.NUMEROALBARAN
             WHERE CPC.CODIGOCLIENTEALBARAN = '${sanitizeForSQL(clientCode)}'
               AND CPC.NUMEROALBARAN < 900000 AND CPC.EJERCICIOALBARAN > 0
               ${yearParam ? `AND CPC.EJERCICIOALBARAN = ${parseInt(yearParam)}` : ''}
@@ -543,9 +527,10 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
               ${clientFilter}
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO
             ORDER BY OPP.ANOREPARTO DESC, OPP.MESREPARTO DESC
+            FETCH FIRST 500 ROWS ONLY
         `;
 
-        const rows = await query(sql, false);
+        const rows = await cachedQuery(query, sql, `repartidor:objectives:${cleanRepartidorId}`, TTL.REALTIME);
 
         const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -610,9 +595,10 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
               AND OPP.ANOREPARTO = ${selectedYear}
               ${clientFilter}
+            FETCH FIRST 10000 ROWS ONLY
         `;
 
-        const clientRows = await query(clientsSql, false);
+        const clientRows = await cachedQuery(query, clientsSql, `repartidor:objDetail:${cleanIds}:${selectedYear}:${clientId || 'all'}`, TTL.REALTIME);
         if (clientRows.length === 0) {
             return res.json({ success: true, clients: [], year: selectedYear });
         }
@@ -2130,9 +2116,10 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         mainSql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, '')), TRIM(OPP.CODIGOREPARTIDOR), TRIM(COALESCE(VDD.NOMBREVENDEDOR, ''))`;
         mainSql += ` ORDER BY MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) DESC`;
+        mainSql += ` FETCH FIRST 500 ROWS ONLY`;
 
         logger.info(`[REPARTIDOR] Clients SQL for repartidorId ${repartidorId}`);
-        const rows = await query(mainSql, false);
+        const rows = await cachedQuery(query, mainSql, `repartidor:clients:${cleanRepartidorId}:${search || ''}`, TTL.REALTIME);
         logger.info(`[REPARTIDOR] Found ${rows.length} clients with deliveries for ${repartidorId}`);
 
         // Deduplicate by client ID (a client may appear with different repartidors)

@@ -8,6 +8,8 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
 const { query, queryWithParams, getPool } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const { sanitizeForSQL } = require('../utils/common');
 const loadPlanner = require('../services/loadPlanner');
 
@@ -457,7 +459,7 @@ router.post('/load-plan-manual', async (req, res) => {
  */
 router.get('/vehicles', async (req, res) => {
     try {
-        const vehicles = await query(`
+        const vehicles = await cachedQuery(query, `
       SELECT
         TRIM(V.CODIGOVEHICULO) AS CODE,
         TRIM(V.DESCRIPCIONVEHICULO) AS DESCRIPCION,
@@ -470,7 +472,7 @@ router.get('/vehicles', async (req, res) => {
       LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C
         ON TRIM(V.CODIGOVEHICULO) = C.CODIGOVEHICULO
       ORDER BY V.CODIGOVEHICULO
-    `);
+    `, 'warehouse:vehicles', TTL.LONG);
 
         res.json({
             vehicles: vehicles.map(v => {
@@ -603,12 +605,12 @@ router.put('/truck-config/:vehicleCode', async (req, res) => {
 router.get('/personnel', async (req, res) => {
     try {
         // Get custom personnel from ALMACEN_PERSONAL
-        const customRows = await query(`
+        const customRows = await cachedQuery(query, `
       SELECT ID, NOMBRE, CODIGO_VENDEDOR, ROL, ACTIVO, TELEFONO, EMAIL, CREATED_AT
       FROM JAVIER.ALMACEN_PERSONAL
       WHERE ACTIVO = 'S'
       ORDER BY NOMBRE
-    `);
+    `, 'warehouse:personnel:custom', TTL.MEDIUM);
 
         // Get only repartidores/drivers from VDD (people with assigned vehicles or active delivery routes)
         let vddRows = [];

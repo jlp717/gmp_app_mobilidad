@@ -205,33 +205,33 @@ router.get('/', async (req, res) => {
             }
         }
 
-        // Ventas del mes actual (usando LAC)
-        // Aplicamos vendedorFilter para que coincida con lo solicitado (Global o Vendedor)
-        const currentSales = await query(`
+        // Parallelize 3 independent sales queries
+        const [currentSales, lastYearSales, prevYearAnnual] = await Promise.all([
+            // Ventas del mes actual (usando LAC)
+            query(`
       SELECT 
         COALESCE(SUM(IMPORTEVENTA), 0) as sales,
         COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
         COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
       FROM DSEDAC.LAC L
       WHERE ANODOCUMENTO = ${targetYear} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
-    `);
-
-        // Ventas del mismo mes año anterior (usando LAC)
-        const lastYearSales = await query(`
+    `),
+            // Ventas del mismo mes año anterior (usando LAC)
+            query(`
       SELECT 
         COALESCE(SUM(IMPORTEVENTA), 0) as sales,
         COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
         COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
       FROM DSEDAC.LAC
       WHERE ANODOCUMENTO = ${targetYear - 1} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
-    `);
-
-        // NEW: Need Annual Totals of Previous Year for Seasonality Calculation
-        const prevYearAnnual = await query(`
+    `),
+            // Annual Totals of Previous Year for Seasonality Calculation
+            query(`
             SELECT COALESCE(SUM(IMPORTEVENTA), 0) as TOTAL_SALES
             FROM DSEDAC.LAC
             WHERE ANODOCUMENTO = ${targetYear - 1} ${vendedorFilter}
-        `, false);
+        `, false)
+        ]);
 
         const curr = currentSales[0] || {};
         const last = lastYearSales[0] || {};
@@ -658,48 +658,38 @@ router.get('/matrix', async (req, res) => {
         yearsArray.forEach(y => allYearsToFetch.add(y - 1));
         const yearsFilter = Array.from(allYearsToFetch).join(',');
 
-        // --- NEW: Client Contact & Observations ---
+        // --- NEW: Client Contact & Observations (parallelized) ---
         let contactInfo = { phone: '', phone2: '', email: '', phones: [] };
         let editableNotes = null;
 
-        // Get phones (separate try-catch to not break if one fails)
-        try {
-            const contactRows = await query(`
+        const [contactRows, notesRows] = await Promise.all([
+            query(`
                 SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2 
                 FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
-            `);
-            if (contactRows.length > 0) {
-                const c = contactRows[0];
-                const phones = [];
-                if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
-                if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
-
-                contactInfo = {
-                    phone: c.PHONE?.trim() || '',
-                    phone2: c.PHONE2?.trim() || '',
-                    email: '',
-                    phones: phones
-                };
-            }
-        } catch (e) {
-            logger.warn(`Could not load contact info: ${e.message}`);
-        }
-
-        // Get editable notes (separate try-catch - table may not exist)
-        try {
-            const notesRows = await query(`
+            `).catch(e => { logger.warn(`Could not load contact info: ${e.message}`); return []; }),
+            query(`
                 SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES 
                 WHERE CLIENT_CODE = '${sanitizeForSQL(clientCode)}' FETCH FIRST 1 ROWS ONLY
-            `, false);
-            if (notesRows.length > 0) {
-                editableNotes = {
-                    text: notesRows[0].OBSERVACIONES,
-                    modifiedBy: notesRows[0].MODIFIED_BY
-                };
-            }
-        } catch (e) {
-            // Table may not exist - this is OK, just skip notes
-            logger.debug(`Notes table not available: ${e.message}`);
+            `, false).catch(e => { logger.debug(`Notes table not available: ${e.message}`); return []; })
+        ]);
+
+        if (contactRows.length > 0) {
+            const c = contactRows[0];
+            const phones = [];
+            if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
+            if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
+            contactInfo = {
+                phone: c.PHONE?.trim() || '',
+                phone2: c.PHONE2?.trim() || '',
+                email: '',
+                phones: phones
+            };
+        }
+        if (notesRows.length > 0) {
+            editableNotes = {
+                text: notesRows[0].OBSERVACIONES,
+                modifiedBy: notesRows[0].MODIFIED_BY
+            };
         }
         // -------------------------------------------
 
@@ -784,6 +774,7 @@ router.get('/matrix', async (req, res) => {
         ${filterConditions}
       GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
       ORDER BY SALES DESC
+      FETCH FIRST 50000 ROWS ONLY
     `);
 
         // Get family names and available filters properly
@@ -1791,9 +1782,20 @@ router.get('/by-client', async (req, res) => {
         const retrievedCodes = currentRows.map(r => `'${r.CODE}'`).join(',');
 
         let prevSalesMap = new Map();
+        let objectiveConfigMap = new Map();
+        let defaultObjectiveData = { percentage: 10 };
+        let fixedTargetsMap = new Map();
+        const vendorCodesArray = vendedorCodes ? vendedorCodes.split(',').map(v => v.trim()) : [];
 
         if (retrievedCodes.length > 0) {
-            const prevRows = await query(`
+            // Parallelize 3 independent queries: prevSales + OBJ_CONFIG + COMMERCIAL_TARGETS
+            const now = getCurrentDate();
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+
+            const [prevRows, confRows, fixedRows] = await Promise.all([
+                // Previous year sales for retrieved clients
+                query(`
               SELECT 
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as PREV_SALES
@@ -1803,82 +1805,56 @@ router.get('/by-client', async (req, res) => {
                 AND ${LACLAE_SALES_FILTER}
                 AND L.LCCDCL IN (${retrievedCodes})
               GROUP BY L.LCCDCL
-            `);
-
-            prevRows.forEach(r => {
-                prevSalesMap.set(r.CODE?.trim() || '', parseFloat(r.PREV_SALES) || 0);
-            });
-        }
-
-        // Fetch Objective Configuration from JAVIER.OBJ_CONFIG
-        // Get config for retrieved clients AND the default ('*')
-        let objectiveConfigMap = new Map();
-        let defaultObjectiveData = { percentage: 10 }; // Fallback hardcoded if DB empty
-
-        if (retrievedCodes.length > 0) {
-            const objConfQuery = `
+            `),
+                // Objective configuration
+                query(`
                 SELECT CODIGOCLIENTE, TARGET_PERCENTAGE 
                 FROM JAVIER.OBJ_CONFIG 
                 WHERE CODIGOCLIENTE IN (${retrievedCodes}, '*') 
                    OR CODIGOCLIENTE = '*'
-             `;
-
-            try {
-                const confRows = await query(objConfQuery);
-                confRows.forEach(r => {
-                    const code = r.CODIGOCLIENTE?.trim();
-                    const pct = parseFloat(r.TARGET_PERCENTAGE) || 0;
-                    if (code === '*') {
-                        defaultObjectiveData.percentage = pct;
-                    } else {
-                        objectiveConfigMap.set(code, pct);
-                    }
-                });
-            } catch (err) {
-                logger.warn(`Could not load objective config: ${err.message}`);
-            }
-        }
-
-        // NEW: Fetch fixed monthly targets from COMMERCIAL_TARGETS for vendors with fixed amounts
-        // This is for new commercials like #15 who have fixed objectives (e.g., 25,000€/month)
-        let fixedTargetsMap = new Map();
-        const vendorCodesArray = vendedorCodes ? vendedorCodes.split(',').map(v => v.trim()) : [];
-
-        if (vendorCodesArray.length > 0) {
-            const now = getCurrentDate();
-            const currentMonth = now.getMonth() + 1;
-            const currentYear = now.getFullYear();
-
-            try {
-                const vendorList = vendorCodesArray.map(v => `'${v}'`).join(',');
-                const fixedRows = await query(`
+             `).catch(err => { logger.warn(`Could not load objective config: ${err.message}`); return []; }),
+                // Fixed monthly targets from COMMERCIAL_TARGETS
+                vendorCodesArray.length > 0
+                    ? query(`
                     SELECT CODIGOVENDEDOR, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA
                     FROM JAVIER.COMMERCIAL_TARGETS
-                    WHERE CODIGOVENDEDOR IN (${vendorList})
+                    WHERE CODIGOVENDEDOR IN (${vendorCodesArray.map(v => `'${v}'`).join(',')})
                       AND ANIO = ${currentYear}
                       AND (MES = ${currentMonth} OR MES IS NULL)
                       AND ACTIVO = 1
                     ORDER BY MES DESC
                     FETCH FIRST 1 ROWS ONLY
-                `, false);
+                `, false).catch(err => { logger.warn(`Could not load fixed commercial targets: ${err.message}`); return []; })
+                    : Promise.resolve([])
+            ]);
 
-                fixedRows.forEach(r => {
-                    const vendorCode = r.CODIGOVENDEDOR?.trim();
-                    if (vendorCode) {
-                        // Store as vendor-level target (applies to all clients of this vendor)
-                        fixedTargetsMap.set(`VENDOR_${vendorCode}`, {
-                            importe: parseFloat(r.IMPORTE_OBJETIVO) || 0,
-                            baseComision: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
-                            porcentaje: parseFloat(r.PORCENTAJE_MEJORA) || 10
-                        });
-                    }
-                });
+            prevRows.forEach(r => {
+                prevSalesMap.set(r.CODE?.trim() || '', parseFloat(r.PREV_SALES) || 0);
+            });
 
-                if (fixedTargetsMap.size > 0) {
-                    logger.info(`[OBJECTIVES] Loaded ${fixedTargetsMap.size} fixed commercial targets`);
+            confRows.forEach(r => {
+                const code = r.CODIGOCLIENTE?.trim();
+                const pct = parseFloat(r.TARGET_PERCENTAGE) || 0;
+                if (code === '*') {
+                    defaultObjectiveData.percentage = pct;
+                } else {
+                    objectiveConfigMap.set(code, pct);
                 }
-            } catch (err) {
-                logger.warn(`Could not load fixed commercial targets: ${err.message}`);
+            });
+
+            fixedRows.forEach(r => {
+                const vendorCode = r.CODIGOVENDEDOR?.trim();
+                if (vendorCode) {
+                    fixedTargetsMap.set(`VENDOR_${vendorCode}`, {
+                        importe: parseFloat(r.IMPORTE_OBJETIVO) || 0,
+                        baseComision: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
+                        porcentaje: parseFloat(r.PORCENTAJE_MEJORA) || 10
+                    });
+                }
+            });
+
+            if (fixedTargetsMap.size > 0) {
+                logger.info(`[OBJECTIVES] Loaded ${fixedTargetsMap.size} fixed commercial targets`);
             }
         }
 
