@@ -32,7 +32,7 @@ module.exports = {
             env_ts: {
                 NODE_ENV: 'production',
                 PORT: 3334,
-                USE_TS_ROUTES: 'false', // Reverted TS routes for stability
+                USE_TS_ROUTES: 'true', // TS routes ready for migration
                 VENDOR_COLUMN: 'R1_T8CDVD',
             },
 
