@@ -220,8 +220,25 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 
   void _showTruckFullModal(LoadPlanResult r) {
     final m = r.metrics;
-    final isFull = m.volumeOccupancyPct > 85 || m.weightOccupancyPct > 85;
+    final isFull =
+        m.volumeOccupancyPct > 85 || m.weightOccupancyPct > 85;
     final sc = _statusColor(m.status);
+
+    // Calculate balance
+    final t = r.truck;
+    final cL = t != null
+        ? math.max(t.interior.lengthCm, 250.0)
+        : 250.0;
+    final cW = t != null
+        ? math.max(t.interior.widthCm, 160.0)
+        : 160.0;
+    final axle =
+        AxleBalanceHelper.axleDistribution(r.placed, cL);
+    final lat =
+        AxleBalanceHelper.lateralDistribution(r.placed, cW);
+    final balanced =
+        AxleBalanceHelper.isBalanced(r.placed, cL, cW);
+    final bc = balanced ? AppTheme.neonGreen : Colors.amber;
 
     showModalBottomSheet<void>(
       context: context,
@@ -232,7 +249,10 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         decoration: BoxDecoration(
           color: AppTheme.darkCard.withValues(alpha: 0.98),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: sc.withValues(alpha: 0.5), width: 2),
+          border: Border.all(
+            color: sc.withValues(alpha: 0.5),
+            width: 2,
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -284,6 +304,101 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                     '(${m.overflowWeightKg.toStringAsFixed(0)} kg)',
                 Colors.redAccent,
               ),
+            // EUR economic data
+            if (m.totalImporteEur > 0) ...[
+              const SizedBox(height: 4),
+              _optimizeStatRow(
+                'Valor cargado',
+                '${m.totalImporteEur.toStringAsFixed(2)} €',
+                const Color(0xFF4CAF50),
+              ),
+              if (m.totalMargenEur > 0)
+                _optimizeStatRow(
+                  'Margen real',
+                  '${m.totalMargenEur.toStringAsFixed(2)} €',
+                  const Color(0xFF66BB6A),
+                ),
+              if (m.overflowImporteEur > 0)
+                _optimizeStatRow(
+                  'Valor excluido',
+                  '${m.overflowImporteEur.toStringAsFixed(2)} €',
+                  Colors.redAccent,
+                ),
+            ],
+            // Axle balance section
+            if (r.placed.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    balanced
+                        ? Icons.balance_rounded
+                        : Icons.warning_amber_rounded,
+                    color: bc,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'EQUILIBRIO DE EJES',
+                    style: TextStyle(
+                      color: bc,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: bc.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      balanced ? 'OK' : 'REVISAR',
+                      style: TextStyle(
+                        color: bc,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _balanceItem(
+                    'Frontal',
+                    '${axle['frontPct']!.round()}%',
+                    bc,
+                  ),
+                  _balanceItem(
+                    'Trasero',
+                    '${axle['rearPct']!.round()}%',
+                    axle['rearPct']! > 65
+                        ? Colors.redAccent
+                        : bc,
+                  ),
+                  _balanceItem(
+                    'Izquierda',
+                    '${lat['leftPct']!.round()}%',
+                    bc,
+                  ),
+                  _balanceItem(
+                    'Derecha',
+                    '${lat['rightPct']!.round()}%',
+                    bc,
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () => Navigator.pop(ctx),
@@ -301,6 +416,29 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _balanceItem(String label, String value, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.35),
+            fontSize: 8,
+          ),
+        ),
+      ],
     );
   }
 
@@ -791,6 +929,17 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                   style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.5),
                       fontSize: 9)),
+              if (m.totalImporteEur > 0) ...[
+                const SizedBox(height: 2),
+                Text(
+                  '${m.totalImporteEur.toStringAsFixed(0)} €',
+                  style: const TextStyle(
+                    color: Color(0xFF4CAF50),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -801,6 +950,13 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           right: 8,
           bottom: _selectedBoxId != null ? 70 : 8,
           child: _buildColorLegend(),
+        ),
+      // Axle balance indicator
+      if (_result != null && _result!.placed.isNotEmpty && _result!.truck != null)
+        Positioned(
+          left: 8,
+          bottom: _selectedBoxId != null ? 70 : 8,
+          child: _buildAxleBalance(),
         ),
     ]);
 
@@ -1047,6 +1203,77 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
     }
   }
 
+  // ─── Axle balance indicator ─────────────────────────────────────────
+
+  Widget _buildAxleBalance() {
+    final placed = _result!.placed;
+    final t = _result!.truck!;
+    final cL = math.max(t.interior.lengthCm, 250.0);
+    final cW = math.max(t.interior.widthCm, 160.0);
+
+    final axle = AxleBalanceHelper.axleDistribution(placed, cL);
+    final lat = AxleBalanceHelper.lateralDistribution(placed, cW);
+    final frontPct = axle['frontPct']!;
+    final rearPct = axle['rearPct']!;
+    final leftPct = lat['leftPct']!;
+    final rightPct = lat['rightPct']!;
+    final balanced = AxleBalanceHelper.isBalanced(placed, cL, cW);
+
+    final bc = balanced ? AppTheme.neonGreen : Colors.amber;
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      constraints: const BoxConstraints(maxWidth: 110),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: bc.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                balanced
+                    ? Icons.balance_rounded
+                    : Icons.warning_amber_rounded,
+                color: bc,
+                size: 12,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                balanced ? 'EQUILIBRADO' : 'DESBALANCE',
+                style: TextStyle(
+                  color: bc,
+                  fontSize: 7,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Cross diagram
+          SizedBox(
+            width: 80,
+            height: 55,
+            child: CustomPaint(
+              painter: _BalanceDiagramPainter(
+                frontPct: frontPct,
+                rearPct: rearPct,
+                leftPct: leftPct,
+                rightPct: rightPct,
+                balanced: balanced,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Color legend ───────────────────────────────────────────────────
 
   Widget _buildColorLegend() {
@@ -1124,4 +1351,119 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
       ),
     );
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BALANCE DIAGRAM — Mini cross showing weight distribution
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _BalanceDiagramPainter extends CustomPainter {
+  final double frontPct, rearPct, leftPct, rightPct;
+  final bool balanced;
+
+  _BalanceDiagramPainter({
+    required this.frontPct,
+    required this.rearPct,
+    required this.leftPct,
+    required this.rightPct,
+    required this.balanced,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final accent = balanced
+        ? const Color(0xFF6BCB77)
+        : const Color(0xFFFFE66D);
+
+    // Truck outline (simplified top-down)
+    final truckRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(cx, cy),
+        width: size.width * 0.6,
+        height: size.height * 0.85,
+      ),
+      const Radius.circular(4),
+    );
+    canvas.drawRRect(
+      truckRect,
+      Paint()..color = const Color(0x20FFFFFF),
+    );
+    canvas.drawRRect(
+      truckRect,
+      Paint()
+        ..color = accent.withValues(alpha: 0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    // Center cross lines
+    final crossPaint = Paint()
+      ..color = const Color(0x15FFFFFF)
+      ..strokeWidth = 0.5;
+    canvas.drawLine(
+      Offset(cx, cy - size.height * 0.4),
+      Offset(cx, cy + size.height * 0.4),
+      crossPaint,
+    );
+    canvas.drawLine(
+      Offset(cx - size.width * 0.28, cy),
+      Offset(cx + size.width * 0.28, cy),
+      crossPaint,
+    );
+
+    // Center of gravity dot
+    final cogX = cx + (rightPct - leftPct) / 100 * size.width * 0.25;
+    final cogY = cy + (rearPct - frontPct) / 100 * size.height * 0.35;
+    canvas.drawCircle(
+      Offset(cogX, cogY),
+      4,
+      Paint()..color = accent,
+    );
+    canvas.drawCircle(
+      Offset(cogX, cogY),
+      4,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    // Labels
+    _drawLabel(canvas, '${frontPct.round()}%',
+        Offset(cx, cy - size.height * 0.38), accent);
+    _drawLabel(canvas, '${rearPct.round()}%',
+        Offset(cx, cy + size.height * 0.38), accent);
+    _drawLabel(canvas, '${leftPct.round()}%',
+        Offset(cx - size.width * 0.28, cy), accent);
+    _drawLabel(canvas, '${rightPct.round()}%',
+        Offset(cx + size.width * 0.28, cy), accent);
+  }
+
+  void _drawLabel(
+      Canvas canvas, String text, Offset pos, Color color) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: 7,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(pos.dx - tp.width / 2, pos.dy - tp.height / 2),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _BalanceDiagramPainter old) =>
+      old.frontPct != frontPct ||
+      old.rearPct != rearPct ||
+      old.leftPct != leftPct ||
+      old.rightPct != rightPct;
 }

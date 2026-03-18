@@ -276,7 +276,9 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
       TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
       TRIM(LAC.CODIGOARTICULO) AS ARTICULO,
       LAC.CANTIDADUNIDADES AS CANTIDAD,
-      LAC.CANTIDADENVASES AS CAJAS
+      LAC.CANTIDADENVASES AS CAJAS,
+      COALESCE(LAC.IMPORTEVENTA, 0) AS IMPORTE_VENTA,
+      COALESCE(LAC.IMPORTEMARGENREAL, 0) AS MARGEN_REAL
     FROM DSEDAC.OPP OPP
     INNER JOIN DSEDAC.CPC CPC
       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
@@ -301,6 +303,8 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
         articleCode: (r.ARTICULO || '').trim(),
         units: parseFloat(r.CANTIDAD) || 0,
         boxes: parseFloat(r.CAJAS) || 0,
+        importeVenta: parseFloat(r.IMPORTE_VENTA) || 0,
+        margenReal: parseFloat(r.MARGEN_REAL) || 0,
     }))
     .filter(o => {
         // Skip zero-quantity lines
@@ -399,6 +403,8 @@ function binPack3D(boxes, interior, tolerancePct = 5) {
                 id: box.id, label: box.label,
                 orderNumber: box.orderNumber, clientCode: box.clientCode,
                 articleCode: box.articleCode, weight: box.weight,
+                importeEur: box.importeEur || 0,
+                margenEur: box.margenEur || 0,
                 x: bestFit.x, y: bestFit.y, z: bestFit.z,
                 w: bestRot.w, d: bestRot.d, h: bestRot.h,
             });
@@ -416,6 +422,8 @@ function binPack3D(boxes, interior, tolerancePct = 5) {
                 id: box.id, label: box.label,
                 orderNumber: box.orderNumber, clientCode: box.clientCode,
                 articleCode: box.articleCode, weight: box.weight,
+                importeEur: box.importeEur || 0,
+                margenEur: box.margenEur || 0,
                 w: box.w, d: box.d, h: box.h,
             });
         }
@@ -429,6 +437,9 @@ function binPack3D(boxes, interior, tolerancePct = 5) {
     const overflowWeight = overflow.reduce((sum, b) => sum + b.weight, 0);
     const totalDemandVolume = usedVolume + overflowVolume;
     const totalDemandWeight = totalWeight + overflowWeight;
+    const totalImporteEur = placed.reduce((sum, b) => sum + (b.importeEur || 0), 0);
+    const totalMargenEur = placed.reduce((sum, b) => sum + (b.margenEur || 0), 0);
+    const overflowImporteEur = overflow.reduce((sum, b) => sum + (b.importeEur || 0), 0);
 
     return {
         placed,
@@ -447,6 +458,9 @@ function binPack3D(boxes, interior, tolerancePct = 5) {
             totalDemandWeightKg: Math.round(totalDemandWeight * 100) / 100,
             demandVsCapacityPct: containerVolume > 0
                 ? Math.round((totalDemandVolume / containerVolume) * 10000) / 100 : 0,
+            totalImporteEur: Math.round(totalImporteEur * 100) / 100,
+            totalMargenEur: Math.round(totalMargenEur * 100) / 100,
+            overflowImporteEur: Math.round(overflowImporteEur * 100) / 100,
         },
     };
 }
@@ -514,6 +528,10 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
             : numBoxes * (dim.weightKg || DEFAULT_WEIGHT_PER_BOX);
         const weightPerBox = lineWeight / numBoxes;
 
+        // EUR per box: distribute line totals evenly across physical boxes
+        const importePerBox = order.importeVenta / numBoxes;
+        const margenPerBox = order.margenReal / numBoxes;
+
         for (let i = 0; i < numBoxes; i++) {
             boxes.push({
                 id: boxId++,
@@ -525,6 +543,8 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
                 orderNumber: order.orderNumber,
                 clientCode: order.clientCode,
                 articleCode: order.articleCode,
+                importeEur: Math.round(importePerBox * 100) / 100,
+                margenEur: Math.round(margenPerBox * 100) / 100,
             });
         }
     }
@@ -657,9 +677,10 @@ async function optimizeForProfit(vehicleCode, year, month, day) {
             : numBoxes * (d.weightKg || DEFAULT_WEIGHT_PER_BOX);
         const lineVolume = (d.largoCm * d.anchoCm * d.altoCm) * numBoxes;
 
-        // Use units * weight as proxy for value (heavier = more product = more revenue)
-        // In a real scenario this would come from a price table
-        const lineValue = lineWeight;
+        // Real EUR from invoice data (fallback to weight if no pricing)
+        const lineValue = order.importeVenta > 0
+            ? order.importeVenta
+            : lineWeight;
 
         if (!orderAgg[order.orderNumber]) {
             orderAgg[order.orderNumber] = {
@@ -776,8 +797,10 @@ async function smartOptimize(vehicleCode, year, month, day, mustDeliverOrders = 
             ? order.units * (d.weightKg || DEFAULT_WEIGHT_PER_BOX)
             : numBoxes * (d.weightKg || DEFAULT_WEIGHT_PER_BOX);
         const lineVolume = (d.largoCm * d.anchoCm * d.altoCm) * numBoxes;
-        // Proxy valor: peso × 2.5 EUR/kg (sustituir por IMPORTELINEAALBARAN cuando esté disponible)
-        const lineValue = lineWeight * 2.5;
+        // Real EUR value from invoice (fallback to weight proxy if no data)
+        const lineValue = order.importeVenta > 0
+            ? order.importeVenta
+            : lineWeight * 2.5;
 
         if (!orderAgg[order.orderNumber]) {
             orderAgg[order.orderNumber] = {

@@ -13,6 +13,7 @@ class ClientSummary {
   final List<TruckOrder> orders = [];
   double totalWeight = 0;
   int totalBoxes = 0;
+  double totalImporteEur = 0;
   ClientSummary({required this.code, required this.name});
 }
 
@@ -262,6 +263,24 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                 color: sc, fontSize: 11, fontWeight: FontWeight.w800),
           ),
         ),
+        if (m.totalImporteEur > 0) ...[
+          const SizedBox(width: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF4CAF50).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '${m.totalImporteEur.toStringAsFixed(0)} €',
+              style: const TextStyle(
+                color: Color(0xFF4CAF50),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
       ]),
     );
   }
@@ -338,6 +357,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
       cs.orders.add(o);
       cs.totalWeight += o.units * o.weightPerUnit;
       cs.totalBoxes += o.boxes > 0 ? o.boxes.round() : 1;
+      cs.totalImporteEur += o.units * o.weightPerUnit * 2.5;
     }
     final clients = clientMap.values.toList()
       ..sort((a, b) => b.totalWeight.compareTo(a.totalWeight));
@@ -364,6 +384,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             _summaryItem('Bultos', '${m.placedCount}', AppTheme.neonGreen),
             _summaryItem(
                 'Peso', '${m.totalWeightKg.toStringAsFixed(0)} kg', Colors.amber),
+            _summaryItem('Valor', '${m.totalImporteEur.toStringAsFixed(0)}€', const Color(0xFF4CAF50)),
           ],
         ),
       ),
@@ -408,7 +429,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
         subtitle: Text(
-            '${c.orders.length} lineas · ${c.totalBoxes} bultos · ${c.totalWeight.toStringAsFixed(0)} kg',
+            '${c.orders.length} lin · ${c.totalBoxes} bul · ${c.totalWeight.toStringAsFixed(0)} kg${c.totalImporteEur > 0 ? ' · ${c.totalImporteEur.toStringAsFixed(0)}€' : ''}',
             style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.35), fontSize: 10)),
         iconColor: Colors.white30,

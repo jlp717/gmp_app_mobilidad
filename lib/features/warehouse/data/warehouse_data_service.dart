@@ -114,6 +114,9 @@ class PlacedBox {
   final String clientCode;
   final String articleCode;
   final double weight;
+  // EUR values from invoice
+  final double importeEur;
+  final double margenEur;
   // Posición (esquina inferior-izquierda-frontal)
   final double x, y, z;
   // Dimensiones tal como fue colocada
@@ -126,6 +129,8 @@ class PlacedBox {
     required this.clientCode,
     required this.articleCode,
     required this.weight,
+    this.importeEur = 0,
+    this.margenEur = 0,
     required this.x,
     required this.y,
     required this.z,
@@ -143,6 +148,8 @@ class PlacedBox {
     clientCode: (json['clientCode'] as String?) ?? '',
     articleCode: (json['articleCode'] as String?) ?? '',
     weight: ((json['weight'] ?? 0) as num).toDouble(),
+    importeEur: ((json['importeEur'] ?? 0) as num).toDouble(),
+    margenEur: ((json['margenEur'] ?? 0) as num).toDouble(),
     x: ((json['x'] ?? 0) as num).toDouble(),
     y: ((json['y'] ?? 0) as num).toDouble(),
     z: ((json['z'] ?? 0) as num).toDouble(),
@@ -168,6 +175,10 @@ class LoadMetrics {
   final double totalDemandWeightKg;
   final double demandVsCapacityPct;
   final String status; // SEGURO, OPTIMO, EXCESO
+  // EUR economic data
+  final double totalImporteEur;
+  final double totalMargenEur;
+  final double overflowImporteEur;
 
   LoadMetrics({
     required this.totalBoxes,
@@ -184,6 +195,9 @@ class LoadMetrics {
     required this.totalDemandWeightKg,
     required this.demandVsCapacityPct,
     required this.status,
+    this.totalImporteEur = 0,
+    this.totalMargenEur = 0,
+    this.overflowImporteEur = 0,
   });
 
   factory LoadMetrics.fromJson(Map<String, dynamic> json) => LoadMetrics(
@@ -201,6 +215,9 @@ class LoadMetrics {
     totalDemandWeightKg: ((json['totalDemandWeightKg'] ?? 0) as num).toDouble(),
     demandVsCapacityPct: ((json['demandVsCapacityPct'] ?? 0) as num).toDouble(),
     status: (json['status'] as String?) ?? 'SEGURO',
+    totalImporteEur: ((json['totalImporteEur'] ?? 0) as num).toDouble(),
+    totalMargenEur: ((json['totalMargenEur'] ?? 0) as num).toDouble(),
+    overflowImporteEur: ((json['overflowImporteEur'] ?? 0) as num).toDouble(),
   );
 }
 

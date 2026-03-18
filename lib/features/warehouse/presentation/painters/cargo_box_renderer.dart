@@ -227,6 +227,10 @@ class CargoBoxRenderer {
 
     if (!isTiny) {
       _drawBoxLabel(canvas, topPts, b, color, isSmall);
+      // Size class badge on front face (S/M/L/XL)
+      if (!isSmall) {
+        _drawSizeClassBadge(canvas, frontPts, b.weight);
+      }
     }
   }
 
@@ -284,7 +288,7 @@ class CargoBoxRenderer {
           : '${b.weight.toStringAsFixed(1)}kg';
       _drawPillLabel(
         canvas,
-        Offset(center.dx, center.dy + 10),
+        Offset(center.dx, center.dy + 9),
         weightText,
         const TextStyle(
           color: Colors.white,
@@ -292,6 +296,24 @@ class CargoBoxRenderer {
           fontWeight: FontWeight.w500,
         ),
         bgColor: const Color(0xAA000000),
+      );
+    }
+
+    // EUR value badge (only for larger boxes with importeEur > 0)
+    if (!isSmall && b.importeEur > 0) {
+      final eurText = b.importeEur >= 1000
+          ? '${(b.importeEur / 1000).toStringAsFixed(1)}k€'
+          : '${b.importeEur.toStringAsFixed(2)}€';
+      _drawPillLabel(
+        canvas,
+        Offset(center.dx, center.dy + 20),
+        eurText,
+        const TextStyle(
+          color: Colors.white,
+          fontSize: 7,
+          fontWeight: FontWeight.w500,
+        ),
+        bgColor: const Color(0xAA1B5E20),
       );
     }
 
@@ -364,6 +386,52 @@ class CargoBoxRenderer {
   Color _textColorForBg(Color bg) {
     final luminance = bg.computeLuminance();
     return luminance > 0.45 ? const Color(0xFF1A1A2E) : Colors.white;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // SIZE CLASS BADGE — S/M/L/XL on front face
+  // ═══════════════════════════════════════════════════════════════════════
+
+  void _drawSizeClassBadge(
+      Canvas canvas, List<Offset> frontPts, double weight) {
+    final faceW = (frontPts[1] - frontPts[0]).distance;
+    final faceH = (frontPts[3] - frontPts[0]).distance;
+    if (faceW < 30 || faceH < 20) return;
+
+    final label = CargoColors.sizeLabel(weight);
+    final badgeColor = CargoColors.sizeColor(weight);
+
+    // Bottom-left of front face
+    final bx = frontPts[0].dx + faceW * 0.1;
+    final by = frontPts[0].dy - faceH * 0.2;
+    final center = Offset(bx, by);
+
+    final r = math.min(faceW, faceH) * 0.15;
+    if (r < 4) return;
+
+    // Circle background
+    canvas.drawCircle(
+      center,
+      r,
+      Paint()..color = badgeColor.withValues(alpha: 0.7),
+    );
+
+    // Label text
+    final tp = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: math.min(r * 1.1, 8).toDouble(),
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════
