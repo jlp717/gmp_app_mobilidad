@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
+const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 
 // Ensure directories exist
@@ -135,8 +136,11 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 
         logger.info(`[ENTREGAS] Getting pending deliveries for repartidor ${repartidorId} (${dia}/${mes}/${ano})`);
 
-        // Handle multiple IDs (comma separated) case
-        const ids = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        // Handle multiple IDs (comma separated) case - SECURITY: sanitize
+        const ids = sanitizeCodeList(repartidorId);
+        if (!ids) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
 
         // Load payment conditions from JAVIER.PAYMENT_CONDITIONS table
         let paymentConditions = {};
@@ -757,16 +761,14 @@ router.post('/update', async (req, res) => {
         // AUDIT FIX: Save old state for recovery before delete
         let previousState = null;
         try {
-            const prev = await query(`SELECT * FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
+            const prev = await queryWithParams(`SELECT * FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [itemId]);
             if (prev.length > 0) previousState = prev[0];
         } catch (_) {}
 
         // 1. Delete existing (if any)
-        await query(`DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
+        await queryWithParams(`DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [itemId]);
 
         // 2. Insert new record
-        const obsSafe = observaciones ? observaciones.replace(/'/g, "''") : '';
-        const firmaSafe = firma ? firma.replace(/'/g, "''") : '';
         const lat = latitud || 0;
         const lon = longitud || 0;
 
@@ -781,29 +783,28 @@ router.post('/update', async (req, res) => {
             inspectorId = inspectorId.substring(0, 20);
         }
 
-        const insertSql = `
-            INSERT INTO JAVIER.DELIVERY_STATUS 
-            (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT)
-            VALUES ('${itemId}', '${status}', '${obsSafe}', '${firmaSafe}', ${lat}, ${lon}, '${inspectorId}', CURRENT TIMESTAMP)
-        `;
-
         try {
-            await query(insertSql, false);
+            await queryWithParams(`
+                INSERT INTO JAVIER.DELIVERY_STATUS 
+                (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT)
+                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
+            `, [itemId, status, observaciones || '', firma || '', lat, lon, inspectorId]);
         } catch (insertErr) {
             // AUDIT FIX: Restore previous state if INSERT fails after DELETE
             logger.error(`[ENTREGAS] INSERT failed for ${itemId}: ${insertErr.message}`);
             if (previousState) {
                 try {
-                    const restoreSql = `
+                    await queryWithParams(`
                         INSERT INTO JAVIER.DELIVERY_STATUS
                         (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT)
-                        VALUES ('${previousState.ID}', '${previousState.STATUS}',
-                                '${(previousState.OBSERVACIONES || '').replace(/'/g, "''")}',
-                                '${previousState.FIRMA_PATH || ''}',
-                                ${previousState.LATITUD || 0}, ${previousState.LONGITUD || 0},
-                                '${previousState.REPARTIDOR_ID || ''}', CURRENT TIMESTAMP)
-                    `;
-                    await query(restoreSql, false);
+                        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
+                    `, [
+                        previousState.ID, previousState.STATUS,
+                        previousState.OBSERVACIONES || '',
+                        previousState.FIRMA_PATH || '',
+                        previousState.LATITUD || 0, previousState.LONGITUD || 0,
+                        previousState.REPARTIDOR_ID || ''
+                    ]);
                     logger.warn(`[ENTREGAS] Restored previous state for ${itemId}`);
                 } catch (restoreErr) {
                     logger.error(`[ENTREGAS] CRITICAL: Could not restore ${itemId}: ${restoreErr.message}`);
@@ -871,16 +872,16 @@ router.post('/uploads/signature', async (req, res) => {
                 // Upsert logic (Delete + Insert is safest fallback)
                 const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
                 const safeDni = dni.replace(/[^a-zA-Z0-9]/g, '');
-                const safeNombre = (nombre || '').replace(/'/g, "''").replace(/[^a-zA-Z0-9 .,'áéíóúñÁÉÍÓÚÑ()-]/g, '');
-                await query(`
+                const safeNombre = sanitizeForSQL(nombre || '');
+                await queryWithParams(`
                     DELETE FROM JAVIER.CLIENT_SIGNERS 
-                    WHERE CODIGOCLIENTE = '${safeClientCode}' AND DNI = '${safeDni}'
-                `, false, false);
+                    WHERE CODIGOCLIENTE = ? AND DNI = ?
+                `, [safeClientCode, safeDni]);
 
-                await query(`
+                await queryWithParams(`
                     INSERT INTO JAVIER.CLIENT_SIGNERS (CODIGOCLIENTE, DNI, NOMBRE, LAST_USED, USAGE_COUNT)
-                    VALUES ('${safeClientCode}', '${safeDni}', '${safeNombre}', CURRENT DATE, 1)
-                `, false, true);
+                    VALUES (?, ?, ?, CURRENT DATE, 1)
+                `, [safeClientCode, safeDni, safeNombre]);
 
                 logger.info(`[SIGN] Saved signer info for client ${clientCode}: ${dni} - ${nombre}`);
             } catch (dbError) {
@@ -951,25 +952,27 @@ router.post('/receipt/:entregaId', async (req, res) => {
             repartidor
         };
 
-        // Resolve signature path if relative
+        // Resolve signature path if relative - SECURITY: prevent path traversal
         let fullSignaturePath = null;
         if (signaturePath) {
-            fullSignaturePath = path.join(photosDir, signaturePath);
-            logger.info(`[RECEIPT] Signature path: relative='${signaturePath}' full='${fullSignaturePath}' exists=${fs.existsSync(fullSignaturePath)}`);
-            if (!fs.existsSync(fullSignaturePath)) {
-                // Try absolute path directly (in case signaturePath is already absolute)
-                if (fs.existsSync(signaturePath)) {
-                    fullSignaturePath = signaturePath;
-                    logger.info(`[RECEIPT] Using absolute signature path: ${signaturePath}`);
+            // Validate no path traversal
+            const normalizedSig = path.normalize(signaturePath).replace(/\\/g, '/');
+            if (normalizedSig.includes('..') || path.isAbsolute(normalizedSig)) {
+                logger.warn(`[RECEIPT] Rejected suspicious signature path: ${signaturePath}`);
+                fullSignaturePath = null;
+            } else {
+                fullSignaturePath = path.join(photosDir, normalizedSig);
+                // Verify resolved path is within photosDir
+                const resolvedPath = path.resolve(fullSignaturePath);
+                const resolvedBase = path.resolve(photosDir);
+                if (!resolvedPath.startsWith(resolvedBase)) {
+                    logger.warn(`[RECEIPT] Path traversal attempt blocked: ${signaturePath}`);
+                    fullSignaturePath = null;
                 } else {
-                    // Try under uploads/photos
-                    const altPath = path.join(photosDir, '..', signaturePath);
-                    if (fs.existsSync(altPath)) {
-                        fullSignaturePath = altPath;
-                        logger.info(`[RECEIPT] Using alt signature path: ${altPath}`);
-                    } else {
+                    logger.info(`[RECEIPT] Signature path: relative='${signaturePath}' full='${fullSignaturePath}' exists=${fs.existsSync(fullSignaturePath)}`);
+                    if (!fs.existsSync(fullSignaturePath)) {
                         fullSignaturePath = null;
-                        logger.warn(`[RECEIPT] Signature not found at either path`);
+                        logger.warn(`[RECEIPT] Signature not found at path`);
                     }
                 }
             }

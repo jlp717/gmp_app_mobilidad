@@ -7,7 +7,8 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query, getPool } = require('../config/db');
+const { query, queryWithParams, getPool } = require('../config/db');
+const { sanitizeForSQL } = require('../utils/common');
 const loadPlanner = require('../services/loadPlanner');
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -157,6 +158,9 @@ async function initWarehouseTables() {
         { table: 'JAVIER.ALMACEN_ART_DIMENSIONES', col: 'APILABLE', ddl: `ALTER TABLE JAVIER.ALMACEN_ART_DIMENSIONES ADD COLUMN APILABLE CHAR(1) DEFAULT 'S'` },
         { table: 'JAVIER.ALMACEN_ART_DIMENSIONES', col: 'TEMPERATURA', ddl: `ALTER TABLE JAVIER.ALMACEN_ART_DIMENSIONES ADD COLUMN TEMPERATURA VARCHAR(10) DEFAULT 'AMBIENTE'` },
         { table: 'JAVIER.ALMACEN_ART_DIMENSIONES', col: 'MAX_APILADO', ddl: `ALTER TABLE JAVIER.ALMACEN_ART_DIMENSIONES ADD COLUMN MAX_APILADO INTEGER DEFAULT 3` },
+        { table: 'JAVIER.ALMACEN_CARGA_HISTORICO', col: 'IMPORTE_TOTAL', ddl: `ALTER TABLE JAVIER.ALMACEN_CARGA_HISTORICO ADD COLUMN IMPORTE_TOTAL DECIMAL(12,2) DEFAULT 0` },
+        { table: 'JAVIER.ALMACEN_CARGA_HISTORICO', col: 'MARGEN_TOTAL', ddl: `ALTER TABLE JAVIER.ALMACEN_CARGA_HISTORICO ADD COLUMN MARGEN_TOTAL DECIMAL(12,2) DEFAULT 0` },
+        { table: 'JAVIER.ALMACEN_CARGA_HISTORICO', col: 'DETALLES_JSON', ddl: `ALTER TABLE JAVIER.ALMACEN_CARGA_HISTORICO ADD COLUMN DETALLES_JSON CLOB(1M) DEFAULT '{}'` },
     ];
     for (const ac of alterCols) {
         const pool = getPool();
@@ -292,25 +296,58 @@ router.post('/load-plan', async (req, res) => {
 
         const result = await loadPlanner.planLoad(vehicleCode, y, m, d, tolerance);
 
-        // Save to history
+        // Save to history with detailed breakdown
         try {
-            await query(`
+            const clientBreakdown = {};
+            for (const box of (result.placed || [])) {
+                const cc = box.clientCode || 'DESCONOCIDO';
+                if (!clientBreakdown[cc]) {
+                    clientBreakdown[cc] = { clientCode: cc, clientName: box.clientName || cc, boxes: 0, weightKg: 0, importeEur: 0, margenEur: 0, articles: {} };
+                }
+                clientBreakdown[cc].boxes++;
+                clientBreakdown[cc].weightKg += (box.weight || 0);
+                clientBreakdown[cc].importeEur += (box.importeEur || 0);
+                clientBreakdown[cc].margenEur += (box.margenEur || 0);
+                const artKey = box.articleCode || 'UNK';
+                if (!clientBreakdown[cc].articles[artKey]) {
+                    clientBreakdown[cc].articles[artKey] = { code: artKey, name: box.label || artKey, boxes: 0, weightKg: 0, importeEur: 0 };
+                }
+                clientBreakdown[cc].articles[artKey].boxes++;
+                clientBreakdown[cc].articles[artKey].weightKg += (box.weight || 0);
+                clientBreakdown[cc].articles[artKey].importeEur += (box.importeEur || 0);
+            }
+            const detalles = {
+                clients: Object.values(clientBreakdown).map(c => ({
+                    ...c, articles: Object.values(c.articles),
+                    weightKg: Math.round(c.weightKg * 100) / 100,
+                    importeEur: Math.round(c.importeEur * 100) / 100,
+                    margenEur: Math.round(c.margenEur * 100) / 100,
+                })),
+                overflowCount: (result.overflow || []).length,
+            };
+            const detallesStr = JSON.stringify(detalles);
+
+            await queryWithParams(`
         INSERT INTO JAVIER.ALMACEN_CARGA_HISTORICO
           (CODIGOVEHICULO, FECHA_PLANIFICACION, PESO_TOTAL_KG, VOLUMEN_TOTAL_CM3,
-           PCT_VOLUMEN, PCT_PESO, NUM_ORDENES, NUM_BULTOS, ESTADO, CREATED_BY)
-        VALUES (
-          '${vehicleCode.replace(/'/g, "''")}',
-          '${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}',
-          ${result.metrics.totalWeightKg},
-          ${result.metrics.usedVolumeCm3},
-          ${result.metrics.volumeOccupancyPct},
-          ${result.metrics.weightOccupancyPct || 0},
-          ${result.metrics.placedCount},
-          ${result.metrics.totalBoxes},
-          '${result.metrics.status}',
-          '${(req.user?.code || 'SYSTEM').replace(/'/g, "''")}'
-        )
-      `);
+           PCT_VOLUMEN, PCT_PESO, NUM_ORDENES, NUM_BULTOS, ESTADO, CREATED_BY,
+           IMPORTE_TOTAL, MARGEN_TOTAL, DETALLES_JSON)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+                sanitizeForSQL(vehicleCode),
+                `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+                result.metrics.totalWeightKg,
+                result.metrics.usedVolumeCm3,
+                result.metrics.volumeOccupancyPct,
+                result.metrics.weightOccupancyPct || 0,
+                result.metrics.placedCount,
+                result.metrics.totalBoxes,
+                sanitizeForSQL(result.metrics.status),
+                sanitizeForSQL(req.user?.code || 'SYSTEM'),
+                result.metrics.totalImporteEur || 0,
+                result.metrics.totalMargenEur || 0,
+                detallesStr
+            ]);
         } catch (histErr) {
             logger.warn(`Error guardando histórico carga: ${histErr.message}`);
         }
@@ -507,32 +544,45 @@ router.get('/truck-config/:vehicleCode', async (req, res) => {
  */
 router.put('/truck-config/:vehicleCode', async (req, res) => {
     try {
-        const code = req.params.vehicleCode.replace(/'/g, "''");
+        const code = sanitizeForSQL(req.params.vehicleCode);
         const { largoInteriorCm, anchoInteriorCm, altoInteriorCm, toleranciaExceso, notas } = req.body;
 
         // Upsert
         try {
-            await query(`
+            await queryWithParams(`
         UPDATE JAVIER.ALMACEN_CAMIONES_CONFIG SET
-          LARGO_INTERIOR_CM = ${parseFloat(largoInteriorCm) || 'NULL'},
-          ANCHO_INTERIOR_CM = ${parseFloat(anchoInteriorCm) || 'NULL'},
-          ALTO_INTERIOR_CM = ${parseFloat(altoInteriorCm) || 'NULL'},
-          TOLERANCIA_EXCESO = ${parseFloat(toleranciaExceso) || 5},
-          NOTAS = '${(notas || '').replace(/'/g, "''").substring(0, 250)}',
+          LARGO_INTERIOR_CM = ?,
+          ANCHO_INTERIOR_CM = ?,
+          ALTO_INTERIOR_CM = ?,
+          TOLERANCIA_EXCESO = ?,
+          NOTAS = ?,
           UPDATED_AT = CURRENT_TIMESTAMP,
-          UPDATED_BY = '${(req.user?.code || 'SYSTEM').replace(/'/g, "''")}'
-        WHERE CODIGOVEHICULO = '${code}'
-      `);
+          UPDATED_BY = ?
+        WHERE CODIGOVEHICULO = ?
+      `, [
+                parseFloat(largoInteriorCm) || null,
+                parseFloat(anchoInteriorCm) || null,
+                parseFloat(altoInteriorCm) || null,
+                parseFloat(toleranciaExceso) || 5,
+                (notas || '').substring(0, 250),
+                sanitizeForSQL(req.user?.code || 'SYSTEM'),
+                code
+            ]);
         } catch (updateErr) {
             // Try insert if update didn't match
-            await query(`
+            await queryWithParams(`
         INSERT INTO JAVIER.ALMACEN_CAMIONES_CONFIG
           (CODIGOVEHICULO, LARGO_INTERIOR_CM, ANCHO_INTERIOR_CM, ALTO_INTERIOR_CM, TOLERANCIA_EXCESO, NOTAS, UPDATED_BY)
-        VALUES ('${code}', ${parseFloat(largoInteriorCm) || 'NULL'}, ${parseFloat(anchoInteriorCm) || 'NULL'},
-                ${parseFloat(altoInteriorCm) || 'NULL'}, ${parseFloat(toleranciaExceso) || 5},
-                '${(notas || '').replace(/'/g, "''").substring(0, 250)}',
-                '${(req.user?.code || 'SYSTEM').replace(/'/g, "''")}')
-      `);
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+                code,
+                parseFloat(largoInteriorCm) || null,
+                parseFloat(anchoInteriorCm) || null,
+                parseFloat(altoInteriorCm) || null,
+                parseFloat(toleranciaExceso) || 5,
+                (notas || '').substring(0, 250),
+                sanitizeForSQL(req.user?.code || 'SYSTEM')
+            ]);
         }
 
         const updated = await loadPlanner.getTruckConfig(req.params.vehicleCode);
@@ -647,16 +697,16 @@ router.post('/personnel', async (req, res) => {
         const { nombre, codigoVendedor, rol, telefono, email } = req.body;
         if (!nombre) return res.status(400).json({ error: 'nombre es obligatorio' });
 
-        await query(`
+        await queryWithParams(`
       INSERT INTO JAVIER.ALMACEN_PERSONAL (NOMBRE, CODIGO_VENDEDOR, ROL, TELEFONO, EMAIL)
-      VALUES (
-        '${nombre.replace(/'/g, "''").substring(0, 100)}',
-        '${(codigoVendedor || '').replace(/'/g, "''").substring(0, 20)}',
-        '${(rol || 'PREPARADOR').replace(/'/g, "''").substring(0, 30)}',
-        '${(telefono || '').replace(/'/g, "''").substring(0, 20)}',
-        '${(email || '').replace(/'/g, "''").substring(0, 100)}'
-      )
-    `);
+      VALUES (?, ?, ?, ?, ?)
+    `, [
+            sanitizeForSQL(nombre).substring(0, 100),
+            sanitizeForSQL(codigoVendedor || '').substring(0, 20),
+            sanitizeForSQL(rol || 'PREPARADOR').substring(0, 30),
+            sanitizeForSQL(telefono || '').substring(0, 20),
+            sanitizeForSQL(email || '').substring(0, 100)
+        ]);
 
         res.json({ success: true, message: 'Operario añadido' });
     } catch (error) {
@@ -674,15 +724,17 @@ router.put('/personnel/:id', async (req, res) => {
         const { nombre, codigoVendedor, rol, telefono, email, activo } = req.body;
 
         const sets = [];
-        if (nombre) sets.push(`NOMBRE = '${nombre.replace(/'/g, "''").substring(0, 100)}'`);
-        if (codigoVendedor !== undefined) sets.push(`CODIGO_VENDEDOR = '${codigoVendedor.replace(/'/g, "''")}'`);
-        if (rol) sets.push(`ROL = '${rol.replace(/'/g, "''")}'`);
-        if (telefono !== undefined) sets.push(`TELEFONO = '${telefono.replace(/'/g, "''")}'`);
-        if (email !== undefined) sets.push(`EMAIL = '${email.replace(/'/g, "''")}'`);
-        if (activo !== undefined) sets.push(`ACTIVO = '${activo ? 'S' : 'N'}'`);
+        const params = [];
+        if (nombre) { sets.push('NOMBRE = ?'); params.push(sanitizeForSQL(nombre).substring(0, 100)); }
+        if (codigoVendedor !== undefined) { sets.push('CODIGO_VENDEDOR = ?'); params.push(sanitizeForSQL(codigoVendedor)); }
+        if (rol) { sets.push('ROL = ?'); params.push(sanitizeForSQL(rol)); }
+        if (telefono !== undefined) { sets.push('TELEFONO = ?'); params.push(sanitizeForSQL(telefono)); }
+        if (email !== undefined) { sets.push('EMAIL = ?'); params.push(sanitizeForSQL(email)); }
+        if (activo !== undefined) { sets.push('ACTIVO = ?'); params.push(activo ? 'S' : 'N'); }
         sets.push('UPDATED_AT = CURRENT_TIMESTAMP');
+        params.push(id);
 
-        await query(`UPDATE JAVIER.ALMACEN_PERSONAL SET ${sets.join(', ')} WHERE ID = ${id}`);
+        await queryWithParams(`UPDATE JAVIER.ALMACEN_PERSONAL SET ${sets.join(', ')} WHERE ID = ?`, params);
         res.json({ success: true });
     } catch (error) {
         logger.error(`Update personnel error: ${error.message}`);
@@ -713,12 +765,9 @@ router.post('/personnel/:id/delete', async (req, res) => {
  */
 router.get('/articles', async (req, res) => {
     try {
-        const { search, onlyWithDimensions, limit = 2000 } = req.query;
+        const { search, onlyWithDimensions, limit = 500 } = req.query;
         let where = "TRIM(A.CODIGOARTICULO) <> '' AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)";
 
-        // GOD MODE V4: Filtro nuclear de artículos basura.
-        // La BD tiene 6182 articles, 3177 activos, pero cientos son instrucciones internas del AS400
-        // (códigos 0000-0099, K, D001, etc.) que aparecen como PESO=1 genérico.
         const garbageKeywords = [
             'PRUEBA', 'TEST', 'DESCUENTO', 'ESTIMADO', 'CT CT', 'CTR ', 'URGENTE',
             'REPARTIR', 'ENVIAR', 'ULTIMA HORA', 'GASTOS ESTABLECIMIENTO', 'COLABORACION GASTOS',
@@ -731,40 +780,91 @@ router.get('/articles', async (req, res) => {
         for (const kw of garbageKeywords) {
             where += ` AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%${kw}%'`;
         }
-        // Exclude articles with internal codes (numeric codes < 100 that are notes/instructions)
         where += " AND NOT (LENGTH(TRIM(A.CODIGOARTICULO)) = 1)";
         where += " AND TRIM(A.CODIGOARTICULO) NOT IN ('0000','0006','0022','0043','0045','0046','0047','0051','0053','0054','0056','0058','0061','0070','0071','D001','K')";
 
         if (search) {
-            const s = search.replace(/'/g, "''").trim().toUpperCase();
+            const s = sanitizeForSQL(search.trim().toUpperCase());
             where += ` AND (UPPER(TRIM(A.CODIGOARTICULO)) LIKE '%${s}%' OR UPPER(A.DESCRIPCIONARTICULO) LIKE '%${s}%')`;
         }
         if (onlyWithDimensions === 'true') {
             where += ' AND D.CODIGOARTICULO IS NOT NULL';
         }
+
+        let orderBy = 'A.CODIGOARTICULO';
+        let extraJoin = '';
+        let recentCol = '0 AS EN_PEDIDOS_RECIENTES';
+        if (!search) {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = now.getMonth() + 1;
+            const d = now.getDate();
+            extraJoin = `
+                LEFT JOIN (
+                    SELECT DISTINCT TRIM(LAC2.CODIGOARTICULO) AS ART_CODE
+                    FROM DSEDAC.OPP OPP2
+                    INNER JOIN DSEDAC.CPC CPC2
+                        ON OPP2.NUMEROORDENPREPARACION = CPC2.NUMEROORDENPREPARACION
+                        AND OPP2.EJERCICIOORDENPREPARACION = CPC2.EJERCICIOORDENPREPARACION
+                    INNER JOIN DSEDAC.LAC LAC2
+                        ON CPC2.NUMEROALBARAN = LAC2.NUMEROALBARAN
+                        AND CPC2.EJERCICIOALBARAN = LAC2.EJERCICIOALBARAN
+                        AND TRIM(CPC2.SERIEALBARAN) = TRIM(LAC2.SERIEALBARAN)
+                    WHERE OPP2.ANOREPARTO = ${y} AND OPP2.MESREPARTO = ${m} AND OPP2.DIAREPARTO BETWEEN ${Math.max(1, d - 7)} AND ${d}
+                ) RECENT ON TRIM(A.CODIGOARTICULO) = RECENT.ART_CODE
+            `;
+            recentCol = 'CASE WHEN RECENT.ART_CODE IS NOT NULL THEN 1 ELSE 0 END AS EN_PEDIDOS_RECIENTES';
+            orderBy = 'CASE WHEN D.CODIGOARTICULO IS NOT NULL THEN 0 ELSE 1 END, CASE WHEN RECENT.ART_CODE IS NOT NULL THEN 0 ELSE 1 END, A.CODIGOARTICULO';
+        }
+
         const rows = await query(`
             SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
                    COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA,
-                   D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS
+                   D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS,
+                   ${recentCol}
             FROM DSEDAC.ART A
             LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
+            ${extraJoin}
             WHERE ${where}
-            ORDER BY A.CODIGOARTICULO
+            ORDER BY ${orderBy}
             FETCH FIRST ${parseInt(limit)} ROWS ONLY
         `);
+
+        const estimateFn = require('../services/loadPlanner').estimateBoxDimensions;
+
         res.json({
-            articles: rows.map(r => ({
-                code: (r.CODE || '').trim(),
-                name: (r.NOMBRE || '').trim(),
-                weight: parseFloat(r.PESO) || 0,
-                unitsPerBox: parseInt(r.UNIDADESCAJA) || 1,
-                hasRealDimensions: r.LARGO_CM != null,
-                largoCm: parseFloat(r.LARGO_CM) || null,
-                anchoCm: parseFloat(r.ANCHO_CM) || null,
-                altoCm: parseFloat(r.ALTO_CM) || null,
-                pesoOverrideKg: parseFloat(r.PESO_CAJA_KG) || null,
-                notas: (r.NOTAS || '').trim(),
-            })),
+            articles: rows.map(r => {
+                const hasReal = r.LARGO_CM != null;
+                let estLargo = null, estAncho = null, estAlto = null;
+                if (!hasReal && estimateFn) {
+                    try {
+                        const est = estimateFn(
+                            parseFloat(r.PESO) || 0,
+                            parseInt(r.UNIDADESCAJA) || 1,
+                            (r.NOMBRE || '')
+                        );
+                        estLargo = est.largo;
+                        estAncho = est.ancho;
+                        estAlto = est.alto;
+                    } catch(e) { /* ignore */ }
+                }
+                return {
+                    code: (r.CODE || '').trim(),
+                    name: (r.NOMBRE || '').trim(),
+                    weight: parseFloat(r.PESO) || 0,
+                    unitsPerBox: parseInt(r.UNIDADESCAJA) || 1,
+                    hasRealDimensions: hasReal,
+                    largoCm: parseFloat(r.LARGO_CM) || null,
+                    anchoCm: parseFloat(r.ANCHO_CM) || null,
+                    altoCm: parseFloat(r.ALTO_CM) || null,
+                    estLargoCm: estLargo,
+                    estAnchoCm: estAncho,
+                    estAltoCm: estAlto,
+                    pesoOverrideKg: parseFloat(r.PESO_CAJA_KG) || null,
+                    notas: (r.NOTAS || '').trim(),
+                    inRecentOrders: r.EN_PEDIDOS_RECIENTES === 1,
+                };
+            }),
         });
     } catch (error) {
         logger.error(`Articles list error: ${error.message}`);
@@ -781,8 +881,8 @@ router.get('/articles', async (req, res) => {
  */
 router.get('/article-dimensions/:code', async (req, res) => {
     try {
-        const code = req.params.code.replace(/'/g, "''").trim();
-        const rows = await query(`
+        const code = sanitizeForSQL(req.params.code.trim());
+        const rows = await queryWithParams(`
       SELECT 
         TRIM(A.CODIGOARTICULO) AS CODE,
         TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
@@ -790,8 +890,8 @@ router.get('/article-dimensions/:code', async (req, res) => {
         D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS
       FROM DSEDAC.ART A
       LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
-      WHERE TRIM(A.CODIGOARTICULO) = '${code}'
-    `);
+      WHERE TRIM(A.CODIGOARTICULO) = ?
+    `, [code]);
 
         if (!rows.length) return res.status(404).json({ error: 'Artículo no encontrado' });
 
@@ -822,33 +922,72 @@ router.get('/article-dimensions/:code', async (req, res) => {
  */
 router.put('/article-dimensions/:code', async (req, res) => {
     try {
-        const code = req.params.code.replace(/'/g, "''").trim();
+        const code = sanitizeForSQL(req.params.code.trim());
         const { largoCm, anchoCm, altoCm, pesoCajaKg, notas } = req.body;
 
         // Upsert via DELETE + INSERT (DB2 i5/OS compatible)
         try {
-            await query(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = '${code}'`);
+            await queryWithParams(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = ?`, [code]);
         } catch (e) { /* might not exist */ }
 
-        await query(`
+        await queryWithParams(`
       INSERT INTO JAVIER.ALMACEN_ART_DIMENSIONES
         (CODIGOARTICULO, LARGO_CM, ANCHO_CM, ALTO_CM, PESO_CAJA_KG, NOTAS, UPDATED_AT, UPDATED_BY)
-      VALUES (
-        '${code}',
-        ${parseFloat(largoCm) || 30},
-        ${parseFloat(anchoCm) || 20},
-        ${parseFloat(altoCm) || 15},
-        ${pesoCajaKg ? parseFloat(pesoCajaKg) : 'NULL'},
-        '${(notas || '').replace(/'/g, "''").substring(0, 200)}',
-        CURRENT_TIMESTAMP,
-        '${(req.user?.code || 'SYSTEM').replace(/'/g, "''")}'
-      )
-    `);
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+    `, [
+            code,
+            parseFloat(largoCm) || 30,
+            parseFloat(anchoCm) || 20,
+            parseFloat(altoCm) || 15,
+            pesoCajaKg ? parseFloat(pesoCajaKg) : null,
+            (notas || '').substring(0, 200),
+            sanitizeForSQL(req.user?.code || 'SYSTEM')
+        ]);
 
         res.json({ success: true, message: 'Dimensiones actualizadas' });
     } catch (error) {
         logger.error(`Update article dims error: ${error.message}`);
         res.status(500).json({ error: 'Error actualizando dimensiones', details: error.message });
+    }
+});
+
+/**
+ * POST /warehouse/articles/bulk-estimate
+ * Auto-estimate and save dimensions for articles without real dimensions
+ */
+router.post('/articles/bulk-estimate', async (req, res) => {
+    try {
+        const estimateFn = require('../services/loadPlanner').estimateBoxDimensions;
+        const rows = await query(`
+            SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
+                   COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA
+            FROM DSEDAC.ART A
+            LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
+            WHERE D.CODIGOARTICULO IS NULL
+              AND TRIM(A.CODIGOARTICULO) <> ''
+              AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)
+              AND COALESCE(A.PESO, 0) > 0
+            FETCH FIRST 500 ROWS ONLY
+        `);
+        let saved = 0;
+        for (const r of rows) {
+            try {
+                const est = estimateFn(parseFloat(r.PESO) || 0, parseInt(r.UNIDADESCAJA) || 1, (r.NOMBRE || ''));
+                const code = sanitizeForSQL((r.CODE || '').trim());
+                const pesoCaja = (parseFloat(r.PESO) || 0) * Math.max(parseInt(r.UNIDADESCAJA) || 1, 1);
+                try { await queryWithParams(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = ?`, [code]); } catch(e) {}
+                await queryWithParams(`
+                    INSERT INTO JAVIER.ALMACEN_ART_DIMENSIONES
+                        (CODIGOARTICULO, LARGO_CM, ANCHO_CM, ALTO_CM, PESO_CAJA_KG, NOTAS, UPDATED_BY)
+                    VALUES (?, ?, ?, ?, ?, 'Auto-estimado por familia/peso', 'SYSTEM')
+                `, [code, est.largo, est.ancho, est.alto, parseFloat(pesoCaja.toFixed(2))]);
+                saved++;
+            } catch(e) { /* skip individual errors */ }
+        }
+        res.json({ success: true, estimated: saved, total: rows.length });
+    } catch (error) {
+        logger.error(`Bulk estimate error: ${error.message}`);
+        res.status(500).json({ error: 'Error en estimacion masiva', details: error.message });
     }
 });
 
@@ -861,7 +1000,7 @@ router.put('/article-dimensions/:code', async (req, res) => {
  */
 router.get('/truck/:vehicleCode/orders', async (req, res) => {
     try {
-        const code = req.params.vehicleCode.replace(/'/g, "''");
+        const code = sanitizeForSQL(req.params.vehicleCode);
         const now = new Date();
         const year = parseInt(req.query.year) || now.getFullYear();
         const month = parseInt(req.query.month) || (now.getMonth() + 1);
@@ -936,44 +1075,98 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
  */
 router.get('/load-history', async (req, res) => {
     try {
-        const { vehicleCode, limit = 20 } = req.query;
+        const { vehicleCode, dateFrom, dateTo, limit = 50 } = req.query;
         let where = '1=1';
         if (vehicleCode) {
-            where = `CODIGOVEHICULO = '${vehicleCode.replace(/'/g, "''")}'`;
+            where += ` AND H.CODIGOVEHICULO = '${sanitizeForSQL(vehicleCode)}'`;
         }
-
+        if (dateFrom) {
+            where += ` AND H.FECHA_PLANIFICACION >= '${sanitizeForSQL(dateFrom)}'`;
+        }
+        if (dateTo) {
+            where += ` AND H.FECHA_PLANIFICACION <= '${sanitizeForSQL(dateTo)}'`;
+        }
         const rows = await query(`
-      SELECT ID, CODIGOVEHICULO, FECHA_PLANIFICACION,
-             PESO_TOTAL_KG, VOLUMEN_TOTAL_CM3, PCT_VOLUMEN, PCT_PESO,
-             NUM_ORDENES, NUM_BULTOS, ESTADO, CREATED_BY, CREATED_AT
-      FROM JAVIER.ALMACEN_CARGA_HISTORICO
-      WHERE ${where}
-      ORDER BY CREATED_AT DESC
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `);
-
+            SELECT H.ID, H.CODIGOVEHICULO, H.FECHA_PLANIFICACION,
+                   H.PESO_TOTAL_KG, H.VOLUMEN_TOTAL_CM3, H.PCT_VOLUMEN, H.PCT_PESO,
+                   H.NUM_ORDENES, H.NUM_BULTOS, H.ESTADO, H.CREATED_BY, H.CREATED_AT,
+                   COALESCE(H.IMPORTE_TOTAL, 0) AS IMPORTE_TOTAL,
+                   COALESCE(H.MARGEN_TOTAL, 0) AS MARGEN_TOTAL,
+                   H.DETALLES_JSON,
+                   TRIM(V.DESCRIPCIONVEHICULO) AS DESC_VEHICULO,
+                   TRIM(V.MATRICULA) AS MATRICULA
+            FROM JAVIER.ALMACEN_CARGA_HISTORICO H
+            LEFT JOIN DSEDAC.VEH V ON TRIM(H.CODIGOVEHICULO) = TRIM(V.CODIGOVEHICULO)
+            WHERE ${where}
+            ORDER BY H.CREATED_AT DESC
+            FETCH FIRST ${parseInt(limit)} ROWS ONLY
+        `);
         res.json({
-            history: rows.map(r => ({
-                id: r.ID,
-                vehicleCode: (r.CODIGOVEHICULO || '').trim(),
-                date: r.FECHA_PLANIFICACION,
-                weightKg: parseFloat(r.PESO_TOTAL_KG) || 0,
-                volumeCm3: parseFloat(r.VOLUMEN_TOTAL_CM3) || 0,
-                volumePct: parseFloat(r.PCT_VOLUMEN) || 0,
-                weightPct: parseFloat(r.PCT_PESO) || 0,
-                orderCount: r.NUM_ORDENES,
-                boxCount: r.NUM_BULTOS,
-                status: (r.ESTADO || '').trim(),
-                createdBy: (r.CREATED_BY || '').trim(),
-                createdAt: r.CREATED_AT,
-            })),
+            history: rows.map(r => {
+                let detalles = null;
+                try {
+                    const raw = r.DETALLES_JSON;
+                    if (raw && raw !== '{}' && String(raw).trim().length > 2) {
+                        detalles = JSON.parse(raw);
+                    }
+                } catch(e) { /* ignore */ }
+                return {
+                    id: r.ID,
+                    vehicleCode: (r.CODIGOVEHICULO || '').trim(),
+                    vehicleDesc: (r.DESC_VEHICULO || '').trim(),
+                    matricula: (r.MATRICULA || '').trim(),
+                    date: r.FECHA_PLANIFICACION,
+                    weightKg: parseFloat(r.PESO_TOTAL_KG) || 0,
+                    volumeCm3: parseFloat(r.VOLUMEN_TOTAL_CM3) || 0,
+                    volumePct: parseFloat(r.PCT_VOLUMEN) || 0,
+                    weightPct: parseFloat(r.PCT_PESO) || 0,
+                    orderCount: r.NUM_ORDENES,
+                    boxCount: r.NUM_BULTOS,
+                    status: (r.ESTADO || '').trim(),
+                    importeTotal: parseFloat(r.IMPORTE_TOTAL) || 0,
+                    margenTotal: parseFloat(r.MARGEN_TOTAL) || 0,
+                    detalles,
+                    createdBy: (r.CREATED_BY || '').trim(),
+                    createdAt: r.CREATED_AT,
+                };
+            }),
         });
     } catch (error) {
         if (isTableNotFound(error)) {
             return res.json({ history: [] });
         }
-        logger.error(`Load history error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo historial', details: error.message });
+        // Fallback without new columns
+        try {
+            const { vehicleCode, limit = 50 } = req.query;
+            let where = '1=1';
+            if (vehicleCode) where = `CODIGOVEHICULO = '${sanitizeForSQL(vehicleCode)}'`;
+            const rows = await query(`
+                SELECT ID, CODIGOVEHICULO, FECHA_PLANIFICACION,
+                       PESO_TOTAL_KG, VOLUMEN_TOTAL_CM3, PCT_VOLUMEN, PCT_PESO,
+                       NUM_ORDENES, NUM_BULTOS, ESTADO, CREATED_BY, CREATED_AT
+                FROM JAVIER.ALMACEN_CARGA_HISTORICO
+                WHERE ${where}
+                ORDER BY CREATED_AT DESC
+                FETCH FIRST ${parseInt(limit)} ROWS ONLY
+            `);
+            return res.json({
+                history: rows.map(r => ({
+                    id: r.ID, vehicleCode: (r.CODIGOVEHICULO || '').trim(),
+                    date: r.FECHA_PLANIFICACION,
+                    weightKg: parseFloat(r.PESO_TOTAL_KG) || 0,
+                    volumeCm3: parseFloat(r.VOLUMEN_TOTAL_CM3) || 0,
+                    volumePct: parseFloat(r.PCT_VOLUMEN) || 0,
+                    weightPct: parseFloat(r.PCT_PESO) || 0,
+                    orderCount: r.NUM_ORDENES, boxCount: r.NUM_BULTOS,
+                    status: (r.ESTADO || '').trim(),
+                    importeTotal: 0, margenTotal: 0, detalles: null,
+                    createdBy: (r.CREATED_BY || '').trim(), createdAt: r.CREATED_AT,
+                })),
+            });
+        } catch (err2) {
+            logger.error(`Load history fallback error: ${err2.message}`);
+            res.status(500).json({ error: 'Error obteniendo historial', details: err2.message });
+        }
     }
 });
 
@@ -987,16 +1180,16 @@ router.get('/load-history', async (req, res) => {
  */
 router.get('/manual-layout/:vehicleCode/:date', async (req, res) => {
     try {
-        const code = req.params.vehicleCode.replace(/'/g, "''").trim();
-        const date = req.params.date.replace(/'/g, "''").trim();
+        const code = sanitizeForSQL(req.params.vehicleCode.trim());
+        const date = sanitizeForSQL(req.params.date.trim());
 
-        const rows = await query(`
+        const rows = await queryWithParams(`
             SELECT ID, CODIGOVEHICULO, FECHA_CARGA, VENDEDOR,
                    LAYOUT_JSON, METRICS_JSON, CREATED_AT, UPDATED_AT
             FROM JAVIER.ALMACEN_CARGA_MANUAL
-            WHERE CODIGOVEHICULO = '${code}'
-              AND FECHA_CARGA = '${date}'
-        `, false, false);
+            WHERE CODIGOVEHICULO = ?
+              AND FECHA_CARGA = ?
+        `, [code, date]);
 
         if (!rows.length) {
             return res.json({ found: false, layout: null });
@@ -1042,38 +1235,34 @@ router.post('/manual-layout', async (req, res) => {
             return res.status(400).json({ error: 'vehicleCode, date y layoutJson son obligatorios' });
         }
 
-        const code = vehicleCode.replace(/'/g, "''").trim();
-        const d = date.replace(/'/g, "''").trim();
-        const v = (vendor || '').replace(/'/g, "''").trim();
+        const code = sanitizeForSQL(vehicleCode.trim());
+        const d = sanitizeForSQL(date.trim());
+        const v = sanitizeForSQL((vendor || '').trim());
         const layout = typeof layoutJson === 'string' ? layoutJson : JSON.stringify(layoutJson);
         const metrics = typeof metricsJson === 'string' ? metricsJson : JSON.stringify(metricsJson || {});
 
         // Try update first
-        const existing = await query(`
+        const existing = await queryWithParams(`
             SELECT ID FROM JAVIER.ALMACEN_CARGA_MANUAL
-            WHERE CODIGOVEHICULO = '${code}' AND FECHA_CARGA = '${d}'
-        `);
+            WHERE CODIGOVEHICULO = ? AND FECHA_CARGA = ?
+        `, [code, d]);
 
         if (existing.length > 0) {
-            await query(`
+            await queryWithParams(`
                 UPDATE JAVIER.ALMACEN_CARGA_MANUAL SET
-                    LAYOUT_JSON = '${layout.replace(/'/g, "''")}',
-                    METRICS_JSON = '${metrics.replace(/'/g, "''")}',
-                    VENDEDOR = '${v}',
+                    LAYOUT_JSON = ?,
+                    METRICS_JSON = ?,
+                    VENDEDOR = ?,
                     UPDATED_AT = CURRENT_TIMESTAMP
-                WHERE CODIGOVEHICULO = '${code}' AND FECHA_CARGA = '${d}'
-            `);
+                WHERE CODIGOVEHICULO = ? AND FECHA_CARGA = ?
+            `, [layout, metrics, v, code, d]);
             res.json({ success: true, action: 'updated', id: existing[0].ID });
         } else {
-            await query(`
+            await queryWithParams(`
                 INSERT INTO JAVIER.ALMACEN_CARGA_MANUAL
                     (CODIGOVEHICULO, FECHA_CARGA, VENDEDOR, LAYOUT_JSON, METRICS_JSON)
-                VALUES (
-                    '${code}', '${d}', '${v}',
-                    '${layout.replace(/'/g, "''")}',
-                    '${metrics.replace(/'/g, "''")}'
-                )
-            `);
+                VALUES (?, ?, ?, ?, ?)
+            `, [code, d, v, layout, metrics]);
             res.json({ success: true, action: 'created' });
         }
     } catch (error) {
@@ -1144,25 +1333,28 @@ router.put('/config', async (req, res) => {
         if (!updates || typeof updates !== 'object') {
             return res.status(400).json({ error: 'updates es obligatorio (objeto clave:valor)' });
         }
-        const user = (req.user?.code || 'SYSTEM').replace(/'/g, "''");
+        const user = sanitizeForSQL(req.user?.code || 'SYSTEM');
         for (const [key, value] of Object.entries(updates)) {
-            const k = key.replace(/'/g, "''").substring(0, 50);
-            const v = String(value).replace(/'/g, "''").substring(0, 200);
+            const k = sanitizeForSQL(key).substring(0, 50);
+            const v = sanitizeForSQL(String(value)).substring(0, 200);
             try {
-                const upd = await query(
-                    `UPDATE JAVIER.ALMACEN_CONFIG_GLOBAL SET VALOR = '${v}', UPDATED_AT = CURRENT_TIMESTAMP, UPDATED_BY = '${user}' WHERE CLAVE = '${k}'`
+                const upd = await queryWithParams(
+                    `UPDATE JAVIER.ALMACEN_CONFIG_GLOBAL SET VALOR = ?, UPDATED_AT = CURRENT_TIMESTAMP, UPDATED_BY = ? WHERE CLAVE = ?`,
+                    [v, user, k]
                 );
                 // Si no actualizó filas, insertar
                 if (!upd || (Array.isArray(upd) && upd.length === 0)) {
-                    await query(
-                        `INSERT INTO JAVIER.ALMACEN_CONFIG_GLOBAL (CLAVE, VALOR, UPDATED_BY) VALUES ('${k}', '${v}', '${user}')`
+                    await queryWithParams(
+                        `INSERT INTO JAVIER.ALMACEN_CONFIG_GLOBAL (CLAVE, VALOR, UPDATED_BY) VALUES (?, ?, ?)`,
+                        [k, v, user]
                     );
                 }
             } catch (upsertErr) {
                 // El UPDATE puede fallar si no existe → intentar INSERT
                 try {
-                    await query(
-                        `INSERT INTO JAVIER.ALMACEN_CONFIG_GLOBAL (CLAVE, VALOR, UPDATED_BY) VALUES ('${k}', '${v}', '${user}')`
+                    await queryWithParams(
+                        `INSERT INTO JAVIER.ALMACEN_CONFIG_GLOBAL (CLAVE, VALOR, UPDATED_BY) VALUES (?, ?, ?)`,
+                        [k, v, user]
                     );
                 } catch (insErr) {
                     if (!(insErr.message || '').includes('SQL0803')) {

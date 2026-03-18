@@ -105,7 +105,7 @@ const PORT = process.env.PORT || 3334;
 
 // Middleware — Security
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || true, // Restrict in production via CORS_ORIGIN env var
+  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? false : true), // SECURITY: block all origins in production unless explicitly configured
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   maxAge: 86400 // Cache preflight for 24h

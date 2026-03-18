@@ -13,13 +13,13 @@ const SMTP_CONFIG = {
     secure: true,
     auth: {
         user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
-        pass: process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
+        pass: process.env.SMTP_PASSWORD || '' // MUST be set via environment variable
     },
     connectionTimeout: 20000,
     greetingTimeout: 10000,
     socketTimeout: 20000,
     tls: {
-        rejectUnauthorized: false,
+        rejectUnauthorized: process.env.NODE_ENV === 'production',
         minVersion: 'TLSv1.2'
     }
 };

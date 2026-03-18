@@ -2,14 +2,15 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const logger = require('../middleware/logger');
-const { getPool, query } = require('../config/db');
+const { getPool, query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, deleteCachePattern } = require('../services/redis-cache');
 const {
     getCurrentDate,
     buildVendedorFilter,
     formatCurrency,
-    LACLAE_SALES_FILTER
+    LACLAE_SALES_FILTER,
+    sanitizeForSQL
 } = require('../utils/common');
 
 // Imports from laclae service
@@ -453,7 +454,7 @@ router.post('/rutero/move_clients', async (req, res) => {
                     INSERT INTO JAVIER.RUTERO_LOG 
                     (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES)
                     VALUES ('${vendedor}', 'CAMBIO_DIA', '${moved.fromDay}', '${moved.toDay}', '${moved.client}', 
-                            '${(moved.clientName || '').replace(/'/g, "''")}', 
+                            '${sanitizeForSQL(moved.clientName || '')}', 
                             ${moved.previousPosition ?? 'NULL'}, ${moved.newPosition}, 
                             'Movido de ${moved.fromDay} a ${moved.toDay}')
                 `);
@@ -964,7 +965,7 @@ router.get('/rutero/day/:day', async (req, res) => {
         // Limit clients for safety
         const batchSize = 200;
         const clientBatch = dayClientCodes.slice(0, batchSize);
-        const safeClientFilter = clientBatch.map(c => `'${c.replace(/'/g, "''")}'`).join(',');
+        const safeClientFilter = clientBatch.map(c => `'${sanitizeForSQL(c)}'`).join(',');
 
         // --- 2. Heavy Queries with Caching ---
 

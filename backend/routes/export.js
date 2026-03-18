@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const {
     buildVendedorFilter,
     formatCurrency,
-    MIN_YEAR
+    MIN_YEAR,
+    sanitizeForSQL
 } = require('../utils/common');
 
 // =============================================================================
@@ -18,7 +19,7 @@ router.get('/client-report', async (req, res) => {
             return res.status(400).json({ error: 'Se requiere código de cliente' });
         }
 
-        const safeCode = code.replace(/'/g, "''").trim();
+        const safeCode = sanitizeForSQL(code.trim());
         const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
 
         // Get complete client data for PDF report

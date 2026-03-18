@@ -958,4 +958,5 @@ module.exports = {
     getArticleDimensions,
     getOrdersForVehicle,
     binPack3D,
+    estimateBoxDimensions,
 };

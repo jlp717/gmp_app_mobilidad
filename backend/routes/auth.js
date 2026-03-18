@@ -48,8 +48,8 @@ router.post('/login', loginLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
         }
 
-        // Sanitize and normalize inputs
-        const safeUser = username.replace(/[^a-zA-Z0-9 .-_()]/g, '').trim().toUpperCase();
+        // Sanitize and normalize inputs - SECURITY FIX: strict alphanumeric + space only
+        const safeUser = username.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
         const trimmedPwd = password.trim();
 
         if (safeUser.length < 1 || safeUser.length > 50) {
@@ -82,7 +82,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         // ===================================================================
         logger.info(`[${requestId}] 🔍 Attempting login for: ${safeUser}`);
 
-        let pinRecord = await query(`
+        let pinRecord = await queryWithParams(`
             SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
                    TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
                    V.TIPOVENDEDOR, X.JEFEVENTASSN,
@@ -92,9 +92,9 @@ router.post('/login', loginLimiter, async (req, res) => {
             JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
             LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
             LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON P.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-            WHERE TRIM(P.CODIGOVENDEDOR) = '${safeUser}'
+            WHERE TRIM(P.CODIGOVENDEDOR) = ?
             FETCH FIRST 1 ROWS ONLY
-        `, false);
+        `, [safeUser], false);
 
         // ===================================================================
         // STEP 2: If not found by code, try to find by NAME in VDD
@@ -103,7 +103,8 @@ router.post('/login', loginLimiter, async (req, res) => {
             logger.info(`[${requestId}] 🔄 Not found by code, searching by name...`);
 
             // Search by name - compare without spaces to handle "MARICARMEN" vs "93 MARI CARMEN"
-            const nameSearch = await query(`
+            const searchParam = safeUser.replace(/ /g, '');
+            const nameSearch = await queryWithParams(`
                 SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
                        TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
                        V.TIPOVENDEDOR, X.JEFEVENTASSN,
@@ -113,9 +114,9 @@ router.post('/login', loginLimiter, async (req, res) => {
                 JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
                 LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
                 LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON D.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%' CONCAT REPLACE('${safeUser}', ' ', '') CONCAT '%'
+                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%' CONCAT ? CONCAT '%'
                 FETCH FIRST 1 ROWS ONLY
-            `, false);
+            `, [searchParam], false);
 
             if (nameSearch.length > 0) {
                 pinRecord = nameSearch;
@@ -157,13 +158,13 @@ router.post('/login', loginLimiter, async (req, res) => {
             // Check VEH.CODIGOCONDUCTOR (personal vehicle assignment)
             // OR high OPP delivery count this year (repartidor with pool vehicle)
             const currentYear = new Date().getFullYear();
-            const vehCheck = await query(`
+            const vehCheck = await queryWithParams(`
                 SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA 
                 FROM DSEDAC.VEH 
-                WHERE TRIM(CODIGOCONDUCTOR) = '${vendedorCode}' 
+                WHERE TRIM(CODIGOCONDUCTOR) = ? 
                   AND TRIM(CODIGOCONDUCTOR) <> '98'
                 FETCH FIRST 1 ROWS ONLY
-            `, false);
+            `, [vendedorCode], false);
 
             if (vehCheck.length > 0) {
                 isRepartidor = true;
@@ -172,11 +173,11 @@ router.post('/login', loginLimiter, async (req, res) => {
                 logger.info(`[${requestId}] 🚚 Detected Repartidor Role for ${vendedorCode} (Vehicle: ${matriculaVehiculo})`);
             } else {
                 // Fallback: check if they have ≥100 deliveries this year in OPP
-                const oppCheck = await query(`
+                const oppCheck = await queryWithParams(`
                     SELECT COUNT(*) as CNT FROM DSEDAC.OPP
-                    WHERE TRIM(CODIGOREPARTIDOR) = '${vendedorCode}'
-                      AND ANOREPARTO = ${currentYear}
-                `, false);
+                    WHERE TRIM(CODIGOREPARTIDOR) = ?
+                      AND ANOREPARTO = ?
+                `, [vendedorCode, currentYear], false);
                 if (oppCheck.length > 0 && (oppCheck[0].CNT || 0) >= 100) {
                     isRepartidor = true;
                     codigoConductor = vendedorCode;

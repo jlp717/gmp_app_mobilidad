@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const {
@@ -11,7 +11,9 @@ const {
     formatCurrency,
     MIN_YEAR,
     LAC_SALES_FILTER,
-    LACLAE_SALES_FILTER
+    LACLAE_SALES_FILTER,
+    sanitizeForSQL,
+    sanitizeCodeList
 } = require('../utils/common');
 
 
@@ -25,7 +27,7 @@ router.get('/yoy-comparison', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         // Optional month filter
-        const monthFilter = month ? `AND L.LCMMDC = ${month}` : '';
+        const monthFilter = month ? `AND L.LCMMDC = ${parseInt(month) || 0}` : '';
         const cacheKeyBase = `analytics:yoy:${currentYear}:${month || 'all'}:${vendedorCodes}`;
 
         const getData = async (yr) => {
@@ -90,8 +92,8 @@ router.get('/top-clients', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         let dateFilter = '';
-        if (year) dateFilter += ` AND L.LCAADC = ${year}`;
-        if (month) dateFilter += ` AND L.LCMMDC = ${month}`;
+        if (year) dateFilter += ` AND L.LCAADC = ${parseInt(year) || 0}`;
+        if (month) dateFilter += ` AND L.LCMMDC = ${parseInt(month) || 0}`;
 
         const sql = `
       SELECT 
@@ -102,7 +104,7 @@ router.get('/top-clients', async (req, res) => {
       WHERE ${LACLAE_SALES_FILTER} ${dateFilter} ${vendedorFilter}
       GROUP BY L.LCCDCL
       ORDER BY totalSales DESC
-      FETCH FIRST ${limit} ROWS ONLY
+      FETCH FIRST ${parseInt(limit) || 10} ROWS ONLY
     `;
 
         const cacheKey = `analytics:top_clients:${year || 'current'}:${month || 'all'}:${vendedorCodes}:${limit}`;
@@ -114,7 +116,7 @@ router.get('/top-clients', async (req, res) => {
 
         if (topClients.length === 0) return res.json({ clients: [] });
 
-        const clientCodes = topClients.map(c => `'${c.CODE}'`).join(',');
+        const clientCodes = topClients.map(c => `'${sanitizeForSQL(c.CODE)}'`).join(',');
         const namesMsg = `
             SELECT CODIGOCLIENTE as C, NOMBRECLIENTE as N, POBLACION as P 
             FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${clientCodes})
@@ -325,7 +327,7 @@ router.get('/sales-history', async (req, res) => {
 
         // Filter by Product (Code or Description) or Batch/Reference - safe interpolation
         if (productSearch) {
-            const safeTerm = productSearch.toUpperCase().trim().replace(/'/g, "''").replace(/[%_\\]/g, '');
+            const safeTerm = sanitizeForSQL(productSearch.toUpperCase().trim()).replace(/[%_\\]/g, '');
             whereClause += ` AND (UPPER(L.DESCRIPCION) LIKE '%${safeTerm}%' OR L.CODIGOARTICULO LIKE '%${safeTerm}%' OR L.REFERENCIA LIKE '%${safeTerm}%')`;
         }
 
@@ -426,19 +428,19 @@ router.get('/sales-history/summary', async (req, res) => {
         // Build filters for LACLAE table
         const LACLAE_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z')`;
 
-        // Vendedor filter - adaptar para LACLAE (LCCDVD)
+        // Vendedor filter - adaptar para LACLAE (LCCDVD) - SECURITY: sanitize
         let vendedorFilter = '';
         if (vendedorCodes) {
-            const codes = vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',');
-            vendedorFilter = `AND L.LCCDVD IN (${codes})`;
+            const codes = sanitizeCodeList(vendedorCodes);
+            if (codes) vendedorFilter = `AND L.LCCDVD IN (${codes})`;
         }
 
         // Client filter - adaptar para LACLAE (LCCDCL)
-        const clientFilter = clientCode ? `AND L.LCCDCL = '${clientCode}'` : '';
+        const clientFilter = clientCode ? `AND L.LCCDCL = '${sanitizeForSQL(clientCode)}'` : '';
 
         // Product search filter - adaptar para LACLAE (LCCDRF, LCDESC)
         const searchFilter = productSearch
-            ? `AND (UPPER(L.LCDESC) LIKE UPPER('%${productSearch}%') OR TRIM(L.LCCDRF) LIKE '%${productSearch}%')`
+            ? `AND (UPPER(L.LCDESC) LIKE UPPER('%${sanitizeForSQL(productSearch)}%') OR TRIM(L.LCCDRF) LIKE '%${sanitizeForSQL(productSearch)}%')`
             : '';
 
         // Helper to query LACLAE

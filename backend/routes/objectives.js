@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const {
     getCurrentDate,
     buildVendedorFilter,
@@ -12,7 +12,9 @@ const {
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
-    getBSales
+    getBSales,
+    sanitizeForSQL,
+    sanitizeCodeList
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const { redisCache, TTL } = require('../services/redis-cache');
@@ -38,25 +40,26 @@ const {
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
     // Uses getVendorColumn(year) for date-aware column (LCCDVD before March 2026, R1_T8CDVD after)
+    const safeVendorCode = sanitizeForSQL(vendorCode);
     const col = getVendorColumn(currentYear);
-    const rows = await query(`
+    const rows = await queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.${col} = '${vendorCode}'
-          AND L.LCAADC = ${currentYear}
+        WHERE L.${col} = ?
+          AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
-    `, false);
+    `, [safeVendorCode, currentYear], false);
 
     // If no clients in current year, try previous year
     if (rows.length === 0) {
         const prevCol = getVendorColumn(currentYear - 1);
-        const prevRows = await query(`
+        const prevRows = await queryWithParams(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.${prevCol} = '${vendorCode}'
-              AND L.LCAADC = ${currentYear - 1}
+            WHERE L.${prevCol} = ?
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
-        `, false);
+        `, [safeVendorCode, currentYear - 1], false);
         return prevRows.map(r => r.CLIENT_CODE);
     }
 
@@ -70,7 +73,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
 async function getClientsMonthlySales(clientCodes, year) {
     if (!clientCodes || clientCodes.length === 0) return {};
 
-    const clientList = clientCodes.map(c => `'${c}'`).join(',');
+    const clientList = clientCodes.map(c => `'${sanitizeForSQL(c)}'`).join(',');
 
     // PERF: Removed TRIM(L.LCCDCL) - DB2 CHAR comparison handles trailing spaces
     const rows = await query(`
@@ -686,7 +689,7 @@ router.get('/matrix', async (req, res) => {
         try {
             const notesRows = await query(`
                 SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES 
-                WHERE CLIENT_CODE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
+                WHERE CLIENT_CODE = '${sanitizeForSQL(clientCode)}' FETCH FIRST 1 ROWS ONLY
             `, false);
             if (notesRows.length > 0) {
                 editableNotes = {
@@ -703,39 +706,40 @@ router.get('/matrix', async (req, res) => {
         // Build filter conditions (using LACLAE column names)
         let filterConditions = '';
         if (productCode && productCode.trim()) {
-            filterConditions += ` AND UPPER(L.LCCDRF) LIKE '%${productCode.trim().toUpperCase()}%'`;
+            filterConditions += ` AND UPPER(L.LCCDRF) LIKE '%${sanitizeForSQL(productCode.trim()).toUpperCase()}%'`;
         }
         if (productName && productName.trim()) {
-            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE '%${productName.trim().toUpperCase()}%' OR UPPER(L.LCDESC) LIKE '%${productName.trim().toUpperCase()}%')`;
+            const safeProdName = sanitizeForSQL(productName.trim()).toUpperCase();
+            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE '%${safeProdName}%' OR UPPER(L.LCDESC) LIKE '%${safeProdName}%')`;
         }
         // Legacy family/subfamily filters (mantener compatibilidad)
         if (familyCode && familyCode.trim()) {
-            filterConditions += ` AND A.CODIGOFAMILIA = '${familyCode.trim()}'`;
+            filterConditions += ` AND A.CODIGOFAMILIA = '${sanitizeForSQL(familyCode.trim())}'`;
         }
         if (subfamilyCode && subfamilyCode.trim()) {
-            filterConditions += ` AND A.CODIGOSUBFAMILIA = '${subfamilyCode.trim()}'`;
+            filterConditions += ` AND A.CODIGOSUBFAMILIA = '${sanitizeForSQL(subfamilyCode.trim())}'`;
         }
 
         // NEW: FI hierarchical filters (join con ARTX)
         let needsArtxJoin = false;
         if (fi1 && fi1.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO01) = '${fi1.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO01) = '${sanitizeForSQL(fi1.trim())}'`;
             needsArtxJoin = true;
         }
         if (fi2 && fi2.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO02) = '${fi2.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO02) = '${sanitizeForSQL(fi2.trim())}'`;
             needsArtxJoin = true;
         }
         if (fi3 && fi3.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO03) = '${fi3.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO03) = '${sanitizeForSQL(fi3.trim())}'`;
             needsArtxJoin = true;
         }
         if (fi4 && fi4.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO04) = '${fi4.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO04) = '${sanitizeForSQL(fi4.trim())}'`;
             needsArtxJoin = true;
         }
         if (fi5 && fi5.trim()) {
-            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = '${fi5.trim()}'`;
+            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = '${sanitizeForSQL(fi5.trim())}'`;
         }
 
         // Build ARTX join if needed
@@ -1692,11 +1696,11 @@ router.get('/by-client', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes, 'L');
 
         let extraFilters = '';
-        if (city && city.trim()) extraFilters += ` AND UPPER(C.POBLACION) = '${city.trim().toUpperCase()}'`;
-        if (code && code.trim()) extraFilters += ` AND C.CODIGOCLIENTE LIKE '%${code.trim()}%'`;
-        if (nif && nif.trim()) extraFilters += ` AND C.NIF LIKE '%${nif.trim()}%'`;
+        if (city && city.trim()) extraFilters += ` AND UPPER(C.POBLACION) = '${sanitizeForSQL(city.trim()).toUpperCase()}'`;
+        if (code && code.trim()) extraFilters += ` AND C.CODIGOCLIENTE LIKE '%${sanitizeForSQL(code.trim())}%'`;
+        if (nif && nif.trim()) extraFilters += ` AND C.NIF LIKE '%${sanitizeForSQL(nif.trim())}%'`;
         if (name && name.trim()) {
-            const safeName = name.trim().toUpperCase().replace(/'/g, "''");
+            const safeName = sanitizeForSQL(name.trim()).toUpperCase();
             extraFilters += ` AND (UPPER(C.NOMBRECLIENTE) LIKE '%${safeName}%' OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeName}%')`;
         }
 
@@ -1711,8 +1715,8 @@ router.get('/by-client', async (req, res) => {
         let currentRows = [];
 
         if (cachedClientCodes && cachedClientCodes.length > 0) {
-            // Use cached client codes for fast filtering
-            const clientCodesFilter = cachedClientCodes.map(c => `'${c}'`).join(',');
+            // Use cached client codes for fast filtering - SECURITY: sanitize codes
+            const clientCodesFilter = cachedClientCodes.map(c => `'${sanitizeForSQL(c)}'`).join(',');
 
             // Query 0: Count clients from cache (filtered by extra filters if any)
             if (extraFilters) {

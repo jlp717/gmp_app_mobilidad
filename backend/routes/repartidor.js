@@ -10,6 +10,7 @@ const express = require('express');
 const router = express.Router();
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
+const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 
@@ -46,7 +47,11 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
-        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const cleanIds = sanitizeCodeList(repartidorId);
+
+        if (!cleanIds) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
 
         logger.info(`[REPARTIDOR] Getting collections summary for ${cleanIds} (${selectedMonth}/${selectedYear})`);
 
@@ -251,11 +256,13 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
         let repartidorJoin = '';
         if (repartidorId) {
-            const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
-            repartidorJoin = `
-                INNER JOIN DSEDAC.OPP OPP
-                    ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                    AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
+            const cleanIds = sanitizeCodeList(repartidorId);
+            if (cleanIds) {
+                repartidorJoin = `
+                    INNER JOIN DSEDAC.OPP OPP
+                        ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                        AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
+            }
         }
 
         // Date range filter (YYYY-MM-DD format)
@@ -357,7 +364,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
             FROM DSEDAC.CPC CPC
             ${repartidorJoin}
             ${dsJoin}
-            WHERE CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
+            WHERE CPC.CODIGOCLIENTEALBARAN = '${sanitizeForSQL(clientCode)}'
               AND CPC.NUMEROALBARAN < 900000 AND CPC.EJERCICIOALBARAN > 0
               ${yearParam ? `AND CPC.EJERCICIOALBARAN = ${parseInt(yearParam)}` : ''}
               ${dateFilter}
@@ -580,7 +587,11 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
         const { year, clientId } = req.query;
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
-        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const cleanIds = sanitizeCodeList(repartidorId);
+
+        if (!cleanIds) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
 
         logger.info(`[REPARTIDOR] Objectives detail for ${repartidorId}, year ${selectedYear}${clientId ? `, client ${clientId}` : ''}`);
 
@@ -1071,7 +1082,11 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
-        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const cleanIds = sanitizeCodeList(repartidorId);
+
+        if (!cleanIds) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
 
         // Only include days up to today if viewing current month/year
         // This prevents future pre-loaded albaranes from inflating the % entrega
@@ -1384,48 +1399,50 @@ router.post('/entregas', async (req, res) => {
         logger.info(`[REPARTIDOR] Creating/updating entrega for albaran ${numeroAlbaran}`);
 
         // Check if delivery already exists
-        const checkSql = `
+        const existing = await queryWithParams(`
             SELECT ID FROM JAVIER.REPARTIDOR_ENTREGAS 
-            WHERE NUMERO_ALBARAN = ${numeroAlbaran} 
-              AND EJERCICIO_ALBARAN = ${ejercicioAlbaran} 
-              AND SERIE_ALBARAN = '${serieAlbaran}'
-        `;
-        const existing = await query(checkSql, false);
+            WHERE NUMERO_ALBARAN = ? 
+              AND EJERCICIO_ALBARAN = ? 
+              AND SERIE_ALBARAN = ?
+        `, [numeroAlbaran, ejercicioAlbaran, serieAlbaran]);
 
         let entregaId;
 
         if (existing.length > 0) {
             // Update existing
             entregaId = existing[0].ID;
-            const updateSql = `
+            await queryWithParams(`
                 UPDATE JAVIER.REPARTIDOR_ENTREGAS SET
-                    ESTADO = '${estado}',
+                    ESTADO = ?,
                     FECHA_ENTREGA = ${estado === 'ENTREGADO' ? 'CURRENT_TIMESTAMP' : 'NULL'},
-                    OBSERVACIONES = ${observaciones ? `'${observaciones.replace(/'/g, "''")}'` : 'NULL'}
-                WHERE ID = ${entregaId}
-            `;
-            await query(updateSql, false);
+                    OBSERVACIONES = ?
+                WHERE ID = ?
+            `, [estado, observaciones || null, entregaId]);
         } else {
             // Insert new
-            const insertSql = `
+            await queryWithParams(`
                 INSERT INTO JAVIER.REPARTIDOR_ENTREGAS (
                     NUMERO_ALBARAN, EJERCICIO_ALBARAN, SERIE_ALBARAN,
                     CODIGO_CLIENTE, NOMBRE_CLIENTE,
                     CODIGO_REPARTIDOR, CODIGO_CONDUCTOR,
                     ESTADO, FECHA_PREVISTA, IMPORTE_TOTAL, ES_CTR, OBSERVACIONES
-                ) VALUES (
-                    ${numeroAlbaran}, ${ejercicioAlbaran}, '${serieAlbaran}',
-                    '${codigoCliente}', ${nombreCliente ? `'${nombreCliente.replace(/'/g, "''")}'` : 'NULL'},
-                    '${codigoRepartidor}', ${codigoConductor ? `'${codigoConductor}'` : 'NULL'},
-                    '${estado}', ${fechaPrevista ? `'${fechaPrevista}'` : 'CURRENT_DATE'},
-                    ${importeTotal || 0}, '${esCTR ? 'S' : 'N'}',
-                    ${observaciones ? `'${observaciones.replace(/'/g, "''")}'` : 'NULL'}
-                )
-            `;
-            await query(insertSql, false);
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                numeroAlbaran, ejercicioAlbaran, serieAlbaran,
+                codigoCliente, nombreCliente || null,
+                codigoRepartidor, codigoConductor || null,
+                estado, fechaPrevista || null,
+                importeTotal || 0, esCTR ? 'S' : 'N',
+                observaciones || null
+            ]);
 
             // Get the new ID
-            const newIdResult = await query(checkSql, false);
+            const newIdResult = await queryWithParams(`
+                SELECT ID FROM JAVIER.REPARTIDOR_ENTREGAS 
+                WHERE NUMERO_ALBARAN = ? 
+                  AND EJERCICIO_ALBARAN = ? 
+                  AND SERIE_ALBARAN = ?
+            `, [numeroAlbaran, ejercicioAlbaran, serieAlbaran]);
             entregaId = newIdResult[0]?.ID;
         }
 
@@ -1464,33 +1481,31 @@ router.post('/entregas/:entregaId/firma', async (req, res) => {
         }
 
         // Delete existing signature if any
-        await query(`DELETE FROM JAVIER.REPARTIDOR_FIRMAS WHERE ENTREGA_ID = ${entregaId}`, false);
+        await queryWithParams(`DELETE FROM JAVIER.REPARTIDOR_FIRMAS WHERE ENTREGA_ID = ?`, [entregaId]);
 
         // Insert new signature
-        const insertSql = `
+        await queryWithParams(`
             INSERT INTO JAVIER.REPARTIDOR_FIRMAS (
                 ENTREGA_ID, FIRMA_BASE64, FIRMANTE_NOMBRE, FIRMANTE_DNI,
                 DISPOSITIVO, LATITUD, LONGITUD
-            ) VALUES (
-                ${entregaId},
-                '${firmaBase64.substring(0, 1000000)}',
-                ${firmaNombre ? `'${firmaNombre.replace(/'/g, "''")}'` : 'NULL'},
-                ${firmaDNI ? `'${firmaDNI}'` : 'NULL'},
-                ${dispositivo ? `'${dispositivo}'` : 'NULL'},
-                ${latitud || 'NULL'},
-                ${longitud || 'NULL'}
-            )
-        `;
-
-        await query(insertSql, false);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+            entregaId,
+            (firmaBase64 || '').substring(0, 1000000),
+            firmaNombre || null,
+            firmaDNI || null,
+            dispositivo || null,
+            latitud || null,
+            longitud || null
+        ]);
 
         // Update entrega status to delivered
-        await query(`
+        await queryWithParams(`
             UPDATE JAVIER.REPARTIDOR_ENTREGAS SET 
                 ESTADO = 'ENTREGADO', 
                 FECHA_ENTREGA = CURRENT_TIMESTAMP 
-            WHERE ID = ${entregaId}
-        `, false);
+            WHERE ID = ?
+        `, [entregaId]);
 
         res.json({
             success: true,
@@ -1519,29 +1534,28 @@ router.post('/entregas/:entregaId/lineas', async (req, res) => {
         }
 
         // Delete existing lines
-        await query(`DELETE FROM JAVIER.REPARTIDOR_ENTREGA_LINEAS WHERE ENTREGA_ID = ${entregaId}`, false);
+        await queryWithParams(`DELETE FROM JAVIER.REPARTIDOR_ENTREGA_LINEAS WHERE ENTREGA_ID = ?`, [entregaId]);
 
         // Insert new lines
         for (const linea of lineas) {
-            const insertSql = `
+            await queryWithParams(`
                 INSERT INTO JAVIER.REPARTIDOR_ENTREGA_LINEAS (
                     ENTREGA_ID, LINEA_ALBARAN, CODIGO_ARTICULO, DESCRIPCION_ARTICULO,
                     CANTIDAD_PEDIDA, CANTIDAD_ENTREGADA, CANTIDAD_RECHAZADA,
                     ESTADO, OBSERVACIONES, MOTIVO_NO_ENTREGA
-                ) VALUES (
-                    ${entregaId},
-                    ${linea.lineaAlbaran || 0},
-                    '${linea.codigoArticulo || ''}',
-                    ${linea.descripcion ? `'${linea.descripcion.replace(/'/g, "''").substring(0, 200)}'` : 'NULL'},
-                    ${linea.cantidadPedida || 0},
-                    ${linea.cantidadEntregada || 0},
-                    ${linea.cantidadRechazada || 0},
-                    '${linea.estado || 'PENDIENTE'}',
-                    ${linea.observaciones ? `'${linea.observaciones.replace(/'/g, "''")}'` : 'NULL'},
-                    ${linea.motivoNoEntrega ? `'${linea.motivoNoEntrega}'` : 'NULL'}
-                )
-            `;
-            await query(insertSql, false);
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                entregaId,
+                linea.lineaAlbaran || 0,
+                linea.codigoArticulo || '',
+                linea.descripcion ? linea.descripcion.substring(0, 200) : null,
+                linea.cantidadPedida || 0,
+                linea.cantidadEntregada || 0,
+                linea.cantidadRechazada || 0,
+                linea.estado || 'PENDIENTE',
+                linea.observaciones || null,
+                linea.motivoNoEntrega || null
+            ]);
         }
 
         // Determine overall delivery status
@@ -1549,9 +1563,9 @@ router.post('/entregas/:entregaId/lineas', async (req, res) => {
         const noneDelivered = lineas.every(l => l.estado === 'NO_ENTREGADO');
         const overallStatus = allDelivered ? 'ENTREGADO' : (noneDelivered ? 'NO_ENTREGADO' : 'PARCIAL');
 
-        await query(`
-            UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADO = '${overallStatus}' WHERE ID = ${entregaId}
-        `, false);
+        await queryWithParams(`
+            UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADO = ? WHERE ID = ?
+        `, [overallStatus, entregaId]);
 
         res.json({
             success: true,
@@ -1592,31 +1606,31 @@ router.post('/cobros', async (req, res) => {
                 ENTREGA_ID, CODIGO_CLIENTE, NOMBRE_CLIENTE,
                 CODIGO_REPARTIDOR, TIPO_DOCUMENTO, NUMERO_DOCUMENTO, EJERCICIO_DOCUMENTO,
                 IMPORTE_COBRADO, IMPORTE_PENDIENTE, FORMA_PAGO, NOTAS
-            ) VALUES (
-                ${entregaId || 'NULL'},
-                '${codigoCliente}',
-                ${nombreCliente ? `'${nombreCliente.replace(/'/g, "''")}'` : 'NULL'},
-                '${codigoRepartidor}',
-                '${tipoDocumento}',
-                ${numeroDocumento},
-                ${ejercicioDocumento},
-                ${importeCobrado},
-                ${importePendiente},
-                ${formaPago ? `'${formaPago}'` : 'NULL'},
-                ${notas ? `'${notas.replace(/'/g, "''")}'` : 'NULL'}
-            )
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
-        await query(insertSql, false);
+        await queryWithParams(insertSql, [
+            entregaId || null,
+            codigoCliente,
+            nombreCliente || null,
+            codigoRepartidor,
+            tipoDocumento,
+            numeroDocumento,
+            ejercicioDocumento,
+            importeCobrado,
+            importePendiente,
+            formaPago || null,
+            notas || null
+        ]);
 
         // Update CTR status if applicable
         if (entregaId) {
-            await query(`
+            await queryWithParams(`
                 UPDATE JAVIER.REPARTIDOR_ENTREGAS SET 
                     CTR_COBRADO = 'S',
-                    IMPORTE_COBRADO = IMPORTE_COBRADO + ${importeCobrado}
-                WHERE ID = ${entregaId} AND ES_CTR = 'S'
-            `, false);
+                    IMPORTE_COBRADO = IMPORTE_COBRADO + ?
+                WHERE ID = ? AND ES_CTR = 'S'
+            `, [importeCobrado, entregaId]);
         }
 
         res.json({
@@ -1835,7 +1849,7 @@ router.get('/history/:repartidorId', async (req, res) => {
         `;
 
         if (search) {
-            const cleanSearch = search.toUpperCase().replace(/'/g, "''");
+            const cleanSearch = sanitizeForSQL(search.toUpperCase());
             sql += ` AND (
                 UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR 
                 UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR
@@ -2110,7 +2124,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
         `;
 
         if (search) {
-            const cleanSearch = search.toUpperCase().replace(/'/g, "''");
+            const cleanSearch = sanitizeForSQL(search.toUpperCase());
             mainSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CPC.CODIGOCLIENTEALBARAN) LIKE '%${cleanSearch}%')`;
         }
 

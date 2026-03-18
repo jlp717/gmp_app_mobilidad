@@ -4,7 +4,7 @@ const { query, queryWithParams, getPool } = require('../config/db');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
+const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL } = require('../utils/common');
 const { redisCache, TTL } = require('../services/redis-cache');
 
 
@@ -1089,14 +1089,14 @@ router.post('/pay', async (req, res) => {
         const ventasSobreObjetivoNum = parseFloat(ventasSobreObjetivo) || 0;
 
         // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
-        const safePayVendor = vendedorCode.trim().replace(/'/g, "''").replace(/[^a-zA-Z0-9']/g, '');
-        const safePayObs = (observaciones || '').substring(0, 1000).replace(/'/g, "''");
-        const safePayAdmin = (adminCode || 'unknown').substring(0, 50).replace(/'/g, "''");
-        await query(`
+        const safePayVendor = sanitizeForSQL(vendedorCode.trim());
+        const safePayObs = sanitizeForSQL((observaciones || '').substring(0, 1000));
+        const safePayAdmin = sanitizeForSQL((adminCode || 'unknown').substring(0, 50));
+        await queryWithParams(`
             INSERT INTO JAVIER.COMMISSION_PAYMENTS
             (VENDEDOR_CODIGO, ANIO, MES, VENTAS_REAL, OBJETIVO_MES, VENTAS_SOBRE_OBJETIVO, COMISION_GENERADA, IMPORTE_PAGADO, FECHA_PAGO, OBSERVACIONES, CREADO_POR)
-            VALUES ('${safePayVendor}', ${parseInt(year)}, ${parseInt(month) || 0}, ${parseFloat(ventaComision) || 0}, ${parseFloat(objetivoMesNum) || 0}, ${parseFloat(ventasSobreObjetivoNum) || 0}, ${parseFloat(generatedNum) || 0}, ${parseFloat(amountNum) || 0}, CURRENT_TIMESTAMP, '${safePayObs}', '${safePayAdmin}')
-        `, false);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+        `, [safePayVendor, parseInt(year), parseInt(month) || 0, parseFloat(ventaComision) || 0, parseFloat(objetivoMesNum) || 0, parseFloat(ventasSobreObjetivoNum) || 0, parseFloat(generatedNum) || 0, parseFloat(amountNum) || 0, safePayObs, safePayAdmin]);
 
         logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${adminCode}${observaciones ? ' [with observaciones]' : ''}`);
         res.json({ success: true, message: 'Pago registrado correctamente' });
