@@ -18,8 +18,8 @@ export const login = asyncHandler(async (req: Request, res: Response): Promise<v
   const requestId = req.requestId || '';
   const log = createRequestLogger(requestId);
 
-  // Aceptar varios formatos
-  const usuario = req.body.usuario || req.body.codigoCliente || req.body.codigoVendedor || req.body.codigo;
+  // Aceptar varios formatos (Flutter envía username/password)
+  const usuario = req.body.username || req.body.usuario || req.body.codigoCliente || req.body.codigoVendedor || req.body.codigo;
   const password = req.body.password || req.body.nif || req.body.pin;
 
   if (!usuario || !password) {
