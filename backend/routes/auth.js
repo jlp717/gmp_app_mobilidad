@@ -82,19 +82,29 @@ router.post('/login', loginLimiter, async (req, res) => {
         // ===================================================================
         logger.info(`[${requestId}] 🔍 Attempting login for: ${safeUser}`);
 
-        let pinRecord = await queryWithParams(`
-            SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
-                   TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
-                   V.TIPOVENDEDOR, X.JEFEVENTASSN,
-                   E.HIDE_COMMISSIONS
-            FROM DSEDAC.VDPL1 P
-            JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
-            JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
-            LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-            LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON P.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-            WHERE TRIM(P.CODIGOVENDEDOR) = ?
-            FETCH FIRST 1 ROWS ONLY
-        `, [safeUser], false);
+        let pinRecord = [];
+
+        // Only try code search if input is short enough for CODIGOVENDEDOR column
+        if (safeUser.length <= 10) {
+            try {
+                pinRecord = await queryWithParams(`
+                    SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
+                           TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
+                           V.TIPOVENDEDOR, X.JEFEVENTASSN,
+                           E.HIDE_COMMISSIONS
+                    FROM DSEDAC.VDPL1 P
+                    JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+                    JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
+                    LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+                    LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON P.CODIGOVENDEDOR = E.CODIGOVENDEDOR
+                    WHERE TRIM(P.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
+                    FETCH FIRST 1 ROWS ONLY
+                `, [safeUser], false);
+            } catch (codeErr) {
+                logger.debug(`[${requestId}] Code search failed, falling through to name search`);
+                pinRecord = [];
+            }
+        }
 
         // ===================================================================
         // STEP 2: If not found by code, try to find by NAME in VDD
@@ -114,7 +124,7 @@ router.post('/login', loginLimiter, async (req, res) => {
                 JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
                 LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
                 LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON D.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%' CONCAT ? CONCAT '%'
+                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%' CONCAT CAST(? AS VARCHAR(100)) CONCAT '%'
                 FETCH FIRST 1 ROWS ONLY
             `, [searchParam], false);
 
