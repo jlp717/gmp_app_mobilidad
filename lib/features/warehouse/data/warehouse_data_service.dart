@@ -388,8 +388,10 @@ class ArticleDimension {
   final int unitsPerBox;
   final bool hasRealDimensions;
   final double? largoCm, anchoCm, altoCm;
+  final double? estLargoCm, estAnchoCm, estAltoCm;
   final double? pesoOverrideKg;
   final String notas;
+  final bool inRecentOrders;
 
   ArticleDimension({
     required this.code,
@@ -400,8 +402,12 @@ class ArticleDimension {
     this.largoCm,
     this.anchoCm,
     this.altoCm,
+    this.estLargoCm,
+    this.estAnchoCm,
+    this.estAltoCm,
     this.pesoOverrideKg,
     this.notas = '',
+    this.inRecentOrders = false,
   });
 
   factory ArticleDimension.fromJson(Map<String, dynamic> json) =>
@@ -414,8 +420,12 @@ class ArticleDimension {
         largoCm: (json['largoCm'] as num?)?.toDouble(),
         anchoCm: (json['anchoCm'] as num?)?.toDouble(),
         altoCm: (json['altoCm'] as num?)?.toDouble(),
+        estLargoCm: (json['estLargoCm'] as num?)?.toDouble(),
+        estAnchoCm: (json['estAnchoCm'] as num?)?.toDouble(),
+        estAltoCm: (json['estAltoCm'] as num?)?.toDouble(),
         pesoOverrideKg: (json['pesoOverrideKg'] as num?)?.toDouble(),
         notas: (json['notas'] as String?) ?? '',
+        inRecentOrders: (json['inRecentOrders'] as bool?) ?? false,
       );
 }
 
@@ -423,6 +433,8 @@ class ArticleDimension {
 class LoadHistoryEntry {
   final int id;
   final String vehicleCode;
+  final String vehicleDesc;
+  final String matricula;
   final String date;
   final double weightKg;
   final double volumeCm3;
@@ -431,12 +443,17 @@ class LoadHistoryEntry {
   final int orderCount;
   final int boxCount;
   final String status;
+  final double importeTotal;
+  final double margenTotal;
+  final Map<String, dynamic>? detalles;
   final String createdBy;
   final String createdAt;
 
   LoadHistoryEntry({
     required this.id,
     required this.vehicleCode,
+    this.vehicleDesc = '',
+    this.matricula = '',
     required this.date,
     required this.weightKg,
     required this.volumeCm3,
@@ -445,6 +462,9 @@ class LoadHistoryEntry {
     required this.orderCount,
     required this.boxCount,
     required this.status,
+    this.importeTotal = 0,
+    this.margenTotal = 0,
+    this.detalles,
     required this.createdBy,
     required this.createdAt,
   });
@@ -453,6 +473,8 @@ class LoadHistoryEntry {
       LoadHistoryEntry(
         id: (json['id'] as int?) ?? 0,
         vehicleCode: (json['vehicleCode'] as String?) ?? '',
+        vehicleDesc: (json['vehicleDesc'] as String?) ?? '',
+        matricula: (json['matricula'] as String?) ?? '',
         date: (json['date'] as String?) ?? '',
         weightKg: ((json['weightKg'] ?? 0) as num).toDouble(),
         volumeCm3: ((json['volumeCm3'] ?? 0) as num).toDouble(),
@@ -461,6 +483,9 @@ class LoadHistoryEntry {
         orderCount: (json['orderCount'] as int?) ?? 0,
         boxCount: (json['boxCount'] as int?) ?? 0,
         status: (json['status'] as String?) ?? '',
+        importeTotal: ((json['importeTotal'] ?? 0) as num).toDouble(),
+        margenTotal: ((json['margenTotal'] ?? 0) as num).toDouble(),
+        detalles: json['detalles'] as Map<String, dynamic>?,
         createdBy: (json['createdBy'] as String?) ?? '',
         createdAt: (json['createdAt'] as String?) ?? '',
       );
@@ -624,11 +649,17 @@ class WarehouseDataService {
     await ApiClient.post('/warehouse/personnel/$id/delete', {});
   }
 
+  /// Auto-estimate dimensions for articles without real dimensions
+  static Future<Map<String, dynamic>> bulkEstimateDimensions() async {
+    final response = await ApiClient.post('/warehouse/articles/bulk-estimate', {});
+    return response;
+  }
+
   /// Artículos con dimensiones (búsqueda)
   static Future<List<ArticleDimension>> getArticles({
     String? search,
     bool? onlyWithDimensions,
-    int limit = 50,
+    int limit = 200,
   }) async {
     final qp = <String, String>{'limit': limit.toString()};
     if (search != null && search.isNotEmpty) qp['search'] = search;
@@ -662,13 +693,17 @@ class WarehouseDataService {
     });
   }
 
-  /// Historial de cargas
+  /// Historial de cargas con filtros de fecha
   static Future<List<LoadHistoryEntry>> getLoadHistory({
     String? vehicleCode,
-    int limit = 30,
+    String? dateFrom,
+    String? dateTo,
+    int limit = 50,
   }) async {
     final qp = <String, String>{'limit': limit.toString()};
     if (vehicleCode != null) qp['vehicleCode'] = vehicleCode;
+    if (dateFrom != null) qp['dateFrom'] = dateFrom;
+    if (dateTo != null) qp['dateTo'] = dateTo;
 
     final response = await ApiClient.get(
       '/warehouse/load-history',
@@ -803,6 +838,27 @@ class WarehouseDataService {
   /// Seed default config values
   static Future<void> seedConfig() async {
     await ApiClient.post('/warehouse/config/seed', {});
+  }
+
+  /// Guardar carga actual al histórico (botón explícito)
+  static Future<void> saveLoad({
+    required String vehicleCode,
+    required int year,
+    required int month,
+    required int day,
+    required Map<String, dynamic> metrics,
+    required List<Map<String, dynamic>> placed,
+    List<Map<String, dynamic>> overflow = const [],
+  }) async {
+    await ApiClient.post('/warehouse/save-load', {
+      'vehicleCode': vehicleCode,
+      'year': year,
+      'month': month,
+      'day': day,
+      'metrics': metrics,
+      'placed': placed,
+      'overflow': overflow,
+    });
   }
 
   /// Actualizar config camión

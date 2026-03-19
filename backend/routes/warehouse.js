@@ -1410,5 +1410,84 @@ router.post('/config/seed', async (req, res) => {
     }
 });
 
+/**
+ * POST /warehouse/save-load
+ * Body: { vehicleCode, year, month, day, metrics, placed, overflow }
+ * Guarda explícitamente la carga actual al histórico
+ */
+router.post('/save-load', async (req, res) => {
+    try {
+        const { vehicleCode, year, month, day, metrics, placed, overflow } = req.body;
+        if (!vehicleCode || !metrics) {
+            return res.status(400).json({ error: 'vehicleCode y metrics son obligatorios' });
+        }
+
+        const y = parseInt(year) || new Date().getFullYear();
+        const m = parseInt(month) || (new Date().getMonth() + 1);
+        const d = parseInt(day) || new Date().getDate();
+
+        // Build client breakdown from placed boxes
+        const clientBreakdown = {};
+        for (const box of (placed || [])) {
+            const cc = box.clientCode || 'DESCONOCIDO';
+            if (!clientBreakdown[cc]) {
+                clientBreakdown[cc] = { clientCode: cc, clientName: box.clientName || cc, boxes: 0, weightKg: 0, importeEur: 0, margenEur: 0, articles: {} };
+            }
+            clientBreakdown[cc].boxes++;
+            clientBreakdown[cc].weightKg += (box.weight || 0);
+            clientBreakdown[cc].importeEur += (box.importeEur || 0);
+            clientBreakdown[cc].margenEur += (box.margenEur || 0);
+            const artKey = box.articleCode || 'UNK';
+            if (!clientBreakdown[cc].articles[artKey]) {
+                clientBreakdown[cc].articles[artKey] = { code: artKey, name: box.label || artKey, boxes: 0, weightKg: 0, importeEur: 0 };
+            }
+            clientBreakdown[cc].articles[artKey].boxes++;
+            clientBreakdown[cc].articles[artKey].weightKg += (box.weight || 0);
+            clientBreakdown[cc].articles[artKey].importeEur += (box.importeEur || 0);
+        }
+        const detalles = {
+            clients: Object.values(clientBreakdown).map(c => ({
+                ...c, articles: Object.values(c.articles),
+                weightKg: Math.round(c.weightKg * 100) / 100,
+                importeEur: Math.round(c.importeEur * 100) / 100,
+                margenEur: Math.round(c.margenEur * 100) / 100,
+            })),
+            overflowCount: (overflow || []).length,
+            savedManually: true,
+        };
+
+        await queryWithParams(`
+            INSERT INTO JAVIER.ALMACEN_CARGA_HISTORICO
+              (CODIGOVEHICULO, FECHA_PLANIFICACION, PESO_TOTAL_KG, VOLUMEN_TOTAL_CM3,
+               PCT_VOLUMEN, PCT_PESO, NUM_ORDENES, NUM_BULTOS, ESTADO, CREATED_BY,
+               IMPORTE_TOTAL, MARGEN_TOTAL, DETALLES_JSON)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            sanitizeForSQL(vehicleCode),
+            `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+            metrics.totalWeightKg || 0,
+            metrics.usedVolumeCm3 || 0,
+            metrics.volumeOccupancyPct || 0,
+            metrics.weightOccupancyPct || 0,
+            metrics.placedCount || 0,
+            metrics.totalBoxes || 0,
+            sanitizeForSQL(metrics.status || 'GUARDADO'),
+            sanitizeForSQL(req.user?.code || 'SYSTEM'),
+            metrics.totalImporteEur || 0,
+            metrics.totalMargenEur || 0,
+            JSON.stringify(detalles)
+        ]);
+
+        logger.info(`[SAVE-LOAD] Carga guardada manualmente: ${vehicleCode} ${y}-${m}-${d}`);
+        res.json({ success: true, message: 'Carga guardada correctamente' });
+    } catch (error) {
+        if (isTableNotFound(error)) {
+            return res.status(503).json({ error: 'Tabla de histórico no disponible. Reinicia el servidor.' });
+        }
+        logger.error(`Save load error: ${error.message}`);
+        res.status(500).json({ error: 'Error guardando carga', details: error.message });
+    }
+});
+
 module.exports = router;
 module.exports.initWarehouseTables = initWarehouseTables;

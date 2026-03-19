@@ -45,6 +45,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   bool _isManualMode = false;
   bool _recomputing = false;
   bool _optimizing = false;
+  bool _saving = false;
   Timer? _debounce;
 
   // 3D Camera
@@ -211,6 +212,73 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al optimizar: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveLoad() async {
+    if (_saving || _result == null) return;
+    setState(() => _saving = true);
+    try {
+      final r = _result!;
+      final m = r.metrics;
+      final placedMaps = r.placed.map((b) => {
+        'clientCode': b.clientCode,
+        'clientName': b.label,
+        'articleCode': b.articleCode,
+        'label': b.label,
+        'weight': b.weight,
+        'importeEur': b.importeEur,
+        'margenEur': b.margenEur,
+      }).toList();
+      final overflowMaps = r.overflow.map((b) => {
+        'clientCode': b.clientCode,
+        'clientName': b.label,
+        'articleCode': b.articleCode,
+        'label': b.label,
+        'weight': b.weight,
+        'importeEur': b.importeEur,
+        'margenEur': b.margenEur,
+      }).toList();
+
+      await WarehouseDataService.saveLoad(
+        vehicleCode: widget.vehicleCode,
+        year: widget.date.year,
+        month: widget.date.month,
+        day: widget.date.day,
+        metrics: {
+          'totalWeightKg': m.totalWeightKg,
+          'usedVolumeCm3': m.usedVolumeCm3,
+          'volumeOccupancyPct': m.volumeOccupancyPct,
+          'weightOccupancyPct': m.weightOccupancyPct,
+          'placedCount': m.placedCount,
+          'totalBoxes': m.totalBoxes,
+          'status': m.status,
+          'totalImporteEur': m.totalImporteEur,
+          'totalMargenEur': m.totalMargenEur,
+        },
+        placed: placedMaps,
+        overflow: overflowMaps,
+      );
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Carga guardada correctamente'),
+            backgroundColor: Color(0xFF4CAF50),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al guardar: $e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -781,6 +849,27 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                 onPressed: _resetOrders,
                 icon: const Icon(Icons.restart_alt_rounded,
                     color: Colors.amber, size: 22)),
+          // Save to DB button
+          IconButton(
+            onPressed: (_saving || _result == null)
+                ? null
+                : _saveLoad,
+            icon: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.amber,
+                    ),
+                  )
+                : const Icon(
+                    Icons.save_rounded,
+                    color: Colors.amber,
+                    size: 22,
+                  ),
+            tooltip: 'Guardar carga en BBDD',
+          ),
           IconButton(
               onPressed: _loadPlan,
               icon: const Icon(Icons.refresh_rounded,
