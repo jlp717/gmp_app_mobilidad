@@ -101,14 +101,32 @@ class _VehiclesPageState extends State<VehiclesPage> {
         child: Padding(
           padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
           child: Row(children: [
-            // Vehicle icon
+            // Vehicle photo or icon
             Container(
-              width: Responsive.value(context, phone: 40, desktop: 48), height: Responsive.value(context, phone: 40, desktop: 48),
+              width: Responsive.value(context, phone: 56, desktop: 64),
+              height: Responsive.value(context, phone: 56, desktop: 64),
               decoration: BoxDecoration(
                 color: AppTheme.neonBlue.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.local_shipping_rounded,
-                  color: AppTheme.neonBlue, size: 26),
+              clipBehavior: Clip.antiAlias,
+              child: v.imageUrl != null && v.imageUrl!.isNotEmpty
+                  ? Image.network(
+                      v.imageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                          Icons.local_shipping_rounded,
+                          color: AppTheme.neonBlue, size: 28),
+                      loadingBuilder: (_, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(
+                          child: SizedBox(width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppTheme.neonBlue)),
+                        );
+                      },
+                    )
+                  : const Icon(Icons.local_shipping_rounded,
+                      color: AppTheme.neonBlue, size: 28),
             ),
             const SizedBox(width: 12),
             // Info

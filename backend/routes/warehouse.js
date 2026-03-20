@@ -191,6 +191,75 @@ async function initWarehouseTables() {
     logger.info('✅ Warehouse: table check complete');
 }
 
+// ─── Vehicle photo mapping ──────────────────────────────────────────────────
+// URLs verified via Wikipedia REST API (en.wikipedia.org/api/rest_v1/page/summary)
+// These are REAL Wikimedia Commons files confirmed to exist.
+// Using 640px thumbnails for good quality without excessive bandwidth.
+const VEHICLE_PHOTOS = {
+    // ── IVECO (dominant brand in this fleet) ──
+    // Daily: furgon/camion pequeno (codes 16, 19, 20)
+    'IVECO DAILY':      'https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/2014_Iveco_Daily_35_S13_MWB_2.3.jpg/640px-2014_Iveco_Daily_35_S13_MWB_2.3.jpg',
+    // Eurocargo / 100E18: camion medio (codes 02, 12, 22, 28, 29, 53, 77, 78, 86, 87, 89, 90)
+    'IVECO 100E18':     'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Iveco_Eurocargo_2015.jpg/640px-Iveco_Eurocargo_2015.jpg',
+    'IVECO EUROCARGO':  'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Iveco_Eurocargo_2015.jpg/640px-Iveco_Eurocargo_2015.jpg',
+    // Generic IVECO → Eurocargo (most fleet vehicles are medium trucks)
+    'IVECO':            'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Iveco_Eurocargo_2015.jpg/640px-Iveco_Eurocargo_2015.jpg',
+
+    // ── MERCEDES ──
+    // 20T / Atego: camion grande (code 05)
+    'MERCEDES 20':      'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Mercedes_Benz_Atego_1624_2012_%2815054808361%29.jpg/640px-Mercedes_Benz_Atego_1624_2012_%2815054808361%29.jpg',
+    'MERCEDES ATEGO':   'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Mercedes_Benz_Atego_1624_2012_%2815054808361%29.jpg/640px-Mercedes_Benz_Atego_1624_2012_%2815054808361%29.jpg',
+    // Sprinter: furgon/heladero pequeno (codes 11, 15, 23)
+    'MERCEDES SPRINTER':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/2019_Mercedes-Benz_Sprinter_314_CDi_2.1.jpg/640px-2019_Mercedes-Benz_Sprinter_314_CDi_2.1.jpg',
+    'MERCEDES-CHICO':   'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/2019_Mercedes-Benz_Sprinter_314_CDi_2.1.jpg/640px-2019_Mercedes-Benz_Sprinter_314_CDi_2.1.jpg',
+    'MERCEDES PETIT':   'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/2019_Mercedes-Benz_Sprinter_314_CDi_2.1.jpg/640px-2019_Mercedes-Benz_Sprinter_314_CDi_2.1.jpg',
+    // Generic MERCEDES → Atego (most fleet Mercedes are medium trucks)
+    'MERCEDES':         'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Mercedes_Benz_Atego_1624_2012_%2815054808361%29.jpg/640px-Mercedes_Benz_Atego_1624_2012_%2815054808361%29.jpg',
+
+    // ── MITSUBISHI FUSO / CANTER (codes 04, 21) ──
+    'FUSO CANTER':      'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Fuso_Canter_3C13%2C_8th_Generation.jpg/640px-Fuso_Canter_3C13%2C_8th_Generation.jpg',
+    'MITSUBISHI FUSO':  'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Fuso_Canter_3C13%2C_8th_Generation.jpg/640px-Fuso_Canter_3C13%2C_8th_Generation.jpg',
+    'CANTER':           'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Fuso_Canter_3C13%2C_8th_Generation.jpg/640px-Fuso_Canter_3C13%2C_8th_Generation.jpg',
+    'FUSO':             'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Fuso_Canter_3C13%2C_8th_Generation.jpg/640px-Fuso_Canter_3C13%2C_8th_Generation.jpg',
+    'MITSUBISHI':       'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Fuso_Canter_3C13%2C_8th_Generation.jpg/640px-Fuso_Canter_3C13%2C_8th_Generation.jpg',
+
+    // ── NISSAN (codes 10, 14) — Cabstar/NT400 ──
+    'NISSAN':           'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Nissan_Cabstar_waste_collector_-_Strasbourg.JPG/640px-Nissan_Cabstar_waste_collector_-_Strasbourg.JPG',
+
+    // ── RENAULT (code 18) — Midlum (white delivery truck) ──
+    'RENAULT':          'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Renault_Midlum_livraison_blanc_-_Strasbourg.JPG/640px-Renault_Midlum_livraison_blanc_-_Strasbourg.JPG',
+
+    // ── PEUGEOT BOXER (code 25) — same platform as Fiat Ducato ──
+    'PEUGEOT BOXER':    'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/2024_Fiat_Ducato_DSC_7199.jpg/640px-2024_Fiat_Ducato_DSC_7199.jpg',
+    'PEUGEOT':          'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/2024_Fiat_Ducato_DSC_7199.jpg/640px-2024_Fiat_Ducato_DSC_7199.jpg',
+
+    // ── FORD TRANSIT / DFM (codes 17, 24) — alquiler ──
+    'FORD TRANSIT':     'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/2016_Ford_Transit_350_2.2.jpg/640px-2016_Ford_Transit_350_2.2.jpg',
+    'FORD':             'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/2016_Ford_Transit_350_2.2.jpg/640px-2016_Ford_Transit_350_2.2.jpg',
+    'DFM':              'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/2016_Ford_Transit_350_2.2.jpg/640px-2016_Ford_Transit_350_2.2.jpg',
+
+    // ── Other brands (not in current fleet but kept for future) ──
+    'VOLKSWAGEN':       'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Iveco_Eurocargo_2015.jpg/640px-Iveco_Eurocargo_2015.jpg',
+    'MAN':              'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Iveco_Eurocargo_2015.jpg/640px-Iveco_Eurocargo_2015.jpg',
+    'SCANIA':           'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Iveco_Eurocargo_2015.jpg/640px-Iveco_Eurocargo_2015.jpg',
+    'DAF':              'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Iveco_Eurocargo_2015.jpg/640px-Iveco_Eurocargo_2015.jpg',
+    'VOLVO':            'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Iveco_Eurocargo_2015.jpg/640px-Iveco_Eurocargo_2015.jpg',
+    'FIAT DUCATO':      'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/2024_Fiat_Ducato_DSC_7199.jpg/640px-2024_Fiat_Ducato_DSC_7199.jpg',
+    'CITROEN':          'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/2024_Fiat_Ducato_DSC_7199.jpg/640px-2024_Fiat_Ducato_DSC_7199.jpg',
+};
+
+/** Match vehicle description to best photo URL */
+function getVehiclePhotoUrl(description) {
+    if (!description) return null;
+    const desc = description.toUpperCase().trim();
+    // Try longest keys first for most specific match
+    const sortedKeys = Object.keys(VEHICLE_PHOTOS).sort((a, b) => b.length - a.length);
+    for (const key of sortedKeys) {
+        if (desc.includes(key)) return VEHICLE_PHOTOS[key];
+    }
+    return null;
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // DASHBOARD — Vista general del día
 // ═════════════════════════════════════════════════════════════════════════════
@@ -517,6 +586,7 @@ router.get('/vehicles', async (req, res) => {
                         heightCm: finalH,
                     },
                     tolerancePct: parseFloat(v.TOLERANCIA_EXCESO) || 5,
+                    imageUrl: getVehiclePhotoUrl((v.DESCRIPCION || '').trim()),
                 };
             }),
         });
@@ -612,44 +682,7 @@ router.get('/personnel', async (req, res) => {
       ORDER BY NOMBRE
     `, 'warehouse:personnel:custom', TTL.MEDIUM);
 
-        // Get only repartidores/drivers from VDD (people with assigned vehicles or active delivery routes)
-        let vddRows = [];
-        try {
-            vddRows = await query(`
-          SELECT
-            TRIM(VDD.CODIGOVENDEDOR) AS CODIGO,
-            TRIM(VDD.NOMBREVENDEDOR) AS NOMBRE
-          FROM DSEDAC.VDD VDD
-          WHERE TRIM(VDD.NOMBREVENDEDOR) <> ''
-            AND (
-              EXISTS (
-                SELECT 1 FROM DSEDAC.VEH V
-                WHERE TRIM(V.CODIGOCONDUCTOR) = TRIM(VDD.CODIGOVENDEDOR)
-                  AND TRIM(V.CODIGOCONDUCTOR) <> '98'
-              )
-              OR TRIM(VDD.CODIGOVENDEDOR) IN (
-                SELECT TRIM(OPP.CODIGOREPARTIDOR)
-                FROM DSEDAC.OPP OPP
-                WHERE OPP.ANOREPARTO = YEAR(CURRENT_DATE)
-                GROUP BY TRIM(OPP.CODIGOREPARTIDOR)
-                HAVING COUNT(*) >= 50
-              )
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM DSEDAC.VDDX X
-              WHERE TRIM(X.CODIGOVENDEDOR) = TRIM(VDD.CODIGOVENDEDOR)
-                AND TRIM(X.JEFEVENTASSN) = 'S'
-            )
-          ORDER BY VDD.NOMBREVENDEDOR
-        `);
-            logger.info(`Personnel: got ${vddRows.length} repartidores from VDD`);
-        } catch (vddErr) {
-            logger.warn(`VDD repartidor query failed (will show only custom personnel): ${vddErr.message}`);
-        }
-
-        // Merge: custom personnel + VDD entries not already in custom table
-        const customCodes = new Set(customRows.map(r => (r.CODIGO_VENDEDOR || '').trim()));
-
+        // Only warehouse-specific personnel (no repartidores/comerciales from VDD)
         const personnel = customRows.map(r => ({
             id: r.ID,
             name: (r.NOMBRE || '').trim(),
@@ -660,22 +693,6 @@ router.get('/personnel', async (req, res) => {
             email: (r.EMAIL || '').trim(),
             source: 'custom',
         }));
-
-        for (const v of vddRows) {
-            const code = (v.CODIGO || '').trim();
-            if (code && !customCodes.has(code)) {
-                personnel.push({
-                    id: 'VDD-' + code,
-                    name: (v.NOMBRE || '').trim(),
-                    vendorCode: code,
-                    role: 'REPARTIDOR',
-                    active: true,
-                    phone: '',
-                    email: '',
-                    source: 'vdd',
-                });
-            }
-        }
 
         personnel.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -951,6 +968,21 @@ router.put('/article-dimensions/:code', async (req, res) => {
     } catch (error) {
         logger.error(`Update article dims error: ${error.message}`);
         res.status(500).json({ error: 'Error actualizando dimensiones', details: error.message });
+    }
+});
+
+/**
+ * POST /warehouse/article-dimensions/:code/delete
+ * Elimina dimensiones reales de un artículo (vuelve a estimado)
+ */
+router.post('/article-dimensions/:code/delete', async (req, res) => {
+    try {
+        const code = sanitizeForSQL(req.params.code.trim());
+        await queryWithParams(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = ?`, [code]);
+        res.json({ success: true, message: 'Dimensiones eliminadas, vuelve a estimado' });
+    } catch (error) {
+        logger.error(`Delete article dims error: ${error.message}`);
+        res.status(500).json({ error: 'Error eliminando dimensiones', details: error.message });
     }
 });
 

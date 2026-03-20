@@ -995,21 +995,46 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
       if (_selectedBoxId != null)
         Positioned(
             left: 8, right: 8, bottom: 8, child: _buildSelectedBox()),
-      // Live metrics overlay
+      // Live metrics overlay with dynamic status
       Positioned(
         left: 8,
         top: 8,
         child: Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: AppTheme.darkCard.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: sc.withValues(alpha: 0.2)),
+            color: AppTheme.darkCard.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: sc.withValues(alpha: 0.3)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Dynamic status badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: sc.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: sc.withValues(alpha: 0.3)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(
+                    m.status == 'EXCESO'
+                        ? Icons.warning_rounded
+                        : m.status == 'OPTIMO'
+                            ? Icons.check_circle_rounded
+                            : Icons.verified_rounded,
+                    color: sc, size: 12),
+                  const SizedBox(width: 4),
+                  Text(m.status,
+                      style: TextStyle(
+                          color: sc, fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5)),
+                ]),
+              ),
               _miniProgressBar('Volumen', volPct.toDouble(), sc),
               const SizedBox(height: 4),
               _miniProgressBar('Peso', wgtPct.toDouble(), sc),
@@ -1018,16 +1043,44 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                   style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.5),
                       fontSize: 9)),
+              if (m.overflowCount > 0)
+                Text('${m.overflowCount} no caben',
+                    style: const TextStyle(
+                        color: Colors.redAccent, fontSize: 9,
+                        fontWeight: FontWeight.w600)),
               if (m.totalImporteEur > 0) ...[
-                const SizedBox(height: 2),
-                Text(
-                  '${m.totalImporteEur.toStringAsFixed(0)} €',
-                  style: const TextStyle(
-                    color: Color(0xFF4CAF50),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
                   ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.euro_rounded,
+                        color: Color(0xFF4CAF50), size: 10),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${m.totalImporteEur.toStringAsFixed(0)} EUR',
+                      style: const TextStyle(
+                        color: Color(0xFF4CAF50),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ]),
                 ),
+                if (m.totalMargenEur > 0) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Margen: ${m.totalMargenEur.toStringAsFixed(0)} EUR',
+                    style: TextStyle(
+                      color: const Color(0xFF66BB6A).withValues(alpha: 0.7),
+                      fontSize: 8,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ],
             ],
           ),

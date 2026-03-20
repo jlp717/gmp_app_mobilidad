@@ -60,11 +60,16 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
 
   @override
   void dispose() {
-    // Clean up temp file to prevent native PDF viewer file lock issues on reopen
-    if (_tempPath != null) {
-      try {
-        File(_tempPath!).deleteSync();
-      } catch (_) {}
+    // Save path for async cleanup, then nullify to unmount PDFView first
+    final pathToClean = _tempPath;
+    _tempPath = null;
+    // Clean up temp file async with delay to let native view fully release
+    if (pathToClean != null) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        try {
+          File(pathToClean).deleteSync();
+        } catch (_) {}
+      });
     }
     super.dispose();
   }

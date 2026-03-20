@@ -363,14 +363,17 @@ class _ArticlesPageState extends State<ArticlesPage> {
 
   void _showEditSheet(ArticleDimension a) {
     final largoC = TextEditingController(
-        text: a.largoCm?.toStringAsFixed(0) ??
-            a.estLargoCm?.toStringAsFixed(0) ?? '');
+        text: a.hasRealDimensions
+            ? a.largoCm?.toStringAsFixed(0) ?? ''
+            : '');
     final anchoC = TextEditingController(
-        text: a.anchoCm?.toStringAsFixed(0) ??
-            a.estAnchoCm?.toStringAsFixed(0) ?? '');
+        text: a.hasRealDimensions
+            ? a.anchoCm?.toStringAsFixed(0) ?? ''
+            : '');
     final altoC = TextEditingController(
-        text: a.altoCm?.toStringAsFixed(0) ??
-            a.estAltoCm?.toStringAsFixed(0) ?? '');
+        text: a.hasRealDimensions
+            ? a.altoCm?.toStringAsFixed(0) ?? ''
+            : '');
     final pesoC = TextEditingController(
         text: a.pesoOverrideKg?.toStringAsFixed(1) ?? '');
 
@@ -421,17 +424,59 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     color: Colors.white.withValues(alpha: 0.4),
                     fontSize: 11)),
           ]),
+          // Status badge: REAL vs ESTIMADO
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: a.hasRealDimensions
+                    ? AppTheme.neonGreen.withValues(alpha: 0.12)
+                    : (a.estLargoCm != null
+                        ? Colors.amber.withValues(alpha: 0.12)
+                        : Colors.white.withValues(alpha: 0.05)),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: a.hasRealDimensions
+                      ? AppTheme.neonGreen.withValues(alpha: 0.3)
+                      : (a.estLargoCm != null
+                          ? Colors.amber.withValues(alpha: 0.3)
+                          : Colors.white.withValues(alpha: 0.1)),
+                ),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(
+                  a.hasRealDimensions ? Icons.verified_rounded : Icons.auto_fix_high_rounded,
+                  size: 12,
+                  color: a.hasRealDimensions ? AppTheme.neonGreen : Colors.amber,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  a.hasRealDimensions
+                      ? 'DIMENSIONES REALES: ${a.largoCm?.toStringAsFixed(0)}x${a.anchoCm?.toStringAsFixed(0)}x${a.altoCm?.toStringAsFixed(0)} cm'
+                      : (a.estLargoCm != null
+                          ? 'ESTIMADO: ~${a.estLargoCm?.toStringAsFixed(0)}x${a.estAnchoCm?.toStringAsFixed(0)}x${a.estAltoCm?.toStringAsFixed(0)} cm'
+                          : 'SIN MEDIDAS'),
+                  style: TextStyle(
+                    color: a.hasRealDimensions ? AppTheme.neonGreen : Colors.amber,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ]),
+            ),
+          ),
           if (!a.hasRealDimensions && a.estLargoCm != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                  'Dimensiones estimadas pre-rellenadas (verificar)',
+                  'Introduce medidas reales verificadas con cinta metrica',
                   style: TextStyle(
-                      color: Colors.amber.withValues(alpha: 0.6),
+                      color: Colors.white.withValues(alpha: 0.3),
                       fontSize: 10),
                   textAlign: TextAlign.center),
             ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Row(children: [
             Expanded(child: _field(largoC, 'Largo (cm)')),
             const SizedBox(width: 10),
@@ -441,7 +486,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
           ]),
           const SizedBox(height: 12),
           _field(pesoC, 'Peso por caja (kg) - opcional'),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           SizedBox(width: double.infinity, height: 44,
               child: ElevatedButton.icon(
             onPressed: () async {
@@ -454,6 +499,42 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     backgroundColor: Colors.amber));
                 return;
               }
+              // Confirmation dialog
+              final confirm = await showDialog<bool>(
+                context: ctx,
+                builder: (dCtx) => AlertDialog(
+                  backgroundColor: AppTheme.darkCard,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  title: const Text('Confirmar dimensiones REALES',
+                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                  content: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text(
+                      'Estas guardando ${largo.toStringAsFixed(0)} x ${ancho.toStringAsFixed(0)} x ${alto.toStringAsFixed(0)} cm como dimensiones REALES verificadas.',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Estas medidas se usaran en el planificador 3D. Asegurate de haberlas medido fisicamente.',
+                      style: TextStyle(color: Colors.amber.withValues(alpha: 0.8), fontSize: 11),
+                    ),
+                  ]),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dCtx, false),
+                      child: const Text('CANCELAR', style: TextStyle(color: Colors.white54)),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(dCtx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
+                        foregroundColor: AppTheme.neonGreen,
+                      ),
+                      child: const Text('CONFIRMAR', style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm != true) return;
               try {
                 await WarehouseDataService.updateArticleDimensions(
                   code: a.code, largoCm: largo, anchoCm: ancho, altoCm: alto,
@@ -470,7 +551,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
               }
             },
             icon: const Icon(Icons.save_rounded, size: 18),
-            label: const Text('GUARDAR DIMENSIONES',
+            label: const Text('GUARDAR COMO REAL',
                 style: TextStyle(
                     fontWeight: FontWeight.w700, letterSpacing: 0.5)),
             style: ElevatedButton.styleFrom(
@@ -479,6 +560,68 @@ class _ArticlesPageState extends State<ArticlesPage> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10))),
           )),
+          // Undo button: delete real dimensions
+          if (a.hasRealDimensions) ...[
+            const SizedBox(height: 8),
+            SizedBox(width: double.infinity, height: 40,
+                child: OutlinedButton.icon(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: ctx,
+                  builder: (dCtx) => AlertDialog(
+                    backgroundColor: AppTheme.darkCard,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: const Text('Eliminar dimensiones reales',
+                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                    content: Text(
+                      'Se eliminaran las dimensiones reales guardadas y el articulo volvera a usar dimensiones estimadas automaticamente.',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dCtx, false),
+                        child: const Text('CANCELAR', style: TextStyle(color: Colors.white54)),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(dCtx, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
+                          foregroundColor: Colors.redAccent,
+                        ),
+                        child: const Text('ELIMINAR', style: TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm != true) return;
+                try {
+                  await WarehouseDataService.deleteArticleDimensions(a.code);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  _search(_searchC.text);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Dimensiones reales eliminadas, vuelve a estimado'),
+                      backgroundColor: Colors.amber,
+                    ));
+                  }
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                        content: Text('Error: $e'),
+                        backgroundColor: Colors.redAccent));
+                  }
+                }
+              },
+              icon: const Icon(Icons.undo_rounded, size: 16),
+              label: const Text('VOLVER A ESTIMADO',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.redAccent,
+                side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10))),
+            )),
+          ],
         ]),
       ),
     );

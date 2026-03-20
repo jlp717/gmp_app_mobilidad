@@ -307,8 +307,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                 CPC.ANODOCUMENTO as ANO, CPC.MESDOCUMENTO as MES, CPC.DIADOCUMENTO as DIA,
                 CPC.CODIGOCLIENTEALBARAN,
-                COALESCE(CAC_J.IMPORTETOTAL, CPC.IMPORTETOTAL) as IMPORTETOTAL,
-                COALESCE(CVC_J.IMPORTE_PENDIENTE, 0) as IMPORTE_PENDIENTE,
+                CPC.IMPORTETOTAL,
                 CPC.CONFORMADOSN,
                 CPC.SITUACIONALBARAN,
                 CPC.HORALLEGADA,
@@ -333,16 +332,6 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 AND CAC_J.SERIEALBARAN = CPC.SERIEALBARAN
                 AND CAC_J.TERMINALALBARAN = CPC.TERMINALALBARAN
                 AND CAC_J.NUMEROALBARAN = CPC.NUMEROALBARAN
-            LEFT JOIN (
-                SELECT CV.SUBEMPRESADOCUMENTO, CV.EJERCICIODOCUMENTO, CV.SERIEDOCUMENTO, CV.NUMERODOCUMENTO,
-                       SUM(CV.IMPORTEPENDIENTE) as IMPORTE_PENDIENTE
-                FROM DSEDAC.CVC CV
-                GROUP BY CV.SUBEMPRESADOCUMENTO, CV.EJERCICIODOCUMENTO, CV.SERIEDOCUMENTO, CV.NUMERODOCUMENTO
-            ) CVC_J
-                ON CVC_J.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
-                AND CVC_J.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
-                AND CVC_J.SERIEDOCUMENTO = CPC.SERIEALBARAN
-                AND CVC_J.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CACFIRMAS CF_J
                 ON CF_J.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
                 AND TRIM(CF_J.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
@@ -377,7 +366,6 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
         const documents = uniqueRows.map(row => {
             const importe = parseFloat(row.IMPORTETOTAL) || 0;
-            const pendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
 
             // --- SENIOR STATUS LOGIC ---
             // --- SENIOR STATUS LOGIC v2 (Time-Aware) ---

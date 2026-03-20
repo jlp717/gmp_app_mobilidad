@@ -59,6 +59,7 @@ class VehicleConfig {
   final double containerVolumeM3;
   final TruckInterior interior;
   final double tolerancePct;
+  final String? imageUrl;
 
   VehicleConfig({
     required this.code,
@@ -70,6 +71,7 @@ class VehicleConfig {
     required this.containerVolumeM3,
     required this.interior,
     required this.tolerancePct,
+    this.imageUrl,
   });
 
   factory VehicleConfig.fromJson(Map<String, dynamic> json) => VehicleConfig(
@@ -83,6 +85,7 @@ class VehicleConfig {
     interior: TruckInterior.fromJson(
         (json['interior'] as Map<String, dynamic>?) ?? {}),
     tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
+    imageUrl: json['imageUrl'] as String?,
   );
 }
 
@@ -691,6 +694,11 @@ class WarehouseDataService {
       if (pesoCajaKg != null) 'pesoCajaKg': pesoCajaKg,
       if (notas != null) 'notas': notas,
     });
+  }
+
+  /// Eliminar dimensiones reales (volver a estimado)
+  static Future<void> deleteArticleDimensions(String code) async {
+    await ApiClient.post('/warehouse/article-dimensions/$code/delete', {});
   }
 
   /// Historial de cargas con filtros de fecha

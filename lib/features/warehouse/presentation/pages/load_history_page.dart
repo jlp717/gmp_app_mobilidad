@@ -547,32 +547,70 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
 
   Widget _buildArticleRow(Map<String, dynamic> a) {
     final impEur = (a['importeEur'] ?? 0) as num;
-    return Padding(
-      padding: const EdgeInsets.only(left: 8, top: 1),
-      child: Row(children: [
-        Container(width: 3, height: 3,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Expanded(child: Text(
-            '${a['code'] ?? ''} ${a['name'] ?? ''}',
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.3),
-                fontSize: 9),
-            maxLines: 1, overflow: TextOverflow.ellipsis)),
-        Text('x${a['boxes'] ?? 0}',
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
-                fontSize: 9, fontWeight: FontWeight.w600)),
-        if (impEur > 0) ...[
+    final wKg = (a['weightKg'] ?? a['weight'] ?? 0) as num;
+    final largo = (a['largoCm'] ?? a['w'] ?? 0) as num;
+    final ancho = (a['anchoCm'] ?? a['d'] ?? 0) as num;
+    final alto = (a['altoCm'] ?? a['h'] ?? 0) as num;
+    final hasDims = largo > 0 && ancho > 0 && alto > 0;
+
+    return Container(
+      margin: const EdgeInsets.only(left: 8, top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 3, height: 3,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle)),
           const SizedBox(width: 6),
-          Text('${impEur.toStringAsFixed(2)} EUR',
+          Expanded(child: Text(
+              '${a['code'] ?? ''} ${a['name'] ?? ''}',
               style: TextStyle(
-                  color: const Color(0xFF4CAF50)
-                      .withValues(alpha: 0.6),
-                  fontSize: 8)),
-        ],
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 10, fontWeight: FontWeight.w600),
+              maxLines: 1, overflow: TextOverflow.ellipsis)),
+          Text('x${a['boxes'] ?? 0}',
+              style: TextStyle(
+                  color: AppTheme.neonBlue.withValues(alpha: 0.7),
+                  fontSize: 10, fontWeight: FontWeight.w700)),
+          if (impEur > 0) ...[
+            const SizedBox(width: 6),
+            Text('${impEur.toStringAsFixed(2)} EUR',
+                style: TextStyle(
+                    color: const Color(0xFF4CAF50)
+                        .withValues(alpha: 0.7),
+                    fontSize: 9, fontWeight: FontWeight.w600)),
+          ],
+        ]),
+        // Detail row: dimensions + weight
+        Padding(
+          padding: const EdgeInsets.only(left: 9, top: 2),
+          child: Row(children: [
+            if (hasDims) ...[
+              Icon(Icons.straighten_rounded, size: 8,
+                  color: Colors.white.withValues(alpha: 0.2)),
+              const SizedBox(width: 3),
+              Text('${largo.toInt()}x${ancho.toInt()}x${alto.toInt()} cm',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      fontSize: 8)),
+              const SizedBox(width: 8),
+            ],
+            if (wKg > 0) ...[
+              Icon(Icons.scale_rounded, size: 8,
+                  color: Colors.white.withValues(alpha: 0.2)),
+              const SizedBox(width: 3),
+              Text('${wKg.toStringAsFixed(1)} kg',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      fontSize: 8)),
+            ],
+          ]),
+        ),
       ]),
     );
   }
