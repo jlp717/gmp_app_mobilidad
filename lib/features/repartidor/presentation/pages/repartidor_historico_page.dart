@@ -1371,7 +1371,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         context,
         MaterialPageRoute(
           builder: (_) => PdfPreviewScreen(
-            key: ValueKey('preview_${doc.id}_${DateTime.now().millisecondsSinceEpoch}'),
             pdfBytes: pdfBytes,
             title: '$typeLabel ${doc.number}',
             fileName: fileName,

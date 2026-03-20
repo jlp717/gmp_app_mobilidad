@@ -415,7 +415,8 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
             // Legacy signature detection (from CACFIRMAS)
             const legacyNombre = (row.LEGACY_FIRMA_NOMBRE || '').trim();
-            const hasLegacySig = legacyNombre.length > 0 || (row.LEGACY_ANO && row.LEGACY_ANO > 0);
+            // Only count as signed if there's an actual signature name (LEGACY_ANO alone is unreliable)
+            const hasLegacySig = legacyNombre.length > 0;
 
             // Format Time (HORALLEGADA is HHMMS or HHMMSS)
             let timeFormatted = null;
@@ -2068,42 +2069,41 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 
         const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
 
-        // Single query: OPP/CPC for delivery data + JOIN CLI for client names
-        // Only uses columns known to exist in DB2
-        const now = new Date();
-        const cutoffYear = now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
-        const cutoffMonth = ((now.getMonth() - 5 + 12) % 12) || 12;
-        const cutoffDate = cutoffYear * 10000 + cutoffMonth * 100 + 1;
-
+        // FIX: Use DISTINCT subquery to deduplicate OPP-CPC joins (one albaran can have multiple OPP records)
+        // FIX: Remove 6-month cutoff so client list counts match what the documents endpoint returns
+        // The documents endpoint has no cutoff, so the client summary must aggregate ALL documents too
         let mainSql = `
             SELECT
-                TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
+                TRIM(UNIQ.CODIGOCLIENTEALBARAN) as ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
-                TRIM(OPP.CODIGOREPARTIDOR) as REP_CODE,
-                TRIM(COALESCE(VDD.NOMBREVENDEDOR, '')) as REP_NAME,
                 COUNT(*) as TOTAL_DOCS,
-                COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
-                MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
-            FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC
-                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                COALESCE(SUM(UNIQ.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
+                MAX(UNIQ.ANODOCUMENTO * 10000 + UNIQ.MESDOCUMENTO * 100 + UNIQ.DIADOCUMENTO) as LAST_VISIT
+            FROM (
+                SELECT DISTINCT
+                    CPC.CODIGOCLIENTEALBARAN,
+                    CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
+                    CPC.IMPORTETOTAL,
+                    CPC.ANODOCUMENTO, CPC.MESDOCUMENTO, CPC.DIADOCUMENTO
+                FROM DSEDAC.CPC CPC
+                INNER JOIN DSEDAC.OPP OPP ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+                  AND CPC.NUMEROALBARAN < 900000
+                  AND CPC.EJERCICIOALBARAN > 0
+            ) UNIQ
             LEFT JOIN DSEDAC.CLI CLI
-                ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            LEFT JOIN DSEDAC.VDD VDD
-                ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
-              AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${cutoffDate}
-              AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL OR CLI.ANOBAJA IS NULL)
+                ON TRIM(CLI.CODIGOCLIENTE) = TRIM(UNIQ.CODIGOCLIENTEALBARAN)
+            WHERE (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
         `;
 
         if (search) {
             const cleanSearch = sanitizeForSQL(search.toUpperCase());
-            mainSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CPC.CODIGOCLIENTEALBARAN) LIKE '%${cleanSearch}%')`;
+            mainSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(UNIQ.CODIGOCLIENTEALBARAN) LIKE '%${cleanSearch}%')`;
         }
 
-        mainSql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, '')), TRIM(OPP.CODIGOREPARTIDOR), TRIM(COALESCE(VDD.NOMBREVENDEDOR, ''))`;
-        mainSql += ` ORDER BY MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) DESC`;
+        mainSql += ` GROUP BY TRIM(UNIQ.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))`;
+        mainSql += ` ORDER BY LAST_VISIT DESC`;
         mainSql += ` FETCH FIRST 500 ROWS ONLY`;
 
         logger.info(`[REPARTIDOR] Clients SQL for repartidorId ${repartidorId}`);
@@ -2139,8 +2139,8 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                 totalDocuments: parseInt(r.TOTAL_DOCS) || 0,
                 totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
                 lastVisit: lastVisitStr,
-                repCode: (r.REP_CODE || '').trim() || null,
-                repName: (r.REP_NAME || '').trim() || null
+                repCode: null,
+                repName: null
             };
         });
 
