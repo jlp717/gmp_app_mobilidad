@@ -794,15 +794,15 @@ router.get('/articles', async (req, res) => {
         }
 
         let orderBy = 'A.CODIGOARTICULO';
-        let extraJoin = '';
-        let recentCol = '0 AS EN_PEDIDOS_RECIENTES';
+        // Fetch recent order article codes separately (fast, avoids heavy JOIN)
+        let recentArticleCodes = new Set();
         if (!search) {
-            const now = new Date();
-            const y = now.getFullYear();
-            const m = now.getMonth() + 1;
-            const d = now.getDate();
-            extraJoin = `
-                LEFT JOIN (
+            try {
+                const now = new Date();
+                const y = now.getFullYear();
+                const m = now.getMonth() + 1;
+                const d = now.getDate();
+                const recentRows = await query(`
                     SELECT DISTINCT TRIM(LAC2.CODIGOARTICULO) AS ART_CODE
                     FROM DSEDAC.OPP OPP2
                     INNER JOIN DSEDAC.CPC CPC2
@@ -813,20 +813,21 @@ router.get('/articles', async (req, res) => {
                         AND CPC2.EJERCICIOALBARAN = LAC2.EJERCICIOALBARAN
                         AND TRIM(CPC2.SERIEALBARAN) = TRIM(LAC2.SERIEALBARAN)
                     WHERE OPP2.ANOREPARTO = ${y} AND OPP2.MESREPARTO = ${m} AND OPP2.DIAREPARTO BETWEEN ${Math.max(1, d - 7)} AND ${d}
-                ) RECENT ON TRIM(A.CODIGOARTICULO) = RECENT.ART_CODE
-            `;
-            recentCol = 'CASE WHEN RECENT.ART_CODE IS NOT NULL THEN 1 ELSE 0 END AS EN_PEDIDOS_RECIENTES';
-            orderBy = 'CASE WHEN D.CODIGOARTICULO IS NOT NULL THEN 0 ELSE 1 END, CASE WHEN RECENT.ART_CODE IS NOT NULL THEN 0 ELSE 1 END, A.CODIGOARTICULO';
+                    FETCH FIRST 2000 ROWS ONLY
+                `);
+                recentArticleCodes = new Set(recentRows.map(r => (r.ART_CODE || '').trim()));
+            } catch (e) {
+                logger.warn(`Recent articles query failed (non-blocking): ${e.message}`);
+            }
+            orderBy = 'CASE WHEN D.CODIGOARTICULO IS NOT NULL THEN 0 ELSE 1 END, A.CODIGOARTICULO';
         }
 
         const rows = await query(`
             SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
                    COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA,
-                   D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS,
-                   ${recentCol}
+                   D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS
             FROM DSEDAC.ART A
             LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
-            ${extraJoin}
             WHERE ${where}
             ORDER BY ${orderBy}
             FETCH FIRST ${parseInt(limit)} ROWS ONLY
@@ -864,7 +865,7 @@ router.get('/articles', async (req, res) => {
                     estAltoCm: estAlto,
                     pesoOverrideKg: parseFloat(r.PESO_CAJA_KG) || null,
                     notas: (r.NOTAS || '').trim(),
-                    inRecentOrders: r.EN_PEDIDOS_RECIENTES === 1,
+                    inRecentOrders: recentArticleCodes.has((r.CODE || '').trim()),
                 };
             }),
         });

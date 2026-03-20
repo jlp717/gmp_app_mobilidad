@@ -278,7 +278,7 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
       LAC.CANTIDADUNIDADES AS CANTIDAD,
       LAC.CANTIDADENVASES AS CAJAS,
       COALESCE(LAC.IMPORTEVENTA, 0) AS IMPORTE_VENTA,
-      COALESCE(LAC.IMPORTEMARGENREAL, 0) AS MARGEN_REAL
+      COALESCE(LAC.IMPORTECOSTO, 0) AS IMPORTE_COSTO
     FROM DSEDAC.OPP OPP
     INNER JOIN DSEDAC.CPC CPC
       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
@@ -304,7 +304,7 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
         units: parseFloat(r.CANTIDAD) || 0,
         boxes: parseFloat(r.CAJAS) || 0,
         importeVenta: parseFloat(r.IMPORTE_VENTA) || 0,
-        margenReal: parseFloat(r.MARGEN_REAL) || 0,
+        margenReal: Math.max(0, (parseFloat(r.IMPORTE_VENTA) || 0) - (parseFloat(r.IMPORTE_COSTO) || 0)),
     }))
     .filter(o => {
         // Skip zero-quantity lines
