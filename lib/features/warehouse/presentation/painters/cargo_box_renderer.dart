@@ -165,10 +165,13 @@ class CargoBoxRenderer {
 
     // ─── Face rendering ──────────────────────────────────────────────
 
-    // Top face: corners [4,5,7,6] — Brightest
+    // Top face: corners [4,5,7,6] — Brightest (stronger gradient for depth)
     final topPts = [corners[4], corners[5], corners[7], corners[6]];
-    final topColorBright = Lighting3D.applyLight(color, 1.1, alpha);
-    final topColorDark = Lighting3D.applyLight(color, 0.95, alpha);
+    // Heavier boxes get slightly darker shade
+    final weightRatio = maxWeight > 0 ? (b.weight / maxWeight).clamp(0.0, 1.0) : 0.0;
+    final weightDarken = 1.0 - (weightRatio * 0.15);
+    final topColorBright = Lighting3D.applyLight(color, 1.2 * weightDarken, alpha);
+    final topColorDark = Lighting3D.applyLight(color, 0.85 * weightDarken, alpha);
     PolyHelper.fillFaceGradient(canvas, topPts, topColorBright, topColorDark);
 
     // Front face: corners [0,1,5,4] — Medium
@@ -195,9 +198,9 @@ class CargoBoxRenderer {
 
     if (!isTiny) {
       final edgeColor = isSelected
-          ? Colors.white.withValues(alpha: 0.8)
-          : Colors.white.withValues(alpha: 0.25);
-      final edgeWidth = isSelected ? 2.0 : 0.8;
+          ? Colors.white.withValues(alpha: 0.9)
+          : Colors.white.withValues(alpha: 0.3);
+      final edgeWidth = isSelected ? 2.5 : 1.2;
 
       // Top face edges (most visible)
       PolyHelper.strokeFace(canvas, topPts, edgeColor, edgeWidth);
@@ -210,17 +213,52 @@ class CargoBoxRenderer {
     // ─── Selection glow ─────────────────────────────────────────────
 
     if (isSelected) {
-      final glowAlpha = 0.3 + glow * 0.15;
+      final glowAlpha = 0.35 + glow * 0.25;
       final glowColor = color.withValues(alpha: glowAlpha);
-      
-      // Outer glow on top face
+
+      // Wide outer glow on all visible faces
       final glowPaint = Paint()
         ..color = glowColor
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 14)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 4;
+        ..strokeWidth = 6;
       canvas.drawPath(PolyHelper.pathOf(topPts), glowPaint);
       canvas.drawPath(PolyHelper.pathOf(frontPts), glowPaint);
+      canvas.drawPath(PolyHelper.pathOf(rightPts), glowPaint);
+
+      // Inner bright outline
+      final innerPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.5 + glow * 0.2)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      canvas.drawPath(PolyHelper.pathOf(topPts), innerPaint);
+    }
+
+    // ─── Article code on front face ──────────────────────────────────
+
+    if (!isTiny && !isSmall) {
+      final faceW = (frontPts[1] - frontPts[0]).distance;
+      final faceH = (frontPts[3] - frontPts[0]).distance;
+      if (faceW > 35 && faceH > 25) {
+        final fcx = (frontPts[0].dx + frontPts[1].dx + frontPts[2].dx + frontPts[3].dx) / 4;
+        final fcy = (frontPts[0].dy + frontPts[1].dy + frontPts[2].dy + frontPts[3].dy) / 4;
+        final code = b.articleCode.length > 5
+            ? b.articleCode.substring(0, 5)
+            : b.articleCode;
+        final tp = TextPainter(
+          text: TextSpan(
+            text: code,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontSize: math.min(faceW * 0.18, 9).toDouble(),
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(fcx - tp.width / 2, fcy - tp.height / 2));
+      }
     }
 
     // ─── Labels (only for non-tiny boxes) ────────────────────────────

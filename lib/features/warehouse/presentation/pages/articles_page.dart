@@ -23,6 +23,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
   final _searchC = TextEditingController();
   Timer? _debounce;
   bool _bulkEstimating = false;
+  bool _bulkResetting = false;
 
   int _totalCount = 0;
   int _withDimsCount = 0;
@@ -94,6 +95,65 @@ class _ArticlesPageState extends State<ArticlesPage> {
     }
   }
 
+  Future<void> _bulkReset() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('RESETEAR TODAS las dimensiones',
+            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(
+            'Esto eliminara TODAS las dimensiones reales guardadas ($_withDimsCount articulos). '
+            'Todos los articulos volveran a usar dimensiones estimadas automaticamente.',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Esta accion NO se puede deshacer.',
+            style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx, false),
+            child: const Text('CANCELAR', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dCtx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
+              foregroundColor: Colors.redAccent,
+            ),
+            child: const Text('RESETEAR TODO', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    setState(() => _bulkResetting = true);
+    try {
+      final result = await WarehouseDataService.resetAllDimensions();
+      if (mounted) {
+        final deleted = result['deleted'] ?? 0;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$deleted dimensiones reales eliminadas'),
+          backgroundColor: Colors.amber,
+        ));
+        _search(_searchC.text);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'), backgroundColor: Colors.redAccent,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _bulkResetting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -145,6 +205,15 @@ class _ArticlesPageState extends State<ArticlesPage> {
           Text('Dimensiones para el planificador 3D',
               style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10)),
         ])),
+        if (_withDimsCount > 0)
+          _bulkResetting
+            ? const SizedBox(width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.redAccent))
+            : IconButton(
+                icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
+                tooltip: 'Resetear TODAS las dimensiones reales',
+                onPressed: _bulkReset,
+              ),
         _bulkEstimating
           ? const SizedBox(width: 20, height: 20,
               child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonGreen))

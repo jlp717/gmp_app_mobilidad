@@ -303,16 +303,22 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
 
   Widget _tab(String label, int idx, IconData icon) {
     final sel = _panelTab == idx;
+    final isOverflow = idx == 2;
+    final activeColor = isOverflow ? Colors.redAccent : AppTheme.neonBlue;
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _panelTab = idx),
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
+            color: sel
+                ? activeColor.withValues(alpha: 0.08)
+                : Colors.transparent,
             border: Border(
               bottom: BorderSide(
-                color: sel ? AppTheme.neonBlue : Colors.transparent,
-                width: 2,
+                color: sel ? activeColor : Colors.white10,
+                width: sel ? 2.5 : 1,
               ),
             ),
           ),
@@ -321,11 +327,11 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             children: [
               Icon(icon,
                   size: 13,
-                  color: sel ? AppTheme.neonBlue : Colors.white30),
+                  color: sel ? activeColor : Colors.white30),
               const SizedBox(width: 4),
               Text(label,
                   style: TextStyle(
-                      color: sel ? AppTheme.neonBlue : Colors.white30,
+                      color: sel ? activeColor : Colors.white30,
                       fontSize: 10,
                       fontWeight: FontWeight.w700)),
             ],
@@ -520,9 +526,19 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             ),
             child: Row(children: [
               Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: cc),
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: cc,
+                  boxShadow: [
+                    BoxShadow(
+                      color: cc.withValues(alpha: 0.4),
+                      blurRadius: 4,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -652,27 +668,50 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
 
     return ListView(padding: const EdgeInsets.all(8), children: [
       Container(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(12),
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: Colors.redAccent.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.15)),
-        ),
-        child: Row(children: [
-          const Icon(Icons.warning_amber_rounded,
-              color: Colors.redAccent, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '${overflow.length} bultos no caben (${widget.result.metrics.overflowWeightKg.toStringAsFixed(0)} kg)',
-              style: const TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600),
-            ),
+          color: Colors.redAccent.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.redAccent.withValues(alpha: 0.3),
+            width: 1.5,
           ),
-        ]),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.redAccent.withValues(alpha: 0.08),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const Icon(Icons.warning_rounded,
+                  color: Colors.redAccent, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${overflow.length} bultos no caben',
+                  style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+              '${widget.result.metrics.overflowWeightKg.toStringAsFixed(0)} kg de exceso de peso',
+              style: TextStyle(
+                color: Colors.redAccent.withValues(alpha: 0.7),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
       ...groups.map((g) {
         String client = g.clientCode;

@@ -2,6 +2,7 @@
 /// API client for warehouse/expedition endpoints (3D Load Planner)
 
 import '../../../core/api/api_client.dart';
+import '../../../core/api/api_config.dart';
 import '../../../core/cache/cache_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -74,19 +75,30 @@ class VehicleConfig {
     this.imageUrl,
   });
 
-  factory VehicleConfig.fromJson(Map<String, dynamic> json) => VehicleConfig(
-    code: (json['code'] as String?) ?? '',
-    description: (json['description'] as String?) ?? '',
-    matricula: (json['matricula'] as String?) ?? '',
-    maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
-    tara: ((json['tara'] ?? 0) as num).toDouble(),
-    volumeM3: ((json['volumeM3'] ?? 0) as num).toDouble(),
-    containerVolumeM3: ((json['containerVolumeM3'] ?? 0) as num).toDouble(),
-    interior: TruckInterior.fromJson(
-        (json['interior'] as Map<String, dynamic>?) ?? {}),
-    tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
-    imageUrl: json['imageUrl'] as String?,
-  );
+  factory VehicleConfig.fromJson(Map<String, dynamic> json) {
+    // Build full image URL from relative proxy path
+    String? imgUrl = json['imageUrl'] as String?;
+    if (imgUrl != null && imgUrl.startsWith('/api/')) {
+      final base = ApiConfig.baseUrl; // e.g. http://192.168.1.230:3334/api
+      final serverRoot = base.endsWith('/api')
+          ? base.substring(0, base.length - 4)
+          : base;
+      imgUrl = '$serverRoot$imgUrl';
+    }
+    return VehicleConfig(
+      code: (json['code'] as String?) ?? '',
+      description: (json['description'] as String?) ?? '',
+      matricula: (json['matricula'] as String?) ?? '',
+      maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
+      tara: ((json['tara'] ?? 0) as num).toDouble(),
+      volumeM3: ((json['volumeM3'] ?? 0) as num).toDouble(),
+      containerVolumeM3: ((json['containerVolumeM3'] ?? 0) as num).toDouble(),
+      interior: TruckInterior.fromJson(
+          (json['interior'] as Map<String, dynamic>?) ?? {}),
+      tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
+      imageUrl: imgUrl,
+    );
+  }
 }
 
 class TruckInterior {
@@ -699,6 +711,17 @@ class WarehouseDataService {
   /// Eliminar dimensiones reales (volver a estimado)
   static Future<void> deleteArticleDimensions(String code) async {
     await ApiClient.post('/warehouse/article-dimensions/$code/delete', {});
+  }
+
+  /// Resetear TODAS las dimensiones reales (volver todo a estimado)
+  static Future<Map<String, dynamic>> resetAllDimensions() async {
+    final response = await ApiClient.post('/warehouse/articles/reset-all-dimensions', {});
+    return response;
+  }
+
+  /// Limpiar personal de test
+  static Future<void> cleanupTestPersonnel() async {
+    await ApiClient.post('/warehouse/personnel/cleanup-test', {});
   }
 
   /// Historial de cargas con filtros de fecha

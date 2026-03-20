@@ -59,11 +59,11 @@ class TruckBodyRenderer {
   // Environment
   static const Color _groundShadow = Color(0x20000000);
   static const Color _gridLine = Color(0x25FFFFFF);
-  static const Color _gridLineAccent = Color(0x40FFFFFF);
+  static const Color _gridLineAccent = Color(0x55FFFFFF);
   static const Color _measureLine = Color(0x60FFFFFF);
   static const Color _woodPlank = Color(0x12FFFFFF);
   static const Color _railColor = Color(0x18FFFFFF);
-  static const Color _ledColor = Color(0x25FFFFFF);
+  static const Color _ledColor = Color(0x45FFFFFF);
 
   void drawAll(Canvas canvas) {
     _drawGroundShadow(canvas);
@@ -92,17 +92,17 @@ class TruckBodyRenderer {
 
   void _drawGroundShadow(Canvas canvas) {
     final center = proj.project(0, cD * 0.3, oz, size);
-    final rx = cD * 0.5 * proj.zoom * 0.4;
-    final ry = rx * 0.3;
+    final rx = cD * 0.6 * proj.zoom * 0.45;
+    final ry = rx * 0.35;
 
     final shadowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          _groundShadow,
-          _groundShadow.withValues(alpha: 0.05),
+          _groundShadow.withValues(alpha: 0.18),
+          _groundShadow.withValues(alpha: 0.06),
           Colors.transparent,
         ],
-        stops: const [0.0, 0.6, 1.0],
+        stops: const [0.0, 0.55, 1.0],
       ).createShader(Rect.fromCenter(center: center, width: rx * 2, height: ry * 2));
 
     canvas.drawOval(
@@ -167,6 +167,21 @@ class TruckBodyRenderer {
       final p1 = proj.project(ox, oy + y, oz, size);
       final p2 = proj.project(ox + cW, oy + y, oz, size);
       canvas.drawLine(p1, p2, isAccent ? accentPaint : gridPaint);
+      // Labeled marks every 100cm along depth
+      if (isAccent && y > 0) {
+        final labelPos = proj.project(ox - 5, oy + y, oz + 1, size);
+        final tp = TextPainter(
+          text: TextSpan(
+            text: '${y.toInt()}',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.3),
+              fontSize: 8,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(labelPos.dx - tp.width - 2, labelPos.dy - tp.height / 2));
+      }
     }
   }
 
@@ -211,8 +226,8 @@ class TruckBodyRenderer {
 
     // Brighter core
     final corePaint = Paint()
-      ..color = const Color(0x15FFFFFF)
-      ..strokeWidth = 1;
+      ..color = const Color(0x30FFFFFF)
+      ..strokeWidth = 1.5;
     canvas.drawLine(led1, led2, corePaint);
   }
 
@@ -269,25 +284,25 @@ class TruckBodyRenderer {
       proj.project(ox, oy + cD, oz + cH, size),
       proj.project(ox, oy, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, leftPts, _containerBase, Lighting3D.leftLight, 0.25);
+    PolyHelper.fillFaceSolid(canvas, leftPts, _containerBase, Lighting3D.leftLight, 0.17);
 
-    // Right wall (translucent)
+    // Right wall (translucent — reduced alpha for cargo visibility)
     final rightPts = [
       proj.project(ox + cW, oy, oz, size),
       proj.project(ox + cW, oy + cD, oz, size),
       proj.project(ox + cW, oy + cD, oz + cH, size),
       proj.project(ox + cW, oy, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, rightPts, _containerBase, Lighting3D.rightLight, 0.25);
+    PolyHelper.fillFaceSolid(canvas, rightPts, _containerBase, Lighting3D.rightLight, 0.17);
 
-    // Back wall (slightly more opaque)
+    // Back wall (reduced alpha for better cargo visibility)
     final backPts = [
       proj.project(ox, oy + cD, oz, size),
       proj.project(ox + cW, oy + cD, oz, size),
       proj.project(ox + cW, oy + cD, oz + cH, size),
       proj.project(ox, oy + cD, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, backPts, _containerBase, Lighting3D.backLight, 0.35);
+    PolyHelper.fillFaceSolid(canvas, backPts, _containerBase, Lighting3D.backLight, 0.22);
 
     // Roof (very translucent)
     final roofPts = [
@@ -296,7 +311,7 @@ class TruckBodyRenderer {
       proj.project(ox + cW, oy + cD, oz + cH, size),
       proj.project(ox, oy + cD, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, roofPts, _containerBase, Lighting3D.topLight, 0.12);
+    PolyHelper.fillFaceSolid(canvas, roofPts, _containerBase, Lighting3D.topLight, 0.08);
 
     // Ambient occlusion — dark gradient at floor-wall junctions
     _drawAmbientOcclusion(canvas);
@@ -339,7 +354,7 @@ class TruckBodyRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void _drawOpenDoors(Canvas canvas) {
-    final doorW = cW / 2;
+    final doorW = cW * 0.6;
     const doorThickness = 3.0;
     // Doors open at 90° outward (toward camera)
     // Hinge on left edge of left door, right edge of right door

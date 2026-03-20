@@ -186,6 +186,29 @@ class _PersonnelPageState extends State<PersonnelPage> {
                     ],
                   ),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.cleaning_services_rounded, color: Colors.amber, size: 20),
+                  tooltip: 'Limpiar entradas de test',
+                  onPressed: () async {
+                    try {
+                      await WarehouseDataService.cleanupTestPersonnel();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Entradas de test limpiadas'),
+                          backgroundColor: Colors.amber,
+                        ));
+                        _load();
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('Error: $e'),
+                          backgroundColor: Colors.redAccent,
+                        ));
+                      }
+                    }
+                  },
+                ),
                 FloatingActionButton.small(
                   heroTag: 'add_person',
                   backgroundColor: AppTheme.neonPurple.withValues(alpha: 0.3),

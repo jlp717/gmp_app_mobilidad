@@ -381,7 +381,7 @@ router.post('/load-plan', async (req, res) => {
                 clientBreakdown[cc].margenEur += (box.margenEur || 0);
                 const artKey = box.articleCode || 'UNK';
                 if (!clientBreakdown[cc].articles[artKey]) {
-                    clientBreakdown[cc].articles[artKey] = { code: artKey, name: box.label || artKey, boxes: 0, weightKg: 0, importeEur: 0 };
+                    clientBreakdown[cc].articles[artKey] = { code: artKey, name: box.label || artKey, boxes: 0, weightKg: 0, importeEur: 0, largoCm: box.w || 0, anchoCm: box.d || 0, altoCm: box.h || 0 };
                 }
                 clientBreakdown[cc].articles[artKey].boxes++;
                 clientBreakdown[cc].articles[artKey].weightKg += (box.weight || 0);
@@ -396,7 +396,18 @@ router.post('/load-plan', async (req, res) => {
                 })),
                 overflowCount: (result.overflow || []).length,
             };
-            const detallesStr = JSON.stringify(detalles);
+            let detallesStr = JSON.stringify(detalles);
+            // Safety: if JSON too large for ODBC buffer, compact by removing article names
+            if (detallesStr.length > 500000) {
+                for (const cl of (detalles.clients || [])) {
+                    for (const art of (cl.articles || [])) {
+                        delete art.name; // save space
+                    }
+                    delete cl.clientName;
+                }
+                detallesStr = JSON.stringify(detalles);
+                logger.info(`[LOAD-PLAN] Compacted detalles JSON from large to ${detallesStr.length} bytes`);
+            }
 
             await queryWithParams(`
         INSERT INTO JAVIER.ALMACEN_CARGA_HISTORICO
@@ -586,7 +597,9 @@ router.get('/vehicles', async (req, res) => {
                         heightCm: finalH,
                     },
                     tolerancePct: parseFloat(v.TOLERANCIA_EXCESO) || 5,
-                    imageUrl: getVehiclePhotoUrl((v.DESCRIPCION || '').trim()),
+                    imageUrl: getVehiclePhotoUrl((v.DESCRIPCION || '').trim())
+                        ? `/api/warehouse/vehicle-photo/${(v.CODE || '').trim()}`
+                        : null,
                 };
             }),
         });
@@ -983,6 +996,113 @@ router.post('/article-dimensions/:code/delete', async (req, res) => {
     } catch (error) {
         logger.error(`Delete article dims error: ${error.message}`);
         res.status(500).json({ error: 'Error eliminando dimensiones', details: error.message });
+    }
+});
+
+/**
+ * POST /warehouse/articles/reset-all-dimensions
+ * Elimina TODAS las dimensiones reales guardadas (vuelve todo a estimado)
+ * Útil cuando se confirmaron dimensiones por error en masa
+ */
+router.post('/articles/reset-all-dimensions', async (req, res) => {
+    try {
+        const countResult = await query(`SELECT COUNT(*) AS CNT FROM JAVIER.ALMACEN_ART_DIMENSIONES`);
+        const total = parseInt(countResult[0]?.CNT) || 0;
+        await query(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES`);
+        logger.info(`✅ Reset ALL article dimensions: ${total} rows deleted`);
+        res.json({ success: true, deleted: total, message: `${total} dimensiones reales eliminadas` });
+    } catch (error) {
+        logger.error(`Reset all dims error: ${error.message}`);
+        res.status(500).json({ error: 'Error reseteando dimensiones', details: error.message });
+    }
+});
+
+/**
+ * GET /warehouse/vehicle-photo/:code
+ * Proxy endpoint for vehicle photos — avoids Wikipedia User-Agent blocks in Flutter
+ * Streams the image directly from Wikimedia Commons
+ */
+router.get('/vehicle-photo/:code', async (req, res) => {
+    try {
+        const code = req.params.code.trim();
+        // Get vehicle description from DB
+        const rows = await cachedQuery(query, `
+            SELECT TRIM(V.DESCRIPCIONVEHICULO) AS DESC
+            FROM DSEDAC.VEH V
+            WHERE TRIM(V.CODIGOVEHICULO) = '${sanitizeForSQL(code)}'
+            FETCH FIRST 1 ROWS ONLY
+        `, `warehouse:veh-desc:${code}`, TTL.LONG);
+
+        const desc = (rows[0]?.DESC || '').trim();
+        const photoUrl = getVehiclePhotoUrl(desc);
+
+        if (!photoUrl) {
+            return res.status(404).json({ error: 'No photo found for vehicle' });
+        }
+
+        // Fetch from Wikimedia with proper User-Agent
+        const https = require('https');
+        const url = new URL(photoUrl);
+        const proxyReq = https.get({
+            hostname: url.hostname,
+            path: url.pathname,
+            headers: {
+                'User-Agent': 'GMP-App/1.0 (gmp-logistics; contact@gmp.es) Node.js',
+                'Accept': 'image/*',
+            },
+        }, (proxyRes) => {
+            if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+                // Follow redirect
+                const redirectUrl = new URL(proxyRes.headers.location);
+                https.get({
+                    hostname: redirectUrl.hostname,
+                    path: redirectUrl.pathname + (redirectUrl.search || ''),
+                    headers: {
+                        'User-Agent': 'GMP-App/1.0 (gmp-logistics; contact@gmp.es) Node.js',
+                        'Accept': 'image/*',
+                    },
+                }, (finalRes) => {
+                    res.set('Content-Type', finalRes.headers['content-type'] || 'image/jpeg');
+                    res.set('Cache-Control', 'public, max-age=86400');
+                    finalRes.pipe(res);
+                }).on('error', (e) => {
+                    res.status(502).json({ error: 'Image fetch failed', details: e.message });
+                });
+                return;
+            }
+            res.set('Content-Type', proxyRes.headers['content-type'] || 'image/jpeg');
+            res.set('Cache-Control', 'public, max-age=86400');
+            proxyRes.pipe(res);
+        });
+        proxyReq.on('error', (e) => {
+            res.status(502).json({ error: 'Image fetch failed', details: e.message });
+        });
+        proxyReq.setTimeout(10000, () => {
+            proxyReq.destroy();
+            res.status(504).json({ error: 'Image fetch timeout' });
+        });
+    } catch (error) {
+        logger.error(`Vehicle photo proxy error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo foto', details: error.message });
+    }
+});
+
+/**
+ * POST /warehouse/personnel/cleanup-test
+ * Remove test personnel entries (like test_operario_script)
+ */
+router.post('/personnel/cleanup-test', async (req, res) => {
+    try {
+        const result = await query(`
+            UPDATE JAVIER.ALMACEN_PERSONAL
+            SET ACTIVO = 'N', UPDATED_AT = CURRENT_TIMESTAMP
+            WHERE UPPER(NOMBRE) LIKE '%TEST%' OR UPPER(NOMBRE) LIKE '%SCRIPT%' OR UPPER(NOMBRE) LIKE '%PRUEBA%'
+        `);
+        logger.info('✅ Cleaned up test personnel entries');
+        res.json({ success: true, message: 'Entradas de test desactivadas' });
+    } catch (error) {
+        logger.error(`Cleanup test personnel error: ${error.message}`);
+        res.status(500).json({ error: 'Error limpiando personal test', details: error.message });
     }
 });
 
@@ -1472,7 +1592,7 @@ router.post('/save-load', async (req, res) => {
             clientBreakdown[cc].margenEur += (box.margenEur || 0);
             const artKey = box.articleCode || 'UNK';
             if (!clientBreakdown[cc].articles[artKey]) {
-                clientBreakdown[cc].articles[artKey] = { code: artKey, name: box.label || artKey, boxes: 0, weightKg: 0, importeEur: 0 };
+                clientBreakdown[cc].articles[artKey] = { code: artKey, name: box.label || artKey, boxes: 0, weightKg: 0, importeEur: 0, largoCm: box.largoCm || box.w || 0, anchoCm: box.anchoCm || box.d || 0, altoCm: box.altoCm || box.h || 0 };
             }
             clientBreakdown[cc].articles[artKey].boxes++;
             clientBreakdown[cc].articles[artKey].weightKg += (box.weight || 0);
@@ -1488,6 +1608,15 @@ router.post('/save-load', async (req, res) => {
             overflowCount: (overflow || []).length,
             savedManually: true,
         };
+        let detallesManualStr = JSON.stringify(detalles);
+        // Safety: compact if too large for ODBC buffer
+        if (detallesManualStr.length > 500000) {
+            for (const cl of (detalles.clients || [])) {
+                for (const art of (cl.articles || [])) { delete art.name; }
+                delete cl.clientName;
+            }
+            detallesManualStr = JSON.stringify(detalles);
+        }
 
         await queryWithParams(`
             INSERT INTO JAVIER.ALMACEN_CARGA_HISTORICO
@@ -1508,7 +1637,7 @@ router.post('/save-load', async (req, res) => {
             sanitizeForSQL(req.user?.code || 'SYSTEM'),
             metrics.totalImporteEur || 0,
             metrics.totalMargenEur || 0,
-            JSON.stringify(detalles)
+            detallesManualStr
         ]);
 
         logger.info(`[SAVE-LOAD] Carga guardada manualmente: ${vehicleCode} ${y}-${m}-${d}`);

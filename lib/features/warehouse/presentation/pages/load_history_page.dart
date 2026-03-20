@@ -454,35 +454,113 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
   Widget _buildDetailBreakdown(Map<String, dynamic> detalles) {
     final clients = (detalles['clients'] as List?) ?? [];
     if (clients.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(12),
-        child: Text('Sin desglose disponible',
-            style: TextStyle(color: Colors.white24, fontSize: 11)),
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.info_outline_rounded,
+              color: Colors.white.withValues(alpha: 0.15), size: 28),
+          const SizedBox(height: 6),
+          const Text('Sin desglose disponible',
+              style: TextStyle(color: Colors.white24, fontSize: 11)),
+          Text('Las cargas antiguas no incluyen detalle',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  fontSize: 9)),
+        ]),
       );
+    }
+
+    // Calculate totals for summary
+    int totalBoxes = 0;
+    double totalWeight = 0;
+    double totalEur = 0;
+    for (final c in clients) {
+      final cm = c as Map<String, dynamic>;
+      totalBoxes += ((cm['boxes'] ?? 0) as num).toInt();
+      totalWeight += ((cm['weightKg'] ?? 0) as num).toDouble();
+      totalEur += ((cm['importeEur'] ?? 0) as num).toDouble();
     }
 
     return Container(
       decoration: BoxDecoration(
         border: Border(top: BorderSide(
-            color: Colors.white.withValues(alpha: 0.05)))),
+            color: AppTheme.neonBlue.withValues(alpha: 0.1)))),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-        Text('DESGLOSE POR CLIENTE', style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4),
-            fontSize: 9, fontWeight: FontWeight.w800,
-            letterSpacing: 1)),
-        const SizedBox(height: 6),
-        ...clients.map<Widget>((c) =>
-            _buildClientRow(c as Map<String, dynamic>)),
+        // Summary header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.neonBlue.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+                color: AppTheme.neonBlue.withValues(alpha: 0.1))),
+          child: Row(children: [
+            Icon(Icons.receipt_long_rounded, size: 12,
+                color: AppTheme.neonBlue.withValues(alpha: 0.5)),
+            const SizedBox(width: 6),
+            Text('DESGLOSE', style: TextStyle(
+                color: AppTheme.neonBlue.withValues(alpha: 0.7),
+                fontSize: 9, fontWeight: FontWeight.w800,
+                letterSpacing: 1)),
+            const Spacer(),
+            Text('${clients.length} clientes',
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    fontSize: 9)),
+            const SizedBox(width: 8),
+            Text('$totalBoxes bultos',
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    fontSize: 9)),
+            const SizedBox(width: 8),
+            Text('${totalWeight.toStringAsFixed(0)} kg',
+                style: TextStyle(
+                    color: Colors.amber.withValues(alpha: 0.5),
+                    fontSize: 9, fontWeight: FontWeight.w600)),
+            if (totalEur > 0) ...[
+              const SizedBox(width: 8),
+              Text('${totalEur.toStringAsFixed(0)} EUR',
+                  style: TextStyle(
+                      color: const Color(0xFF4CAF50).withValues(alpha: 0.7),
+                      fontSize: 9, fontWeight: FontWeight.w700)),
+            ],
+          ]),
+        ),
+        // Client rows
+        ...clients.asMap().entries.map<Widget>((entry) {
+          final c = entry.value as Map<String, dynamic>;
+          final isLast = entry.key == clients.length - 1;
+          return Column(children: [
+            _buildClientRow(c),
+            if (!isLast) Divider(
+                color: Colors.white.withValues(alpha: 0.03),
+                height: 2),
+          ]);
+        }),
         if (((detalles['overflowCount'] ?? 0) as num) > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-                '${detalles['overflowCount']} bultos no cargados',
-                style: const TextStyle(
-                    color: Colors.redAccent, fontSize: 9)),
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                  color: Colors.redAccent.withValues(alpha: 0.15))),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.warning_amber_rounded,
+                  color: Colors.redAccent, size: 12),
+              const SizedBox(width: 4),
+              Text(
+                  '${detalles['overflowCount']} bultos no cargados',
+                  style: const TextStyle(
+                      color: Colors.redAccent, fontSize: 9,
+                      fontWeight: FontWeight.w600)),
+            ]),
           ),
       ]),
     );
@@ -493,6 +571,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
     final impEur = (client['importeEur'] ?? 0) as num;
     final mrgEur = (client['margenEur'] ?? 0) as num;
     final wKg = (client['weightKg'] ?? 0) as num;
+    final boxes = (client['boxes'] ?? 0) as num;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
@@ -504,6 +583,12 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
         Row(children: [
+          Container(
+            width: 4, height: 20,
+            decoration: BoxDecoration(
+              color: AppTheme.neonBlue.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(2))),
+          const SizedBox(width: 8),
           Expanded(child: Text(
             '${client['clientCode'] ?? ''} — '
             '${client['clientName'] ?? ''}',
@@ -512,30 +597,35 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
                 fontWeight: FontWeight.w600),
             maxLines: 1, overflow: TextOverflow.ellipsis)),
           if (impEur > 0)
-            Text('${impEur.toStringAsFixed(2)} EUR',
-                style: const TextStyle(
-                    color: Color(0xFF4CAF50), fontSize: 10,
-                    fontWeight: FontWeight.w700)),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4)),
+              child: Text('${impEur.toStringAsFixed(2)} EUR',
+                  style: const TextStyle(
+                      color: Color(0xFF4CAF50), fontSize: 10,
+                      fontWeight: FontWeight.w700)),
+            ),
         ]),
-        const SizedBox(height: 2),
-        Row(children: [
-          Text('${client['boxes'] ?? 0} bultos',
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 9)),
-          const SizedBox(width: 8),
-          Text('${wKg.toStringAsFixed(1)} kg',
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 9)),
-          if (mrgEur > 0) ...[
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Row(children: [
+            _detailChip(Icons.all_inbox_rounded,
+                '${boxes.toInt()} bultos', AppTheme.neonBlue),
             const SizedBox(width: 8),
-            Text('Margen: ${mrgEur.toStringAsFixed(2)} EUR',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    fontSize: 9)),
-          ],
-        ]),
+            _detailChip(Icons.scale_rounded,
+                '${wKg.toStringAsFixed(1)} kg', Colors.amber),
+            if (mrgEur > 0) ...[
+              const SizedBox(width: 8),
+              _detailChip(Icons.trending_up_rounded,
+                  '${mrgEur.toStringAsFixed(2)} margen',
+                  const Color(0xFF66BB6A)),
+            ],
+          ]),
+        ),
         if (articles.isNotEmpty) ...[
           const SizedBox(height: 4),
           ...articles.map<Widget>((art) =>
@@ -543,6 +633,16 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
         ],
       ]),
     );
+  }
+
+  Widget _detailChip(IconData icon, String text, Color color) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 10, color: color.withValues(alpha: 0.5)),
+      const SizedBox(width: 3),
+      Text(text, style: TextStyle(
+          color: color.withValues(alpha: 0.6), fontSize: 9,
+          fontWeight: FontWeight.w600)),
+    ]);
   }
 
   Widget _buildArticleRow(Map<String, dynamic> a) {
