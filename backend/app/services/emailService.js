@@ -6,21 +6,20 @@
 const nodemailer = require('nodemailer');
 const logger = require('../../middleware/logger');
 
-// Configuración SMTP (misma infraestructura que granja_mari_pepa)
+// Configuración SMTP - Usa mail.mari-pepa.com:587 (probado y funcional)
 const SMTP_CONFIG = {
-    host: process.env.SMTP_HOST || '_dc-mx.bef93564e202.mari-pepa.com',
-    port: 465,
-    secure: true,
+    host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: false,
     auth: {
         user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
-        pass: process.env.SMTP_PASSWORD || '' // MUST be set via environment variable
+        pass: process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
     },
-    connectionTimeout: 20000,
+    connectionTimeout: 15000,
     greetingTimeout: 10000,
     socketTimeout: 20000,
     tls: {
-        rejectUnauthorized: process.env.NODE_ENV === 'production',
-        minVersion: 'TLSv1.2'
+        rejectUnauthorized: false
     }
 };
 

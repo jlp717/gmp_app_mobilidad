@@ -346,9 +346,8 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
         const rows = await query(sql);
 
-        // --- DEDUPLICATION: Group by unique albaran key to eliminate duplicate CPC rows ---
-        // Each albaran is shown individually. Factura number is metadata, NOT a grouping key.
-        // Grouping by factura caused wrong amounts (e.g. F-560 showed 3,890€ instead of individual albaran amounts).
+        // --- DEDUPLICATION PASS 1: Eliminate duplicate CPC rows per albaran ---
+        // JOINs with CAC/CACFIRMAS can produce multiple rows per albaran
         const uniqueMap = new Map();
         rows.forEach(row => {
             const serie = (row.SERIEALBARAN || '').toString().trim();
@@ -361,27 +360,20 @@ router.get('/history/documents/:clientId', async (req, res) => {
         });
         const uniqueRows = Array.from(uniqueMap.values());
         if (uniqueRows.length < rows.length) {
-            logger.info(`[REPARTIDOR] Deduplication v2 (Summing): ${rows.length} raw rows -> ${uniqueRows.length} unique documents for client ${clientId}`);
+            logger.info(`[REPARTIDOR] Dedup pass 1: ${rows.length} raw rows -> ${uniqueRows.length} unique albaranes for client ${clientId}`);
         }
 
-        const documents = uniqueRows.map(row => {
-            const importe = parseFloat(row.IMPORTETOTAL) || 0;
-
-            // --- SENIOR STATUS LOGIC ---
-            // --- SENIOR STATUS LOGIC v2 (Time-Aware) ---
-            // 1. App Status (Highest Priority - Real Time)
+        // --- Helper: compute status for a row ---
+        function computeRowStatus(row) {
             let status = 'pending';
             const appStatus = (row.DELIVERY_STATUS || '').trim().toLowerCase();
-            const legacyStatus = (row.SITUACIONALBARAN || '').trim().toUpperCase(); // F=Facturado, R=Repartido, X=Printed/Active
+            const legacyStatus = (row.SITUACIONALBARAN || '').trim().toUpperCase();
             const isDispatched = (row.CONFORMADOSN || '').trim().toUpperCase() === 'S';
 
-            // Current Date for comparison
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const docDate = new Date(row.ANO, row.MES - 1, row.DIA);
 
-            // AUDIT FIX: Match both English ('delivered') and Spanish ('entregado') values.
-            // Flutter writes 'ENTREGADO' to DELIVERY_STATUS, not 'delivered'.
             if (appStatus === 'delivered' || appStatus === 'entregado') {
                 status = 'delivered';
             } else if (appStatus === 'no_delivered' || appStatus === 'no_entregado' || appStatus === 'absent' || appStatus === 'rechazado') {
@@ -391,50 +383,36 @@ router.get('/history/documents/:clientId', async (req, res) => {
             } else if (appStatus === 'parcial') {
                 status = 'partial';
             } else {
-                // 2. Legacy ERP Status
                 if (legacyStatus === 'F' || legacyStatus === 'R') {
-                    // F: Facturado, R: Realizado/Repartido -> Green
                     status = 'delivered';
                 } else if (isDispatched) {
-                    // S: Salido de Almacén.
-                    // Logic: If it's a past date, assume Delivered (Green). If Today, assume En Ruta (Blue).
                     if (docDate < today) {
                         status = 'delivered';
                     } else {
                         status = 'en_ruta';
                     }
                 }
-                // Default remains 'pending' (Red)
             }
+            return status;
+        }
 
+        // --- Helper: build document from row ---
+        function buildDocument(row, overrides = {}) {
+            const importe = overrides.amount !== undefined ? overrides.amount : (parseFloat(row.IMPORTETOTAL) || 0);
+            const status = computeRowStatus(row);
             const hasFirmaPath = !!row.FIRMA_PATH;
             const numFactura = parseInt(row.NUMEROFACTURA) || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
             const ejercicioFactura = parseInt(row.EJERCICIOFACTURA) || 0;
             const isFactura = numFactura > 0;
-
-            // Legacy signature detection (from CACFIRMAS)
             const legacyNombre = (row.LEGACY_FIRMA_NOMBRE || '').trim();
-            // Only count as signed if there's an actual signature name (LEGACY_ANO alone is unreliable)
             const hasLegacySig = legacyNombre.length > 0;
-
-            // Format Time (HORALLEGADA is HHMMS or HHMMSS)
-            let timeFormatted = null;
-            if (row.HORALLEGADA && row.HORALLEGADA > 0) {
-                let hStr = row.HORALLEGADA.toString().padStart(6, '0'); // Confirm 6 digits for HHMMSS
-                // 130202 -> 13:02
-                const hh = hStr.substring(0, 2);
-                const mm = hStr.substring(2, 4);
-                timeFormatted = `${hh}:${mm}`;
-            }
-            // Pendiente removed from repartidor history — misleading aggregated CVC values
-
             const serie = (row.SERIEALBARAN || 'A').trim();
 
             return {
                 id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
-                type: isFactura ? 'factura' : 'albaran',
-                number: isFactura ? numFactura : row.NUMEROALBARAN,
+                type: overrides.type || (isFactura ? 'factura' : 'albaran'),
+                number: overrides.number !== undefined ? overrides.number : (isFactura ? numFactura : row.NUMEROALBARAN),
                 albaranNumber: row.NUMEROALBARAN,
                 facturaNumber: numFactura || null,
                 serieFactura: serieFactura || null,
@@ -448,7 +426,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                     : null,
                 amount: importe,
                 pending: 0,
-                status,
+                status: overrides.status || status,
                 hasSignature: hasFirmaPath || hasLegacySig,
                 signaturePath: row.FIRMA_PATH || null,
                 deliveryDate: row.DELIVERY_DATE || null,
@@ -458,8 +436,76 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 hasLegacySignature: hasLegacySig,
                 legacyDate: (row.LEGACY_ANO > 0)
                     ? `${row.LEGACY_ANO}-${String(row.LEGACY_MES).padStart(2, '0')}-${String(row.LEGACY_DIA).padStart(2, '0')} ${String(row.LEGACY_HORA).padStart(6, '0').substring(0, 2)}:${String(row.LEGACY_HORA).padStart(6, '0').substring(2, 4)}`
-                    : null
+                    : null,
+                // When grouped by factura, include constituent albaranes
+                ...(overrides.albaranes ? { albaranes: overrides.albaranes } : {})
             };
+        }
+
+        // --- DEDUPLICATION PASS 2: Group albaranes by factura ---
+        // When multiple albaranes share the same factura number, show ONE factura entry
+        // with the summed amount (matching the factura PDF total).
+        const facturaGroups = new Map(); // facturaKey -> [rows]
+        const noFacturaRows = [];
+        uniqueRows.forEach(row => {
+            const numFactura = parseInt(row.NUMEROFACTURA) || 0;
+            if (numFactura > 0) {
+                const serieF = (row.SERIEFACTURA || '').trim();
+                const ejercicioF = parseInt(row.EJERCICIOFACTURA) || 0;
+                const fKey = `F-${ejercicioF}-${serieF}-${numFactura}`;
+                if (!facturaGroups.has(fKey)) {
+                    facturaGroups.set(fKey, []);
+                }
+                facturaGroups.get(fKey).push(row);
+            } else {
+                noFacturaRows.push(row);
+            }
+        });
+
+        const documents = [];
+
+        // Add grouped factura entries
+        for (const [fKey, fRows] of facturaGroups.entries()) {
+            // Sum amounts from all albaranes in this factura
+            const totalAmount = fRows.reduce((sum, r) => sum + (parseFloat(r.IMPORTETOTAL) || 0), 0);
+
+            // Use the most recent row for display metadata (date, status, etc.)
+            const primaryRow = fRows[0]; // Already sorted by date DESC
+
+            // Determine best status: if any delivered, factura is delivered; else most recent status
+            const statuses = fRows.map(r => computeRowStatus(r));
+            let bestStatus = statuses[0];
+            if (statuses.includes('delivered')) bestStatus = 'delivered';
+            else if (statuses.includes('partial')) bestStatus = 'partial';
+            else if (statuses.includes('en_ruta')) bestStatus = 'en_ruta';
+
+            const albaranes = fRows.map(r => {
+                const s = (r.SERIEALBARAN || 'A').trim();
+                return { serie: s, terminal: r.TERMINALALBARAN, numero: r.NUMEROALBARAN, ejercicio: r.EJERCICIOALBARAN, amount: parseFloat(r.IMPORTETOTAL) || 0 };
+            });
+
+            documents.push(buildDocument(primaryRow, {
+                type: 'factura',
+                number: parseInt(primaryRow.NUMEROFACTURA),
+                amount: totalAmount,
+                status: bestStatus,
+                albaranes: albaranes.length > 1 ? albaranes : undefined
+            }));
+
+            if (fRows.length > 1) {
+                logger.info(`[REPARTIDOR] Factura ${fKey}: grouped ${fRows.length} albaranes, total=${totalAmount.toFixed(2)}`);
+            }
+        }
+
+        // Add non-factura albaranes as individual entries
+        noFacturaRows.forEach(row => {
+            documents.push(buildDocument(row));
+        });
+
+        // Sort by date DESC, then number DESC
+        documents.sort((a, b) => {
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            return (b.number || 0) - (a.number || 0);
         });
 
         res.json({

@@ -1033,12 +1033,18 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                if (isFactura && doc.facturaNumber != null && doc.facturaNumber! > 0)
-                  Text('  (F-${doc.facturaNumber})',
-                    style: TextStyle(fontSize: 10, color: Colors.purpleAccent.withOpacity(0.7))),
+                Flexible(
+                  child: Text(
+                    isFactura && doc.facturaNumber != null && doc.facturaNumber! > 0
+                      ? 'F-${doc.facturaNumber}'
+                      : '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isFactura && doc.albaranNumber != null)
+                  Text('  (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber})',
+                    style: TextStyle(fontSize: 9, color: AppTheme.textSecondary.withOpacity(0.6))),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1155,7 +1161,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Albarán ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}${isFactura && doc.facturaNumber != null ? " (F-${doc.facturaNumber})" : ""}',
+                        Text(
+                          isFactura && doc.facturaNumber != null
+                            ? 'Factura F-${doc.facturaNumber} (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number})'
+                            : 'Albarán ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
                           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
                         Text('${DateFormat('dd/MM/yyyy').format(doc.date)} · ${CurrencyFormatter.format(doc.amount)}',
                           style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
