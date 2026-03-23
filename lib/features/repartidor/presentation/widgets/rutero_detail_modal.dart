@@ -8,7 +8,6 @@ import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
@@ -20,6 +19,22 @@ import '../../../../core/widgets/whatsapp_form_modal.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
+
+/// Validate Spanish DNI/NIE format with check letter
+bool _isValidDniNie(String value) {
+  final cleaned = value.trim().toUpperCase();
+  final regex = RegExp(r'^([XYZ]\d{7}|\d{8})[A-Z]$');
+  if (!regex.hasMatch(cleaned)) return false;
+  const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+  var numStr = cleaned.substring(0, cleaned.length - 1);
+  numStr = numStr
+      .replaceFirst('X', '0')
+      .replaceFirst('Y', '1')
+      .replaceFirst('Z', '2');
+  final num = int.tryParse(numStr);
+  if (num == null) return false;
+  return cleaned[cleaned.length - 1] == letters[num % 23];
+}
 
 /// Rutero Detail Modal - Futuristic Redesign v2
 /// Features:
@@ -83,6 +98,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   String? _dniError;
   String? _firmaError;
   String? _pagoError;
+  String? _observacionesError;
 
   @override
   void initState() {
@@ -722,7 +738,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final docLabel = widget.albaran.numeroFactura > 0
           ? 'Factura_${widget.albaran.numeroFactura}'
           : 'Albaran_${widget.albaran.numeroAlbaran}';
-      final file = File('${tempDir.path}/Nota_Entrega_$docLabel.pdf');
+      final dlTs = DateTime.now().millisecondsSinceEpoch;
+      final file = File('${tempDir.path}/Nota_Entrega_${docLabel}_$dlTs.pdf');
       await file.writeAsBytes(base64Decode(pdfData));
 
       modal.success('Guardado en Descargas');
@@ -1816,15 +1833,44 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
           const SizedBox(height: 16),
 
+          // Orange warning when quantities modified
+          if (_items.any((item) =>
+              (_productQuantities[item.codigoArticulo] ??
+                      item.cantidadPedida.toInt()) !=
+                  item.cantidadPedida.toInt()))
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.15),
+                border: Border.all(color: Colors.orange),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Se han modificado cantidades. Las observaciones '
+                'son obligatorias para justificar los cambios.',
+                style: TextStyle(
+                  color: Colors.orange,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+
           // Observations
           TextField(
             controller: _observacionesController,
             maxLines: 3,
+            onChanged: (_) {
+              if (_observacionesError != null) {
+                setState(() => _observacionesError = null);
+              }
+            },
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               labelText: 'Observaciones',
               hintText: 'Añadir nota sobre la entrega...',
               alignLabelWithHint: true,
+              errorText: _observacionesError,
               filled: true,
               fillColor: AppTheme.darkCard,
               border: OutlineInputBorder(
@@ -1974,6 +2020,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _dniError = null;
       _firmaError = null;
       _pagoError = null;
+      _observacionesError = null;
     });
   }
 
@@ -1990,9 +2037,25 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       isValid = false;
     }
     
-    // Validate DNI
-    if (_dniController.text.trim().isEmpty) {
+    // Validate DNI format (Spanish DNI/NIE)
+    final dniText = _dniController.text.trim();
+    if (dniText.isEmpty) {
       _dniError = 'El DNI/NIF es obligatorio';
+      isValid = false;
+    } else if (!_isValidDniNie(dniText)) {
+      _dniError = 'Formato no válido (ej: 12345678A o X1234567B)';
+      isValid = false;
+    }
+
+    // Require observations when quantities are modified
+    final anyQtyModified = _items.any((item) =>
+        (_productQuantities[item.codigoArticulo] ??
+                item.cantidadPedida.toInt()) !=
+            item.cantidadPedida.toInt());
+    if (anyQtyModified &&
+        _observacionesController.text.trim().isEmpty) {
+      _observacionesError =
+          'Obligatorio cuando se modifican cantidades';
       isValid = false;
     }
     
@@ -2138,8 +2201,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (sigBytes == null) throw Exception('Error al procesar firma');
       final String base64Sig = base64Encode(sigBytes);
 
-      // Build observations
+      // Build observations with quantity changes
       String finalObs = _observacionesController.text.trim();
+      final qtyChanges = <String>[];
+      for (final item in _items) {
+        final orig = item.cantidadPedida.toInt();
+        final actual =
+            _productQuantities[item.codigoArticulo] ?? orig;
+        if (actual != orig) {
+          qtyChanges.add(
+            '${item.descripcion}: $orig -> $actual',
+          );
+        }
+      }
+      if (qtyChanges.isNotEmpty) {
+        finalObs +=
+            '\n--- Cambios de cantidad ---\n${qtyChanges.join('\n')}';
+      }
       if (_nombreController.text.isNotEmpty) {
         finalObs += '\nReceptor: ${_nombreController.text} (${_dniController.text})';
       }
@@ -2280,6 +2358,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             items: _items,
             observaciones: obsController.text.trim(),
             receptorNombre: _nombreController.text.trim(),
+            receptorDni: _dniController.text.trim(),
           );
 
           return AlertDialog(
@@ -2556,24 +2635,20 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
       // Save PDF temporarily
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}.pdf');
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final file = File(
+        '${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}_$ts.pdf',
+      );
       await file.writeAsBytes(base64Decode(pdfData));
 
       modal.close();
       if (!mounted) return;
 
-      // Clean phone
-      String cleanPhone = result.phone.replaceAll(RegExp(r'[^\d]'), '');
-      if (cleanPhone.length == 9) cleanPhone = '34$cleanPhone';
-
-      // Share via WhatsApp
-      final whatsappUrl = 'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(result.message)}';
-      if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
-        await launchUrl(Uri.parse(whatsappUrl), mode: LaunchMode.externalApplication);
-      } else {
-        // Fallback
-        await Share.shareXFiles([XFile(file.path)], text: result.message);
-      }
+      // Share PDF via system share sheet (user picks WhatsApp)
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: result.message,
+      );
       
     } catch (e) {
       modal.error('Error al compartir: $e');
@@ -2607,9 +2682,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'iva': 0,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
-          'repartidor': widget.albaran.codigoRepartidor,
+          'ordenPreparacion': widget.albaran.ordenPreparacion,
+          'repartidor': widget.albaran.nombreRepartidor.isNotEmpty
+              ? widget.albaran.nombreRepartidor
+              : widget.albaran.codigoRepartidor,
           'items': _items.map((i) => {
-            'cantidad': i.cantidadPedida,
+            'cantidad': _productQuantities[i.codigoArticulo] ??
+                i.cantidadPedida.toInt(),
             'descripcion': i.descripcion,
             'precio': i.precioUnitario,
           }).toList(),
@@ -2758,9 +2837,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'iva': 0,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
-          'repartidor': widget.albaran.codigoRepartidor,
+          'ordenPreparacion': widget.albaran.ordenPreparacion,
+          'repartidor': widget.albaran.nombreRepartidor.isNotEmpty
+              ? widget.albaran.nombreRepartidor
+              : widget.albaran.codigoRepartidor,
           'items': _items.map((i) => {
-            'cantidad': i.cantidadPedida,
+            'cantidad': _productQuantities[i.codigoArticulo] ??
+                i.cantidadPedida.toInt(),
             'descripcion': i.descripcion,
             'precio': i.precioUnitario,
           }).toList(),

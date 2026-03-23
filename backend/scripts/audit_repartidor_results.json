@@ -1,0 +1,306 @@
+{
+  "summary": {
+    "titulo": "Auditoría Exhaustiva del Perfil Repartidor",
+    "fecha": "2026-03-23",
+    "total_issues": 10,
+    "criticos": 2,
+    "altos": 4,
+    "medios": 3,
+    "bajos": 1,
+    "archivos_modificados": 6,
+    "branch_propuesto": "fix/repartidor-audit-patches"
+  },
+  "files": [
+    "backend/app/services/deliveryReceiptService.js",
+    "backend/routes/entregas.js",
+    "lib/features/entregas/providers/entregas_provider.dart",
+    "lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart",
+    "lib/features/repartidor/data/zebra_print_service.dart",
+    "lib/features/dashboard/presentation/pages/main_shell.dart"
+  ],
+  "queries_descriptions": [
+    {
+      "id": "Q1",
+      "proposito": "Detectar discrepancias entre CPC.IMPORTETOTAL y SUM(LAC.IMPORTEVENTA)",
+      "tablas": ["DSEDAC.CPC", "DSEDAC.LAC"],
+      "join": "por EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN",
+      "filtro": "EJERCICIOALBARAN = ?, CODIGOREPARTIDOR = ?",
+      "having": "ABS(CPC.IMPORTETOTAL - SUM(LAC.IMPORTEVENTA)) > 0.01"
+    },
+    {
+      "id": "Q2",
+      "proposito": "Obtener nombre del repartidor desde tabla VDD",
+      "tablas": ["DSEDAC.VDD"],
+      "join": "LEFT JOIN con OPP por CODIGOVENDEDOR = CODIGOREPARTIDOR",
+      "select": "COALESCE(TRIM(VDD.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR)) as NOMBRE_REPARTIDOR"
+    },
+    {
+      "id": "Q3",
+      "proposito": "Obtener orden de preparación del albarán",
+      "tablas": ["DSEDAC.OPP"],
+      "select": "OPP.NUMEROORDENPREPARACION as ORDEN_PREPARACION",
+      "nota": "Ya existía JOIN con OPP pero no se incluía en SELECT"
+    }
+  ],
+  "issues": [
+    {
+      "id": "ISS-001",
+      "title": "SQL sin parametrizar — inyección potencial",
+      "severity": "CRITICO",
+      "files_affected": [
+        "backend/app/services/deliveryReceiptService.js:42-88",
+        "backend/routes/entregas.js:584-586,650-653,737"
+      ],
+      "root_cause": "Interpolación directa de variables en queries SQL (${variable}) en lugar de placeholders (?)",
+      "fix_applied": "Todas las queries convertidas a queryWithParams con placeholders ?",
+      "acceptance_criteria": [
+        "Ninguna query en deliveryReceiptService.js usa interpolación ${} en SQL",
+        "Ninguna query en entregas.js líneas 584-737 usa interpolación ${} en SQL",
+        "Todas usan queryWithParams con array de parámetros"
+      ]
+    },
+    {
+      "id": "ISS-002",
+      "title": "PDF Preview — archivo temporal bloqueado al reabrir",
+      "severity": "BAJO",
+      "files_affected": ["rutero_detail_modal.dart:2559,725"],
+      "root_cause": "Nombre fijo de archivo PDF temporal; si un viewer externo lo bloquea, la escritura falla",
+      "fix_applied": "Timestamp añadido al nombre: nota_entrega_<num>_<ts>.pdf",
+      "acceptance_criteria": [
+        "Reabrir PDF del mismo albarán no falla por archivo bloqueado",
+        "Cada generación crea un archivo con nombre único"
+      ]
+    },
+    {
+      "id": "ISS-003",
+      "title": "WhatsApp no adjunta PDF — solo envía texto",
+      "severity": "ALTO",
+      "files_affected": ["rutero_detail_modal.dart:2569-2576"],
+      "root_cause": "wa.me URL solo soporta texto plano; Share.shareXFiles fallback sin mimeType",
+      "fix_applied": "Reemplazado bloque wa.me por Share.shareXFiles con mimeType 'application/pdf'",
+      "acceptance_criteria": [
+        "Al compartir por WhatsApp se abre share sheet nativo con PDF adjunto",
+        "Import url_launcher eliminado (ya no se usa)"
+      ]
+    },
+    {
+      "id": "ISS-004",
+      "title": "Cantidades modificadas no se envían al PDF ni al backend",
+      "severity": "ALTO",
+      "files_affected": ["rutero_detail_modal.dart:2763"],
+      "root_cause": "PDF envía i.cantidadPedida (original) en vez de _productQuantities[i.codigoArticulo] (modificada)",
+      "fix_applied": "Cambiado a _productQuantities[i.codigoArticulo] ?? i.cantidadPedida.toInt() en receipt y email",
+      "acceptance_criteria": [
+        "PDF refleja cantidades modificadas con +/-",
+        "Observaciones incluyen resumen de cambios si hay modificaciones",
+        "Observaciones obligatorias cuando se modifican cantidades"
+      ]
+    },
+    {
+      "id": "ISS-005",
+      "title": "Validación DNI/NIE insuficiente — solo comprueba vacío",
+      "severity": "MEDIO",
+      "files_affected": ["rutero_detail_modal.dart:1993-1997"],
+      "root_cause": "Solo se valida isEmpty, sin verificar formato ni letra de control",
+      "fix_applied": "Función _isValidDniNie con regex y verificación letra de control (mod 23). Soporta DNI (8 dígitos + letra) y NIE (X/Y/Z + 7 dígitos + letra)",
+      "acceptance_criteria": [
+        "DNI '12345678Z' acepta",
+        "DNI '123' rechaza con mensaje 'Formato no válido'",
+        "NIE 'X1234567B' acepta (si letra correcta)",
+        "Campo vacío sigue mostrando 'El DNI/NIF es obligatorio'"
+      ]
+    },
+    {
+      "id": "ISS-006",
+      "title": "Orden de preparación ausente en UI, PDF y ZPL",
+      "severity": "MEDIO",
+      "files_affected": [
+        "backend/routes/entregas.js:195-227",
+        "backend/app/services/deliveryReceiptService.js:279",
+        "lib/features/repartidor/data/zebra_print_service.dart:206",
+        "lib/features/entregas/providers/entregas_provider.dart"
+      ],
+      "root_cause": "OPP.NUMEROORDENPREPARACION existe en JOIN pero no en SELECT ni en modelo frontend",
+      "fix_applied": "Agregado al SELECT del backend, al modelo AlbaranEntrega, al PDF y al ZPL",
+      "acceptance_criteria": [
+        "PDF muestra 'Orden de preparación: X' debajo de fecha",
+        "ZPL imprime 'Orden Prep.: X' debajo de fecha",
+        "Si no hay orden, no se muestra nada"
+      ]
+    },
+    {
+      "id": "ISS-007",
+      "title": "ZPL no imprime DNI del firmante",
+      "severity": "MEDIO",
+      "files_affected": ["lib/features/repartidor/data/zebra_print_service.dart:327-334"],
+      "root_cause": "Parámetro receptorDni no existía; solo se imprime nombre",
+      "fix_applied": "Agregado parámetro receptorDni; imprime 'DNI/NIF: X' después del nombre del firmante",
+      "acceptance_criteria": [
+        "ZPL imprime DNI/NIF debajo del nombre del firmante",
+        "Si DNI vacío o null, no se imprime línea"
+      ]
+    },
+    {
+      "id": "ISS-008",
+      "title": "Comisiones visible para repartidores sin permiso",
+      "severity": "ALTO",
+      "files_affected": ["lib/features/dashboard/presentation/pages/main_shell.dart:349-357"],
+      "root_cause": "Condición if (!isJefe) muestra Comisiones a todos los repartidores; showCommissions del UserModel no se consulta",
+      "fix_applied": "Cambiado a if (!isJefe && (authProvider.currentUser?.showCommissions ?? false))",
+      "acceptance_criteria": [
+        "Repartidor con showCommissions=false NO ve pestaña Comisiones",
+        "Repartidor con showCommissions=true SÍ ve pestaña Comisiones",
+        "Índices de páginas se mantienen sincronizados"
+      ]
+    },
+    {
+      "id": "ISS-009",
+      "title": "Layout PDF: alturas y fuentes subóptimas",
+      "severity": "BAJO",
+      "files_affected": ["backend/app/services/deliveryReceiptService.js:233-238,448"],
+      "root_cause": "Altura mínima 400pt genera espacio blanco; máxima 900pt corta albaranes grandes; footer font 4.5pt",
+      "fix_applied": "lineHeight 11→12, headerHeight 120→135, footerHeight sin firma 70→80, rango altura 300-1200pt, footer font 4.5→5",
+      "acceptance_criteria": [
+        "Albaranes con pocos items no tienen exceso de espacio blanco",
+        "Albaranes con >30 items no se cortan",
+        "Footer legal legible"
+      ]
+    },
+    {
+      "id": "ISS-009b",
+      "title": "'Entregado por' muestra código numérico en lugar de nombre",
+      "severity": "ALTO",
+      "files_affected": [
+        "backend/routes/entregas.js:449",
+        "lib/features/entregas/providers/entregas_provider.dart",
+        "lib/features/repartidor/data/zebra_print_service.dart:362-363",
+        "lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart:2841"
+      ],
+      "root_cause": "Backend solo devuelve codigoRepartidor (ej: '25'); no incluye nombre. ZPL y PDF usan el código directamente.",
+      "fix_applied": "JOIN con DSEDAC.VDD para obtener NOMBREVENDEDOR; campo nombreRepartidor agregado al modelo; ZPL y PDF usan nombreRepartidor con fallback a código",
+      "acceptance_criteria": [
+        "PDF muestra 'Entregado por: JUAN GARCIA' (nombre real)",
+        "ZPL imprime 'Entregado por: JUAN GARCIA'",
+        "Si nombre no disponible, muestra código como fallback"
+      ]
+    }
+  ],
+  "patches": [
+    {
+      "file": "backend/app/services/deliveryReceiptService.js",
+      "changes": [
+        "Import queryWithParams desde config/db",
+        "getAlbaranLines: SQL parametrizada con ?",
+        "getAlbaranHeader: SQL parametrizada con ?",
+        "Layout: lineHeight 12, headerHeight 135, footerHeight 80, rango 300-1200",
+        "Footer font 4.5→5",
+        "Destructure ordenPreparacion de deliveryData",
+        "Mostrar orden de preparación en PDF debajo de fecha"
+      ]
+    },
+    {
+      "file": "backend/routes/entregas.js",
+      "changes": [
+        "SELECT: agregar ORDEN_PREPARACION y NOMBRE_REPARTIDOR",
+        "JOIN: LEFT JOIN DSEDAC.VDD para nombre repartidor",
+        "Map: agregar ordenPreparacion y nombreRepartidor a respuesta",
+        "Discrepancy: calcular lineSum y flag discrepancy",
+        "Albaran detail header: SQL parametrizada",
+        "Albaran detail items: SQL parametrizada",
+        "DELIVERY_STATUS check: SQL parametrizada"
+      ]
+    },
+    {
+      "file": "lib/features/entregas/providers/entregas_provider.dart",
+      "changes": [
+        "AlbaranEntrega: campos nombreRepartidor, ordenPreparacion, discrepancy, lineSum",
+        "fromJson: parsing de nuevos campos",
+        "Receipt/email: enviar nombreRepartidor en vez de codigoRepartidor"
+      ]
+    },
+    {
+      "file": "lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart",
+      "changes": [
+        "Función _isValidDniNie con regex + letra de control",
+        "Validación DNI: formato además de vacío",
+        "Campo _observacionesError",
+        "Observaciones obligatorias si cantidades modificadas",
+        "Banner naranja de aviso de cantidades modificadas",
+        "WhatsApp: Share.shareXFiles con mimeType, sin wa.me URL",
+        "PDF filename con timestamp",
+        "Cantidades modificadas enviadas al PDF",
+        "Resumen de cambios en observaciones",
+        "ordenPreparacion enviado al PDF",
+        "nombreRepartidor usado en receipt y email"
+      ]
+    },
+    {
+      "file": "lib/features/repartidor/data/zebra_print_service.dart",
+      "changes": [
+        "Parámetro receptorDni añadido",
+        "Imprime DNI/NIF después del firmante",
+        "Imprime Orden Prep. después de fecha",
+        "Entregado por: usa nombreRepartidor con fallback"
+      ]
+    },
+    {
+      "file": "lib/features/dashboard/presentation/pages/main_shell.dart",
+      "changes": [
+        "Comisiones: gating con showCommissions flag"
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "tipo": "backend_curl",
+      "descripcion": "Albaran detail con discrepancy flag",
+      "endpoint": "GET /api/entregas/albaran?numero=4876&ejercicio=2026&serie=P&terminal=16",
+      "verificar": ["response incluye lineSum", "response incluye discrepancy boolean"]
+    },
+    {
+      "tipo": "backend_curl",
+      "descripcion": "Receipt PDF con orden preparación y nombre repartidor",
+      "endpoint": "POST /api/entregas/receipt/:id",
+      "verificar": ["PDF base64 generado", "Contiene orden preparación", "Contiene nombre repartidor"]
+    },
+    {
+      "tipo": "frontend_manual",
+      "descripcion": "Login como repartidor",
+      "pasos": ["Login con usuario repartidor", "Verificar que NO aparece Comisiones si showCommissions=false"]
+    },
+    {
+      "tipo": "frontend_manual",
+      "descripcion": "Modificar cantidad y validar observaciones",
+      "pasos": [
+        "Abrir albarán",
+        "Modificar cantidad con +/-",
+        "Intentar confirmar sin observaciones",
+        "Verificar aviso naranja y error en observaciones"
+      ]
+    },
+    {
+      "tipo": "frontend_manual",
+      "descripcion": "Validación DNI",
+      "pasos": [
+        "Introducir '123' → error formato",
+        "Introducir '12345678Z' → acepta",
+        "Dejar vacío → error obligatorio"
+      ]
+    },
+    {
+      "tipo": "frontend_manual",
+      "descripcion": "WhatsApp share con PDF adjunto",
+      "pasos": ["Compartir por WhatsApp", "Verificar share sheet con PDF adjunto"]
+    },
+    {
+      "tipo": "frontend_manual",
+      "descripcion": "Impresión Zebra",
+      "pasos": [
+        "Imprimir en Zebra",
+        "Verificar DNI del firmante en ticket",
+        "Verificar orden de preparación",
+        "Verificar nombre repartidor en 'Entregado por'"
+      ]
+    }
+  ]
+}

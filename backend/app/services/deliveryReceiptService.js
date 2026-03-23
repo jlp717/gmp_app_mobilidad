@@ -11,7 +11,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../../middleware/logger');
-const { query } = require('../../config/db');
+const { query, queryWithParams } = require('../../config/db');
 
 // Directorio para almacenar recibos temporales
 const receiptsDir = path.join(__dirname, '../../uploads/receipts');
@@ -52,15 +52,15 @@ async function getAlbaranLines(ejercicio, serie, terminal, numero) {
             LAC.IMPORTEVENTA as IMPORTE,
             TRIM(LAC.CODIGOIVA) as COD_IVA
         FROM DSEDAC.LAC LAC
-        WHERE LAC.EJERCICIOALBARAN = ${ejercicio}
-          AND TRIM(LAC.SERIEALBARAN) = '${serie}'
-          AND LAC.TERMINALALBARAN = ${terminal}
-          AND LAC.NUMEROALBARAN = ${numero}
+        WHERE LAC.EJERCICIOALBARAN = ?
+          AND TRIM(LAC.SERIEALBARAN) = ?
+          AND LAC.TERMINALALBARAN = ?
+          AND LAC.NUMEROALBARAN = ?
           AND TRIM(LAC.TIPOLINEA) != 'T'
           AND TRIM(LAC.CODIGOARTICULO) != ''
         ORDER BY LAC.SECUENCIA
     `;
-    return await query(sql, false);
+    return await queryWithParams(sql, [ejercicio, serie, terminal, numero]);
 }
 
 /**
@@ -78,13 +78,13 @@ async function getAlbaranHeader(ejercicio, serie, terminal, numero) {
             TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
             DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
         FROM DSEDAC.CPC
-        WHERE EJERCICIOALBARAN = ${ejercicio}
-          AND TRIM(SERIEALBARAN) = '${serie}'
-          AND TERMINALALBARAN = ${terminal}
-          AND NUMEROALBARAN = ${numero}
+        WHERE EJERCICIOALBARAN = ?
+          AND TRIM(SERIEALBARAN) = ?
+          AND TERMINALALBARAN = ?
+          AND NUMEROALBARAN = ?
         FETCH FIRST 1 ROWS ONLY
     `;
-    const rows = await query(sql, false);
+    const rows = await queryWithParams(sql, [ejercicio, serie, terminal, numero]);
     return rows[0] || null;
 }
 
@@ -143,7 +143,7 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
         ejercicio, serie, terminal, numero,
         albaranNum, facturaNum,
         clientCode, clientName,
-        fecha, formaPago, repartidor,
+        fecha, formaPago, repartidor, ordenPreparacion,
         signatureBase64: inputSigBase64,
         firmante: inputFirmante
     } = deliveryData;
@@ -230,12 +230,12 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
     return new Promise((resolve, reject) => {
         try {
             // Calcular altura dinámica con más espacio para cada elemento
-            const lineHeight = 11; // More spacing between product lines
-            const headerHeight = 120;
-            const footerHeight = hasSignature ? 150 : 70; // More space for signature
+            const lineHeight = 12; // More spacing between product lines
+            const headerHeight = 135;
+            const footerHeight = hasSignature ? 150 : 80; // More space for signature
             const ivaGroups = Object.keys(gruposIVA).length;
             const minHeight = headerHeight + (lines.length * lineHeight) + (ivaGroups * 14) + footerHeight + 100;
-            const docHeight = Math.max(400, Math.min(900, minHeight));
+            const docHeight = Math.max(300, Math.min(1200, minHeight));
 
             const doc = new PDFDocument({
                 size: [226, docHeight],
@@ -278,6 +278,12 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             const fechaStr = fecha || (header ? `${String(header.DIADOCUMENTO).padStart(2, '0')}/${String(header.MESDOCUMENTO).padStart(2, '0')}/${header.ANODOCUMENTO}` : '');
             doc.fontSize(7).font('Helvetica')
                 .text(`Fecha: ${fechaStr}`, { align: 'center' });
+
+            const ordenPrep = ordenPreparacion || (header ? header.ORDEN_PREPARACION : null);
+            if (ordenPrep) {
+                doc.fontSize(6.5).font('Helvetica')
+                    .text(`Orden de preparación: ${ordenPrep}`, { align: 'center' });
+            }
 
             doc.moveDown(0.3);
 
@@ -445,7 +451,7 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
                 .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
             doc.moveDown(0.3);
 
-            doc.fontSize(4.5).font('Helvetica')
+            doc.fontSize(5).font('Helvetica')
                 .text('La posesión de este documento NO implica el pago de la misma', { align: 'center' })
                 .text('No se admiten devoluciones una vez aceptada la recepción', { align: 'center' });
 

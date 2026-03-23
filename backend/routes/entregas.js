@@ -222,6 +222,8 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
               TRIM(CPC.CODIGORUTA) as RUTA,
               TRIM(OPP.CODIGOREPARTIDOR) as CODIGO_REPARTIDOR,
+              OPP.NUMEROORDENPREPARACION as ORDEN_PREPARACION,
+              COALESCE(TRIM(VDD.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR)) as NOMBRE_REPARTIDOR,
               CPC.DIALLEGADA, CPC.HORALLEGADA,
               TRIM(CPC.CONFORMADOSN) as CONFORMADO,
               ${dsColumns}
@@ -234,6 +236,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
               AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
               AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            LEFT JOIN DSEDAC.VDD VDD ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
             ${dsJoin}
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids})
               AND OPP.DIAREPARTO = ${dia}
@@ -447,6 +450,8 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
                 ruta: row.RUTA?.trim(),
                 codigoRepartidor: row.CODIGO_REPARTIDOR?.trim() || '',
+                nombreRepartidor: row.NOMBRE_REPARTIDOR?.trim() || row.CODIGO_REPARTIDOR?.trim() || '',
+                ordenPreparacion: row.ORDEN_PREPARACION || null,
                 estado: status,
                 observaciones: row.DS_OBS,
                 firma: row.DS_FIRMA
@@ -580,10 +585,11 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         const serie = req.query.serie;
         const terminal = req.query.terminal;
 
-        // 1. Build WHERE clause
-        let whereClause = `CPC.NUMEROALBARAN = ${numero} AND CPC.EJERCICIOALBARAN = ${ejercicio}`;
-        if (serie) whereClause += ` AND CPC.SERIEALBARAN = '${serie}'`;
-        if (terminal) whereClause += ` AND CPC.TERMINALALBARAN = ${terminal}`;
+        // 1. Build WHERE clause with parameterized query
+        const headerParams = [numero, ejercicio];
+        let whereClause = `CPC.NUMEROALBARAN = ? AND CPC.EJERCICIOALBARAN = ?`;
+        if (serie) { whereClause += ` AND CPC.SERIEALBARAN = ?`; headerParams.push(serie); }
+        if (terminal) { whereClause += ` AND CPC.TERMINALALBARAN = ?`; headerParams.push(terminal); }
 
         // 2. Get Header from CPC (uses IMPORTETOTAL - correct final amount)
         const headerSql = `
@@ -617,7 +623,7 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             FETCH FIRST 1 ROWS ONLY
         `;
 
-        const headers = await query(headerSql, false);
+        const headers = await queryWithParams(headerSql, headerParams);
         if (headers.length === 0) return res.status(404).json({ success: false, error: 'Albaran not found' });
 
         // AGGREGATE: If multiple CPC rows exist for the same Albaran detail request
@@ -642,20 +648,17 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
         }
 
         // 3. Get Items from LAC (Simplified for ODBC compatibility - NO ALIASES)
-        // 3. Get Items from LAC (Super Simplified for ODBC)
-        // Removed L alias completely to avoid "Error executing sql"
+        // Parameterized query to prevent SQL injection
+        const itemParams = [numero, ejercicio];
         let itemsSql = `
             SELECT *
             FROM DSEDAC.LAC
-            WHERE NUMEROALBARAN = ${numero} AND EJERCICIOALBARAN = ${ejercicio}
+            WHERE NUMEROALBARAN = ? AND EJERCICIOALBARAN = ?
         `;
-        if (serie) itemsSql += ` AND SERIEALBARAN = '${serie}'`;
-        if (terminal) itemsSql += ` AND TERMINALALBARAN = ${terminal}`;
+        if (serie) { itemsSql += ` AND SERIEALBARAN = ?`; itemParams.push(serie); }
+        if (terminal) { itemsSql += ` AND TERMINALALBARAN = ?`; itemParams.push(terminal); }
 
-        // Note: We use * because listing columns explicitly was failing. 
-        // We will map carefully below.
-
-        const items = await query(itemsSql, false);
+        const items = await queryWithParams(itemsSql, itemParams);
 
         // IVA breakdown for detail
         const base1 = parseFloat(header.CPC_BASE1) || 0;
@@ -710,6 +713,12 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
             estado: 'PENDIENTE'
         };
 
+        // Discrepancy detection: compare header total vs sum of line amounts
+        const lineSum = albaran.items.reduce((sum, item) => sum + item.totalLinea, 0);
+        const lineSumRounded = Math.round(lineSum * 100) / 100;
+        albaran.lineSum = lineSumRounded;
+        albaran.discrepancy = Math.abs(albaran.importe - lineSumRounded) > 0.01;
+
         res.json({ success: true, albaran });
     } catch (error) {
         logger.error(`Error in /albaran: ${error.message}`);
@@ -734,8 +743,7 @@ router.post('/update', async (req, res) => {
         // VALIDATION: Check if already delivered (prevents accidental duplicate confirmations)
         if (status === 'ENTREGADO') {
             try {
-                const checkSql = `SELECT STATUS, UPDATED_AT, REPARTIDOR_ID FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`;
-                const existing = await query(checkSql, false);
+                const existing = await queryWithParams(`SELECT STATUS, UPDATED_AT, REPARTIDOR_ID FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [itemId]);
 
                 if (existing.length > 0 && existing[0].STATUS === 'ENTREGADO') {
                     // Already delivered - only allow if forceUpdate is true

@@ -161,6 +161,7 @@ class ZebraPrintService {
     required List<EntregaItem> items,
     required String observaciones,
     String? receptorNombre,
+    String? receptorDni,
   }) {
     final buf = StringBuffer();
     int y = 25;
@@ -203,7 +204,12 @@ class ZebraPrintService {
     y += 32;
     buf.writeln('^CF0,18');
     buf.writeln('^FO$_xLeft,$y^FDFecha: ${albaran.fecha}^FS');
-    y += 26;
+    y += 24;
+    if (albaran.ordenPreparacion != null) {
+      buf.writeln('^CF0,18');
+      buf.writeln('^FO$_xLeft,$y^FDOrden Prep.: ${albaran.ordenPreparacion}^FS');
+      y += 24;
+    }
 
     // ═══ CLIENT INFO ═══
     buf.writeln('^CF0,20');
@@ -332,6 +338,11 @@ class ZebraPrintService {
       );
       y += 22;
     }
+    if (receptorDni != null && receptorDni.isNotEmpty) {
+      buf.writeln('^CF0,16');
+      buf.writeln('^FO$_xLeft,$y^FDDNI/NIF: $receptorDni^FS');
+      y += 20;
+    }
 
     // ═══ OBSERVATIONS ═══
     if (observaciones.isNotEmpty) {
@@ -360,7 +371,7 @@ class ZebraPrintService {
     buf.writeln('^CF0,16');
     buf.writeln(
       '^FO$_xLeft,$y^FDEntregado por: '
-      '${albaran.codigoRepartidor}^FS',
+      '${albaran.nombreRepartidor.isNotEmpty ? albaran.nombreRepartidor : albaran.codigoRepartidor}^FS',
     );
 
     buf.writeln('^XZ');

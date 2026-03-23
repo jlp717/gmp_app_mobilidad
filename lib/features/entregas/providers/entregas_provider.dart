@@ -98,6 +98,10 @@ class AlbaranEntrega {
   final String codigoVendedor;
   final String nombreVendedor;
   final String codigoRepartidor; // Para Jefe de Ventas
+  final String nombreRepartidor;
+  final int? ordenPreparacion;
+  final bool discrepancy;
+  final double lineSum;
   EstadoEntrega estado;
   List<EntregaItem> items;
   String? observaciones;
@@ -139,6 +143,10 @@ class AlbaranEntrega {
     this.codigoVendedor = '',
     this.nombreVendedor = '',
     this.codigoRepartidor = '',
+    this.nombreRepartidor = '',
+    this.ordenPreparacion,
+    this.discrepancy = false,
+    this.lineSum = 0,
     this.estado = EstadoEntrega.pendiente,
     this.items = const [],
     this.observaciones,
@@ -186,6 +194,10 @@ class AlbaranEntrega {
       codigoVendedor: json['codigoVendedor']?.toString() ?? '',
       nombreVendedor: json['nombreVendedor']?.toString() ?? '',
       codigoRepartidor: json['codigoRepartidor']?.toString() ?? '',
+      nombreRepartidor: json['nombreRepartidor']?.toString() ?? '',
+      ordenPreparacion: json['ordenPreparacion'] as int?,
+      discrepancy: json['discrepancy'] == true,
+      lineSum: ((json['lineSum'] ?? 0) as num).toDouble(),
       estado: EstadoEntrega.fromString((json['estado'] ?? 'PENDIENTE') as String),
       items: (json['items'] as List<dynamic>?)
               ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
@@ -511,7 +523,7 @@ class EntregasProvider extends ChangeNotifier {
         'iva': albaran.importeIva,
         'total': albaran.importeTotal,
         'formaPago': albaran.formaPagoDesc,
-        'repartidor': albaran.codigoRepartidor,
+        'repartidor': albaran.nombreRepartidor.isNotEmpty ? albaran.nombreRepartidor : albaran.codigoRepartidor,
       });
       if (response['success'] == true) {
         return response;
@@ -546,7 +558,7 @@ class EntregasProvider extends ChangeNotifier {
         'iva': albaran.importeIva,
         'total': albaran.importeTotal,
         'formaPago': albaran.formaPagoDesc,
-        'repartidor': albaran.codigoRepartidor,
+        'repartidor': albaran.nombreRepartidor.isNotEmpty ? albaran.nombreRepartidor : albaran.codigoRepartidor,
       });
       return response['success'] == true;
     } catch (e) {

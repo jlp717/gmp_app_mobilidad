@@ -346,8 +346,8 @@ class _MainShellState extends State<MainShell> {
         label: 'Rutero',
         color: AppTheme.neonBlue,
       ));
-      // Comisiones only for real repartidores, not Jefe in repartidor mode
-      if (!isJefe) {
+      // Comisiones only for real repartidores with showCommissions enabled
+      if (!isJefe && (authProvider.currentUser?.showCommissions ?? false)) {
         items.add(_NavItem(
           icon: Icons.euro_outlined,
           selectedIcon: Icons.euro,
