@@ -111,3 +111,8 @@ upload-keystore.jks
 
 # Deprecated/test files that shouldn't be tracked
 backend/deprecated/
+
+# Ruflo swarm runtime files
+.swarm/*.db
+.swarm/*.db-wal
+.swarm/*.db-shm
