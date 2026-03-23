@@ -1,7 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/widgets/fi_filters_widget.dart';
@@ -1696,6 +1700,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final unitsVariation = prevYearUnits > 0 ? ((units - prevYearUnits) / prevYearUnits) * 100 : 0.0;
     final salesVariation = prevYearSales > 0 ? ((sales - prevYearSales) / prevYearSales) * 100 : 0.0;
 
+    final baseUrl = ApiConfig.baseUrl;
+    final imageUrl = '$baseUrl/products/${Uri.encodeComponent(code.trim())}/image';
+    final fichaUrl = '$baseUrl/products/${Uri.encodeComponent(code.trim())}/ficha';
+
     return Container(
       margin: const EdgeInsets.only(left: 8, right: 4, bottom: 6),
       padding: const EdgeInsets.all(10),
@@ -1707,20 +1715,77 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Product header
+          // Product header with image
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Code badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                child: Text(code, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+              // Product thumbnail
+              GestureDetector(
+                onTap: () => _showFullscreenImage(context, imageUrl, name),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    color: AppTheme.darkBase,
+                    child: Image.network(
+                      imageUrl,
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                      headers: const {'Accept': 'image/*'},
+                      loadingBuilder: (ctx, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)));
+                      },
+                      errorBuilder: (ctx, err, stack) => const Icon(Icons.image_not_supported_outlined, color: Colors.white24, size: 22),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
-              // Name
+              // Code badge + Name
               Expanded(
-                child: Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                          child: Text(code, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                        ),
+                        const Spacer(),
+                        // Ficha Técnica button
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () => _openFichaTecnica(context, code.trim(), fichaUrl),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppTheme.neonBlue.withOpacity(0.4)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.description_outlined, color: AppTheme.neonBlue, size: 12),
+                                  SizedBox(width: 3),
+                                  Text('Ficha', style: TextStyle(color: AppTheme.neonBlue, fontSize: 9)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 2),
+                  ],
+                ),
               ),
             ],
           ),
@@ -1932,5 +1997,99 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
      
      return Text('$prefix${variation.toStringAsFixed(0)}%', 
          style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: color));
+  }
+
+  // ===========================================================================
+  // FULLSCREEN IMAGE VIEWER
+  // ===========================================================================
+  void _showFullscreenImage(BuildContext ctx, String imageUrl, String productName) {
+    Navigator.of(ctx).push(
+      PageRouteBuilder<void>(
+        opaque: false,
+        barrierColor: Colors.black87,
+        barrierDismissible: true,
+        pageBuilder: (c, anim, secondAnim) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              elevation: 0,
+              title: Text(productName, style: const TextStyle(color: Colors.white70, fontSize: 14), overflow: TextOverflow.ellipsis),
+              leading: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.of(c).pop()),
+            ),
+            body: Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5.0,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  headers: const {'Accept': 'image/*'},
+                  loadingBuilder: (ctx2, child, progress) {
+                    if (progress == null) return child;
+                    final pct = progress.expectedTotalBytes != null ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes! : null;
+                    return Center(child: CircularProgressIndicator(value: pct, color: AppTheme.neonBlue));
+                  },
+                  errorBuilder: (ctx2, err, stack) => const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image_outlined, color: Colors.white38, size: 64),
+                      SizedBox(height: 12),
+                      Text('No se pudo cargar la imagen', style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (c, anim, secondAnim, child) => FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // FICHA TÉCNICA — Download PDF and open viewer
+  // ===========================================================================
+  Future<void> _openFichaTecnica(BuildContext ctx, String productCode, String fichaUrl) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(ctx);
+    final navigator = Navigator.of(ctx);
+
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(
+        content: Row(children: [
+          SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+          SizedBox(width: 12),
+          Text('Descargando ficha técnica...'),
+        ]),
+        duration: Duration(seconds: 10),
+      ),
+    );
+
+    try {
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/${productCode}_ficha.pdf';
+
+      await Dio().download(fichaUrl, filePath);
+      scaffoldMessenger.hideCurrentSnackBar();
+
+      if (!File(filePath).existsSync()) {
+        scaffoldMessenger.showSnackBar(const SnackBar(content: Text('No se encontró la ficha técnica para este producto')));
+        return;
+      }
+
+      navigator.push(MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(title: Text('Ficha Técnica - $productCode', style: const TextStyle(fontSize: 14)), backgroundColor: AppTheme.surfaceColor, elevation: 0),
+          body: PDFView(filePath: filePath, enableSwipe: true, swipeHorizontal: false, autoSpacing: true, pageFling: true,
+            onError: (error) { ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error al abrir PDF: $error'))); }),
+        ),
+      ));
+    } catch (e) {
+      scaffoldMessenger.hideCurrentSnackBar();
+      final msg = e.toString().contains('404') ? 'No hay ficha técnica para este producto' : 'Error al descargar: $e';
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text(msg)));
+    }
   }
 }
