@@ -1383,6 +1383,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     else if (yoyTrend == 'down') borderColor = AppTheme.error;
     else if (yoyTrend == 'new') borderColor = AppTheme.neonBlue;
 
+    final baseUrl = ApiConfig.baseUrl;
+    final imageUrl = '$baseUrl/products/${Uri.encodeComponent(code.trim())}/image';
+    final fichaUrl = '$baseUrl/products/${Uri.encodeComponent(code.trim())}/ficha';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
@@ -1394,35 +1398,94 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Product header: Code + Name + Discount badge
+          // Product header: Thumbnail + Code + Name + Ficha button
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                child: Text(code, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+              // Product thumbnail
+              GestureDetector(
+                onTap: () => _showFullscreenImage(context, imageUrl, name),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    color: AppTheme.darkBase,
+                    child: Image.network(
+                      imageUrl,
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.cover,
+                      headers: const {'Accept': 'image/*'},
+                      loadingBuilder: (ctx, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)));
+                      },
+                      errorBuilder: (ctx, err, stack) => const Icon(Icons.image_not_supported_outlined, color: Colors.white24, size: 20),
+                    ),
+                  ),
+                ),
               ),
-              if (hasDiscount) ...[
-                const SizedBox(width: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(3)),
-                  child: Text(avgDiscountPct > 0 ? '-${avgDiscountPct.toStringAsFixed(0)}%' : 'DTO', 
-                    style: const TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: Colors.orange)),
-                ),
-              ],
-              // YoY trend badge
-              if (yoyTrend != 'neutral') ...[
-                const SizedBox(width: 4),
-                Icon(
-                  yoyTrend == 'up' ? Icons.trending_up : yoyTrend == 'down' ? Icons.trending_down : Icons.fiber_new,
-                  size: 12,
-                  color: borderColor,
-                ),
-              ],
               const SizedBox(width: 6),
+              // Code + badges + name
               Expanded(
-                child: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                          child: Text(code, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+                        ),
+                        if (hasDiscount) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(3)),
+                            child: Text(avgDiscountPct > 0 ? '-${avgDiscountPct.toStringAsFixed(0)}%' : 'DTO', 
+                              style: const TextStyle(fontSize: 6, fontWeight: FontWeight.bold, color: Colors.orange)),
+                          ),
+                        ],
+                        if (yoyTrend != 'neutral') ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            yoyTrend == 'up' ? Icons.trending_up : yoyTrend == 'down' ? Icons.trending_down : Icons.fiber_new,
+                            size: 12,
+                            color: borderColor,
+                          ),
+                        ],
+                        const Spacer(),
+                        // Ficha Técnica button
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () => _openFichaTecnica(context, code.trim(), fichaUrl),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppTheme.neonBlue.withOpacity(0.4)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.description_outlined, color: AppTheme.neonBlue, size: 11),
+                                  SizedBox(width: 2),
+                                  Text('Ficha', style: TextStyle(color: AppTheme.neonBlue, fontSize: 8)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
               ),
             ],
           ),

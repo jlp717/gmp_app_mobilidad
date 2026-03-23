@@ -11,6 +11,14 @@ const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 
 /**
+ * Strip leading vendor code from VDD names (e.g., "08 DAMIAN" → "DAMIAN")
+ */
+function stripVendorCode(name) {
+    if (!name) return '';
+    return name.replace(/^\d+\s+/, '').trim();
+}
+
+/**
  * Validate Spanish DNI/NIE format with check letter (mod 23).
  * @param {string} value - DNI/NIE string
  * @returns {boolean} true if format is valid
@@ -468,7 +476,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
                 fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
                 ruta: row.RUTA?.trim(),
                 codigoRepartidor: row.CODIGO_REPARTIDOR?.trim() || '',
-                nombreRepartidor: row.NOMBRE_REPARTIDOR?.trim() || row.CODIGO_REPARTIDOR?.trim() || '',
+                nombreRepartidor: stripVendorCode(row.NOMBRE_REPARTIDOR) || row.CODIGO_REPARTIDOR?.trim() || '',
                 ordenPreparacion: row.ORDEN_PREPARACION || null,
                 estado: status,
                 observaciones: row.DS_OBS,
@@ -721,6 +729,7 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
                 codigoArticulo: i.CODIGOARTICULO,
                 descripcion: i.DESCRIPCION,
                 cantidadPedida: parseFloat(i.CANTIDADUNIDADES) || 0,
+                bultos: parseFloat(i.CANTIDADENVASES) || 0,
                 cantidadCajas: parseFloat(i.CANTIDADCAJAS) || 0,
                 totalLinea: parseFloat(i.IMPORTEVENTA) || 0,
                 unidad: i.UNIDADMEDIDA,
@@ -957,7 +966,7 @@ router.get('/signers/:clientCode', async (req, res) => {
 router.post('/receipt/:entregaId', async (req, res) => {
     try {
         const { entregaId } = req.params;
-        const { signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor } = req.body;
+        const { signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor, ordenPreparacion, firmante, firmanteDni } = req.body;
 
         const { saveReceipt } = require('../app/services/deliveryReceiptService');
 
