@@ -16,7 +16,7 @@ const logger = require('../middleware/logger');
 
 // Configurable base path — fallback to default UNC path
 const IMAGES_BASE = process.env.PRODUCT_IMAGES_PATH
-  || '\\\\192.168.1.191\\acisa\\GestorDocumental\\Articulos_catalogo';
+  || '\\\\192.168.1.191\\acisa\\xampp\\htdocs\\movilidad\\ImagenesGestorDocumentalNuevo';
 
 // Startup check: verify base path accessibility
 try {
@@ -57,7 +57,7 @@ router.get('/diagnostico', async (req, res) => {
     const samples = items.map(folder => {
       const code = folder;
       const imgPath = path.join(IMAGES_BASE, code, `${code}.png`);
-      const fichaPath = path.join(IMAGES_BASE, code, 'FICHA_TECNICA', `${code}.pdf`);
+      const fichaPath = path.join(IMAGES_BASE, code, 'FICHA TECNICA', `${code}.pdf`);
       return {
         code,
         hasImage: fs.existsSync(imgPath),
@@ -90,7 +90,7 @@ router.get('/:code/exists', (req, res) => {
   if (!code) return res.status(400).json({ error: 'Invalid product code' });
 
   const imgPath = path.join(IMAGES_BASE, code, `${code}.png`);
-  const fichaPath = path.join(IMAGES_BASE, code, 'FICHA_TECNICA', `${code}.pdf`);
+  const fichaPath = path.join(IMAGES_BASE, code, 'FICHA TECNICA', `${code}.pdf`);
 
   res.json({
     productCode: code,
@@ -143,7 +143,7 @@ router.get('/:code/ficha', (req, res) => {
   const code = sanitizeCode(req.params.code);
   if (!code) return res.status(404).json({ error: 'Invalid product code' });
 
-  const fichaPath = path.join(IMAGES_BASE, code, 'FICHA_TECNICA', `${code}.pdf`);
+  const fichaPath = path.join(IMAGES_BASE, code, 'FICHA TECNICA', `${code}.pdf`);
 
   if (!fs.existsSync(fichaPath)) {
     logger.warn(`[products] Ficha not found for ${code}. Tried: ${fichaPath} | Folder exists: ${fs.existsSync(path.join(IMAGES_BASE, code))}`);
@@ -181,7 +181,7 @@ router.post('/batch-exists', (req, res) => {
     if (!code) continue;
 
     const imgPath = path.join(IMAGES_BASE, code, `${code}.png`);
-    const fichaPath = path.join(IMAGES_BASE, code, 'FICHA_TECNICA', `${code}.pdf`);
+    const fichaPath = path.join(IMAGES_BASE, code, 'FICHA TECNICA', `${code}.pdf`);
 
     results[code] = {
       hasImage: fs.existsSync(imgPath),
