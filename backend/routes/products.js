@@ -18,6 +18,20 @@ const logger = require('../middleware/logger');
 const IMAGES_BASE = process.env.PRODUCT_IMAGES_PATH
   || '\\\\192.168.1.191\\acisa\\GestorDocumental\\Articulos_catalogo';
 
+// Startup check: verify base path accessibility
+try {
+  const baseExists = fs.existsSync(IMAGES_BASE);
+  logger.info(`[products] IMAGES_BASE = "${IMAGES_BASE}" | accessible = ${baseExists}`);
+  if (baseExists) {
+    const folders = fs.readdirSync(IMAGES_BASE).slice(0, 5);
+    logger.info(`[products] Sample folders: ${folders.join(', ')}`);
+  } else {
+    logger.error(`[products] ⚠️ IMAGES_BASE NOT ACCESSIBLE: "${IMAGES_BASE}"`);
+  }
+} catch (err) {
+  logger.error(`[products] ⚠️ Error checking IMAGES_BASE: ${err.message} (code: ${err.code})`);
+}
+
 // Sanitize product code: only allow alphanumeric, dash, underscore, dot
 function sanitizeCode(code) {
   return (code || '').replace(/[^a-zA-Z0-9._-]/g, '').substring(0, 50);
@@ -105,6 +119,8 @@ router.get('/:code/image', (req, res) => {
   }
 
   if (!filePath) {
+    const triedPath = path.join(IMAGES_BASE, code, `${code}.png`);
+    logger.warn(`[products] Image not found for ${code}. Tried: ${triedPath} | Base exists: ${fs.existsSync(IMAGES_BASE)} | Folder exists: ${fs.existsSync(path.join(IMAGES_BASE, code))}`);
     return res.status(404).json({ error: 'Image not found', productCode: code });
   }
 
@@ -130,6 +146,7 @@ router.get('/:code/ficha', (req, res) => {
   const fichaPath = path.join(IMAGES_BASE, code, 'FICHA_TECNICA', `${code}.pdf`);
 
   if (!fs.existsSync(fichaPath)) {
+    logger.warn(`[products] Ficha not found for ${code}. Tried: ${fichaPath} | Folder exists: ${fs.existsSync(path.join(IMAGES_BASE, code))}`);
     return res.status(404).json({ error: 'Datasheet not found', productCode: code });
   }
 
