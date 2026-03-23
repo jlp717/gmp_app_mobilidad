@@ -365,12 +365,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         widget.albaran.terminal,
       );
       
+      // Filter out ghost lines: no product code, or description starts with "Pedido:"
+      final filtered = items.where((item) {
+        final code = item.codigoArticulo.trim();
+        final desc = item.descripcion.trim();
+        if (code.isEmpty) return false;
+        if (desc.toLowerCase().startsWith('pedido:')) return false;
+        // Filter lines with code like "000" or purely zeros
+        if (RegExp(r'^0+$').hasMatch(code)) return false;
+        return true;
+      }).toList();
+      
       if (mounted) {
         setState(() {
-          _items = items;
+          _items = filtered;
           _isLoadingItems = false;
           
-          for (var item in items) {
+          for (var item in filtered) {
              if (!_productChecked.containsKey(item.codigoArticulo)) {
                 _productChecked[item.codigoArticulo] = true;
                 _productQuantities[item.codigoArticulo] = item.cantidadPedida.toInt();
@@ -1075,6 +1086,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final checked = _productChecked.values.where((v) => v).length;
     final total = lineas.length;
 
+    final ordenPrep = widget.albaran.ordenPreparacion;
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1083,35 +1096,56 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.neonBlue.withOpacity(0.2)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Icon(Icons.checklist, color: AppTheme.neonBlue, size: 20),
-          const SizedBox(width: 12),
-          Text(
-            '$checked de $total productos verificados',
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: checked == total
-                  ? AppTheme.success.withOpacity(0.2)
-                  : AppTheme.warning.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              checked == total ? '✓ COMPLETO' : 'PENDIENTE',
-              style: TextStyle(
-                color: checked == total ? AppTheme.success : AppTheme.warning,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Icon(Icons.checklist, color: AppTheme.neonBlue, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                '$checked de $total productos verificados',
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: checked == total
+                      ? AppTheme.success.withOpacity(0.2)
+                      : AppTheme.warning.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  checked == total ? '✓ COMPLETO' : 'PENDIENTE',
+                  style: TextStyle(
+                    color: checked == total ? AppTheme.success : AppTheme.warning,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
+          if (ordenPrep != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.assignment, color: AppTheme.neonCyan, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Orden de Preparación: $ordenPrep',
+                  style: const TextStyle(
+                    color: AppTheme.neonCyan,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -2169,16 +2203,22 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       isValid = false;
     }
 
-    // Require observations when quantities are modified
+    // Require observations when quantities are modified OR any product unchecked
     final anyQtyModified = _items.any((item) =>
         (_productQuantities[item.codigoArticulo] ??
                 item.cantidadPedida.toInt()) !=
             item.cantidadPedida.toInt());
-    if (anyQtyModified &&
+    final anyUnchecked = _items.any((item) =>
+        !(_productChecked[item.codigoArticulo] ?? true));
+    final hasDiscrepancy = anyQtyModified || anyUnchecked;
+    if (hasDiscrepancy &&
         _observacionesController.text.trim().isEmpty) {
-      _observacionesError =
-          'Obligatorio cuando se modifican cantidades';
+      _observacionesError = anyUnchecked
+          ? 'Obligatorio: hay productos sin marcar como entregados'
+          : 'Obligatorio cuando se modifican cantidades';
       isValid = false;
+      // Navigate to finalize tab so they see the error
+      _tabController.animateTo(2);
     }
     
     // Validate signature (always required; extra emphasis when quantities differ)
