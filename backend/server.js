@@ -33,7 +33,7 @@ const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
-  userActionsRoutes, facturasRoutes, warehouseRoutes, kpiModule;
+  userActionsRoutes, facturasRoutes, warehouseRoutes, productsRoutes, kpiModule;
 
 if (USE_TS_ROUTES) {
   // ==================== COMPILED TYPESCRIPT ROUTES ====================
@@ -91,6 +91,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
   warehouseRoutes = require('./routes/warehouse');
+  productsRoutes = require('./routes/products');
   // Módulo KPI Glacius (DB2/ODBC + Redis)
   try {
     kpiModule = require('./kpi');
@@ -187,6 +188,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/logs', userActionsRoutes);
   app.use('/api/facturas', facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);
+  app.use('/api/products', productsRoutes);
   // KPI Glacius module (DB2/ODBC-backed alerts)
   if (kpiModule) {
     app.use('/api/kpi', kpiModule.kpiRoutes);

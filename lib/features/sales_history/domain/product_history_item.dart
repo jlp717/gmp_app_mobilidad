@@ -42,6 +42,14 @@ class ProductHistoryItem {
     this.fi5 = '',
   });
 
+  /// URL for product image (served by backend)
+  String imageUrl(String baseUrl) =>
+      '$baseUrl/products/${Uri.encodeComponent(productCode.trim())}/image';
+
+  /// URL for technical datasheet PDF (served by backend)
+  String fichaUrl(String baseUrl) =>
+      '$baseUrl/products/${Uri.encodeComponent(productCode.trim())}/ficha';
+
   factory ProductHistoryItem.fromJson(Map<String, dynamic> json) {
     return ProductHistoryItem(
       date: (json['date'] as String?) ?? '',
