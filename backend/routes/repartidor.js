@@ -308,6 +308,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 CPC.ANODOCUMENTO as ANO, CPC.MESDOCUMENTO as MES, CPC.DIADOCUMENTO as DIA,
                 CPC.CODIGOCLIENTEALBARAN,
                 CPC.IMPORTETOTAL,
+                CAC_J.IMPORTETOTAL as IMPORTETOTAL_FACTURA,
                 CPC.CONFORMADOSN,
                 CPC.SITUACIONALBARAN,
                 CPC.HORALLEGADA,
@@ -398,7 +399,9 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
         // --- Helper: build document from row ---
         function buildDocument(row, overrides = {}) {
-            const importe = overrides.amount !== undefined ? overrides.amount : (parseFloat(row.IMPORTETOTAL) || 0);
+            // Prefer CAC factura amount over CPC albaran amount when available
+            const rawAmount = parseFloat(row.IMPORTETOTAL_FACTURA) || parseFloat(row.IMPORTETOTAL) || 0;
+            const importe = overrides.amount !== undefined ? overrides.amount : rawAmount;
             const status = computeRowStatus(row);
             const hasFirmaPath = !!row.FIRMA_PATH;
             const numFactura = parseInt(row.NUMEROFACTURA) || 0;
@@ -466,8 +469,9 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
         // Add grouped factura entries
         for (const [fKey, fRows] of facturaGroups.entries()) {
-            // Sum amounts from all albaranes in this factura
-            const totalAmount = fRows.reduce((sum, r) => sum + (parseFloat(r.IMPORTETOTAL) || 0), 0);
+            // Use CAC IMPORTETOTAL_FACTURA (actual invoiced amount) instead of CPC IMPORTETOTAL (albaran total)
+            // CPC.IMPORTETOTAL is the albaran total which can differ from the factura amount
+            const totalAmount = fRows.reduce((sum, r) => sum + (parseFloat(r.IMPORTETOTAL_FACTURA) || parseFloat(r.IMPORTETOTAL) || 0), 0);
 
             // Use the most recent row for display metadata (date, status, etc.)
             const primaryRow = fRows[0]; // Already sorted by date DESC
@@ -481,7 +485,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
 
             const albaranes = fRows.map(r => {
                 const s = (r.SERIEALBARAN || 'A').trim();
-                return { serie: s, terminal: r.TERMINALALBARAN, numero: r.NUMEROALBARAN, ejercicio: r.EJERCICIOALBARAN, amount: parseFloat(r.IMPORTETOTAL) || 0 };
+                return { serie: s, terminal: r.TERMINALALBARAN, numero: r.NUMEROALBARAN, ejercicio: r.EJERCICIOALBARAN, amount: parseFloat(r.IMPORTETOTAL_FACTURA) || parseFloat(r.IMPORTETOTAL) || 0 };
             });
 
             documents.push(buildDocument(primaryRow, {

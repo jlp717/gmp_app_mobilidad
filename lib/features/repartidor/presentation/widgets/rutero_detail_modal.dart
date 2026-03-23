@@ -9,9 +9,12 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/api/api_config.dart';
 import '../../../../core/widgets/async_operation_modal.dart';
 import '../../../../core/widgets/pdf_preview_screen.dart';
 import '../../../../core/widgets/email_form_modal.dart';
@@ -1201,7 +1204,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       : null,
                 ),
 
-                const SizedBox(width: 14),
+                const SizedBox(width: 10),
+
+                // Product image thumbnail
+                _buildProductThumbnail(linea),
+
+                const SizedBox(width: 10),
 
                 // Product info
                 Expanded(
@@ -1214,7 +1222,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                           color: AppTheme.textPrimary,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          decoration: isChecked ? null : TextDecoration.lineThrough,
+                          decoration: isChecked
+                              ? null
+                              : TextDecoration.lineThrough,
                         ),
                         maxLines: 4,
                         overflow: TextOverflow.ellipsis,
@@ -1250,6 +1260,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                               ),
                             ),
                           ],
+                          const Spacer(),
+                          // Ficha técnica button
+                          _buildFichaButton(linea),
                         ],
                       ),
                     ],
@@ -1345,6 +1358,257 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
       ),
     );
+  }
+
+  // ==========================================================================
+  // PRODUCT IMAGE & FICHA TÉCNICA
+  // ==========================================================================
+
+  String _productImageUrl(String code) =>
+      '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(code.trim())}/image';
+
+  String _productFichaUrl(String code) =>
+      '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(code.trim())}/ficha';
+
+  Widget _buildProductThumbnail(EntregaItem linea) {
+    final url = _productImageUrl(linea.codigoArticulo);
+    return GestureDetector(
+      onTap: () => _showFullscreenImage(
+        url,
+        linea.descripcion,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 48,
+          height: 48,
+          color: AppTheme.darkBase,
+          child: Image.network(
+            url,
+            width: 48,
+            height: 48,
+            fit: BoxFit.cover,
+            headers: const {'Accept': 'image/*'},
+            loadingBuilder: (ctx, child, progress) {
+              if (progress == null) return child;
+              return const Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppTheme.neonBlue,
+                  ),
+                ),
+              );
+            },
+            errorBuilder: (ctx, err, stack) => const Icon(
+              Icons.image_not_supported_outlined,
+              color: Colors.white24,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFichaButton(EntregaItem linea) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _openFichaTecnica(linea),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 3,
+          ),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: AppTheme.neonBlue.withOpacity(0.5),
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.description_outlined,
+                color: AppTheme.neonBlue,
+                size: 14,
+              ),
+              SizedBox(width: 3),
+              Text(
+                'Ficha',
+                style: TextStyle(
+                  color: AppTheme.neonBlue,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFullscreenImage(String imageUrl, String name) {
+    Navigator.of(context).push<void>(
+      PageRouteBuilder<void>(
+        opaque: false,
+        barrierColor: Colors.black87,
+        barrierDismissible: true,
+        pageBuilder: (ctx, anim, secondAnim) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              elevation: 0,
+              title: Text(
+                name,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+            body: Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5.0,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  headers: const {'Accept': 'image/*'},
+                  loadingBuilder: (ctx, child, progress) {
+                    if (progress == null) return child;
+                    final percent =
+                        progress.expectedTotalBytes != null
+                            ? progress.cumulativeBytesLoaded /
+                                progress.expectedTotalBytes!
+                            : null;
+                    return Center(
+                      child: CircularProgressIndicator(
+                        value: percent,
+                        color: AppTheme.neonBlue,
+                      ),
+                    );
+                  },
+                  errorBuilder: (ctx, err, stack) => const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white38,
+                        size: 64,
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        'No se pudo cargar la imagen',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (ctx, anim, secondAnim, child) {
+          return FadeTransition(opacity: anim, child: child);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openFichaTecnica(EntregaItem linea) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            SizedBox(width: 12),
+            Text('Descargando ficha técnica...'),
+          ],
+        ),
+        duration: Duration(seconds: 10),
+      ),
+    );
+
+    try {
+      final url = _productFichaUrl(linea.codigoArticulo);
+      final dir = await getTemporaryDirectory();
+      final filePath =
+          '${dir.path}/${linea.codigoArticulo.trim()}_ficha.pdf';
+
+      await Dio().download(url, filePath);
+      scaffoldMessenger.hideCurrentSnackBar();
+
+      if (!File(filePath).existsSync()) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se encontró la ficha técnica para este producto',
+            ),
+          ),
+        );
+        return;
+      }
+
+      await navigator.push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              title: Text(
+                'Ficha - ${linea.codigoArticulo.trim()}',
+                style: const TextStyle(fontSize: 14),
+              ),
+              backgroundColor: AppTheme.darkSurface,
+              elevation: 0,
+            ),
+            body: PDFView(
+              filePath: filePath,
+              enableSwipe: true,
+              swipeHorizontal: false,
+              autoSpacing: true,
+              pageFling: true,
+              onError: (error) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error al abrir PDF: $error'),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      scaffoldMessenger.hideCurrentSnackBar();
+      final msg = e.toString().contains('404')
+          ? 'No hay ficha técnica para este producto'
+          : 'Error al descargar: $e';
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+    }
   }
 
   /// Show a dialog to edit quantity directly by typing a number.

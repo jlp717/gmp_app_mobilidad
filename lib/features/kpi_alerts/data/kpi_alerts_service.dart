@@ -218,7 +218,7 @@ class KpiAlertsService {
       );
 
       if (response['success'] == true) {
-        final codes = List<String>.from(response['clientCodes'] ?? []);
+        final codes = List<String>.from((response['clientCodes'] as List?) ?? []);
         return codes;
       }
     } catch (e) {

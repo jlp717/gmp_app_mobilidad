@@ -65,7 +65,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     _tempPath = null;
     // Clean up temp file async with delay to let native view fully release
     if (pathToClean != null) {
-      Future.delayed(const Duration(milliseconds: 500), () {
+      Future<void>.delayed(const Duration(milliseconds: 1500), () {
         try {
           File(pathToClean).deleteSync();
         } catch (_) {}

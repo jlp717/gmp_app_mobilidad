@@ -1370,6 +1370,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
       if (!mounted) return;
 
+      // Small delay to ensure modal dialog is fully dismissed before pushing
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      if (!mounted) return;
+
       final pdfBytes = Uint8List.fromList(bytes);
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
       // Use client name in filename if available, otherwise just number
