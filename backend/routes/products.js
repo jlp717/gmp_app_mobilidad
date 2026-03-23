@@ -100,14 +100,17 @@ async function fetchViaHttp(urlPath) {
       validateStatus: (status) => status < 500, // don't throw on 404
     });
     if (response.status === 200) {
+      logger.info(`[products] HTTP ✅ ${url} → 200 (${response.data.byteLength} bytes)`);
       return {
         data: Buffer.from(response.data),
         contentType: response.headers['content-type'] || 'application/octet-stream',
       };
     }
+    // Log non-200 responses (403, 404, etc.)
+    logger.debug(`[products] HTTP ${response.status} for ${url}`);
     return null;
   } catch (err) {
-    logger.warn(`[products] HTTP fetch error for ${url}: ${err.message}`);
+    logger.warn(`[products] HTTP fetch error for ${url}: ${err.code || err.message}`);
     return null;
   }
 }
