@@ -12,6 +12,7 @@ class EntregaItem {
   final String codigoArticulo;
   final String descripcion;
   final double cantidadPedida;
+  final int bultos;
   final String? unit;
   final double precioUnitario;
   double cantidadEntregada;
@@ -23,6 +24,7 @@ class EntregaItem {
     required this.codigoArticulo,
     required this.descripcion,
     required this.cantidadPedida,
+    this.bultos = 0,
     this.unit,
     this.precioUnitario = 0,
     this.cantidadEntregada = 0,
@@ -36,6 +38,7 @@ class EntregaItem {
       codigoArticulo: json['codigoArticulo']?.toString() ?? '',
       descripcion: json['descripcion']?.toString() ?? '',
       cantidadPedida: ((json['cantidadPedida'] ?? json['QTY'] ?? 0) as num).toDouble(),
+      bultos: ((json['bultos'] ?? 0) as num).toInt(),
       unit: json['UNIT']?.toString() ?? json['unit']?.toString(), // Handle both cases
       precioUnitario: ((json['precioUnitario'] ?? json['PRICE'] ?? 0) as num).toDouble(),
       cantidadEntregada: ((json['cantidadEntregada'] ?? 0) as num).toDouble(),

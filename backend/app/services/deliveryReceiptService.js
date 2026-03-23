@@ -145,7 +145,8 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
         clientCode, clientName,
         fecha, formaPago, repartidor, ordenPreparacion,
         signatureBase64: inputSigBase64,
-        firmante: inputFirmante
+        firmante: inputFirmante,
+        firmanteDni: inputFirmanteDni
     } = deliveryData;
 
     // Intentar obtener líneas de la BD
@@ -270,7 +271,7 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
 
             // ═══════════════ TIPO DOCUMENTO + NÚMERO ═══════════════
             const docType = facturaNum ? 'FACTURA' : 'ALBARÁN';
-            const docNum = facturaNum || albaranNum || `${ejercicio}/${serie}${String(terminal).padStart(2, '0')}/${numero}`;
+            const docNum = facturaNum ? `${facturaNum}` : (albaranNum || `${serie}-${terminal}-${numero}`);
 
             doc.fontSize(11).font('Helvetica-Bold')
                 .text(`${docType}: ${docNum}`, L, doc.y, { width: W, align: 'center' });
@@ -433,10 +434,14 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
                     doc.moveDown(0.5);
                 }
 
-                // Firmante name and date
+                // Firmante name, DNI and date
                 if (inputFirmante) {
                     doc.fontSize(5.5).font('Helvetica')
                         .text(`Firmante: ${inputFirmante}`, { align: 'center' });
+                }
+                if (inputFirmanteDni) {
+                    doc.fontSize(5).font('Helvetica')
+                        .text(`DNI/NIF: ${inputFirmanteDni}`, { align: 'center' });
                 }
 
                 const now = new Date();
@@ -456,9 +461,10 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
                 .text('No se admiten devoluciones una vez aceptada la recepción', { align: 'center' });
 
             if (repartidor) {
+                const cleanRepartidor = repartidor.replace(/^\d+\s+/, '').trim();
                 doc.moveDown(0.2)
                     .fontSize(5.5).font('Helvetica')
-                    .text(`Entregado por: ${repartidor}`, { align: 'center' });
+                    .text(`Entregado por: ${cleanRepartidor}`, { align: 'center' });
             }
 
             doc.end();

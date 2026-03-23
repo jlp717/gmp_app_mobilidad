@@ -1365,14 +1365,15 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
       // Use client name in filename if available, otherwise just number
       final safeClientName = _selectedClientName?.replaceAll(RegExp(r'[^\w\s]+'), '') ?? 'Cliente';
-      final fileName = '${typeLabel}_${doc.number}_$safeClientName.pdf';
+      final docRef = '${doc.serie}-${doc.terminal}-${doc.number}';
+      final fileName = '${typeLabel}_${docRef}_$safeClientName.pdf';
 
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => PdfPreviewScreen(
             pdfBytes: pdfBytes,
-            title: '$typeLabel ${doc.number}',
+            title: '$typeLabel ${doc.serie}-${doc.terminal}-${doc.number}',
             fileName: fileName,
             onEmailTap: () {
               Navigator.pop(context);
@@ -1411,10 +1412,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       modal.close();
 
       final tempDir = await getTemporaryDirectory();
-      
+
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = '${typeLabel}_${doc.number}_$timestamp.pdf';
+      final docRef = '${doc.serie}-${doc.terminal}-${doc.number}';
+      final fileName = '${typeLabel}_${docRef}_$timestamp.pdf';
       
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
@@ -1424,7 +1426,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       // Use Share to "Save to..."
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'Guardar $typeLabel ${doc.number}',
+        text: 'Guardar $typeLabel ${doc.serie}-${doc.terminal}-${doc.number}',
       );
       
     } catch (e) {
@@ -1439,9 +1441,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     
     final result = await EmailFormModal.show(
       context,
-      defaultSubject: '$typeLabel ${doc.number} - $clientName',
+      defaultSubject: '$typeLabel ${doc.serie}-${doc.terminal}-${doc.number} - $clientName',
       defaultBody: 'Hola $clientName,\n\n'
-          'Adjunto le remitimos su documento $typeLabel ${doc.number}.\n\n'
+          'Adjunto le remitimos su documento $typeLabel ${doc.serie}-${doc.terminal}-${doc.number}.\n\n'
           'Gracias por confiar en nosotros.\n\n'
           'Atentamente,\n'
           'Granja Mari Pepa',
@@ -1544,7 +1546,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       final tempDir = await getTemporaryDirectory();
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = '${typeLabel}_${doc.number}_$timestamp.pdf';
+      final docRef = '${doc.serie}-${doc.terminal}-${doc.number}';
+      final fileName = '${typeLabel}_${docRef}_$timestamp.pdf';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 

@@ -53,13 +53,13 @@ void main() {
     });
 
     test('volume should be w * d * h', () {
-      final box = LoadBox(
+      const box = LoadBox(
         id: 1,
         label: 'Test',
         orderNumber: 1,
         clientCode: 'C',
         articleCode: 'A',
-        weight: 5.0,
+        weight: 5,
         x: 0,
         y: 0,
         z: 0,
@@ -72,13 +72,13 @@ void main() {
     });
 
     test('copyWith should update specified fields', () {
-      final box = LoadBox(
+      const box = LoadBox(
         id: 1,
         label: 'Test',
         orderNumber: 1,
         clientCode: 'C',
         articleCode: 'A',
-        weight: 5.0,
+        weight: 5,
         x: 0,
         y: 0,
         z: 0,
@@ -87,7 +87,7 @@ void main() {
         h: 25,
       );
 
-      final moved = box.copyWith(x: 100.0, y: 50.0);
+      final moved = box.copyWith(x: 100, y: 50);
 
       expect(moved.id, 1); // unchanged
       expect(moved.x, 100.0);
@@ -97,7 +97,7 @@ void main() {
     });
 
     test('toJson should produce serializable map', () {
-      final box = LoadBox(
+      const box = LoadBox(
         id: 5,
         label: 'Box5',
         orderNumber: 200,
@@ -142,7 +142,7 @@ void main() {
       expect(roundtripped['id'], original['id']);
       expect(roundtripped['label'], original['label']);
       expect(roundtripped['weight'], original['weight']);
-      expect(roundtripped['x'], closeTo(original['x'] as double, 0.001));
+      expect(roundtripped['x'], closeTo(original['x']! as double, 0.001));
     });
 
     test('fromJson handles int values for double fields', () {
@@ -208,7 +208,7 @@ void main() {
     });
 
     test('volumeCm3 should be L * W * H', () {
-      final truck = TruckDimensions(
+      const truck = TruckDimensions(
         code: 'T1',
         description: 'Test',
         lengthCm: 600,
@@ -221,7 +221,7 @@ void main() {
     });
 
     test('volumeM3 should convert from cm3', () {
-      final truck = TruckDimensions(
+      const truck = TruckDimensions(
         code: 'T2',
         description: 'Test',
         lengthCm: 100,
@@ -239,7 +239,7 @@ void main() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   group('PlannerMetrics', () {
-    final truck = TruckDimensions(
+    const truck = TruckDimensions(
       code: 'T',
       description: 'Test',
       lengthCm: 600,
@@ -272,7 +272,7 @@ void main() {
 
     test('fromBoxes computes volume and weight correctly', () {
       final placed = [
-        makeBox(id: 1, weight: 100, w: 100, d: 100, h: 100),
+        makeBox(weight: 100, w: 100, d: 100, h: 100),
         makeBox(id: 2, weight: 50, w: 50, d: 50, h: 50),
       ];
 
@@ -291,7 +291,7 @@ void main() {
 
     test('status is EXCESO when there is overflow', () {
       final metrics = PlannerMetrics.fromBoxes(
-        placed: [makeBox(id: 1)],
+        placed: [makeBox()],
         overflow: [makeBox(id: 2, weight: 20)],
         truck: truck,
       );
@@ -305,7 +305,6 @@ void main() {
       // Truck vol = 600*240*220 = 31,680,000 cm3
       // Need a box that's >= 90% of that
       final bigBox = makeBox(
-        id: 1,
         w: 600,
         d: 240,
         h: 200, // 28,800,000 → 90.9%
@@ -321,7 +320,7 @@ void main() {
     });
 
     test('status is OPTIMO when weight >= 90%', () {
-      final heavyBox = makeBox(id: 1, weight: 5500); // 91.7% of 6000
+      final heavyBox = makeBox(weight: 5500); // 91.7% of 6000
 
       final metrics = PlannerMetrics.fromBoxes(
         placed: [heavyBox],
@@ -333,7 +332,7 @@ void main() {
     });
 
     test('status is SEGURO when below 90%', () {
-      final smallBox = makeBox(id: 1, weight: 100, w: 40, d: 30, h: 25);
+      final smallBox = makeBox(weight: 100);
 
       final metrics = PlannerMetrics.fromBoxes(
         placed: [smallBox],
@@ -369,7 +368,7 @@ void main() {
 
     test('toJson produces correct output', () {
       final metrics = PlannerMetrics.fromBoxes(
-        placed: [makeBox(id: 1, weight: 100)],
+        placed: [makeBox(weight: 100)],
         overflow: [],
         truck: truck,
       );
@@ -382,7 +381,7 @@ void main() {
     });
 
     test('handles zero-volume truck without division error', () {
-      final zeroTruck = TruckDimensions(
+      const zeroTruck = TruckDimensions(
         code: 'Z',
         description: 'Zero',
         lengthCm: 0,
@@ -392,7 +391,7 @@ void main() {
       );
 
       final metrics = PlannerMetrics.fromBoxes(
-        placed: [makeBox(id: 1)],
+        placed: [makeBox()],
         overflow: [],
         truck: zeroTruck,
       );
@@ -413,7 +412,6 @@ void main() {
         startX: 10,
         startY: 20,
         startZ: 0,
-        hasCollision: false,
       );
 
       final updated = state.copyWith(hasCollision: true);
@@ -495,8 +493,8 @@ void main() {
       const summary = ClientSummary(
         clientCode: 'C001',
         boxCount: 5,
-        totalWeight: 150.0,
-        totalVolume: 75000.0,
+        totalWeight: 150,
+        totalVolume: 75000,
       );
 
       expect(summary.clientCode, 'C001');

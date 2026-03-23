@@ -2473,6 +2473,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     // Capture parent scaffold messenger before entering dialog
     final parentMessenger = ScaffoldMessenger.of(context);
 
+    // Pre-compute signature GRF if signature exists
+    String? signatureGrf;
+    if (!_signatureController.isEmpty) {
+      try {
+        final sigPng = await _signatureController.toPngBytes();
+        if (sigPng != null) {
+          signatureGrf = await ZebraPrintService.convertSignatureToGrf(sigPng);
+        }
+      } catch (e) {
+        debugPrint('[ZEBRA] Error converting signature to GRF: $e');
+      }
+    }
+
+    if (!mounted) return;
+
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -2484,6 +2499,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             observaciones: obsController.text.trim(),
             receptorNombre: _nombreController.text.trim(),
             receptorDni: _dniController.text.trim(),
+            signatureGrf: signatureGrf,
+            fechaFirma: DateTime.now(),
           );
 
           return AlertDialog(
@@ -2804,7 +2821,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'signaturePath': widget.albaran.firma,
           'clientCode': widget.albaran.codigoCliente,
           'clientName': widget.albaran.nombreCliente,
-          'albaranNum': widget.albaran.numeroAlbaran.toString(),
+          'albaranNum': '${widget.albaran.serie}-${widget.albaran.terminal}-${widget.albaran.numeroAlbaran}',
           'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
           'fecha': widget.albaran.fecha,
           'subtotal': widget.albaran.importeTotal,
@@ -2812,6 +2829,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
           'ordenPreparacion': widget.albaran.ordenPreparacion,
+          'firmante': _nombreController.text.trim(),
+          'firmanteDni': _dniController.text.trim(),
           'repartidor': widget.albaran.nombreRepartidor.isNotEmpty
               ? widget.albaran.nombreRepartidor
               : widget.albaran.codigoRepartidor,
@@ -2959,7 +2978,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'signaturePath': widget.albaran.firma,
           'clientCode': widget.albaran.codigoCliente,
           'clientName': widget.albaran.nombreCliente,
-          'albaranNum': widget.albaran.numeroAlbaran.toString(),
+          'albaranNum': '${widget.albaran.serie}-${widget.albaran.terminal}-${widget.albaran.numeroAlbaran}',
           'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
           'fecha': widget.albaran.fecha,
           'subtotal': widget.albaran.importeTotal,
@@ -2967,6 +2986,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
           'ordenPreparacion': widget.albaran.ordenPreparacion,
+          'firmante': _nombreController.text.trim(),
+          'firmanteDni': _dniController.text.trim(),
           'repartidor': widget.albaran.nombreRepartidor.isNotEmpty
               ? widget.albaran.nombreRepartidor
               : widget.albaran.codigoRepartidor,

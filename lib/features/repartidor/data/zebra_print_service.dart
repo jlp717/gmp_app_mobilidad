@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -156,18 +157,87 @@ class ZebraPrintService {
   static const int _lineW = 550;
   static const int _xLeft = 20;
 
+  /// Convert PNG signature bytes to ZPL GRF (Graphic Field ASCII) format.
+  /// Returns a `^GFA,...` command string or null on failure.
+  static Future<String?> convertSignatureToGrf(
+    Uint8List pngBytes, {
+    int maxWidth = 300,
+    int maxHeight = 100,
+  }) async {
+    try {
+      final codec = await ui.instantiateImageCodec(pngBytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+
+      final byteData = await image.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      );
+      if (byteData == null) return null;
+
+      final pixels = byteData.buffer.asUint8List();
+      final srcW = image.width;
+      final srcH = image.height;
+
+      // Scale to fit within maxWidth x maxHeight
+      final scaleX = srcW > maxWidth ? maxWidth / srcW : 1.0;
+      final scaleY = srcH > maxHeight ? maxHeight / srcH : 1.0;
+      final scale = scaleX < scaleY ? scaleX : scaleY;
+      final outW = (srcW * scale).toInt();
+      final outH = (srcH * scale).toInt();
+
+      final bytesPerRow = (outW + 7) ~/ 8;
+      final totalBytes = bytesPerRow * outH;
+      final hex = StringBuffer();
+
+      for (int row = 0; row < outH; row++) {
+        for (int col = 0; col < bytesPerRow; col++) {
+          int byte = 0;
+          for (int bit = 0; bit < 8; bit++) {
+            final x = col * 8 + bit;
+            if (x < outW) {
+              final srcX = (x / scale).round().clamp(0, srcW - 1);
+              final srcY = (row / scale).round().clamp(0, srcH - 1);
+              final pixelIdx = (srcY * srcW + srcX) * 4;
+              final r = pixels[pixelIdx];
+              final g = pixels[pixelIdx + 1];
+              final b = pixels[pixelIdx + 2];
+              // Luminance < 128 = black (ink on paper)
+              if ((r * 299 + g * 587 + b * 114) ~/ 1000 < 128) {
+                byte |= (0x80 >> bit);
+              }
+            }
+          }
+          hex.write(byte.toRadixString(16).padLeft(2, '0').toUpperCase());
+        }
+      }
+
+      return '^GFA,$totalBytes,$totalBytes,$bytesPerRow,${hex.toString()}';
+    } catch (e) {
+      debugPrint('[ZEBRA] GRF conversion error: $e');
+      return null;
+    }
+  }
+
+  /// Strip leading numeric vendor code from name (e.g., "08 DAMIAN" → "DAMIAN")
+  static String _stripCodePrefix(String name) {
+    return name.replaceFirst(RegExp(r'^\d+\s+'), '').trim();
+  }
+
   static String generateDeliveryZpl({
     required AlbaranEntrega albaran,
     required List<EntregaItem> items,
     required String observaciones,
     String? receptorNombre,
     String? receptorDni,
+    String? signatureGrf,
+    DateTime? fechaFirma,
   }) {
     final buf = StringBuffer();
     int y = 25;
 
     buf.writeln('^XA');
     buf.writeln('^CI28'); // UTF-8 for Spanish chars
+    buf.writeln('^MNN'); // Continuous media mode (receipt paper)
 
     // ═══ HEADER — Company ═══
     buf.writeln('^CF0,30');
@@ -193,12 +263,12 @@ class ZebraPrintService {
     buf.writeln('^FO$_xLeft,$y^GB$_lineW,1,1^FS');
     y += 10;
 
-    // ═══ DOCUMENT TYPE + NUMBER (centered) ═══
+    // ═══ DOCUMENT TYPE + NUMBER (full reference: serie-terminal-numero) ═══
     final isFactura = albaran.numeroFactura > 0;
     final docType = isFactura ? 'FACTURA' : 'ALBARAN';
     final docNum = isFactura
-        ? '${albaran.serieFactura}/${albaran.numeroFactura}'
-        : '${albaran.serie}/${albaran.numeroAlbaran}';
+        ? '${albaran.serieFactura}-${albaran.terminal}-${albaran.numeroFactura}'
+        : '${albaran.serie}-${albaran.terminal}-${albaran.numeroAlbaran}';
     buf.writeln('^CF0,28');
     buf.writeln('^FO$_xLeft,$y^FD$docType: $docNum^FS');
     y += 32;
@@ -254,7 +324,8 @@ class ZebraPrintService {
     for (int i = 0; i < items.length; i++) {
       final item = items[i];
       final partida = '${i + 1}';
-      final bultos = item.cantidadPedida.toInt();
+      // Use CANTIDADENVASES (bultos) for the Bultos column, not CANTIDADUNIDADES
+      final bultos = item.bultos > 0 ? item.bultos : item.cantidadPedida.toInt();
       totalBultos += bultos;
       final importe = item.cantidadPedida * item.precioUnitario;
 
@@ -342,11 +413,29 @@ class ZebraPrintService {
         buf.writeln('^FO$_xLeft,$y^FDDNI/NIF: $receptorDni^FS');
         y += 20;
       }
-      // Signature box placeholder (actual image requires GRF conversion)
-      buf.writeln('^FO$_xLeft,$y^GB200,60,1^FS');
-      buf.writeln('^CF0,14');
-      buf.writeln('^FO${_xLeft + 50},${y + 20}^FD[FIRMADO]^FS');
-      y += 66;
+
+      // Render actual signature image (GRF) or fallback to box
+      if (signatureGrf != null && signatureGrf.isNotEmpty) {
+        buf.writeln('^FO$_xLeft,$y$signatureGrf^FS');
+        y += 106; // GRF is maxHeight=100 + margin
+      } else {
+        buf.writeln('^FO$_xLeft,$y^GB200,60,1^FS');
+        buf.writeln('^CF0,14');
+        buf.writeln('^FO${_xLeft + 50},${y + 20}^FD[FIRMADO]^FS');
+        y += 66;
+      }
+
+      // Fecha firma
+      if (fechaFirma != null) {
+        buf.writeln('^CF0,14');
+        final ff = '${fechaFirma.day.toString().padLeft(2, '0')}/'
+            '${fechaFirma.month.toString().padLeft(2, '0')}/'
+            '${fechaFirma.year} '
+            '${fechaFirma.hour.toString().padLeft(2, '0')}:'
+            '${fechaFirma.minute.toString().padLeft(2, '0')}';
+        buf.writeln('^FO$_xLeft,$y^FDFecha firma: $ff^FS');
+        y += 18;
+      }
     }
 
     // ═══ OBSERVATIONS ═══
@@ -374,10 +463,18 @@ class ZebraPrintService {
     );
     y += 18;
     buf.writeln('^CF0,16');
-    buf.writeln(
-      '^FO$_xLeft,$y^FDEntregado por: '
-      '${albaran.nombreRepartidor.isNotEmpty ? albaran.nombreRepartidor : albaran.codigoRepartidor}^FS',
+    final repartidorDisplay = _stripCodePrefix(
+      albaran.nombreRepartidor.isNotEmpty
+          ? albaran.nombreRepartidor
+          : albaran.codigoRepartidor,
     );
+    buf.writeln(
+      '^FO$_xLeft,$y^FDEntregado por: $repartidorDisplay^FS',
+    );
+    y += 24;
+
+    // Set label length to match actual content (fixes double-height paper)
+    buf.writeln('^LL${y + 10}');
 
     buf.writeln('^XZ');
     return buf.toString();

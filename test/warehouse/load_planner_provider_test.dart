@@ -2,58 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 
-/// Helper to inject state into provider without calling the API.
-/// We use the public methods to manipulate state after manually
-/// injecting boxes through the test helper extension.
-extension _TestHelper on LoadPlannerProvider {
-  /// Inject test state directly (bypassing API load).
-  void injectTestState({
-    required List<LoadBox> placed,
-    List<LoadBox> overflow = const [],
-    TruckDimensions? truck,
-  }) {
-    // Use the provider's public interface indirectly through reflection-like
-    // approach. Since Dart doesn't have that, we test only through public API.
-    // For unit testing the provider logic, we'll test the methods that
-    // DON'T require API: selectBox, viewMode, colorMode, exclude/include,
-    // undo/redo, drag operations.
-    //
-    // We rely on the fact that exclude/include/drag operate on internal lists
-    // that we can populate by testing the flow end-to-end with mock.
-    //
-    // For now, test what we can through public API.
-  }
-}
-
 void main() {
   late LoadPlannerProvider provider;
-
-  LoadBox makeBox({
-    int id = 1,
-    int orderNumber = 100,
-    String clientCode = 'C001',
-    double weight = 10,
-    double x = 0,
-    double y = 0,
-    double z = 0,
-    double w = 40,
-    double d = 30,
-    double h = 25,
-  }) =>
-      LoadBox(
-        id: id,
-        label: 'Box$id',
-        orderNumber: orderNumber,
-        clientCode: clientCode,
-        articleCode: 'ART',
-        weight: weight,
-        x: x,
-        y: y,
-        z: z,
-        w: w,
-        d: d,
-        h: h,
-      );
 
   setUp(() {
     provider = LoadPlannerProvider();
@@ -93,25 +43,27 @@ void main() {
 
   group('Box selection', () {
     test('selectBox sets index and notifies', () {
-      int notifyCount = 0;
-      provider.addListener(() => notifyCount++);
-
-      provider.selectBox(3);
+      var notifyCount = 0;
+      provider
+        ..addListener(() => notifyCount++)
+        ..selectBox(3);
 
       expect(provider.selectedBoxIndex, 3);
       expect(notifyCount, 1);
     });
 
     test('selectBox with null clears selection', () {
-      provider.selectBox(5);
-      provider.selectBox(null);
+      provider
+        ..selectBox(5)
+        ..selectBox(null);
 
       expect(provider.selectedBoxIndex, isNull);
     });
 
     test('clearSelection clears selected index', () {
-      provider.selectBox(2);
-      provider.clearSelection();
+      provider
+        ..selectBox(2)
+        ..clearSelection();
 
       expect(provider.selectedBoxIndex, isNull);
     });
@@ -123,10 +75,10 @@ void main() {
 
   group('View mode', () {
     test('setViewMode changes mode and notifies', () {
-      int notifyCount = 0;
-      provider.addListener(() => notifyCount++);
-
-      provider.setViewMode(ViewMode.top);
+      var notifyCount = 0;
+      provider
+        ..addListener(() => notifyCount++)
+        ..setViewMode(ViewMode.top);
 
       expect(provider.viewMode, ViewMode.top);
       expect(notifyCount, 1);
@@ -140,10 +92,10 @@ void main() {
 
   group('Color mode', () {
     test('setColorMode changes mode and notifies', () {
-      int notifyCount = 0;
-      provider.addListener(() => notifyCount++);
-
-      provider.setColorMode(ColorMode.client);
+      var notifyCount = 0;
+      provider
+        ..addListener(() => notifyCount++)
+        ..setColorMode(ColorMode.client);
 
       expect(provider.colorMode, ColorMode.client);
       expect(notifyCount, 1);
@@ -175,7 +127,7 @@ void main() {
 
     test('updateDragPosition does nothing without active drag', () {
       // Should not throw
-      provider.updateDragPosition(10.0, 20.0);
+      provider.updateDragPosition(10, 20);
       expect(provider.dragState, isNull);
     });
 
@@ -248,7 +200,7 @@ void main() {
   group('Dispose', () {
     test('dispose does not throw', () {
       final p = LoadPlannerProvider();
-      expect(() => p.dispose(), returnsNormally);
+      expect(p.dispose, returnsNormally);
     });
   });
 }

@@ -979,7 +979,7 @@ router.post('/receipt/:entregaId', async (req, res) => {
 
         const deliveryData = {
             ejercicio, serie, terminal, numero,
-            albaranNum: albaranNum || `${ejercicio}/${serie}${String(terminal || 0).padStart(2, '0')}/${numero}`,
+            albaranNum: albaranNum || `${serie}-${terminal}-${numero}`,
             facturaNum,
             clientCode,
             clientName,
@@ -989,7 +989,10 @@ router.post('/receipt/:entregaId', async (req, res) => {
             iva: iva || 0,
             total: total || 0,
             formaPago,
-            repartidor
+            repartidor: stripVendorCode(repartidor),
+            ordenPreparacion,
+            firmante,
+            firmanteDni
         };
 
         // Resolve signature path if relative - SECURITY: prevent path traversal
@@ -1078,7 +1081,7 @@ router.post('/receipt/:entregaId', async (req, res) => {
 router.post('/receipt/:entregaId/email', async (req, res) => {
     try {
         const { entregaId } = req.params;
-        const { email, signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor } = req.body;
+        const { email, signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor, ordenPreparacion, firmante, firmanteDni } = req.body;
 
         if (!email) {
             return res.status(400).json({ success: false, error: 'Email is required' });
@@ -1096,7 +1099,7 @@ router.post('/receipt/:entregaId/email', async (req, res) => {
 
         const deliveryData = {
             ejercicio, serie, terminal, numero,
-            albaranNum: albaranNum || `${ejercicio}/${serie}${String(terminal || 0).padStart(2, '0')}/${numero}`,
+            albaranNum: albaranNum || `${serie}-${terminal}-${numero}`,
             facturaNum,
             clientCode,
             clientName,
@@ -1106,7 +1109,10 @@ router.post('/receipt/:entregaId/email', async (req, res) => {
             iva: iva || 0,
             total: total || 0,
             formaPago,
-            repartidor
+            repartidor: stripVendorCode(repartidor),
+            ordenPreparacion,
+            firmante,
+            firmanteDni
         };
 
         // Resolve signature path
