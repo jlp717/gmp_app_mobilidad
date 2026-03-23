@@ -7,12 +7,23 @@
  *   1. FILE mode: Direct file access (Windows UNC or local mount)
  *   2. HTTP mode: Proxy via Apache/XAMPP on the image server
  * 
- * Structure: {basePath}/{productCode}/{productCode}.png         (image)
- *            {basePath}/{productCode}/FICHA TECNICA/{productCode}.pdf (datasheet)
+ * IMPORTANT: File names in the image server are INCONSISTENT:
+ *   - `1384/1384.png` (standard)
+ *   - `1415/1415 1.png` (with space+suffix)
+ *   - `1353/1353 - copia (2).jpg` (copy variant)
+ *   - `2450/FOTO1__(1).jpg` (completely different name)
+ *   - `1866/1866 - copia (3).jpg` (copy variant)
+ *   
+ * So we MUST scan the folder contents (via Apache directory listing or fs.readdir)
+ * and find the first image/PDF file, regardless of its name.
+ * 
+ * Ficha técnica folders can be:
+ *   - `FICHA TECNICA/`
+ *   - `FICHA TECNICA - copia/`
  * 
  * Environment variables:
  *   PRODUCT_IMAGES_PATH  — Local/UNC file path (if mounted)
- *   PRODUCT_IMAGES_URL   — HTTP base URL (e.g. http://192.168.1.191/movilidad/ImagenesGestorDocumentalNuevo)
+ *   PRODUCT_IMAGES_URL   — HTTP base URL
  */
 const express = require('express');
 const router = express.Router();
@@ -25,15 +36,11 @@ const logger = require('../middleware/logger');
 // PATH CONFIGURATION
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-// File-based access (Windows UNC or local mount point)
 const IMAGES_FILE_PATH = process.env.PRODUCT_IMAGES_PATH || null;
-
-// HTTP-based access (Apache/XAMPP serves the images)
 const IMAGES_HTTP_URL = process.env.PRODUCT_IMAGES_URL
   || 'http://192.168.1.191/movilidad/ImagenesGestorDocumentalNuevo';
 
-// Auto-detect mode
-let accessMode = 'http'; // default to HTTP (works on Linux without mounts)
+let accessMode = 'http';
 let IMAGES_BASE = null;
 
 // Try file-based access first
@@ -42,23 +49,17 @@ if (IMAGES_FILE_PATH) {
     if (fs.existsSync(IMAGES_FILE_PATH)) {
       accessMode = 'file';
       IMAGES_BASE = IMAGES_FILE_PATH;
-      const folders = fs.readdirSync(IMAGES_BASE).slice(0, 5);
-      logger.info(`[products] ✅ FILE mode: "${IMAGES_BASE}" (sample: ${folders.join(', ')})`);
-    } else {
-      logger.warn(`[products] PRODUCT_IMAGES_PATH set but not accessible: "${IMAGES_FILE_PATH}"`);
+      logger.info(`[products] ✅ FILE mode: "${IMAGES_BASE}"`);
     }
   } catch (err) {
     logger.warn(`[products] PRODUCT_IMAGES_PATH error: ${err.message}`);
   }
 }
 
-// Also try default UNC/local paths if no explicit path set
 if (accessMode !== 'file') {
   const defaultPaths = [
-    // Linux local XAMPP paths
     '/opt/lampp/htdocs/movilidad/ImagenesGestorDocumentalNuevo',
     '/var/www/html/movilidad/ImagenesGestorDocumentalNuevo',
-    // Windows UNC path
     '\\\\192.168.1.191\\acisa\\xampp\\htdocs\\movilidad\\ImagenesGestorDocumentalNuevo',
   ];
   for (const p of defaultPaths) {
@@ -66,8 +67,7 @@ if (accessMode !== 'file') {
       if (fs.existsSync(p)) {
         accessMode = 'file';
         IMAGES_BASE = p;
-        const folders = fs.readdirSync(IMAGES_BASE).slice(0, 5);
-        logger.info(`[products] ✅ FILE mode (auto): "${IMAGES_BASE}" (sample: ${folders.join(', ')})`);
+        logger.info(`[products] ✅ FILE mode (auto): "${IMAGES_BASE}"`);
         break;
       }
     } catch (e) { /* skip */ }
@@ -78,86 +78,266 @@ if (accessMode === 'http') {
   logger.info(`[products] 🌐 HTTP proxy mode: "${IMAGES_HTTP_URL}"`);
 }
 
-// Sanitize product code: only allow alphanumeric, dash, underscore, dot
 function sanitizeCode(code) {
   return (code || '').replace(/[^a-zA-Z0-9._-]/g, '').substring(0, 50);
 }
 
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp']);
+const PDF_EXTENSION = 'pdf';
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// HTTP PROXY HELPERS
+// IN-MEMORY CACHE (avoids repeated directory listings)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const cache = new Map();
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+function getCached(key) {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.ts > CACHE_TTL) { cache.delete(key); return undefined; }
+  return entry.value;
+}
+function setCache(key, value) {
+  cache.set(key, { value, ts: Date.now() });
+  // Prune old entries periodically
+  if (cache.size > 2000) {
+    const now = Date.now();
+    for (const [k, v] of cache) {
+      if (now - v.ts > CACHE_TTL) cache.delete(k);
+    }
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// APACHE DIRECTORY LISTING PARSER
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /**
- * Try to fetch a file via HTTP from the image server.
- * Returns { data: Buffer, contentType: string } or null if not found.
+ * Fetch and parse Apache directory listing.
+ * Returns array of filenames (with trailing / for subdirs).
  */
-async function fetchViaHttp(urlPath) {
+async function listHttpDirectory(urlPath) {
+  const cacheKey = `dir:${urlPath}`;
+  const cached = getCached(cacheKey);
+  if (cached !== undefined) return cached;
+
   const url = `${IMAGES_HTTP_URL}/${urlPath}`;
   try {
     const response = await axios.get(url, {
+      timeout: 8000,
+      responseType: 'text',
+      validateStatus: (s) => s < 500,
+    });
+    if (response.status !== 200) {
+      setCache(cacheKey, null);
+      return null;
+    }
+    const html = response.data;
+    const links = [];
+    const regex = /<a\s+href="([^"]+)"[^>]*>/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      const href = match[1];
+      if (href === '/' || href === '../' || href.startsWith('?') || href.startsWith('/')) continue;
+      try {
+        links.push(decodeURIComponent(href));
+      } catch {
+        links.push(href);
+      }
+    }
+    setCache(cacheKey, links);
+    return links;
+  } catch (err) {
+    logger.warn(`[products] Dir listing error for ${url}: ${err.code || err.message}`);
+    setCache(cacheKey, null);
+    return null;
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SMART FILE DISCOVERY (scans folders, handles inconsistent names)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/**
+ * Find the best image file for a product code.
+ * Scans the folder and picks the first image file, preferring {code}.{ext} matches.
+ */
+async function findImageHttp(code) {
+  const cacheKey = `img:${code}`;
+  const cached = getCached(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const items = await listHttpDirectory(`${code}/`);
+  if (!items) { setCache(cacheKey, null); return null; }
+
+  // Filter to image files only
+  const imageFiles = items.filter(f => {
+    if (f.endsWith('/')) return false; // skip subdirectories
+    const ext = f.split('.').pop().toLowerCase();
+    return IMAGE_EXTENSIONS.has(ext);
+  });
+
+  if (imageFiles.length === 0) { setCache(cacheKey, null); return null; }
+
+  // Prefer exact match: {code}.{ext}
+  let best = imageFiles.find(f => {
+    const name = f.split('.').slice(0, -1).join('.');
+    return name === code;
+  });
+
+  // Then prefer files starting with the code
+  if (!best) {
+    best = imageFiles.find(f => f.startsWith(code));
+  }
+
+  // Otherwise take the first image file
+  if (!best) {
+    best = imageFiles[0];
+  }
+
+  const result = `${code}/${best}`;
+  setCache(cacheKey, result);
+  return result;
+}
+
+/**
+ * Find the ficha técnica PDF for a product code.
+ * Checks: FICHA TECNICA/, FICHA TECNICA - copia/, and root folder.
+ */
+async function findFichaHttp(code) {
+  const cacheKey = `ficha:${code}`;
+  const cached = getCached(cacheKey);
+  if (cached !== undefined) return cached;
+
+  // First, list the product folder to find ficha subdirs
+  const items = await listHttpDirectory(`${code}/`);
+  if (!items) { setCache(cacheKey, null); return null; }
+
+  // Collect ficha-like subdirectories
+  const fichaDirs = items.filter(f =>
+    f.endsWith('/') && f.toUpperCase().startsWith('FICHA')
+  );
+
+  // Also check for PDFs directly in the root folder
+  const rootPdfs = items.filter(f => {
+    if (f.endsWith('/')) return false;
+    return f.toLowerCase().endsWith('.pdf');
+  });
+
+  // Search ficha subdirectories first (ordered: prefer "FICHA TECNICA/" over "FICHA TECNICA - copia/")
+  fichaDirs.sort((a, b) => a.length - b.length); // shorter name first = less likely a "copia"
+
+  for (const dir of fichaDirs) {
+    const dirName = dir.replace(/\/$/, '');
+    const subItems = await listHttpDirectory(`${code}/${encodeURIComponent(dirName)}/`);
+    if (!subItems) continue;
+
+    const pdfs = subItems.filter(f => !f.endsWith('/') && f.toLowerCase().endsWith('.pdf'));
+    if (pdfs.length > 0) {
+      // Prefer PDF named after the code
+      let best = pdfs.find(f => f.startsWith(code));
+      if (!best) best = pdfs[0];
+      const result = `${code}/${encodeURIComponent(dirName)}/${encodeURIComponent(best)}`;
+      setCache(cacheKey, result);
+      return result;
+    }
+  }
+
+  // Fallback: PDF in root folder (but not an image-like PDF)
+  if (rootPdfs.length > 0) {
+    // Only use root PDFs if they look like fichas (not just any PDF)
+    const fichaLikePdf = rootPdfs.find(f =>
+      f.toLowerCase().includes('ficha') || f.toLowerCase().includes('tecnica')
+    );
+    if (fichaLikePdf) {
+      const result = `${code}/${encodeURIComponent(fichaLikePdf)}`;
+      setCache(cacheKey, result);
+      return result;
+    }
+  }
+
+  setCache(cacheKey, null);
+  return null;
+}
+
+/**
+ * Fetch a file by its discovered HTTP path.
+ */
+async function fetchFileHttp(relativePath) {
+  const url = `${IMAGES_HTTP_URL}/${relativePath}`;
+  try {
+    const response = await axios.get(url, {
       responseType: 'arraybuffer',
-      timeout: 10000,
-      validateStatus: (status) => status < 500, // don't throw on 404
+      timeout: 15000,
+      validateStatus: (s) => s < 500,
     });
     if (response.status === 200) {
-      logger.info(`[products] HTTP ✅ ${url} → 200 (${response.data.byteLength} bytes)`);
       return {
         data: Buffer.from(response.data),
         contentType: response.headers['content-type'] || 'application/octet-stream',
       };
     }
-    // Log non-200 responses (403, 404, etc.)
-    logger.debug(`[products] HTTP ${response.status} for ${url}`);
     return null;
   } catch (err) {
-    logger.warn(`[products] HTTP fetch error for ${url}: ${err.code || err.message}`);
+    logger.warn(`[products] HTTP fetch error: ${url}: ${err.code || err.message}`);
     return null;
-  }
-}
-
-/**
- * Check if a remote file exists via HTTP HEAD request.
- */
-async function existsViaHttp(urlPath) {
-  const url = `${IMAGES_HTTP_URL}/${urlPath}`;
-  try {
-    const response = await axios.head(url, {
-      timeout: 5000,
-      validateStatus: (status) => status < 500,
-    });
-    return response.status === 200;
-  } catch {
-    return false;
   }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// FILE ACCESS HELPERS
+// FILE ACCESS HELPERS (scan folder contents)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function findLocalImage(code) {
   if (!IMAGES_BASE) return null;
-  const extensions = ['png', 'jpg', 'jpeg', 'PNG', 'JPG', 'JPEG'];
-  for (const ext of extensions) {
-    const candidate = path.join(IMAGES_BASE, code, `${code}.${ext}`);
-    if (fs.existsSync(candidate)) {
-      // Security: verify resolved path is within IMAGES_BASE
-      const resolved = path.resolve(candidate);
-      const resolvedBase = path.resolve(IMAGES_BASE);
-      if (resolved.startsWith(resolvedBase)) return resolved;
-    }
-  }
-  return null;
+  const folder = path.join(IMAGES_BASE, code);
+  if (!fs.existsSync(folder)) return null;
+
+  try {
+    const files = fs.readdirSync(folder);
+    const images = files.filter(f => {
+      const ext = f.split('.').pop().toLowerCase();
+      return IMAGE_EXTENSIONS.has(ext);
+    });
+    if (images.length === 0) return null;
+
+    // Prefer exact match
+    let best = images.find(f => f.split('.').slice(0, -1).join('.') === code);
+    if (!best) best = images.find(f => f.startsWith(code));
+    if (!best) best = images[0];
+
+    const resolved = path.resolve(path.join(folder, best));
+    const resolvedBase = path.resolve(IMAGES_BASE);
+    return resolved.startsWith(resolvedBase) ? resolved : null;
+  } catch { return null; }
 }
 
 function findLocalFicha(code) {
   if (!IMAGES_BASE) return null;
-  const fichaPath = path.join(IMAGES_BASE, code, 'FICHA TECNICA', `${code}.pdf`);
-  if (fs.existsSync(fichaPath)) {
-    const resolved = path.resolve(fichaPath);
-    const resolvedBase = path.resolve(IMAGES_BASE);
-    if (resolved.startsWith(resolvedBase)) return resolved;
-  }
+  const folder = path.join(IMAGES_BASE, code);
+  if (!fs.existsSync(folder)) return null;
+
+  try {
+    const items = fs.readdirSync(folder);
+    // Find ficha subdirectories
+    const fichaDirs = items.filter(f => {
+      const full = path.join(folder, f);
+      return f.toUpperCase().startsWith('FICHA') && fs.statSync(full).isDirectory();
+    }).sort((a, b) => a.length - b.length);
+
+    for (const dir of fichaDirs) {
+      const subFiles = fs.readdirSync(path.join(folder, dir));
+      const pdfs = subFiles.filter(f => f.toLowerCase().endsWith('.pdf'));
+      if (pdfs.length > 0) {
+        let best = pdfs.find(f => f.startsWith(code));
+        if (!best) best = pdfs[0];
+        const resolved = path.resolve(path.join(folder, dir, best));
+        const resolvedBase = path.resolve(IMAGES_BASE);
+        return resolved.startsWith(resolvedBase) ? resolved : null;
+      }
+    }
+  } catch { /* ignore */ }
   return null;
 }
 
@@ -170,64 +350,22 @@ router.get('/diagnostico', async (req, res) => {
     filePath: IMAGES_BASE,
     httpUrl: IMAGES_HTTP_URL,
     platform: process.platform,
-    fileAccessible: false,
-    httpAccessible: false,
+    cacheSize: cache.size,
     samples: [],
   };
 
-  // Test file access
-  if (IMAGES_BASE) {
-    try {
-      result.fileAccessible = fs.existsSync(IMAGES_BASE);
-      if (result.fileAccessible) {
-        const items = fs.readdirSync(IMAGES_BASE).slice(0, 10);
-        result.samples = items.map(folder => {
-          const code = folder;
-          const imgPath = path.join(IMAGES_BASE, code, `${code}.png`);
-          const fichaPath = path.join(IMAGES_BASE, code, 'FICHA TECNICA', `${code}.pdf`);
-          return {
-            code,
-            hasImage: fs.existsSync(imgPath),
-            hasFicha: fs.existsSync(fichaPath),
-          };
-        });
-      }
-    } catch (e) {
-      result.fileError = e.message;
-    }
-  }
-
-  // Test HTTP access
-  try {
-    const httpResult = await axios.head(IMAGES_HTTP_URL + '/', {
-      timeout: 5000,
-      validateStatus: () => true,
+  const testCodes = ['1384', '1965', '1415', '1353', '1866', '2450', '2413'];
+  for (const code of testCodes) {
+    const imgPath = await findImageHttp(code);
+    const fichaPath = await findFichaHttp(code);
+    const folder = await listHttpDirectory(`${code}/`);
+    result.samples.push({
+      code,
+      folderExists: folder !== null,
+      folderContents: folder || [],
+      imageFound: imgPath || false,
+      fichaFound: fichaPath || false,
     });
-    result.httpAccessible = httpResult.status < 500;
-    result.httpStatus = httpResult.status;
-  } catch (e) {
-    result.httpError = e.message;
-  }
-
-  // If HTTP works, try to list a sample image
-  if (result.httpAccessible && result.samples.length === 0) {
-    // Try known codes from request
-    const testCodes = ['1866', '1127', '1801'];
-    for (const code of testCodes) {
-      const extensions = ['png', 'jpg', 'jpeg'];
-      let found = false;
-      for (const ext of extensions) {
-        const exists = await existsViaHttp(`${code}/${code}.${ext}`);
-        if (exists) {
-          result.samples.push({ code, hasImage: true, imageFormat: ext });
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        result.samples.push({ code, hasImage: false });
-      }
-    }
   }
 
   res.json(result);
@@ -240,27 +378,16 @@ router.get('/:code/exists', async (req, res) => {
   const code = sanitizeCode(req.params.code);
   if (!code) return res.status(400).json({ error: 'Invalid product code' });
 
+  let hasImage = false, hasFicha = false;
+
   if (accessMode === 'file') {
-    const imgPath = path.join(IMAGES_BASE, code, `${code}.png`);
-    const fichaPath = path.join(IMAGES_BASE, code, 'FICHA TECNICA', `${code}.pdf`);
-    return res.json({
-      productCode: code,
-      hasImage: fs.existsSync(imgPath),
-      hasFicha: fs.existsSync(fichaPath),
-    });
+    hasImage = !!findLocalImage(code);
+    hasFicha = !!findLocalFicha(code);
+  } else {
+    hasImage = !!(await findImageHttp(code));
+    hasFicha = !!(await findFichaHttp(code));
   }
 
-  // HTTP mode: check via HEAD requests
-  const extensions = ['png', 'jpg', 'jpeg'];
-  let hasImage = false;
-  for (const ext of extensions) {
-    if (await existsViaHttp(`${code}/${code}.${ext}`)) {
-      hasImage = true;
-      break;
-    }
-  }
-  const hasFicha = await existsViaHttp(`${code}/FICHA%20TECNICA/${code}.pdf`);
-  
   res.json({ productCode: code, hasImage, hasFicha });
 });
 
@@ -271,7 +398,7 @@ router.get('/:code/image', async (req, res) => {
   const code = sanitizeCode(req.params.code);
   if (!code) return res.status(404).json({ error: 'Invalid product code' });
 
-  // --- Try file access first ---
+  // FILE mode
   if (accessMode === 'file' || IMAGES_BASE) {
     const localPath = findLocalImage(code);
     if (localPath) {
@@ -280,10 +407,10 @@ router.get('/:code/image', async (req, res) => {
     }
   }
 
-  // --- Fall back to HTTP proxy ---
-  const extensions = ['png', 'jpg', 'jpeg', 'PNG', 'JPG', 'JPEG'];
-  for (const ext of extensions) {
-    const result = await fetchViaHttp(`${code}/${code}.${ext}`);
+  // HTTP mode — discover the actual image file
+  const imagePath = await findImageHttp(code);
+  if (imagePath) {
+    const result = await fetchFileHttp(imagePath);
     if (result) {
       res.set('Cache-Control', 'public, max-age=86400');
       res.set('Content-Type', result.contentType);
@@ -302,7 +429,7 @@ router.get('/:code/ficha', async (req, res) => {
   const code = sanitizeCode(req.params.code);
   if (!code) return res.status(404).json({ error: 'Invalid product code' });
 
-  // --- Try file access first ---
+  // FILE mode
   if (accessMode === 'file' || IMAGES_BASE) {
     const localPath = findLocalFicha(code);
     if (localPath) {
@@ -312,14 +439,16 @@ router.get('/:code/ficha', async (req, res) => {
     }
   }
 
-  // --- Fall back to HTTP proxy ---
-  // "FICHA TECNICA" has a space — URL-encode it
-  const result = await fetchViaHttp(`${code}/FICHA%20TECNICA/${code}.pdf`);
-  if (result) {
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.set('Content-Type', 'application/pdf');
-    res.set('Content-Disposition', `inline; filename="${code}_ficha_tecnica.pdf"`);
-    return res.send(result.data);
+  // HTTP mode — discover the ficha PDF
+  const fichaPath = await findFichaHttp(code);
+  if (fichaPath) {
+    const result = await fetchFileHttp(fichaPath);
+    if (result) {
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Content-Type', 'application/pdf');
+      res.set('Content-Disposition', `inline; filename="${code}_ficha_tecnica.pdf"`);
+      return res.send(result.data);
+    }
   }
 
   logger.warn(`[products] Ficha not found for ${code} (mode=${accessMode})`);
@@ -338,38 +467,25 @@ router.post('/batch-exists', async (req, res) => {
   const limitedCodes = codes.slice(0, 200);
   const results = {};
 
-  if (accessMode === 'file') {
-    // Fast local check
-    for (const rawCode of limitedCodes) {
+  // Process in batches of 10
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < limitedCodes.length; i += BATCH_SIZE) {
+    const batch = limitedCodes.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(async (rawCode) => {
       const code = sanitizeCode(rawCode);
-      if (!code) continue;
-      const imgPath = path.join(IMAGES_BASE, code, `${code}.png`);
-      const fichaPath = path.join(IMAGES_BASE, code, 'FICHA TECNICA', `${code}.pdf`);
-      results[code] = {
-        hasImage: fs.existsSync(imgPath),
-        hasFicha: fs.existsSync(fichaPath),
-      };
-    }
-  } else {
-    // HTTP mode: parallel HEAD checks (limited concurrency)
-    const BATCH_SIZE = 10;
-    for (let i = 0; i < limitedCodes.length; i += BATCH_SIZE) {
-      const batch = limitedCodes.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map(async (rawCode) => {
-        const code = sanitizeCode(rawCode);
-        if (!code) return;
-        const extensions = ['png', 'jpg', 'jpeg'];
-        let hasImage = false;
-        for (const ext of extensions) {
-          if (await existsViaHttp(`${code}/${code}.${ext}`)) {
-            hasImage = true;
-            break;
-          }
-        }
-        const hasFicha = await existsViaHttp(`${code}/FICHA%20TECNICA/${code}.pdf`);
-        results[code] = { hasImage, hasFicha };
-      }));
-    }
+      if (!code) return;
+      if (accessMode === 'file') {
+        results[code] = {
+          hasImage: !!findLocalImage(code),
+          hasFicha: !!findLocalFicha(code),
+        };
+      } else {
+        results[code] = {
+          hasImage: !!(await findImageHttp(code)),
+          hasFicha: !!(await findFichaHttp(code)),
+        };
+      }
+    }));
   }
 
   res.set('Cache-Control', 'public, max-age=3600');
