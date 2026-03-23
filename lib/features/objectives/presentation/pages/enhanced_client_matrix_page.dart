@@ -1416,7 +1416,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       width: 44,
                       height: 44,
                       fit: BoxFit.cover,
-                      headers: const {'Accept': 'image/*'},
+                      headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
                       loadingBuilder: (ctx, child, progress) {
                         if (progress == null) return child;
                         return const Center(child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)));
@@ -1796,7 +1796,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       width: 48,
                       height: 48,
                       fit: BoxFit.cover,
-                      headers: const {'Accept': 'image/*'},
+                      headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
                       loadingBuilder: (ctx, child, progress) {
                         if (progress == null) return child;
                         return const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)));
@@ -2087,7 +2087,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 child: Image.network(
                   imageUrl,
                   fit: BoxFit.contain,
-                  headers: const {'Accept': 'image/*'},
+                  headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
                   loadingBuilder: (ctx2, child, progress) {
                     if (progress == null) return child;
                     final pct = progress.expectedTotalBytes != null ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes! : null;
@@ -2133,7 +2133,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       final dir = await getTemporaryDirectory();
       final filePath = '${dir.path}/${productCode}_ficha.pdf';
 
-      await Dio().download(fichaUrl, filePath);
+      await ApiClient.dio.download(fichaUrl, filePath);
       scaffoldMessenger.hideCurrentSnackBar();
 
       if (!File(filePath).existsSync()) {
