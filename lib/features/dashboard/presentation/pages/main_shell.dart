@@ -400,13 +400,15 @@ class _MainShellState extends State<MainShell> {
       color: Colors.orange,
     ));
     
-    // Comisiones tab always visible for all sales roles (Jefe + Comercial)
-    items.add(_NavItem(
-      icon: Icons.euro_outlined,
-      selectedIcon: Icons.euro,
-      label: 'Comisiones',
-      color: AppTheme.neonGreen,
-    ));
+    // Comisiones: Jefe always sees it; comercial raso only if showCommissions
+    if (isJefeVentas || (authProvider.currentUser?.showCommissions ?? false)) {
+      items.add(_NavItem(
+        icon: Icons.euro_outlined,
+        selectedIcon: Icons.euro,
+        label: 'Comisiones',
+        color: AppTheme.neonGreen,
+      ));
+    }
     
     items.add(_NavItem(
       icon: Icons.receipt_long_outlined,
@@ -1253,70 +1255,61 @@ class _MainShellState extends State<MainShell> {
           (r['code']?.toString() ?? ''): (r['name']?.toString() ?? ''),
       };
 
-      // Map tab indices dynamically based on role
+      // Map tab indices dynamically using nav item labels to stay in sync.
+      // This avoids hardcoded indices that break when optional tabs are hidden.
+      final navItems = _getNavItems(isJefeVentas, vendedorCodes);
+
+      int? _navIndexOf(String label) {
+        for (int i = 0; i < navItems.length; i++) {
+          if (navItems[i].label == label) return i;
+        }
+        return null;
+      }
+
       Widget pageForIndex(int idx) {
-        if (!isJefe) {
-          // Real rep: 0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA
-          if (idx == 0) return RepartidorClientesPage(
+        // Resolve which page this index corresponds to by nav label
+        final label = idx < navItems.length ? navItems[idx].label : '';
+
+        if (label == 'Panel') {
+          return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
+        }
+        if (label == 'Clientes') {
+          final histIdx = _navIndexOf('Histórico');
+          return RepartidorClientesPage(
             repartidorId: effectiveRepartidorId,
-            isJefeMode: false,
+            isJefeMode: isJefe,
             onNavigateToHistory: (clientId, clientName) {
               setState(() {
                 _pendingClientId = clientId;
                 _pendingClientName = clientName;
-                _currentIndex = 3; // Histórico
+                _currentIndex = histIdx ?? idx;
               });
             },
           );
-          if (idx == 1) return ChangeNotifierProvider(
+        }
+        if (label == 'Rutero') {
+          return ChangeNotifierProvider(
             create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
             child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
           );
-          if (idx == 2) return const ComingSoonPlaceholder(
+        }
+        if (label == 'Comisiones') {
+          return const ComingSoonPlaceholder(
             title: 'Comisiones de Reparto',
             subtitle: 'Aquí podrás consultar tus comisiones\nbasadas en los cobros realizados.',
             icon: Icons.euro,
             accentColor: AppTheme.neonGreen,
           );
-          if (idx == 3) {
-            final cId = _pendingClientId;
-            final cName = _pendingClientName;
-            _pendingClientId = null;
-            _pendingClientName = null;
-            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
-          }
-          if (idx == 4) return const ComingSoonPlaceholder(
-            title: 'Asistente IA de Reparto',
-            subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
-            icon: Icons.smart_toy,
-            accentColor: AppTheme.neonPink,
-          );
-        } else {
-          // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
-          if (idx == 0) return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
-          if (idx == 1) return RepartidorClientesPage(
-            repartidorId: effectiveRepartidorId,
-            isJefeMode: true,
-            onNavigateToHistory: (clientId, clientName) {
-              setState(() {
-                _pendingClientId = clientId;
-                _pendingClientName = clientName;
-                _currentIndex = 3; // Histórico
-              });
-            },
-          );
-          if (idx == 2) return ChangeNotifierProvider(
-            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
-          );
-          if (idx == 3) {
-            final cId = _pendingClientId;
-            final cName = _pendingClientName;
-            _pendingClientId = null;
-            _pendingClientName = null;
-            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
-          }
-          if (idx == 4) return const ComingSoonPlaceholder(
+        }
+        if (label == 'Histórico') {
+          final cId = _pendingClientId;
+          final cName = _pendingClientName;
+          _pendingClientId = null;
+          _pendingClientName = null;
+          return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
+        }
+        if (label == 'Chat IA') {
+          return const ComingSoonPlaceholder(
             title: 'Asistente IA de Reparto',
             subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
             icon: Icons.smart_toy,
@@ -1383,22 +1376,26 @@ class _MainShellState extends State<MainShell> {
     }
 
     // ===============================================
-    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Facturas, 5=Glacius, 6=Chat
+    // COMERCIAL: dynamic indices — Comisiones may be hidden
     // ===============================================
-    switch (_currentIndex) {
-      case 0:
-        return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 1:
-        return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 2:
-        return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 3:
-        return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 4:
+    final comercialNav = _getNavItems(false, vendedorCodes);
+    final comercialLabel = _currentIndex < comercialNav.length
+        ? comercialNav[_currentIndex].label : '';
+    final empCode = vendedorCodes.join(',');
+    switch (comercialLabel) {
+      case 'Clientes':
+        return SimpleClientListPage(employeeCode: empCode, isJefeVentas: false);
+      case 'Ruta':
+        return RuteroPage(employeeCode: empCode, isJefeVentas: false);
+      case 'Objetivos':
+        return ObjectivesPage(employeeCode: empCode, isJefeVentas: false);
+      case 'Comisiones':
+        return CommissionsPage(employeeCode: empCode, isJefeVentas: false);
+      case 'Facturas':
         return const FacturasPage();
-      case 5:
-        return KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 6:
+      case 'Glacius':
+        return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
+      case 'Chat IA':
         return const ComingSoonPlaceholder(
           title: 'Nexus AI — Asistente Comercial',
           subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',

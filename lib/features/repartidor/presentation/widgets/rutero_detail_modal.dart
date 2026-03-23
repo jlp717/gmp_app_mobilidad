@@ -100,6 +100,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   String? _pagoError;
   String? _observacionesError;
 
+  // PDF cache to avoid regenerating on re-open
+  String? _cachedPdfBase64;
+
   @override
   void initState() {
     super.initState();
@@ -690,9 +693,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Future<void> _previewReceiptPdf() async {
     final modal = AsyncOperationModal.show(context, text: 'Generando vista previa...');
     try {
-      final pdfData = await _generateReceiptPdf();
+      // Use cached PDF if available, otherwise generate
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) throw Exception('No se pudo generar el PDF');
-      
+      _cachedPdfBase64 = pdfData; // Cache for re-opens
+
       modal.close();
       if (!mounted) return;
 
@@ -702,6 +707,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           : 'Albarán ${widget.albaran.numeroAlbaran}';
       final fileName = 'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
 
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -721,7 +727,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
       );
     } catch (e) {
-      modal.error('Error al visualizar: $e');
+      modal.error('Error al visualizar: $e', onRetry: () => _previewReceiptPdf());
     }
   }
 
@@ -729,10 +735,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Future<void> _downloadReceiptPdf() async {
     final modal = AsyncOperationModal.show(context, text: 'Descargando...');
     try {
-      final pdfData = await _generateReceiptPdf();
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) {
         throw Exception('Error al generar el PDF');
       }
+      _cachedPdfBase64 = pdfData;
 
       final tempDir = await getTemporaryDirectory();
       final docLabel = widget.albaran.numeroFactura > 0
@@ -1232,19 +1239,25 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 HapticFeedback.selectionClick();
                                 setState(() {
                                   _productQuantities[linea.codigoArticulo] = quantity - 1;
+                                  _cachedPdfBase64 = null;
                                 });
                               }
                             : null,
                       ),
-                      Container(
-                        width: 40,
-                        alignment: Alignment.center,
-                        child: Text(
-                          '$quantity',
-                          style: TextStyle(
-                            color: isModified ? AppTheme.warning : AppTheme.textPrimary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                      GestureDetector(
+                        onTap: () => _showQuantityEditDialog(linea, quantity),
+                        child: Container(
+                          width: 40,
+                          alignment: Alignment.center,
+                          child: Text(
+                            '$quantity',
+                            style: TextStyle(
+                              color: isModified ? AppTheme.warning : AppTheme.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              decoration: TextDecoration.underline,
+                              decorationStyle: TextDecorationStyle.dotted,
+                            ),
                           ),
                         ),
                       ),
@@ -1254,10 +1267,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                           HapticFeedback.selectionClick();
                           setState(() {
                             _productQuantities[linea.codigoArticulo] = quantity + 1;
+                            _cachedPdfBase64 = null;
                           });
                         },
                       ),
                     ],
+                  ),
+                ),
+                // Pencil icon for direct quantity editing
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => _showQuantityEditDialog(linea, quantity),
+                  child: Icon(
+                    Icons.edit_outlined,
+                    color: AppTheme.textTertiary,
+                    size: 18,
                   ),
                 ),
               ],
@@ -1287,6 +1311,102 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
       ),
     );
+  }
+
+  /// Show a dialog to edit quantity directly by typing a number.
+  Future<void> _showQuantityEditDialog(EntregaItem linea, int current) async {
+    final controller = TextEditingController(text: '$current');
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.edit, color: AppTheme.neonBlue, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                linea.descripcion,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 14,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Cantidad original: ${linea.cantidadPedida.toInt()}',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Nueva cantidad',
+                filled: true,
+                fillColor: AppTheme.darkBase,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              onSubmitted: (val) {
+                final n = int.tryParse(val);
+                if (n != null && n >= 0) Navigator.pop(ctx, n);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'CANCELAR',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final n = int.tryParse(controller.text);
+              if (n != null && n >= 0) Navigator.pop(ctx, n);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonBlue,
+            ),
+            child: const Text('ACEPTAR'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && mounted) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _productQuantities[linea.codigoArticulo] = result;
+        _cachedPdfBase64 = null; // Invalidate PDF cache
+      });
+    }
   }
 
   Widget _buildConfirmAllButton(List<EntregaItem> lineas) {
@@ -1847,8 +1967,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
-                'Se han modificado cantidades. Las observaciones '
-                'son obligatorias para justificar los cambios.',
+                'ATENCIÓN: Si marca en verde sin modificar cantidades, '
+                'la entrega está OK. Si modifica o quita cantidades, la '
+                'entrega NO coincide — debe añadir observaciones en la '
+                'pestaña \'Observaciones\' antes de confirmar.',
                 style: TextStyle(
                   color: Colors.orange,
                   fontSize: 13,
@@ -2059,9 +2181,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       isValid = false;
     }
     
-    // Validate signature
+    // Validate signature (always required; extra emphasis when quantities differ)
     if (_signatureController.isEmpty) {
-      _firmaError = 'La firma es obligatoria';
+      _firmaError = anyQtyModified
+          ? 'FIRMA OBLIGATORIA: las cantidades no coinciden con el pedido'
+          : 'La firma es obligatoria';
+      _tabController.animateTo(2); // Switch to signature tab
       isValid = false;
     }
     
@@ -2629,9 +2754,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
     final modal = AsyncOperationModal.show(context, text: 'Preparando WhatsApp...');
     try {
-      // Generate receipt PDF via API
-      final pdfData = await _generateReceiptPdf();
+      // Generate receipt PDF via API (use cache if available)
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) throw Exception('Error generando PDF para WhatsApp');
+      _cachedPdfBase64 = pdfData;
 
       // Save PDF temporarily
       final tempDir = await getTemporaryDirectory();
@@ -2644,10 +2770,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       modal.close();
       if (!mounted) return;
 
-      // Share PDF via system share sheet (user picks WhatsApp)
+      // Share PDF via system share sheet (user picks WhatsApp).
+      // Note: on Android, sending text + file to WhatsApp often causes
+      // WhatsApp to ignore the file. Use subject for the message text
+      // so the file attachment is reliably included.
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
-        text: result.message,
+        subject: result.message,
       );
       
     } catch (e) {

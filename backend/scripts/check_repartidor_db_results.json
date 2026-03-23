@@ -1,0 +1,313 @@
+{
+  "timestamp": "2026-03-23T09:16:07.229Z",
+  "checks": [
+    {
+      "id": "P-16-4876",
+      "header": [
+        {
+          "EJERCICIOALBARAN": 2025,
+          "SERIE": "P",
+          "TERMINALALBARAN": 16,
+          "NUMEROALBARAN": 4876,
+          "IMPORTETOTAL": 87.12,
+          "IMPORTEBRUTO": 79.2,
+          "REP": "16",
+          "OPP_NUM": 59279,
+          "DIADOCUMENTO": 22,
+          "MESDOCUMENTO": 11,
+          "ANODOCUMENTO": 2025
+        }
+      ],
+      "lines_count": 16,
+      "lineSum": "366.76"
+    },
+    {
+      "id": "P-16-4777",
+      "header": [
+        {
+          "EJERCICIOALBARAN": 2025,
+          "SERIE": "P",
+          "TERMINALALBARAN": 16,
+          "NUMEROALBARAN": 4777,
+          "IMPORTETOTAL": 21.78,
+          "IMPORTEBRUTO": 19.8,
+          "REP": "16",
+          "OPP_NUM": 57774
+        }
+      ],
+      "linesSummary": {
+        "CNT": 19,
+        "TOTAL": 413.83
+      }
+    },
+    {
+      "id": "F-133393",
+      "factura": []
+    },
+    {
+      "id": "discrepancies_2026",
+      "count": 20,
+      "rows": [
+        {
+          "NUMEROALBARAN": 119,
+          "SERIE": "P",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 5082.67,
+          "DIFF": 5082.67,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 52,
+          "SERIE": "P",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 2802.51,
+          "LINE_SUM": 5.76,
+          "DIFF": 2796.75,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 721,
+          "SERIE": "P",
+          "TERMINALALBARAN": 2,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 2569.5,
+          "DIFF": 2569.5,
+          "REP": "02"
+        },
+        {
+          "NUMEROALBARAN": 245,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 2507.78,
+          "DIFF": 2507.78,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 237,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 162.81,
+          "LINE_SUM": 2550.86,
+          "DIFF": 2388.05,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 212,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 180.46,
+          "LINE_SUM": 2343.37,
+          "DIFF": 2162.91,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 88,
+          "SERIE": "I",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 2022,
+          "DIFF": 2022,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 223,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 2003.98,
+          "DIFF": 2003.98,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 46,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 53.68,
+          "LINE_SUM": 2055.84,
+          "DIFF": 2002.16,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 155,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 1961.7,
+          "DIFF": 1961.7,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 127,
+          "SERIE": "L",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0.01,
+          "LINE_SUM": 1954.27,
+          "DIFF": 1954.26,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 183,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 1857.57,
+          "DIFF": 1857.57,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 23,
+          "SERIE": "I",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 1845.45,
+          "DIFF": 1845.45,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 171,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 39.43,
+          "LINE_SUM": 1879.48,
+          "DIFF": 1840.05,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 196,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 104.17,
+          "LINE_SUM": 1943.88,
+          "DIFF": 1839.71,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 2,
+          "SERIE": "P",
+          "TERMINALALBARAN": 0,
+          "IMPORTETOTAL": 1621.5,
+          "LINE_SUM": -180.64,
+          "DIFF": 1802.14,
+          "REP": "97"
+        },
+        {
+          "NUMEROALBARAN": 23,
+          "SERIE": "I",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 85.99,
+          "LINE_SUM": 1845.45,
+          "DIFF": 1759.46,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 19,
+          "SERIE": "L",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 1739.13,
+          "DIFF": 1739.13,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 73,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 42.96,
+          "LINE_SUM": 1750.5,
+          "DIFF": 1707.54,
+          "REP": "93"
+        },
+        {
+          "NUMEROALBARAN": 118,
+          "SERIE": "J",
+          "TERMINALALBARAN": 93,
+          "IMPORTETOTAL": 0,
+          "LINE_SUM": 1699.39,
+          "DIFF": 1699.39,
+          "REP": "93"
+        }
+      ]
+    },
+    {
+      "id": "opp_check",
+      "rows": [
+        {
+          "NUMEROORDENPREPARACION": 57774,
+          "ANOREPARTO": 2024,
+          "MESREPARTO": 12,
+          "DIAREPARTO": 13,
+          "REP": "79",
+          "CLI": "4300010020",
+          "NUMEROALBARAN": 4777
+        },
+        {
+          "NUMEROORDENPREPARACION": 59279,
+          "ANOREPARTO": 2024,
+          "MESREPARTO": 12,
+          "DIAREPARTO": 23,
+          "REP": "85",
+          "CLI": "4300010020",
+          "NUMEROALBARAN": 4876
+        },
+        {
+          "NUMEROORDENPREPARACION": 57774,
+          "ANOREPARTO": 2025,
+          "MESREPARTO": 11,
+          "DIAREPARTO": 14,
+          "REP": "16",
+          "CLI": "4300010020",
+          "NUMEROALBARAN": 4777
+        },
+        {
+          "NUMEROORDENPREPARACION": 59279,
+          "ANOREPARTO": 2025,
+          "MESREPARTO": 11,
+          "DIAREPARTO": 22,
+          "REP": "66",
+          "CLI": "4300010020",
+          "NUMEROALBARAN": 4876
+        }
+      ]
+    },
+    {
+      "id": "vdd_names",
+      "rows": [
+        {
+          "COD": "21",
+          "NOMBRE": "21 ANTONIO MONTEJANO"
+        },
+        {
+          "COD": "25",
+          "NOMBRE": "25 DIEGO JIMENEZ"
+        },
+        {
+          "COD": "30",
+          "NOMBRE": "30 CARLOS"
+        },
+        {
+          "COD": "79",
+          "NOMBRE": "79 FRANCISCO JAVIER (AL)"
+        }
+      ]
+    },
+    {
+      "id": "delivery_status",
+      "summary": [
+        {
+          "STATUS": "ENTREGADO",
+          "CNT": 17,
+          "FIRST_UPDATE": "2026-02-04 13:38:44.797231",
+          "LAST_UPDATE": "2026-03-23 08:04:48.501091"
+        }
+      ],
+      "specific": []
+    },
+    {
+      "id": "missing_observations",
+      "count": 0,
+      "sample": []
+    }
+  ]
+}

@@ -337,11 +337,16 @@ class ZebraPrintService {
         '^FO$_xLeft,$y^FDFirmante: $receptorNombre^FS',
       );
       y += 22;
-    }
-    if (receptorDni != null && receptorDni.isNotEmpty) {
-      buf.writeln('^CF0,16');
-      buf.writeln('^FO$_xLeft,$y^FDDNI/NIF: $receptorDni^FS');
-      y += 20;
+      if (receptorDni != null && receptorDni.isNotEmpty) {
+        buf.writeln('^CF0,16');
+        buf.writeln('^FO$_xLeft,$y^FDDNI/NIF: $receptorDni^FS');
+        y += 20;
+      }
+      // Signature box placeholder (actual image requires GRF conversion)
+      buf.writeln('^FO$_xLeft,$y^GB200,60,1^FS');
+      buf.writeln('^CF0,14');
+      buf.writeln('^FO${_xLeft + 50},${y + 20}^FD[FIRMADO]^FS');
+      y += 66;
     }
 
     // ═══ OBSERVATIONS ═══

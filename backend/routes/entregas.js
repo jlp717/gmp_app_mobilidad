@@ -10,6 +10,24 @@ const logger = require('../middleware/logger');
 const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 
+/**
+ * Validate Spanish DNI/NIE format with check letter (mod 23).
+ * @param {string} value - DNI/NIE string
+ * @returns {boolean} true if format is valid
+ */
+function isValidDniNie(value) {
+    if (!value) return false;
+    const cleaned = value.trim().toUpperCase();
+    const regex = /^([XYZ]\d{7}|\d{8})[A-Z]$/;
+    if (!regex.test(cleaned)) return false;
+    const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+    let numStr = cleaned.slice(0, -1)
+        .replace('X', '0').replace('Y', '1').replace('Z', '2');
+    const num = parseInt(numStr, 10);
+    if (isNaN(num)) return false;
+    return cleaned[cleaned.length - 1] === letters[num % 23];
+}
+
 // Ensure directories exist
 const photosDir = path.join(__dirname, '../../uploads/photos');
 if (!fs.existsSync(photosDir)) {
@@ -844,6 +862,11 @@ router.post('/uploads/signature', async (req, res) => {
     try {
         const { entregaId, firma, clientCode, dni, nombre } = req.body; // firma is base64
         if (!firma) return res.status(400).json({ success: false, error: 'No signature' });
+
+        // Validate DNI format if provided
+        if (dni && !isValidDniNie(dni)) {
+            return res.status(400).json({ success: false, error: 'Formato de DNI/NIF no válido' });
+        }
 
         // Create organized directory structure: /uploads/photos/YYYY/MM/
         const now = new Date();

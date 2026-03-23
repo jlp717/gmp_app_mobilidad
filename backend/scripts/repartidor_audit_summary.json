@@ -1,0 +1,169 @@
+{
+  "summary": "Auditoría y corrección del perfil repartidor — 10 fixes aplicados sobre la rama test. Incluye: cache de PDF para reabrir sin timeout, WhatsApp con adjunto PDF correcto, edición de cantidades con diálogo tap-to-edit, firma obligatoria cuando hay diferencias, validación DNI backend, routing dinámico por label en navegación, ocultación de Comisiones por flag showCommissions, placeholder firma ZPL, intent PDF en AndroidManifest, y script de verificación DB.",
+  "branch": "test",
+  "base_commit": "01f143c",
+  "date": "2026-03-23",
+  "flutter_analyze": "0 errors, 0 warnings",
+  "files_changed": [
+    {
+      "file": "lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart",
+      "changes": [
+        "Added _cachedPdfBase64 field for PDF caching (avoids 45s timeout on re-open)",
+        "Updated _previewReceiptPdf, _downloadReceiptPdf, _shareViaWhatsApp to use cache",
+        "Changed WhatsApp share from text: to subject: parameter (fixes PDF not attaching)",
+        "Added _showQuantityEditDialog method with AlertDialog + numeric TextField",
+        "Added GestureDetector on quantity number with dotted underline + pencil icon",
+        "Cache invalidation on +/- buttons and quantity edit dialog",
+        "Updated orange warning text to exact user-requested copy",
+        "Enhanced signature validation message when quantities differ",
+        "Auto-switch to signature tab when signature validation fails"
+      ],
+      "issues_fixed": ["PDF_REOPEN", "WHATSAPP_ATTACH", "QUANTITY_EDIT", "SIGNATURE_MANDATORY"]
+    },
+    {
+      "file": "lib/features/dashboard/presentation/pages/main_shell.dart",
+      "changes": [
+        "Added showCommissions check for comercial Comisiones tab",
+        "Rewrote repartidor pageForIndex with label-based dynamic routing",
+        "Rewrote comercial page routing with label-based matching",
+        "Fixes index desync when Comisiones tab is hidden"
+      ],
+      "issues_fixed": ["COMISIONES_HIDE", "NAV_INDEX_SYNC"]
+    },
+    {
+      "file": "backend/routes/entregas.js",
+      "changes": [
+        "Added isValidDniNie() function with Spanish DNI/NIE regex + mod-23 letter check",
+        "Added DNI validation in /uploads/signature endpoint (400 if invalid format)"
+      ],
+      "issues_fixed": ["DNI_BACKEND_VALIDATION"]
+    },
+    {
+      "file": "lib/features/repartidor/data/zebra_print_service.dart",
+      "changes": [
+        "Restructured signature section: DNI nested under name check",
+        "Added signature box placeholder with [FIRMADO] text"
+      ],
+      "issues_fixed": ["ZPL_FIRMANTE"]
+    },
+    {
+      "file": "android/app/src/main/AndroidManifest.xml",
+      "changes": [
+        "Added PDF MIME type intent query for Android 11+ share compatibility"
+      ],
+      "issues_fixed": ["WHATSAPP_ATTACH"]
+    },
+    {
+      "file": "backend/scripts/check_repartidor_db.js",
+      "changes": [
+        "New file: DB audit script with 8 checks (headers, lines, discrepancies, OPP, VDD, DELIVERY_STATUS)"
+      ],
+      "issues_fixed": ["DB_VERIFICATION"]
+    }
+  ],
+  "issues_fixed": [
+    {
+      "id": "PDF_REOPEN",
+      "title": "PDF preview times out on second open",
+      "severity": "high",
+      "root_cause": "_generateReceiptPdf made fresh API call each time, hitting 45s AsyncOperationModal timeout",
+      "fix": "Cache base64 PDF in _cachedPdfBase64; invalidate on quantity change"
+    },
+    {
+      "id": "WHATSAPP_ATTACH",
+      "title": "WhatsApp opens without PDF attachment",
+      "severity": "medium",
+      "root_cause": "Share.shareXFiles with text: parameter causes Android WhatsApp to ignore file",
+      "fix": "Use subject: instead of text:; added PDF MIME intent in AndroidManifest"
+    },
+    {
+      "id": "QUANTITY_EDIT",
+      "title": "Quantity editing UX — tap center number to edit directly",
+      "severity": "medium",
+      "root_cause": "Only +/- buttons existed; no way to jump to a specific quantity",
+      "fix": "Added _showQuantityEditDialog with numeric TextField; pencil icon; dotted underline on number"
+    },
+    {
+      "id": "SIGNATURE_MANDATORY",
+      "title": "Signature not enforced when quantities differ",
+      "severity": "high",
+      "root_cause": "Validation allowed confirm without signature even with modified quantities",
+      "fix": "Block confirm when any quantity differs and no signature; auto-switch to signature tab; show specific error message"
+    },
+    {
+      "id": "DNI_BACKEND_VALIDATION",
+      "title": "Backend accepts any DNI format",
+      "severity": "medium",
+      "root_cause": "No server-side validation of DNI/NIE format",
+      "fix": "Added isValidDniNie() with regex + mod-23 letter verification in /uploads/signature endpoint"
+    },
+    {
+      "id": "COMISIONES_HIDE",
+      "title": "Comisiones tab visible for comerciales with showCommissions=false",
+      "severity": "medium",
+      "root_cause": "Condition only checked isJefe, not showCommissions flag",
+      "fix": "Added showCommissions check: if (isJefeVentas || showCommissions)"
+    },
+    {
+      "id": "NAV_INDEX_SYNC",
+      "title": "Tab pages desync when Comisiones hidden",
+      "severity": "critical",
+      "root_cause": "Hardcoded index→page mapping in _buildCurrentPage broke when nav items changed dynamically",
+      "fix": "Label-based dynamic routing: match navItems[idx].label to page widget"
+    },
+    {
+      "id": "ZPL_FIRMANTE",
+      "title": "ZPL ticket missing DNI and signature indicator",
+      "severity": "low",
+      "root_cause": "Only printed receptorNombre, no DNI or signature box",
+      "fix": "Added DNI line under name; added [FIRMADO] placeholder box"
+    },
+    {
+      "id": "DB_VERIFICATION",
+      "title": "DB audit for repartidor data integrity",
+      "severity": "info",
+      "root_cause": "No tooling to verify albaran discrepancies at scale",
+      "fix": "Created check_repartidor_db.js with 8 verification checks; found 20 discrepancies in 2026 data"
+    }
+  ],
+  "queries_descriptions": [
+    {
+      "purpose": "Detect albaranes where CPC.IMPORTETOTAL differs from SUM(LAC.IMPORTEVENTA)",
+      "tables": ["DSEDAC.CPC", "DSEDAC.LAC"],
+      "join": "EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN",
+      "filter": "EJERCICIOALBARAN = ?, TRIM(TIPOLINEA) != 'T', TRIM(CODIGOARTICULO) != ''",
+      "having": "ABS(CPC.IMPORTETOTAL - SUM(LAC.IMPORTEVENTA)) > 0.01",
+      "parameterized": true
+    },
+    {
+      "purpose": "Get albaran header + lines for delivery detail",
+      "tables": ["DSEDAC.CPC", "DSEDAC.LAC", "DSEDAC.OPP", "DSEDAC.VDD"],
+      "join": "CPC→OPP via NUMEROORDENPREPARACION, VDD via CODIGOVENDEDOR",
+      "fields": "IMPORTETOTAL, IMPORTEBRUTO, NOMBREVENDEDOR, NUMEROORDENPREPARACION",
+      "parameterized": true
+    },
+    {
+      "purpose": "Validate DNI format (Spanish DNI/NIE)",
+      "regex": "^([XYZ]\\d{7}|\\d{8})[A-Z]$",
+      "algorithm": "mod-23 letter check against TRWAGMYFPDXBNJZSQVHLCKE",
+      "implemented_in": ["backend/routes/entregas.js", "lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart"]
+    }
+  ],
+  "tests": {
+    "manual": [
+      "Login as repartidor → verify Comisiones tab hidden when showCommissions=false",
+      "Open albaran → tap quantity number → verify edit dialog appears with current value",
+      "Modify quantity → try to confirm without signature → verify blocked with orange warning",
+      "Enter invalid DNI (e.g. '123') → verify frontend rejects; verify backend returns 400",
+      "Enter valid DNI (e.g. '12345678Z') → verify accepted",
+      "Preview PDF → close → reopen → verify instant (no timeout)",
+      "Share via WhatsApp → verify share sheet shows PDF attachment",
+      "Print Zebra → verify DNI and [FIRMADO] appear on ticket",
+      "Hide Comisiones for comercial → verify Histórico tab still works (no index desync)"
+    ],
+    "automated": {
+      "flutter_analyze": "0 errors",
+      "db_script": "node backend/scripts/check_repartidor_db.js — 8 checks pass"
+    }
+  }
+}
