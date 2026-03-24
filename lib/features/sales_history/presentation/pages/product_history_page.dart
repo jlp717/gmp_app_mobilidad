@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/api/api_config.dart';
+import '../../../../core/api/api_client.dart';
 import '../../providers/sales_history_provider.dart';
 import '../../../../core/providers/auth_provider.dart';
 import 'package:intl/intl.dart';
@@ -328,7 +329,7 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
       final dir = await getTemporaryDirectory();
       final filePath = '${dir.path}/${item.productCode.trim()}_ficha.pdf';
 
-      await Dio().download(url, filePath);
+      await ApiClient.dio.download(url, filePath);
       scaffoldMessenger.hideCurrentSnackBar();
 
       if (!File(filePath).existsSync()) {
@@ -495,7 +496,7 @@ class _ProductThumbnail extends StatelessWidget {
             width: size,
             height: size,
             fit: BoxFit.cover,
-            headers: const {'Accept': 'image/*'},
+            headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
             loadingBuilder: (ctx, child, progress) {
               if (progress == null) return child;
               return Center(
@@ -570,7 +571,7 @@ class _FullscreenImageViewer extends StatelessWidget {
           child: Image.network(
             imageUrl,
             fit: BoxFit.contain,
-            headers: const {'Accept': 'image/*'},
+            headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
             loadingBuilder: (ctx, child, progress) {
               if (progress == null) return child;
               final percent = progress.expectedTotalBytes != null

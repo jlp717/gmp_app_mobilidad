@@ -214,21 +214,25 @@ async function findFichaHttp(code) {
   const items = await listHttpDirectory(`${code}/`);
   if (!items) { setCache(cacheKey, null); return null; }
 
-  // Collect ficha-like subdirectories
-  const fichaDirs = items.filter(f =>
-    f.endsWith('/') && f.toUpperCase().startsWith('FICHA')
-  );
+  // Separate subdirectories and root-level PDFs
+  const allDirs = items.filter(f => f.endsWith('/') && f !== '../');
+  const rootPdfs = items.filter(f => !f.endsWith('/') && f.toLowerCase().endsWith('.pdf'));
 
-  // Also check for PDFs directly in the root folder
-  const rootPdfs = items.filter(f => {
-    if (f.endsWith('/')) return false;
-    return f.toLowerCase().endsWith('.pdf');
-  });
+  // Priority order for subdirectories:
+  // 1. FICHA TECNICA (exact)
+  // 2. FICHA TECNICA - copia (or similar)
+  // 3. Any other subdirectory
+  const fichaDirs = [];
+  const otherDirs = [];
+  for (const d of allDirs) {
+    if (d.toUpperCase().startsWith('FICHA')) fichaDirs.push(d);
+    else otherDirs.push(d);
+  }
+  fichaDirs.sort((a, b) => a.length - b.length); // shorter = more canonical
+  const searchDirs = [...fichaDirs, ...otherDirs];
 
-  // Search ficha subdirectories first (ordered: prefer "FICHA TECNICA/" over "FICHA TECNICA - copia/")
-  fichaDirs.sort((a, b) => a.length - b.length); // shorter name first = less likely a "copia"
-
-  for (const dir of fichaDirs) {
+  // Search ALL subdirectories for any PDF
+  for (const dir of searchDirs) {
     const dirName = dir.replace(/\/$/, '');
     const subItems = await listHttpDirectory(`${code}/${encodeURIComponent(dirName)}/`);
     if (!subItems) continue;
@@ -244,17 +248,16 @@ async function findFichaHttp(code) {
     }
   }
 
-  // Fallback: PDF in root folder (but not an image-like PDF)
+  // Fallback: ANY PDF in root folder
   if (rootPdfs.length > 0) {
-    // Only use root PDFs if they look like fichas (not just any PDF)
-    const fichaLikePdf = rootPdfs.find(f =>
+    let best = rootPdfs.find(f => f.startsWith(code));
+    if (!best) best = rootPdfs.find(f =>
       f.toLowerCase().includes('ficha') || f.toLowerCase().includes('tecnica')
     );
-    if (fichaLikePdf) {
-      const result = `${code}/${encodeURIComponent(fichaLikePdf)}`;
-      setCache(cacheKey, result);
-      return result;
-    }
+    if (!best) best = rootPdfs[0];
+    const result = `${code}/${encodeURIComponent(best)}`;
+    setCache(cacheKey, result);
+    return result;
   }
 
   setCache(cacheKey, null);
@@ -320,13 +323,21 @@ function findLocalFicha(code) {
 
   try {
     const items = fs.readdirSync(folder);
-    // Find ficha subdirectories
-    const fichaDirs = items.filter(f => {
+    // Separate dirs into ficha-priority and others
+    const fichaDirs = [];
+    const otherDirs = [];
+    for (const f of items) {
       const full = path.join(folder, f);
-      return f.toUpperCase().startsWith('FICHA') && fs.statSync(full).isDirectory();
-    }).sort((a, b) => a.length - b.length);
+      try {
+        if (!fs.statSync(full).isDirectory()) continue;
+      } catch { continue; }
+      if (f.toUpperCase().startsWith('FICHA')) fichaDirs.push(f);
+      else otherDirs.push(f);
+    }
+    fichaDirs.sort((a, b) => a.length - b.length);
+    const allDirs = [...fichaDirs, ...otherDirs];
 
-    for (const dir of fichaDirs) {
+    for (const dir of allDirs) {
       const subFiles = fs.readdirSync(path.join(folder, dir));
       const pdfs = subFiles.filter(f => f.toLowerCase().endsWith('.pdf'));
       if (pdfs.length > 0) {
@@ -336,6 +347,20 @@ function findLocalFicha(code) {
         const resolvedBase = path.resolve(IMAGES_BASE);
         return resolved.startsWith(resolvedBase) ? resolved : null;
       }
+    }
+
+    // Fallback: root-level PDFs
+    const rootPdfs = items.filter(f => {
+      const full = path.join(folder, f);
+      try { return !fs.statSync(full).isDirectory() && f.toLowerCase().endsWith('.pdf'); }
+      catch { return false; }
+    });
+    if (rootPdfs.length > 0) {
+      let best = rootPdfs.find(f => f.startsWith(code));
+      if (!best) best = rootPdfs[0];
+      const resolved = path.resolve(path.join(folder, best));
+      const resolvedBase = path.resolve(IMAGES_BASE);
+      return resolved.startsWith(resolvedBase) ? resolved : null;
     }
   } catch { /* ignore */ }
   return null;

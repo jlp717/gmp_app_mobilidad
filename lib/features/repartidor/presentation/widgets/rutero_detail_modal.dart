@@ -1388,7 +1388,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             width: 48,
             height: 48,
             fit: BoxFit.cover,
-            headers: const {'Accept': 'image/*'},
+            headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
             loadingBuilder: (ctx, child, progress) {
               if (progress == null) return child;
               return const Center(
@@ -1485,7 +1485,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 child: Image.network(
                   imageUrl,
                   fit: BoxFit.contain,
-                  headers: const {'Accept': 'image/*'},
+                  headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
                   loadingBuilder: (ctx, child, progress) {
                     if (progress == null) return child;
                     final percent =
@@ -1557,7 +1557,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final filePath =
           '${dir.path}/${linea.codigoArticulo.trim()}_ficha.pdf';
 
-      await Dio().download(url, filePath);
+      await ApiClient.dio.download(url, filePath);
       scaffoldMessenger.hideCurrentSnackBar();
 
       if (!File(filePath).existsSync()) {
