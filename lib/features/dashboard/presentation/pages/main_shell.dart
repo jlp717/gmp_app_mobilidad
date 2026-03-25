@@ -26,6 +26,8 @@ import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_panel_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_clientes_page.dart';
 import '../../../facturas/presentation/pages/facturas_page.dart';
+import '../../../pedidos/presentation/pages/pedidos_page.dart';
+import '../../../pedidos/providers/pedidos_provider.dart';
 import '../../../warehouse/presentation/pages/warehouse_dashboard_page.dart';
 import '../../../warehouse/presentation/pages/vehicles_page.dart';
 import '../../../warehouse/presentation/pages/articles_page.dart';
@@ -415,6 +417,13 @@ class _MainShellState extends State<MainShell> {
       selectedIcon: Icons.receipt_long,
       label: 'Facturas',
       color: Colors.teal,
+    ));
+
+    items.add(_NavItem(
+      icon: Icons.shopping_cart_outlined,
+      selectedIcon: Icons.shopping_cart,
+      label: 'Pedidos',
+      color: Colors.deepOrange,
     ));
 
     items.add(_NavItem(
@@ -1338,7 +1347,7 @@ class _MainShellState extends State<MainShell> {
     }
     
     // ===============================================
-    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Facturas, 6=Glacius, 7=Chat
+    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Facturas, 6=Pedidos, 7=Glacius, 8=Chat
     // ===============================================
     if (isJefeVentas) {
       switch (_currentIndex) {
@@ -1362,8 +1371,13 @@ class _MainShellState extends State<MainShell> {
         case 5:
           return const FacturasPage();
         case 6:
-          return KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
+          return ChangeNotifierProvider(
+            create: (_) => PedidosProvider(),
+            child: PedidosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          );
         case 7:
+          return KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
+        case 8:
           return const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
             subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
@@ -1393,6 +1407,11 @@ class _MainShellState extends State<MainShell> {
         return CommissionsPage(employeeCode: empCode, isJefeVentas: false);
       case 'Facturas':
         return const FacturasPage();
+      case 'Pedidos':
+        return ChangeNotifierProvider(
+          create: (_) => PedidosProvider(),
+          child: PedidosPage(employeeCode: empCode, isJefeVentas: false),
+        );
       case 'Glacius':
         return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
       case 'Chat IA':

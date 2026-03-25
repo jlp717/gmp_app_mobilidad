@@ -1,0 +1,1253 @@
+/**
+ * PEDIDOS SERVICE (CommonJS)
+ * ==========================
+ * Service for order management (PEDIDOS module).
+ * Tables live in schema JAVIER; product/stock reads go to DSEDAC.
+ */
+
+const { query, queryWithParams, getPool } = require('../config/db');
+const logger = require('../middleware/logger');
+const { cachedQuery } = require('./query-optimizer');
+const { redisCache, TTL } = require('./redis-cache');
+
+// ============================================================================
+// TABLE DDL
+// ============================================================================
+
+const CREATE_PEDIDOS_CAB = `
+CREATE TABLE JAVIER.PEDIDOS_CAB (
+    ID INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    SUBEMPRESA CHAR(3) DEFAULT 'GMP',
+    EJERCICIO NUMERIC(4) NOT NULL,
+    NUMEROPEDIDO NUMERIC(6) NOT NULL,
+    SERIEPEDIDO CHAR(1) DEFAULT 'M',
+    TERMINAL NUMERIC(3) DEFAULT 999,
+    DIADOCUMENTO NUMERIC(2),
+    MESDOCUMENTO NUMERIC(2),
+    ANODOCUMENTO NUMERIC(4),
+    HORADOCUMENTO NUMERIC(6) DEFAULT 0,
+    CODIGOCLIENTE CHAR(10) NOT NULL,
+    NOMBRECLIENTE VARCHAR(60),
+    CODIGOVENDEDOR CHAR(2) NOT NULL,
+    CODIGOFORMAPAGO CHAR(2) DEFAULT '02',
+    CODIGOTARIFA NUMERIC(2) DEFAULT 1,
+    CODIGOALMACEN NUMERIC(4) DEFAULT 1,
+    TIPOVENTA CHAR(2) DEFAULT 'CC',
+    ESTADO VARCHAR(12) DEFAULT 'BORRADOR',
+    IMPORTETOTAL NUMERIC(11,2) DEFAULT 0,
+    IMPORTEBASE NUMERIC(11,2) DEFAULT 0,
+    IMPORTEIVA NUMERIC(11,2) DEFAULT 0,
+    IMPORTECOSTO NUMERIC(11,2) DEFAULT 0,
+    IMPORTEMARGEN NUMERIC(11,2) DEFAULT 0,
+    OBSERVACIONES VARCHAR(200) DEFAULT '',
+    CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UPDATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`;
+
+const CREATE_PEDIDOS_LIN = `
+CREATE TABLE JAVIER.PEDIDOS_LIN (
+    ID INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PEDIDO_ID INTEGER NOT NULL,
+    SECUENCIA NUMERIC(4) DEFAULT 1,
+    CODIGOARTICULO CHAR(10) NOT NULL,
+    DESCRIPCION CHAR(40),
+    CANTIDADENVASES NUMERIC(7,2) DEFAULT 0,
+    CANTIDADUNIDADES NUMERIC(10,5) DEFAULT 0,
+    UNIDADMEDIDA VARCHAR(12) DEFAULT 'CAJAS',
+    UNIDADESCAJA NUMERIC(10,5) DEFAULT 1,
+    PRECIOVENTA NUMERIC(9,4) DEFAULT 0,
+    PRECIOCOSTO NUMERIC(9,4) DEFAULT 0,
+    PRECIOTARIFA NUMERIC(9,4) DEFAULT 0,
+    PRECIOTARIFACLIENTE NUMERIC(9,4) DEFAULT 0,
+    PRECIOMINIMO NUMERIC(9,4) DEFAULT 0,
+    IMPORTEVENTA NUMERIC(10,2) DEFAULT 0,
+    IMPORTECOSTO NUMERIC(10,2) DEFAULT 0,
+    IMPORTEMARGEN NUMERIC(10,2) DEFAULT 0,
+    PORCENTAJEMARGEN NUMERIC(7,2) DEFAULT 0,
+    TIPOLINEA CHAR(1) DEFAULT 'R',
+    TIPOVENTA CHAR(2) DEFAULT 'CC',
+    CLASELINEA CHAR(2) DEFAULT 'VT',
+    ORDEN NUMERIC(4) DEFAULT 0,
+    CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`;
+
+const CREATE_PEDIDOS_SEQ = `
+CREATE TABLE JAVIER.PEDIDOS_SEQ (
+    EJERCICIO NUMERIC(4) NOT NULL PRIMARY KEY,
+    ULTIMO_NUMERO NUMERIC(6) DEFAULT 0
+)`;
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function isTableNotFound(err) {
+    const msg = (err.message || '').toLowerCase();
+    const codes = (err.odbcErrors || []).map(e => e.code);
+    return codes.includes(-204) || msg.includes('sql0204');
+}
+
+/**
+ * Sanitize a string for safe SQL interpolation (only used where
+ * parameterized queries are not possible, e.g. dynamic IN lists).
+ */
+function sanitize(val) {
+    if (val == null) return '';
+    return String(val).replace(/'/g, "''");
+}
+
+// ============================================================================
+// TABLE INITIALIZATION
+// ============================================================================
+
+async function initPedidosTables() {
+    const pool = getPool();
+    if (!pool) { logger.warn('[PEDIDOS] No DB pool available for init'); return; }
+
+    const tables = [
+        { name: 'JAVIER.PEDIDOS_CAB', ddl: CREATE_PEDIDOS_CAB },
+        { name: 'JAVIER.PEDIDOS_LIN', ddl: CREATE_PEDIDOS_LIN },
+        { name: 'JAVIER.PEDIDOS_SEQ', ddl: CREATE_PEDIDOS_SEQ },
+    ];
+
+    let conn;
+    try {
+        conn = await pool.connect();
+
+        for (const t of tables) {
+            try {
+                await conn.query(`SELECT 1 FROM ${t.name} FETCH FIRST 1 ROW ONLY`);
+                logger.info(`[PEDIDOS] ${t.name} ready`);
+            } catch (e) {
+                if (isTableNotFound(e)) {
+                    // Close dirty connection, get a fresh one
+                    try { await conn.close(); } catch (_) { /* ignore */ }
+                    conn = await pool.connect();
+                    await conn.query(t.ddl);
+                    logger.info(`[PEDIDOS] Created ${t.name}`);
+                } else {
+                    throw e;
+                }
+            }
+        }
+    } catch (err) {
+        logger.error(`[PEDIDOS] Table init error: ${err.message}`);
+    } finally {
+        if (conn) try { await conn.close(); } catch (_) { /* ignore */ }
+    }
+}
+
+// ============================================================================
+// PRODUCTS
+// ============================================================================
+
+async function getProducts({ search, clientCode, family, marca, limit = 50, offset = 0 }) {
+    const params = [];
+    let where = 'WHERE A.ANOBAJA = 0';
+
+    if (search) {
+        const s = `%${search.toUpperCase()}%`;
+        where += ' AND (UPPER(A.DESCRIPCIONARTICULO) LIKE ? OR TRIM(A.CODIGOARTICULO) LIKE ?)';
+        params.push(s, s);
+    }
+    if (family) {
+        where += ' AND TRIM(A.CODIGOFAMILIA) = ?';
+        params.push(family.trim());
+    }
+    if (marca) {
+        where += ' AND TRIM(A.CODIGOMARCA) = ?';
+        params.push(marca.trim());
+    }
+
+    const sql = `
+        SELECT TRIM(A.CODIGOARTICULO) AS code,
+            TRIM(A.DESCRIPCIONARTICULO) AS name,
+            TRIM(A.CODIGOMARCA) AS brand,
+            TRIM(A.CODIGOFAMILIA) AS family,
+            A.UNIDADESCAJA AS unitsPerBox,
+            A.UNIDADESFRACCION AS unitsFraction,
+            A.UNIDADESRETRACTIL AS unitsRetractil,
+            TRIM(A.UNIDADMEDIDA) AS unitMeasure,
+            A.PESO AS weight,
+            COALESCE(S.ENVASES_DISP, 0) AS stockEnvases,
+            COALESCE(S.UNIDADES_DISP, 0) AS stockUnidades,
+            COALESCE(T1.PRECIOTARIFA, 0) AS precioTarifa1,
+            COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo
+        FROM DSEDAC.ART A
+        LEFT JOIN (
+            SELECT CODIGOARTICULO,
+                SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
+                SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
+            FROM DSEDAC.ARO
+            WHERE CODIGOALMACEN = 1
+            GROUP BY CODIGOARTICULO
+        ) S ON A.CODIGOARTICULO = S.CODIGOARTICULO
+        LEFT JOIN DSEDAC.ARA T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
+        LEFT JOIN DSEDAC.ARA T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
+        ${where}
+        ORDER BY A.DESCRIPCIONARTICULO
+        OFFSET ? ROWS FETCH FIRST ? ROWS ONLY`;
+
+    params.push(offset, limit);
+
+    const cacheKey = `pedidos:products:${search || ''}:${family || ''}:${marca || ''}:${offset}:${limit}`;
+
+    try {
+        const rows = await cachedQuery(
+            (sql) => queryWithParams(sql, params),
+            sql,
+            cacheKey,
+            TTL.SHORT // 5 min
+        );
+        return rows;
+    } catch (error) {
+        logger.error(`[PEDIDOS] getProducts error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// PRODUCT DETAIL
+// ============================================================================
+
+async function getProductDetail(code, clientCode) {
+    const trimCode = code.trim();
+
+    // Base product
+    const baseSql = `
+        SELECT TRIM(A.CODIGOARTICULO) AS code,
+            TRIM(A.DESCRIPCIONARTICULO) AS name,
+            TRIM(A.CODIGOMARCA) AS brand,
+            TRIM(A.CODIGOFAMILIA) AS family,
+            A.UNIDADESCAJA AS unitsPerBox,
+            A.UNIDADESFRACCION AS unitsFraction,
+            A.UNIDADESRETRACTIL AS unitsRetractil,
+            TRIM(A.UNIDADMEDIDA) AS unitMeasure,
+            A.PESO AS weight
+        FROM DSEDAC.ART A
+        WHERE TRIM(A.CODIGOARTICULO) = ?`;
+
+    // All tariffs
+    const tariffSql = `
+        SELECT T.CODIGOTARIFA,
+            TRIM(TRF.DESCRIPCIONTARIFA) AS tarifaDesc,
+            T.PRECIOTARIFA
+        FROM DSEDAC.ARA T
+        JOIN DSEDAC.TRF TRF ON T.CODIGOTARIFA = TRF.CODIGOTARIFA
+        WHERE TRIM(T.CODIGOARTICULO) = ?`;
+
+    // Stock by warehouse
+    const stockSql = `
+        SELECT ARO.CODIGOALMACEN,
+            TRIM(ALM.DESCRIPCIONALMACEN) AS almacenDesc,
+            SUM(ARO.ENVASESDISPONIBLES) AS envases,
+            SUM(ARO.UNIDADESDISPONIBLES) AS unidades
+        FROM DSEDAC.ARO
+        JOIN DSEDAC.ALM ON ARO.CODIGOALMACEN = ALM.CODIGOALMACEN
+        WHERE TRIM(ARO.CODIGOARTICULO) = ?
+        GROUP BY ARO.CODIGOALMACEN, ALM.DESCRIPCIONALMACEN`;
+
+    try {
+        const [baseRows, tariffRows, stockRows] = await Promise.all([
+            queryWithParams(baseSql, [trimCode]),
+            queryWithParams(tariffSql, [trimCode]),
+            queryWithParams(stockSql, [trimCode]),
+        ]);
+
+        if (!baseRows || baseRows.length === 0) {
+            throw new Error('Producto no encontrado');
+        }
+
+        const product = baseRows[0];
+        product.tariffs = tariffRows || [];
+        product.stock = (stockRows || []).map(s => ({
+            almacen: s.CODIGOALMACEN,
+            almacenDesc: s.almacenDesc,
+            envases: parseFloat(s.envases) || 0,
+            unidades: parseFloat(s.unidades) || 0,
+        }));
+
+        // Client-specific price from most recent sale
+        if (clientCode) {
+            const clientPriceSql = `
+                SELECT L.PRECIOVENTA AS precioCliente
+                FROM DSEDAC.LINDTO L
+                WHERE TRIM(L.CODIGOARTICULO) = ?
+                  AND TRIM(L.CODIGOCLIENTEALBARAN) = ?
+                  AND L.TIPOVENTA IN ('CC', 'VC')
+                  AND L.CLASELINEA IN ('AB', 'VT')
+                  AND L.SERIEALBARAN NOT IN ('N', 'Z')
+                ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
+                FETCH FIRST 1 ROW ONLY`;
+            const priceRows = await queryWithParams(clientPriceSql, [trimCode, clientCode.trim()]);
+            product.precioCliente = priceRows && priceRows.length > 0
+                ? parseFloat(priceRows[0].precioCliente) || 0
+                : null;
+        }
+
+        return product;
+    } catch (error) {
+        logger.error(`[PEDIDOS] getProductDetail error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// STOCK
+// ============================================================================
+
+async function getStock(code, almacen = 1) {
+    const sql = `
+        SELECT SUM(ENVASESDISPONIBLES) AS envases,
+            SUM(UNIDADESDISPONIBLES) AS unidades
+        FROM DSEDAC.ARO
+        WHERE TRIM(CODIGOARTICULO) = ? AND CODIGOALMACEN = ?`;
+
+    const cacheKey = `pedidos:stock:${code.trim()}:${almacen}`;
+
+    try {
+        const rows = await cachedQuery(
+            (sql) => queryWithParams(sql, [code.trim(), almacen]),
+            sql,
+            cacheKey,
+            60 // 1 min TTL
+        );
+        const row = rows && rows[0];
+        return {
+            envases: parseFloat(row?.envases) || 0,
+            unidades: parseFloat(row?.unidades) || 0,
+        };
+    } catch (error) {
+        logger.error(`[PEDIDOS] getStock error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// ORDER SEQUENCE
+// ============================================================================
+
+async function getNextOrderNumber(ejercicio) {
+    // Try update first (atomic increment)
+    const upd = await queryWithParams(
+        `UPDATE JAVIER.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
+        [ejercicio], false
+    );
+
+    // If no row existed, insert initial value
+    if (!upd || upd.count === 0) {
+        try {
+            await queryWithParams(
+                `INSERT INTO JAVIER.PEDIDOS_SEQ (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
+                [ejercicio], false
+            );
+        } catch (e) {
+            // Concurrent insert race — retry the update
+            await queryWithParams(
+                `UPDATE JAVIER.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
+                [ejercicio], false
+            );
+        }
+    }
+
+    const rows = await queryWithParams(
+        `SELECT ULTIMO_NUMERO FROM JAVIER.PEDIDOS_SEQ WHERE EJERCICIO = ?`,
+        [ejercicio], false
+    );
+    return rows[0]?.ULTIMO_NUMERO || 1;
+}
+
+// ============================================================================
+// CREATE ORDER
+// ============================================================================
+
+async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = 'CC', almacen = 1, tarifa = 1, formaPago = '02', observaciones = '', lines = [] }) {
+    if (!clientCode || !vendedorCode) {
+        throw new Error('clientCode and vendedorCode are required');
+    }
+    if (!lines || lines.length === 0) {
+        throw new Error('At least one line is required');
+    }
+
+    const now = new Date();
+    const ejercicio = now.getFullYear();
+    const dia = now.getDate();
+    const mes = now.getMonth() + 1;
+    const ano = now.getFullYear();
+    const hora = parseInt(`${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`, 10);
+
+    const numeroPedido = await getNextOrderNumber(ejercicio);
+
+    // Insert header
+    const cabSql = `
+        INSERT INTO JAVIER.PEDIDOS_CAB (
+            EJERCICIO, NUMEROPEDIDO, DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
+            CODIGOCLIENTE, NOMBRECLIENTE, CODIGOVENDEDOR, CODIGOFORMAPAGO,
+            CODIGOTARIFA, CODIGOALMACEN, TIPOVENTA, OBSERVACIONES
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+    const cabParams = [
+        ejercicio, numeroPedido, dia, mes, ano, hora,
+        clientCode.trim(), (clientName || '').substring(0, 60), vendedorCode.trim(),
+        formaPago, tarifa, almacen, tipoventa, (observaciones || '').substring(0, 200)
+    ];
+
+    await queryWithParams(cabSql, cabParams, false);
+
+    // Retrieve the generated ID
+    const idRows = await queryWithParams(
+        `SELECT ID FROM JAVIER.PEDIDOS_CAB WHERE EJERCICIO = ? AND NUMEROPEDIDO = ? ORDER BY ID DESC FETCH FIRST 1 ROW ONLY`,
+        [ejercicio, numeroPedido]
+    );
+    const pedidoId = idRows[0]?.ID;
+    if (!pedidoId) throw new Error('Failed to retrieve created order ID');
+
+    // Insert lines
+    for (let i = 0; i < lines.length; i++) {
+        const ln = lines[i];
+        const importeVenta = parseFloat(ln.importeVenta) || (parseFloat(ln.cantidad || 0) * parseFloat(ln.precio || 0));
+        const importeCosto = parseFloat(ln.importeCosto) || (parseFloat(ln.cantidad || 0) * parseFloat(ln.precioCosto || 0));
+        const importeMargen = importeVenta - importeCosto;
+        const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
+
+        const linSql = `
+            INSERT INTO JAVIER.PEDIDOS_LIN (
+                PEDIDO_ID, SECUENCIA, CODIGOARTICULO, DESCRIPCION,
+                CANTIDADENVASES, CANTIDADUNIDADES, UNIDADMEDIDA, UNIDADESCAJA,
+                PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
+                IMPORTEVENTA, IMPORTECOSTO, IMPORTEMARGEN, PORCENTAJEMARGEN,
+                TIPOLINEA, TIPOVENTA, CLASELINEA, ORDEN
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+        const linParams = [
+            pedidoId, i + 1,
+            (ln.codigoArticulo || '').trim(), (ln.descripcion || '').substring(0, 40),
+            parseFloat(ln.cantidadEnvases) || 0, parseFloat(ln.cantidad || ln.cantidadUnidades) || 0,
+            ln.unidadMedida || 'CAJAS', parseFloat(ln.unidadesCaja) || 1,
+            parseFloat(ln.precio || ln.precioVenta) || 0, parseFloat(ln.precioCosto) || 0,
+            parseFloat(ln.precioTarifa) || 0, parseFloat(ln.precioTarifaCliente) || 0,
+            parseFloat(ln.precioMinimo) || 0,
+            importeVenta, importeCosto, importeMargen,
+            Math.round(pctMargen * 100) / 100,
+            ln.tipoLinea || 'R', ln.tipoventa || tipoventa, ln.claseLinea || 'VT', i + 1
+        ];
+
+        await queryWithParams(linSql, linParams, false);
+    }
+
+    // Recalculate totals
+    await recalculateOrderTotals(pedidoId);
+
+    // Return created order
+    return getOrderDetail(pedidoId);
+}
+
+// ============================================================================
+// GET ORDERS
+// ============================================================================
+
+async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo, limit = 50, offset = 0 }) {
+    if (!vendedorCodes) throw new Error('vendedorCodes is required');
+
+    const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
+
+    let sql = `
+        SELECT ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO,
+            DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO,
+            TRIM(CODIGOCLIENTE) AS CODIGOCLIENTE,
+            TRIM(NOMBRECLIENTE) AS NOMBRECLIENTE,
+            TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
+            TRIM(TIPOVENTA) AS TIPOVENTA,
+            TRIM(ESTADO) AS ESTADO,
+            IMPORTETOTAL, IMPORTEBASE, IMPORTECOSTO, IMPORTEMARGEN,
+            TRIM(OBSERVACIONES) AS OBSERVACIONES,
+            CREATED_AT, UPDATED_AT
+        FROM JAVIER.PEDIDOS_CAB
+        WHERE 1=1`;
+
+    if (!isAll) {
+        const vendorList = vendedorCodes.split(',').map(v => `'${sanitize(v.trim())}'`).join(',');
+        sql += ` AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
+    }
+
+    if (status) {
+        sql += ` AND TRIM(ESTADO) = '${sanitize(status)}'`;
+    }
+
+    // Date filters
+    let dateFilterApplied = false;
+    if (dateFrom && dateTo) {
+        const fromInt = parseInt(String(dateFrom).replace(/-/g, ''));
+        const toInt = parseInt(String(dateTo).replace(/-/g, ''));
+        if (!isNaN(fromInt) && !isNaN(toInt)) {
+            sql += ` AND (ANODOCUMENTO * 10000 + MESDOCUMENTO * 100 + DIADOCUMENTO) BETWEEN ${fromInt} AND ${toInt}`;
+            dateFilterApplied = true;
+        }
+    }
+
+    if (!dateFilterApplied) {
+        const currentYear = year || new Date().getFullYear();
+        sql += ` AND EJERCICIO = ${parseInt(currentYear)}`;
+        if (month) {
+            sql += ` AND MESDOCUMENTO = ${parseInt(month)}`;
+        }
+    }
+
+    sql += ` ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC, NUMEROPEDIDO DESC`;
+    sql += ` OFFSET ${parseInt(offset)} ROWS FETCH FIRST ${parseInt(limit)} ROWS ONLY`;
+
+    try {
+        const rows = await query(sql);
+        return rows.map(r => ({
+            id: r.ID,
+            ejercicio: r.EJERCICIO,
+            numeroPedido: r.NUMEROPEDIDO,
+            serie: r.SERIEPEDIDO,
+            fecha: `${String(r.DIADOCUMENTO).padStart(2, '0')}/${String(r.MESDOCUMENTO).padStart(2, '0')}/${r.ANODOCUMENTO}`,
+            clienteId: r.CODIGOCLIENTE,
+            clienteNombre: r.NOMBRECLIENTE || `Cliente ${r.CODIGOCLIENTE}`,
+            vendedor: r.CODIGOVENDEDOR,
+            tipoventa: r.TIPOVENTA,
+            estado: r.ESTADO,
+            total: parseFloat(r.IMPORTETOTAL) || 0,
+            base: parseFloat(r.IMPORTEBASE) || 0,
+            costo: parseFloat(r.IMPORTECOSTO) || 0,
+            margen: parseFloat(r.IMPORTEMARGEN) || 0,
+            observaciones: r.OBSERVACIONES,
+            createdAt: r.CREATED_AT,
+            updatedAt: r.UPDATED_AT,
+        }));
+    } catch (error) {
+        logger.error(`[PEDIDOS] getOrders error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// ORDER DETAIL
+// ============================================================================
+
+async function getOrderDetail(orderId) {
+    const id = parseInt(orderId);
+    if (isNaN(id)) throw new Error('Invalid orderId');
+
+    const cabSql = `
+        SELECT ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO, TERMINAL,
+            DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
+            TRIM(CODIGOCLIENTE) AS CODIGOCLIENTE,
+            TRIM(NOMBRECLIENTE) AS NOMBRECLIENTE,
+            TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
+            TRIM(CODIGOFORMAPAGO) AS CODIGOFORMAPAGO,
+            CODIGOTARIFA, CODIGOALMACEN,
+            TRIM(TIPOVENTA) AS TIPOVENTA,
+            TRIM(ESTADO) AS ESTADO,
+            IMPORTETOTAL, IMPORTEBASE, IMPORTEIVA, IMPORTECOSTO, IMPORTEMARGEN,
+            TRIM(OBSERVACIONES) AS OBSERVACIONES,
+            CREATED_AT, UPDATED_AT
+        FROM JAVIER.PEDIDOS_CAB
+        WHERE ID = ?`;
+
+    const linSql = `
+        SELECT ID, PEDIDO_ID, SECUENCIA,
+            TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
+            TRIM(DESCRIPCION) AS DESCRIPCION,
+            CANTIDADENVASES, CANTIDADUNIDADES,
+            TRIM(UNIDADMEDIDA) AS UNIDADMEDIDA, UNIDADESCAJA,
+            PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
+            IMPORTEVENTA, IMPORTECOSTO, IMPORTEMARGEN, PORCENTAJEMARGEN,
+            TRIM(TIPOLINEA) AS TIPOLINEA,
+            TRIM(TIPOVENTA) AS TIPOVENTA,
+            TRIM(CLASELINEA) AS CLASELINEA,
+            ORDEN, CREATED_AT
+        FROM JAVIER.PEDIDOS_LIN
+        WHERE PEDIDO_ID = ?
+        ORDER BY SECUENCIA`;
+
+    try {
+        const [cabRows, linRows] = await Promise.all([
+            queryWithParams(cabSql, [id]),
+            queryWithParams(linSql, [id]),
+        ]);
+
+        if (!cabRows || cabRows.length === 0) {
+            throw new Error('Pedido no encontrado');
+        }
+
+        const cab = cabRows[0];
+        return {
+            header: {
+                id: cab.ID,
+                ejercicio: cab.EJERCICIO,
+                numeroPedido: cab.NUMEROPEDIDO,
+                serie: cab.SERIEPEDIDO,
+                terminal: cab.TERMINAL,
+                fecha: `${String(cab.DIADOCUMENTO).padStart(2, '0')}/${String(cab.MESDOCUMENTO).padStart(2, '0')}/${cab.ANODOCUMENTO}`,
+                hora: cab.HORADOCUMENTO,
+                clienteId: cab.CODIGOCLIENTE,
+                clienteNombre: cab.NOMBRECLIENTE,
+                vendedor: cab.CODIGOVENDEDOR,
+                formaPago: cab.CODIGOFORMAPAGO,
+                tarifa: cab.CODIGOTARIFA,
+                almacen: cab.CODIGOALMACEN,
+                tipoventa: cab.TIPOVENTA,
+                estado: cab.ESTADO,
+                total: parseFloat(cab.IMPORTETOTAL) || 0,
+                base: parseFloat(cab.IMPORTEBASE) || 0,
+                iva: parseFloat(cab.IMPORTEIVA) || 0,
+                costo: parseFloat(cab.IMPORTECOSTO) || 0,
+                margen: parseFloat(cab.IMPORTEMARGEN) || 0,
+                observaciones: cab.OBSERVACIONES,
+                createdAt: cab.CREATED_AT,
+                updatedAt: cab.UPDATED_AT,
+            },
+            lines: (linRows || []).map(l => ({
+                id: l.ID,
+                pedidoId: l.PEDIDO_ID,
+                secuencia: l.SECUENCIA,
+                codigoArticulo: l.CODIGOARTICULO,
+                descripcion: l.DESCRIPCION,
+                cantidadEnvases: parseFloat(l.CANTIDADENVASES) || 0,
+                cantidadUnidades: parseFloat(l.CANTIDADUNIDADES) || 0,
+                unidadMedida: l.UNIDADMEDIDA,
+                unidadesCaja: parseFloat(l.UNIDADESCAJA) || 1,
+                precioVenta: parseFloat(l.PRECIOVENTA) || 0,
+                precioCosto: parseFloat(l.PRECIOCOSTO) || 0,
+                precioTarifa: parseFloat(l.PRECIOTARIFA) || 0,
+                precioTarifaCliente: parseFloat(l.PRECIOTARIFACLIENTE) || 0,
+                precioMinimo: parseFloat(l.PRECIOMINIMO) || 0,
+                importeVenta: parseFloat(l.IMPORTEVENTA) || 0,
+                importeCosto: parseFloat(l.IMPORTECOSTO) || 0,
+                importeMargen: parseFloat(l.IMPORTEMARGEN) || 0,
+                porcentajeMargen: parseFloat(l.PORCENTAJEMARGEN) || 0,
+                tipoLinea: l.TIPOLINEA,
+                tipoventa: l.TIPOVENTA,
+                claseLinea: l.CLASELINEA,
+                orden: l.ORDEN,
+                createdAt: l.CREATED_AT,
+            })),
+        };
+    } catch (error) {
+        logger.error(`[PEDIDOS] getOrderDetail error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// ADD / UPDATE / DELETE LINE
+// ============================================================================
+
+async function addOrderLine(pedidoId, lineData) {
+    const id = parseInt(pedidoId);
+    if (isNaN(id)) throw new Error('Invalid pedidoId');
+
+    // Get next secuencia
+    const seqRows = await queryWithParams(
+        `SELECT COALESCE(MAX(SECUENCIA), 0) + 1 AS NEXT_SEQ FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?`,
+        [id]
+    );
+    const nextSeq = seqRows[0]?.NEXT_SEQ || 1;
+
+    const cantidad = parseFloat(lineData.cantidad || lineData.cantidadUnidades) || 0;
+    const precio = parseFloat(lineData.precio || lineData.precioVenta) || 0;
+    const precioCosto = parseFloat(lineData.precioCosto) || 0;
+    const importeVenta = cantidad * precio;
+    const importeCosto = cantidad * precioCosto;
+    const importeMargen = importeVenta - importeCosto;
+    const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
+
+    const sql = `
+        INSERT INTO JAVIER.PEDIDOS_LIN (
+            PEDIDO_ID, SECUENCIA, CODIGOARTICULO, DESCRIPCION,
+            CANTIDADENVASES, CANTIDADUNIDADES, UNIDADMEDIDA, UNIDADESCAJA,
+            PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
+            IMPORTEVENTA, IMPORTECOSTO, IMPORTEMARGEN, PORCENTAJEMARGEN,
+            TIPOLINEA, TIPOVENTA, CLASELINEA, ORDEN
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+    const params = [
+        id, nextSeq,
+        (lineData.codigoArticulo || '').trim(), (lineData.descripcion || '').substring(0, 40),
+        parseFloat(lineData.cantidadEnvases) || 0, cantidad,
+        lineData.unidadMedida || 'CAJAS', parseFloat(lineData.unidadesCaja) || 1,
+        precio, precioCosto,
+        parseFloat(lineData.precioTarifa) || 0, parseFloat(lineData.precioTarifaCliente) || 0,
+        parseFloat(lineData.precioMinimo) || 0,
+        importeVenta, importeCosto, importeMargen,
+        Math.round(pctMargen * 100) / 100,
+        lineData.tipoLinea || 'R', lineData.tipoventa || 'CC', lineData.claseLinea || 'VT', nextSeq
+    ];
+
+    await queryWithParams(sql, params, false);
+    await recalculateOrderTotals(id);
+
+    return getOrderDetail(id);
+}
+
+async function updateOrderLine(lineId, { cantidad, precio, unidadMedida, precioCosto }) {
+    const id = parseInt(lineId);
+    if (isNaN(id)) throw new Error('Invalid lineId');
+
+    // Fetch current line to get pedidoId and defaults
+    const currentRows = await queryWithParams(
+        `SELECT PEDIDO_ID, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA FROM JAVIER.PEDIDOS_LIN WHERE ID = ?`,
+        [id]
+    );
+    if (!currentRows || currentRows.length === 0) throw new Error('Line not found');
+
+    const current = currentRows[0];
+    const pedidoId = current.PEDIDO_ID;
+
+    const newCantidad = cantidad != null ? parseFloat(cantidad) : parseFloat(current.CANTIDADUNIDADES) || 0;
+    const newPrecio = precio != null ? parseFloat(precio) : parseFloat(current.PRECIOVENTA) || 0;
+    const newCosto = precioCosto != null ? parseFloat(precioCosto) : parseFloat(current.PRECIOCOSTO) || 0;
+    const newUM = unidadMedida || current.UNIDADMEDIDA;
+
+    const importeVenta = newCantidad * newPrecio;
+    const importeCosto = newCantidad * newCosto;
+    const importeMargen = importeVenta - importeCosto;
+    const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
+
+    await queryWithParams(
+        `UPDATE JAVIER.PEDIDOS_LIN SET
+            CANTIDADUNIDADES = ?, PRECIOVENTA = ?, PRECIOCOSTO = ?, UNIDADMEDIDA = ?,
+            IMPORTEVENTA = ?, IMPORTECOSTO = ?, IMPORTEMARGEN = ?, PORCENTAJEMARGEN = ?
+        WHERE ID = ?`,
+        [newCantidad, newPrecio, newCosto, newUM, importeVenta, importeCosto, importeMargen,
+            Math.round(pctMargen * 100) / 100, id],
+        false
+    );
+
+    await recalculateOrderTotals(pedidoId);
+    return getOrderDetail(pedidoId);
+}
+
+async function deleteOrderLine(lineId, pedidoId) {
+    const lid = parseInt(lineId);
+    const pid = parseInt(pedidoId);
+    if (isNaN(lid) || isNaN(pid)) throw new Error('Invalid lineId or pedidoId');
+
+    await queryWithParams(
+        `DELETE FROM JAVIER.PEDIDOS_LIN WHERE ID = ? AND PEDIDO_ID = ?`,
+        [lid, pid], false
+    );
+
+    await recalculateOrderTotals(pid);
+    return getOrderDetail(pid);
+}
+
+// ============================================================================
+// RECALCULATE TOTALS
+// ============================================================================
+
+async function recalculateOrderTotals(pedidoId) {
+    const id = parseInt(pedidoId);
+    await queryWithParams(
+        `UPDATE JAVIER.PEDIDOS_CAB SET
+            IMPORTEBASE = (SELECT COALESCE(SUM(IMPORTEVENTA), 0) FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?),
+            IMPORTECOSTO = (SELECT COALESCE(SUM(IMPORTECOSTO), 0) FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?),
+            IMPORTEMARGEN = (SELECT COALESCE(SUM(IMPORTEMARGEN), 0) FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?),
+            IMPORTETOTAL = (SELECT COALESCE(SUM(IMPORTEVENTA), 0) FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?),
+            UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE ID = ?`,
+        [id, id, id, id, id], false
+    );
+}
+
+// ============================================================================
+// CONFIRM / CANCEL
+// ============================================================================
+
+async function confirmOrder(orderId, saleType) {
+    const id = parseInt(orderId);
+    if (isNaN(id)) throw new Error('Invalid orderId');
+
+    // Validate stock for all lines
+    const lines = await queryWithParams(
+        `SELECT CODIGOARTICULO, CANTIDADENVASES, CANTIDADUNIDADES, DESCRIPCION
+         FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [id]);
+
+    const stockWarnings = [];
+    for (const line of lines) {
+        const code = (line.CODIGOARTICULO || '').trim();
+        if (!code) continue;
+        try {
+            const stock = await getStock(code);
+            const reqEnvases = parseFloat(line.CANTIDADENVASES) || 0;
+            const reqUnidades = parseFloat(line.CANTIDADUNIDADES) || 0;
+            if (reqEnvases > 0 && reqEnvases > stock.envases) {
+                stockWarnings.push({
+                    product: code,
+                    description: (line.DESCRIPCION || '').trim(),
+                    requested: reqEnvases,
+                    available: stock.envases,
+                    unit: 'envases'
+                });
+            }
+            if (reqUnidades > 0 && reqUnidades > stock.unidades) {
+                stockWarnings.push({
+                    product: code,
+                    description: (line.DESCRIPCION || '').trim(),
+                    requested: reqUnidades,
+                    available: stock.unidades,
+                    unit: 'unidades'
+                });
+            }
+        } catch (e) {
+            logger.warn(`[PEDIDOS] Stock check failed for ${code}: ${e.message}`);
+        }
+    }
+
+    // Proceed with confirmation
+    const params = [id];
+    let sql = `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = 'CONFIRMADO', UPDATED_AT = CURRENT_TIMESTAMP`;
+    if (saleType) {
+        sql += `, TIPOVENTA = ?`;
+        params.unshift(saleType.trim());
+    }
+    sql += ` WHERE ID = ?`;
+
+    await queryWithParams(sql, params, false);
+    const order = await getOrderDetail(id);
+
+    return { ...order, stockWarnings };
+}
+
+async function cancelOrder(orderId) {
+    const id = parseInt(orderId);
+    if (isNaN(id)) throw new Error('Invalid orderId');
+
+    await queryWithParams(
+        `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = 'ANULADO', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
+        [id], false
+    );
+    return getOrderDetail(id);
+}
+
+// ============================================================================
+// RECOMMENDATIONS
+// ============================================================================
+
+async function getRecommendations(clientCode, vendedorCode) {
+    if (!clientCode) throw new Error('clientCode is required');
+
+    const trimClient = clientCode.trim();
+    const trimVendor = (vendedorCode || '').trim();
+
+    // Strategy 1: Client purchase history (last 12 months)
+    const historySql = `
+        SELECT TRIM(L.CODIGOARTICULO) AS code,
+            TRIM(L.DESCRIPCION) AS name,
+            COUNT(*) AS frequency,
+            SUM(L.CANTIDADUNIDADES) AS totalUnits,
+            MAX(L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) AS lastPurchase
+        FROM DSEDAC.LINDTO L
+        WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
+          AND L.ANODOCUMENTO >= YEAR(CURRENT_DATE) - 1
+          AND L.TIPOVENTA IN ('CC', 'VC')
+          AND L.CLASELINEA IN ('AB', 'VT')
+          AND L.SERIEALBARAN NOT IN ('N', 'Z')
+        GROUP BY L.CODIGOARTICULO, L.DESCRIPCION
+        ORDER BY frequency DESC
+        FETCH FIRST 20 ROWS ONLY`;
+
+    const promises = [queryWithParams(historySql, [trimClient])];
+
+    // Strategy 2: Similar clients (only if vendor is provided)
+    if (trimVendor) {
+        const similarSql = `
+            SELECT TRIM(L.CODIGOARTICULO) AS code,
+                TRIM(L.DESCRIPCION) AS name,
+                COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) AS clientCount
+            FROM DSEDAC.LINDTO L
+            WHERE TRIM(L.CODIGOVENDEDOR) = ?
+              AND L.ANODOCUMENTO = YEAR(CURRENT_DATE)
+              AND L.TIPOVENTA IN ('CC', 'VC')
+              AND L.CLASELINEA IN ('AB', 'VT')
+              AND L.SERIEALBARAN NOT IN ('N', 'Z')
+              AND L.CODIGOARTICULO NOT IN (
+                  SELECT DISTINCT L2.CODIGOARTICULO FROM DSEDAC.LINDTO L2
+                  WHERE TRIM(L2.CODIGOCLIENTEALBARAN) = ?
+                    AND L2.ANODOCUMENTO = YEAR(CURRENT_DATE)
+                    AND L2.MESDOCUMENTO >= MONTH(CURRENT_DATE) - 3
+              )
+            GROUP BY L.CODIGOARTICULO, L.DESCRIPCION
+            HAVING COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) >= 3
+            ORDER BY clientCount DESC
+            FETCH FIRST 10 ROWS ONLY`;
+        promises.push(queryWithParams(similarSql, [trimVendor, trimClient]));
+    }
+
+    try {
+        const results = await Promise.all(promises);
+        const history = (results[0] || []).map(r => ({
+            code: r.code,
+            name: r.name,
+            frequency: parseInt(r.frequency) || 0,
+            totalUnits: parseFloat(r.totalUnits) || 0,
+            lastPurchase: r.lastPurchase,
+            source: 'history',
+        }));
+
+        const similar = results[1]
+            ? results[1].map(r => ({
+                code: r.code,
+                name: r.name,
+                clientCount: parseInt(r.clientCount) || 0,
+                source: 'similar',
+            }))
+            : [];
+
+        return { history, similar };
+    } catch (error) {
+        logger.error(`[PEDIDOS] getRecommendations error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// FAMILIES & BRANDS
+// ============================================================================
+
+async function getFamilies() {
+    const sql = `SELECT DISTINCT TRIM(CODIGOFAMILIA) AS code FROM DSEDAC.ART WHERE ANOBAJA = 0 AND CODIGOFAMILIA != '' ORDER BY code`;
+    const cacheKey = 'pedidos:families';
+
+    try {
+        return await cachedQuery((sql) => query(sql), sql, cacheKey, TTL.SHORT);
+    } catch (error) {
+        logger.error(`[PEDIDOS] getFamilies error: ${error.message}`);
+        throw error;
+    }
+}
+
+async function getBrands() {
+    const sql = `SELECT DISTINCT TRIM(CODIGOMARCA) AS code FROM DSEDAC.ART WHERE ANOBAJA = 0 AND CODIGOMARCA != '' ORDER BY code`;
+    const cacheKey = 'pedidos:brands';
+
+    try {
+        return await cachedQuery((sql) => query(sql), sql, cacheKey, TTL.SHORT);
+    } catch (error) {
+        logger.error(`[PEDIDOS] getBrands error: ${error.message}`);
+        throw error;
+    }
+}
+
+async function getActivePromotions() {
+    const today = new Date();
+    const todayNum = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+
+    const sql = `
+        SELECT TRIM(P.CODIGOARTICULO) AS code,
+            TRIM(A.NOMBREARTICULO) AS name,
+            P.CODIGOTARIFA AS tariffCode,
+            P.PRECIOTARIFA AS promoPrice,
+            P.PORCENTAJEDESCUENTO AS discountPct,
+            P.DIADESDE AS dayFrom, P.MESDESDE AS monthFrom, P.ANODESDE AS yearFrom,
+            P.DIAHASTA AS dayTo, P.MESHASTA AS monthTo, P.ANOHASTA AS yearTo,
+            COALESCE(R.PRECIOTARIFA, 0) AS regularPrice
+        FROM DSEDAC.ARA P
+        JOIN DSEDAC.ART A ON TRIM(A.CODIGOARTICULO) = TRIM(P.CODIGOARTICULO)
+        LEFT JOIN DSEDAC.ARA R ON TRIM(R.CODIGOARTICULO) = TRIM(P.CODIGOARTICULO)
+            AND R.CODIGOTARIFA = P.CODIGOTARIFA
+            AND R.ANODESDE = 0
+        WHERE P.ANODESDE > 0 AND P.ANOHASTA > 0
+            AND (P.ANODESDE * 10000 + P.MESDESDE * 100 + P.DIADESDE) <= ?
+            AND (P.ANOHASTA * 10000 + P.MESHASTA * 100 + P.DIAHASTA) >= ?
+            AND A.ANOBAJA = 0
+        ORDER BY P.CODIGOARTICULO`;
+
+    const cacheKey = 'pedidos:promotions';
+
+    try {
+        const rows = await cachedQuery(
+            (sql) => queryWithParams(sql, [todayNum, todayNum]),
+            sql,
+            cacheKey,
+            300 // 5 min TTL
+        );
+        return rows.map(r => ({
+            code: (r.CODE || '').trim(),
+            name: (r.NAME || '').trim(),
+            tariffCode: r.TARIFFCODE,
+            regularPrice: parseFloat(r.REGULARPRICE) || 0,
+            promoPrice: parseFloat(r.PROMOPRICE) || 0,
+            discountPct: parseFloat(r.DISCOUNTPCT) || 0,
+            dateFrom: `${r.YEARFROM}-${String(r.MONTHFROM).padStart(2, '0')}-${String(r.DAYFROM).padStart(2, '0')}`,
+            dateTo: `${r.YEARTO}-${String(r.MONTHTO).padStart(2, '0')}-${String(r.DAYTO).padStart(2, '0')}`,
+        }));
+    } catch (error) {
+        logger.error(`[PEDIDOS] getActivePromotions error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
+
+// Alias wrappers for route compatibility
+async function searchProducts(params) { const products = await getProducts(params); return { products, count: products.length }; }
+async function getProductStock(code) { return getStock(code); }
+async function getClientPricing(clientCode) {
+    // Get client tariff code + client-specific prices from last purchases
+    const sql = `SELECT CODIGOTARIFA, CODIGOTARIFAVENTADIRECTA,
+        PORCENTAJEDESCUENTO1, PORCENTAJEDESCUENTO2, PORCENTAJEDESCUENTO3
+        FROM DSEDAC.CLI WHERE CODIGOCLIENTE = ?`;
+    const rows = await queryWithParams(sql, [clientCode]);
+    return rows.length > 0 ? rows[0] : null;
+}
+async function getProductFamilies() { return getFamilies(); }
+async function getProductBrands() { return getBrands(); }
+
+// Wrapper: routes call updateOrderLine(pedidoId, lineId, data)
+async function updateOrderLineRoute(pedidoId, lineId, data) { return updateOrderLine(lineId, data); }
+// Wrapper: routes call deleteOrderLine(pedidoId, lineId)
+async function deleteOrderLineRoute(pedidoId, lineId) { return deleteOrderLine(lineId, pedidoId); }
+
+// =============================================================================
+// CLIENT BALANCE
+// =============================================================================
+
+async function getClientBalance(clientCode) {
+    const code = clientCode.trim();
+    const cacheKey = `pedidos:balance:${code}`;
+
+    const sql = `
+        SELECT
+            SUM(CASE WHEN L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('AB','VT') AND L.LCSRAB NOT IN ('N','Z','G','D')
+                     THEN L.LCIMVT ELSE 0 END) AS TOTAL_FACTURADO,
+            SUM(CASE WHEN L.LCTPVT = 'CO'
+                     THEN L.LCIMVT ELSE 0 END) AS TOTAL_COBRADO
+        FROM DSED.LACLAE L
+        WHERE L.LCCDCL = ?
+          AND L.LCAADC = YEAR(CURRENT_DATE)
+    `;
+
+    try {
+        const rows = await cachedQuery(
+            (s) => queryWithParams(s, [code]),
+            sql, cacheKey, TTL.SHORT
+        );
+        const row = rows[0] || {};
+        const facturado = parseFloat(row.TOTAL_FACTURADO) || 0;
+        const cobrado = Math.abs(parseFloat(row.TOTAL_COBRADO) || 0);
+        return {
+            facturadoAnual: facturado,
+            cobradoAnual: cobrado,
+            saldoPendiente: facturado - cobrado,
+            year: new Date().getFullYear(),
+        };
+    } catch (error) {
+        logger.error(`[PEDIDOS] getClientBalance error: ${error.message}`);
+        return { facturadoAnual: 0, cobradoAnual: 0, saldoPendiente: 0, year: new Date().getFullYear() };
+    }
+}
+
+// =============================================================================
+// CLONE ORDER
+// =============================================================================
+
+async function cloneOrder(orderId) {
+    const detail = await getOrderDetail(orderId);
+    if (!detail || !detail.header) throw new Error('Order not found');
+    return {
+        clientCode: detail.header.clienteId,
+        clientName: detail.header.clienteNombre,
+        tipoventa: detail.header.tipoventa,
+        lines: detail.lines.map(l => ({
+            codigoArticulo: l.codigoArticulo,
+            descripcion: l.descripcion,
+            cantidadEnvases: l.cantidadEnvases,
+            cantidadUnidades: l.cantidadUnidades,
+            unidadMedida: l.unidadMedida,
+            unidadesCaja: l.unidadesCaja,
+            precioVenta: l.precioVenta,
+            precioCosto: l.precioCosto,
+            precioTarifa: l.precioTarifa,
+            precioTarifaCliente: l.precioTarifaCliente,
+            precioMinimo: l.precioMinimo,
+        })),
+    };
+}
+
+// =============================================================================
+// COMPLEMENTARY PRODUCTS
+// =============================================================================
+
+async function getComplementaryProducts(productCodes, clientCode) {
+    if (!productCodes || productCodes.length === 0) return [];
+
+    const codeList = productCodes.map(c => `'${sanitize(c.trim())}'`).join(',');
+    const cacheKey = `pedidos:complementary:${productCodes.sort().join(',')}`;
+
+    const sql = `
+        SELECT TRIM(L2.CODIGOARTICULO) AS code,
+               TRIM(A.DESCRIPCION) AS name,
+               COUNT(DISTINCT L2.CODIGOCLIENTEALBARAN || CAST(L2.ANODOCUMENTO AS CHAR(4)) || CAST(L2.NUMERODOCUMENTO AS CHAR(6))) AS cooccurrences
+        FROM DSEDAC.LINDTO L1
+        JOIN DSEDAC.LINDTO L2
+            ON L2.CODIGOCLIENTEALBARAN = L1.CODIGOCLIENTEALBARAN
+            AND L2.ANODOCUMENTO = L1.ANODOCUMENTO
+            AND L2.NUMERODOCUMENTO = L1.NUMERODOCUMENTO
+            AND TRIM(L2.CODIGOARTICULO) NOT IN (${codeList})
+        JOIN DSEDAC.ART A ON TRIM(A.CODIGOARTICULO) = TRIM(L2.CODIGOARTICULO)
+        WHERE TRIM(L1.CODIGOARTICULO) IN (${codeList})
+          AND L1.ANODOCUMENTO >= YEAR(CURRENT_DATE) - 1
+          AND L1.TIPOVENTA IN ('CC','VC')
+          AND L1.CLASELINEA IN ('AB','VT')
+          AND L2.CLASELINEA IN ('AB','VT')
+          AND A.ANOBAJA = 0
+        GROUP BY L2.CODIGOARTICULO, A.DESCRIPCION
+        HAVING COUNT(DISTINCT L2.CODIGOCLIENTEALBARAN || CAST(L2.ANODOCUMENTO AS CHAR(4)) || CAST(L2.NUMERODOCUMENTO AS CHAR(6))) >= 3
+        ORDER BY cooccurrences DESC
+        FETCH FIRST 10 ROWS ONLY
+    `;
+
+    try {
+        const rows = await cachedQuery(
+            (s) => query(s),
+            sql, cacheKey, TTL.MEDIUM
+        );
+        return rows.map(r => ({
+            code: r.code,
+            name: r.name,
+            cooccurrences: parseInt(r.cooccurrences) || 0,
+            source: 'complementary',
+        }));
+    } catch (error) {
+        logger.error(`[PEDIDOS] getComplementaryProducts error: ${error.message}`);
+        return [];
+    }
+}
+
+// =============================================================================
+// ORDER ANALYTICS
+// =============================================================================
+
+async function getOrderAnalytics(vendedorCodes) {
+    const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
+    let vendorFilter = '';
+    if (!isAll) {
+        const vendorList = vendedorCodes.split(',').map(v => `'${sanitize(v.trim())}'`).join(',');
+        vendorFilter = `AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
+    }
+
+    const cacheKey = `pedidos:analytics:${vendedorCodes}`;
+
+    // Current month vs previous month
+    const sql = `
+        SELECT
+            ANODOCUMENTO AS year, MESDOCUMENTO AS month,
+            COUNT(*) AS orderCount,
+            SUM(IMPORTETOTAL) AS totalRevenue,
+            SUM(IMPORTEMARGEN) AS totalMargin,
+            AVG(IMPORTETOTAL) AS avgOrderValue,
+            COUNT(DISTINCT CODIGOCLIENTE) AS uniqueClients
+        FROM JAVIER.PEDIDOS_CAB
+        WHERE ESTADO IN ('CONFIRMADO','ENVIADO')
+          AND EJERCICIO = YEAR(CURRENT_DATE)
+          ${vendorFilter}
+        GROUP BY ANODOCUMENTO, MESDOCUMENTO
+        ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
+        FETCH FIRST 6 ROWS ONLY
+    `;
+
+    // Top products
+    const topSql = `
+        SELECT TRIM(L.CODIGOARTICULO) AS code,
+               TRIM(L.DESCRIPCION) AS name,
+               SUM(L.IMPORTEVENTA) AS totalSales,
+               SUM(L.CANTIDADENVASES) AS totalEnvases,
+               COUNT(*) AS lineCount
+        FROM JAVIER.PEDIDOS_LIN L
+        JOIN JAVIER.PEDIDOS_CAB C ON C.ID = L.PEDIDO_ID
+        WHERE C.ESTADO IN ('CONFIRMADO','ENVIADO')
+          AND C.EJERCICIO = YEAR(CURRENT_DATE)
+          ${vendorFilter}
+        GROUP BY L.CODIGOARTICULO, L.DESCRIPCION
+        ORDER BY totalSales DESC
+        FETCH FIRST 10 ROWS ONLY
+    `;
+
+    // Status distribution
+    const statusSql = `
+        SELECT TRIM(ESTADO) AS status, COUNT(*) AS count
+        FROM JAVIER.PEDIDOS_CAB
+        WHERE EJERCICIO = YEAR(CURRENT_DATE)
+          ${vendorFilter}
+        GROUP BY ESTADO
+    `;
+
+    try {
+        const [monthly, topProducts, statusDist] = await Promise.all([
+            cachedQuery((s) => query(s), sql, cacheKey + ':monthly', TTL.SHORT),
+            cachedQuery((s) => query(s), topSql, cacheKey + ':top', TTL.SHORT),
+            cachedQuery((s) => query(s), statusSql, cacheKey + ':status', TTL.SHORT),
+        ]);
+
+        return {
+            monthly: monthly.map(r => ({
+                year: r.year || r.YEAR,
+                month: r.month || r.MONTH,
+                orderCount: parseInt(r.orderCount || r.ORDERCOUNT) || 0,
+                totalRevenue: parseFloat(r.totalRevenue || r.TOTALREVENUE) || 0,
+                totalMargin: parseFloat(r.totalMargin || r.TOTALMARGIN) || 0,
+                avgOrderValue: parseFloat(r.avgOrderValue || r.AVGORDERVALUE) || 0,
+                uniqueClients: parseInt(r.uniqueClients || r.UNIQUECLIENTS) || 0,
+            })),
+            topProducts: topProducts.map(r => ({
+                code: (r.code || r.CODE || '').trim(),
+                name: (r.name || r.NAME || '').trim(),
+                totalSales: parseFloat(r.totalSales || r.TOTALSALES) || 0,
+                totalEnvases: parseFloat(r.totalEnvases || r.TOTALENVASES) || 0,
+                lineCount: parseInt(r.lineCount || r.LINECOUNT) || 0,
+            })),
+            statusDistribution: statusDist.reduce((acc, r) => {
+                acc[(r.status || r.STATUS || '').trim()] = parseInt(r.count || r.COUNT) || 0;
+                return acc;
+            }, {}),
+        };
+    } catch (error) {
+        logger.error(`[PEDIDOS] getOrderAnalytics error: ${error.message}`);
+        return { monthly: [], topProducts: [], statusDistribution: {} };
+    }
+}
+
+// =============================================================================
+// ORDER PDF
+// =============================================================================
+
+async function generateOrderPdf(orderId) {
+    const detail = await getOrderDetail(orderId);
+    if (!detail || !detail.header) throw new Error('Order not found');
+    return detail; // Return data, PDF rendering happens in route
+}
+
+module.exports = {
+    initPedidosTables,
+    getProducts,
+    searchProducts,
+    getProductDetail,
+    getStock,
+    getProductStock,
+    getClientPricing,
+    createOrder,
+    getOrders,
+    getOrderDetail,
+    addOrderLine,
+    updateOrderLine: updateOrderLineRoute,
+    deleteOrderLine: deleteOrderLineRoute,
+    confirmOrder,
+    cancelOrder,
+    getRecommendations,
+    getFamilies,
+    getBrands,
+    getProductFamilies,
+    getProductBrands,
+    getActivePromotions,
+    getClientBalance,
+    cloneOrder,
+    getComplementaryProducts,
+    getOrderAnalytics,
+    generateOrderPdf,
+};

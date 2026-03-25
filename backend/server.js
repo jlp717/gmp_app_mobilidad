@@ -92,6 +92,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   facturasRoutes = require('./routes/facturas');
   warehouseRoutes = require('./routes/warehouse');
   productsRoutes = require('./routes/products');
+  pedidosRoutes = require('./routes/pedidos');
   // Módulo KPI Glacius (DB2/ODBC + Redis)
   try {
     kpiModule = require('./kpi');
@@ -189,6 +190,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/facturas', facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);
   app.use('/api/products', productsRoutes);
+  app.use('/api/pedidos', pedidosRoutes);
   // KPI Glacius module (DB2/ODBC-backed alerts)
   if (kpiModule) {
     app.use('/api/kpi', kpiModule.kpiRoutes);
