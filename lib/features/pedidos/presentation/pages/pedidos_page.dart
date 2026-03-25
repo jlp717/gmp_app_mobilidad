@@ -27,6 +27,8 @@ import '../widgets/product_detail_sheet.dart';
 import '../dialogs/client_search_dialog.dart';
 import '../../data/pedidos_offline_service.dart';
 import '../../data/pedidos_favorites_service.dart';
+import '../../../../core/providers/filter_provider.dart';
+import '../../../../core/widgets/global_vendor_selector.dart';
 import 'promotions_list_page.dart';
 
 class PedidosPage extends StatefulWidget {
@@ -59,6 +61,10 @@ class _PedidosPageState extends State<PedidosPage>
       _loadInitialData();
       _initOffline();
       _initFavorites();
+      // Listen to "Ver como" vendor filter changes
+      if (widget.isJefeVentas) {
+        context.read<FilterProvider>().addListener(_onVendorFilterChanged);
+      }
     });
 
     _catalogScrollController.addListener(_onCatalogScroll);
@@ -79,6 +85,11 @@ class _PedidosPageState extends State<PedidosPage>
     _stockRefreshTimer?.cancel();
     _tabController.dispose();
     _catalogScrollController.dispose();
+    if (widget.isJefeVentas) {
+      try {
+        context.read<FilterProvider>().removeListener(_onVendorFilterChanged);
+      } catch (_) {}
+    }
     super.dispose();
   }
 
@@ -107,7 +118,21 @@ class _PedidosPageState extends State<PedidosPage>
 
   String get _vendedorCodes {
     final auth = context.read<AuthProvider>();
-    return auth.vendedorCodes.join(',');
+    String codes = auth.vendedorCodes.join(',');
+    // JEFE_VENTAS: respect global "Ver como" filter
+    if (widget.isJefeVentas) {
+      final filter = context.read<FilterProvider>();
+      final selected = filter.selectedVendor;
+      if (selected != null && selected.isNotEmpty) {
+        codes = selected;
+      }
+    }
+    return codes;
+  }
+
+  void _onVendorFilterChanged() {
+    if (!mounted) return;
+    _loadInitialData();
   }
 
   Future<void> _initOffline() async {
@@ -966,6 +991,12 @@ class _PedidosPageState extends State<PedidosPage>
   Widget _buildCatalogPanel(PedidosProvider provider) {
     return Column(
       children: [
+        // "Ver como" vendor selector for JEFE_VENTAS
+        if (widget.isJefeVentas)
+          GlobalVendorSelector(
+            isJefeVentas: true,
+            onChanged: _onVendorFilterChanged,
+          ),
         // Client & sale type header
         _buildOrderHeader(provider),
         // Search + filters

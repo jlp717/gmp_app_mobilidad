@@ -160,6 +160,7 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
     }
 
     const sql = `
+        SELECT
             TRIM(A.CODIGOARTICULO) AS code,
             TRIM(A.DESCRIPCIONARTICULO) AS name,
             TRIM(A.CODIGOMARCA) AS brand,
@@ -530,7 +531,7 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
 
     try {
         const rows = await query(sql);
-        return rows.map(r => ({
+        const orders = rows.map(r => ({
             id: r.ID,
             ejercicio: r.EJERCICIO,
             numeroPedido: r.NUMEROPEDIDO,
@@ -549,6 +550,7 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             createdAt: r.CREATED_AT,
             updatedAt: r.UPDATED_AT,
         }));
+        return { orders, count: orders.length };
     } catch (error) {
         logger.error(`[PEDIDOS] getOrders error: ${error.message}`);
         throw error;
