@@ -13,16 +13,8 @@ const { sanitizeForSQL } = require('../utils/common');
 const { queryWithParams } = require('../config/db');
 
 // =============================================================================
-// INITIALIZATION
+// INITIALIZATION (called from server.js startServer after initDb)
 // =============================================================================
-(async () => {
-    try {
-        await pedidosService.initPedidosTables();
-        logger.info('Pedidos tables initialized');
-    } catch (error) {
-        logger.error(`Error initializing pedidos tables: ${error.message}`);
-    }
-})();
 
 // =============================================================================
 // HELPERS

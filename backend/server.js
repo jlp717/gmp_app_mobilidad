@@ -283,7 +283,16 @@ async function startServer() {
     logger.warn(`⚠️ Metadata cache error (non-fatal): ${err.message}`);
   }
 
-  // ─── PHASE 3.5: Initialize KPI Glacius module (DB2/ODBC + Redis) ───
+  // ─── PHASE 3.5: Initialize Pedidos tables ───
+  try {
+    const pedidosService = require('./services/pedidos.service');
+    await pedidosService.initPedidosTables();
+    logger.info('✅ Pedidos tables initialized');
+  } catch (err) {
+    logger.warn(`⚠️ Pedidos table init error (non-fatal): ${err.message}`);
+  }
+
+  // ─── PHASE 3.6: Initialize KPI Glacius module (DB2/ODBC + Redis) ───
   if (kpiModule) {
     try {
       await kpiModule.initKpiModule();

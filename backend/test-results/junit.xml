@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="GMP Backend Tests" tests="22" failures="0" errors="0" time="1.483">
-  <testsuite name="initPedidosTables" errors="0" failures="0" skipped="0" timestamp="2026-03-25T08:03:26" time="0.655" tests="22">
-    <testcase classname="initPedidosTables" name="should skip creation when tables already exist" time="0.005">
+<testsuites name="GMP Backend Tests" tests="22" failures="0" errors="0" time="1.596">
+  <testsuite name="initPedidosTables" errors="0" failures="0" skipped="0" timestamp="2026-03-25T08:28:03" time="0.656" tests="22">
+    <testcase classname="initPedidosTables" name="should skip creation when tables already exist" time="0.004">
     </testcase>
-    <testcase classname="initPedidosTables" name="should create tables when they do not exist" time="0.002">
+    <testcase classname="initPedidosTables" name="should create tables when they do not exist" time="0.001">
     </testcase>
     <testcase classname="searchProducts" name="should return products list with count" time="0.002">
     </testcase>
@@ -11,17 +11,17 @@
     </testcase>
     <testcase classname="searchProducts" name="should handle family and marca filters" time="0.002">
     </testcase>
-    <testcase classname="getProductStock" name="should return stock data for a product" time="0.002">
+    <testcase classname="getProductStock" name="should return stock data for a product" time="0.001">
     </testcase>
-    <testcase classname="getProductStock" name="should handle product with no stock rows" time="0.005">
+    <testcase classname="getProductStock" name="should handle product with no stock rows" time="0.003">
     </testcase>
-    <testcase classname="createOrder" name="should reject order without clientCode" time="0.004">
+    <testcase classname="createOrder" name="should reject order without clientCode" time="0.005">
     </testcase>
     <testcase classname="createOrder" name="should reject order without lines" time="0.001">
     </testcase>
     <testcase classname="createOrder" name="should create order with valid data" time="0.003">
     </testcase>
-    <testcase classname="getOrders" name="should return orders list for a vendor" time="0.002">
+    <testcase classname="getOrders" name="should return orders list for a vendor" time="0.001">
     </testcase>
     <testcase classname="getOrders" name="should filter orders by status" time="0.001">
     </testcase>
@@ -29,15 +29,15 @@
     </testcase>
     <testcase classname="confirmOrder" name="should confirm order and return detail with stockWarnings" time="0.001">
     </testcase>
-    <testcase classname="cancelOrder" name="should reject invalid orderId" time="0.002">
+    <testcase classname="cancelOrder" name="should reject invalid orderId" time="0">
     </testcase>
-    <testcase classname="cancelOrder" name="should cancel order and return detail" time="0.003">
+    <testcase classname="cancelOrder" name="should cancel order and return detail" time="0.002">
     </testcase>
-    <testcase classname="getProductFamilies" name="should return list of family codes" time="0.003">
+    <testcase classname="getProductFamilies" name="should return list of family codes" time="0.001">
     </testcase>
-    <testcase classname="getProductBrands" name="should return list of brand strings" time="0.003">
+    <testcase classname="getProductBrands" name="should return list of brand strings" time="0.001">
     </testcase>
-    <testcase classname="getRecommendations" name="should return history and similar arrays" time="0.001">
+    <testcase classname="getRecommendations" name="should return history and similar arrays" time="0.002">
     </testcase>
     <testcase classname="getRecommendations" name="should require clientCode" time="0.001">
     </testcase>
