@@ -79,7 +79,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     setState(() { _loading = true; _error = null; });
     try {
       final resp = await ApiClient.get(
-        '/api/pedidos/product-history/${widget.productCode}/${widget.clientCode}',
+        '/pedidos/product-history/${widget.productCode}/${widget.clientCode}',
       );
       final yearsRaw = resp['years'] as Map<String, dynamic>? ?? {};
       final years = <String, _YearData>{};

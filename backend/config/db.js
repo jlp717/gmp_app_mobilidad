@@ -285,7 +285,10 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
             }
 
             if (logError && attempt === MAX_RETRIES) {
-                logger.error(`❌ Param Query Error (Final): ${error.message}`);
+                const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
+                const sqlPreview = sql ? sql.replace(/\s+/g, ' ').substring(0, 300) : 'N/A';
+                const paramPreview = params ? JSON.stringify(params).substring(0, 200) : '[]';
+                logger.error(`❌ Param Query Error (Final): ${error.message} ${odbcDetails}\n  SQL: ${sqlPreview}\n  Params: ${paramPreview}`);
             } else if (logError) {
                 logger.warn(`⚠️ Param Query Retry (${attempt}): ${error.message}`);
             }

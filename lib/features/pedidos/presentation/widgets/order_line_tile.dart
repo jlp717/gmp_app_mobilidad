@@ -12,6 +12,8 @@ class OrderLineTile extends StatelessWidget {
   final int index;
   final VoidCallback onDismissed;
   final VoidCallback onTap;
+  final VoidCallback onIncrement;
+  final VoidCallback onDecrement;
 
   const OrderLineTile({
     Key? key,
@@ -19,6 +21,8 @@ class OrderLineTile extends StatelessWidget {
     required this.index,
     required this.onDismissed,
     required this.onTap,
+    required this.onIncrement,
+    required this.onDecrement,
   }) : super(key: key);
 
   @override
@@ -99,13 +103,49 @@ class OrderLineTile extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          // Qty
-                          Text(
-                            '${line.cantidadEnvases.toStringAsFixed(0)} c / ${line.cantidadUnidades.toStringAsFixed(0)} u',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: Responsive.fontSize(context,
-                                  small: 11, large: 12),
+                          // Qty Stepper
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: line.cantidadEnvases > 0 || line.cantidadUnidades > 0 ? onDecrement : null,
+                                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(6)),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                      child: Icon(Icons.remove, size: 14, color: Colors.white70),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  child: Text(
+                                    line.cantidadEnvases > 0 ? '${line.cantidadEnvases.toStringAsFixed(0)} c' : '${line.cantidadUnidades.toStringAsFixed(0)} u',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: Responsive.fontSize(context, small: 11, large: 12),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: onIncrement,
+                                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                      child: Icon(Icons.add, size: 14, color: AppTheme.neonBlue),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],

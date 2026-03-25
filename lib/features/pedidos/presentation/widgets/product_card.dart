@@ -11,6 +11,7 @@ class ProductCard extends StatelessWidget {
   final Product product;
   final VoidCallback onTap;
   final bool isFavorite;
+  final PromotionItem? promo;
   final VoidCallback? onToggleFavorite;
 
   const ProductCard({
@@ -18,6 +19,7 @@ class ProductCard extends StatelessWidget {
     required this.product,
     required this.onTap,
     this.isFavorite = false,
+    this.promo,
     this.onToggleFavorite,
   }) : super(key: key);
 
@@ -31,7 +33,8 @@ class ProductCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: AppTheme.borderColor.withOpacity(0.3),
+          color: promo != null ? AppTheme.neonPurple : AppTheme.borderColor.withOpacity(0.3),
+          width: promo != null ? 1.5 : 1.0,
         ),
       ),
       child: InkWell(
@@ -58,13 +61,28 @@ class ProductCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      product.code,
-                      style: TextStyle(
-                        color: Colors.white38,
-                        fontSize: Responsive.fontSize(context,
-                            small: 11, large: 12),
-                      ),
+                    Row(
+                      children: [
+                        if (promo != null)
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.neonPurple.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: AppTheme.neonPurple.withOpacity(0.4)),
+                            ),
+                            child: Text(promo!.promoDesc, style: const TextStyle(color: AppTheme.neonPurple, fontSize: 9, fontWeight: FontWeight.bold)),
+                          ),
+                        Text(
+                          product.code,
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: Responsive.fontSize(context,
+                                small: 11, large: 12),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     // Stock row

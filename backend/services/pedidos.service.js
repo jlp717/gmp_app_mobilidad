@@ -160,10 +160,11 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
     }
 
     const sql = `
-        SELECT TRIM(A.CODIGOARTICULO) AS code,
+            TRIM(A.CODIGOARTICULO) AS code,
             TRIM(A.DESCRIPCIONARTICULO) AS name,
             TRIM(A.CODIGOMARCA) AS brand,
             TRIM(A.CODIGOFAMILIA) AS family,
+            TRIM(A.CODIGOEAN) AS ean,
             A.UNIDADESCAJA AS unitsPerBox,
             A.UNIDADESFRACCION AS unitsFraction,
             A.UNIDADESRETRACTIL AS unitsRetractil,
@@ -204,6 +205,7 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
             name: (r.NAME || '').trim(),
             brand: (r.BRAND || '').trim(),
             family: (r.FAMILY || '').trim(),
+            ean: (r.EAN || '').trim(),
             unitsPerBox: parseFloat(r.UNITSPERBOX) || 1,
             unitsFraction: parseFloat(r.UNITSFRACTION) || 0,
             unitsRetractil: parseFloat(r.UNITSRETRACTIL) || 0,
@@ -233,6 +235,7 @@ async function getProductDetail(code, clientCode) {
             TRIM(A.DESCRIPCIONARTICULO) AS name,
             TRIM(A.CODIGOMARCA) AS brand,
             TRIM(A.CODIGOFAMILIA) AS family,
+            TRIM(A.CODIGOEAN) AS ean,
             A.UNIDADESCAJA AS unitsPerBox,
             A.UNIDADESFRACCION AS unitsFraction,
             A.UNIDADESRETRACTIL AS unitsRetractil,
@@ -879,9 +882,24 @@ async function getRecommendations(clientCode, vendedorCode) {
         ORDER BY frequency DESC
         FETCH FIRST 20 ROWS ONLY`;
 
-    const promises = [queryWithParams(historySql, [trimClient])];
+    // Execute history query
+    let history = [];
+    try {
+        const historyRows = await queryWithParams(historySql, [trimClient]);
+        history = (historyRows || []).map(r => ({
+            code: (r.CODE || '').trim(),
+            name: (r.NAME || '').trim(),
+            frequency: parseInt(r.FREQUENCY) || 0,
+            totalUnits: parseFloat(r.TOTALUNITS) || 0,
+            lastPurchase: r.LASTPURCHASE,
+            source: 'history',
+        }));
+    } catch (error) {
+        logger.error(`[PEDIDOS] getRecommendations history error: ${error.message}`);
+    }
 
     // Strategy 2: Similar clients (only if vendor is provided)
+    let similar = [];
     if (trimVendor) {
         const similarSql = `
             SELECT TRIM(L.CODIGOARTICULO) AS code,
@@ -893,44 +911,31 @@ async function getRecommendations(clientCode, vendedorCode) {
               AND L.TIPOVENTA IN ('CC', 'VC')
               AND L.CLASELINEA IN ('AB', 'VT')
               AND L.SERIEALBARAN NOT IN ('N', 'Z')
-              AND L.CODIGOARTICULO NOT IN (
-                  SELECT DISTINCT L2.CODIGOARTICULO FROM DSEDAC.LINDTO L2
-                  WHERE TRIM(L2.CODIGOCLIENTEALBARAN) = ?
-                    AND L2.ANODOCUMENTO = YEAR(CURRENT_DATE)
-                    AND L2.MESDOCUMENTO >= MONTH(CURRENT_DATE) - 3
+              AND NOT EXISTS (
+                  SELECT 1 FROM DSEDAC.LINDTO L2
+                  WHERE L2.CODIGOARTICULO = L.CODIGOARTICULO
+                    AND TRIM(L2.CODIGOCLIENTEALBARAN) = ?
+                    AND (L2.ANODOCUMENTO * 12 + L2.MESDOCUMENTO)
+                        >= (YEAR(CURRENT_DATE) * 12 + MONTH(CURRENT_DATE) - 3)
               )
             GROUP BY L.CODIGOARTICULO, L.DESCRIPCION
             HAVING COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) >= 3
             ORDER BY clientCount DESC
             FETCH FIRST 10 ROWS ONLY`;
-        promises.push(queryWithParams(similarSql, [trimVendor, trimClient]));
-    }
-
-    try {
-        const results = await Promise.all(promises);
-        const history = (results[0] || []).map(r => ({
-            code: (r.CODE || '').trim(),
-            name: (r.NAME || '').trim(),
-            frequency: parseInt(r.FREQUENCY) || 0,
-            totalUnits: parseFloat(r.TOTALUNITS) || 0,
-            lastPurchase: r.LASTPURCHASE,
-            source: 'history',
-        }));
-
-        const similar = results[1]
-            ? results[1].map(r => ({
+        try {
+            const similarRows = await queryWithParams(similarSql, [trimVendor, trimClient]);
+            similar = (similarRows || []).map(r => ({
                 code: (r.CODE || '').trim(),
                 name: (r.NAME || '').trim(),
                 clientCount: parseInt(r.CLIENTCOUNT) || 0,
                 source: 'similar',
-            }))
-            : [];
-
-        return { history, similar };
-    } catch (error) {
-        logger.error(`[PEDIDOS] getRecommendations error: ${error.message}`);
-        throw error;
+            }));
+        } catch (error) {
+            logger.error(`[PEDIDOS] getRecommendations similar error: ${error.message}`);
+        }
     }
+
+    return { history, similar };
 }
 
 // ============================================================================
@@ -963,11 +968,94 @@ async function getBrands() {
     }
 }
 
-async function getActivePromotions() {
-    // ARA table only has base tariff data (CODIGOARTICULO, CODIGOTARIFA, PRECIOTARIFA).
-    // There is no date-based promotions table in DSEDAC. Return empty for now.
-    // When a real promotions table is discovered, update this query.
-    return [];
+async function getActivePromotions(clientCode) {
+    try {
+        const now = new Date();
+        const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate(); // YYYYMMDD
+        
+        const paramsCpes = [today, today];
+        let sqlCpes = `
+            SELECT 'PRICE' AS PROMOTYPE,
+                   TRIM(P.CODIGOARTICULO) AS CODE,
+                   TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+                   P.PRECIO AS PROMOPRICE,
+                   COALESCE(T.PRECIOTARIFA, 0) AS REGULARPRICE,
+                   P.C9INFC AS DATEFROM, P.C9FIFC AS DATETO,
+                   'Precio Especial' AS PROMODESC
+            FROM DSEDAC.CPESL1 P
+            JOIN DSEDAC.ART A ON P.CODIGOARTICULO = A.CODIGOARTICULO
+            LEFT JOIN DSEDAC.ARA T ON P.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            WHERE P.C9INFC <= ? AND P.C9FIFC >= ?`;
+
+        if (clientCode) {
+            sqlCpes += ` AND TRIM(P.CODIGOCLIENTE) = ?`;
+            paramsCpes.push(clientCode.trim());
+        }
+
+        const paramsPmr = [];
+        let sqlPmr = `
+            SELECT 'GIFT' AS PROMOTYPE,
+                   TRIM(PL.CODIGOARTICULO) AS CODE,
+                   TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+                   0 AS PROMOPRICE,
+                   COALESCE(T.PRECIOTARIFA, 0) AS REGULARPRICE,
+                   H.P1INFC AS DATEFROM, H.P1FNFC AS DATETO,
+                   TRIM(H.NOMBREPROMOCIONREGALO) AS PROMODESC
+            FROM DSEDAC.PMRL1 H
+            JOIN DSEDAC.PMPL1 PL ON TRIM(H.CODIGOPROMOCIONREGALO) = TRIM(PL.CODIGOPROMOCION)
+            JOIN DSEDAC.ART A ON PL.CODIGOARTICULO = A.CODIGOARTICULO
+            LEFT JOIN DSEDAC.ARA T ON A.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            WHERE 1=1`;
+
+        if (clientCode) {
+            sqlPmr += ` AND TRIM(H.CODIGOCLIENTE) = ?`;
+            paramsPmr.push(clientCode.trim());
+        }
+
+        // Run in parallel
+        const [cpesRows, pmrRows] = await Promise.all([
+            queryWithParams(sqlCpes, paramsCpes).catch(e => { logger.warn(`[PEDIDOS] CPESL1 query err: ${e.message}`); return []; }),
+            queryWithParams(sqlPmr, paramsPmr).catch(e => { logger.warn(`[PEDIDOS] PMRL1 query err: ${e.message}`); return []; })
+        ]);
+
+        const formatRow = (r) => {
+            const regPrice = parseFloat(r.REGULARPRICE) || 0;
+            const promPrice = parseFloat(r.PROMOPRICE) || 0;
+            let discount = 0;
+            if (regPrice > 0 && promPrice > 0 && r.PROMOTYPE === 'PRICE') {
+                discount = ((regPrice - promPrice) / regPrice) * 100;
+            }
+
+            // Convert YYYYMMDD to DD/MM/YYYY parts
+            const dFrom = (r.DATEFROM || 0).toString();
+            const dTo = (r.DATETO || 0).toString();
+            const parseDate = (dStr) => {
+                if (dStr.length === 8) return { y: dStr.substring(0,4), m: dStr.substring(4,6), d: dStr.substring(6,8) };
+                return { y: 0, m: 0, d: 0 };
+            };
+            const pFrom = parseDate(dFrom);
+            const pTo = parseDate(dTo);
+
+            return {
+                promoType: r.PROMOTYPE,
+                code: r.CODE || '',
+                name: r.NAME || '',
+                promoDesc: r.PROMODESC || '',
+                promoPrice: promPrice,
+                regularPrice: regPrice,
+                discountPct: discount,
+                dayFrom: pFrom.d, monthFrom: pFrom.m, yearFrom: pFrom.y,
+                dayTo: pTo.d, monthTo: pTo.m, yearTo: pTo.y
+            };
+        };
+
+        const allPromos = [...cpesRows, ...pmrRows].map(formatRow);
+        return allPromos;
+
+    } catch (error) {
+        logger.warn(`[PEDIDOS] getActivePromotions error (returning []): ${error.message}`);
+        return [];
+    }
 }
 
 // ============================================================================

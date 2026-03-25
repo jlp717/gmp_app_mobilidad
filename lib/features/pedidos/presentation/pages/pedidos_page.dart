@@ -23,9 +23,11 @@ import '../widgets/analytics_dashboard.dart';
 import '../widgets/client_balance_badge.dart';
 import '../widgets/complementary_products.dart';
 import '../widgets/order_pdf_generator.dart';
+import '../widgets/product_detail_sheet.dart';
 import '../dialogs/client_search_dialog.dart';
 import '../../data/pedidos_offline_service.dart';
 import '../../data/pedidos_favorites_service.dart';
+import 'promotions_list_page.dart';
 
 class PedidosPage extends StatefulWidget {
   final String employeeCode;
@@ -134,6 +136,7 @@ class _PedidosPageState extends State<PedidosPage>
     provider.loadProducts(vendedorCodes: codes, reset: true);
     provider.loadFilters();
     provider.loadOrders(vendedorCodes: codes);
+    provider.loadPromotions();
   }
 
   void _onCatalogScroll() {
@@ -153,6 +156,8 @@ class _PedidosPageState extends State<PedidosPage>
     final priceController =
         TextEditingController(text: product.bestPrice.toStringAsFixed(3));
     String selectedUnit = 'CAJAS';
+    List<TariffEntry> tariffs = [];
+    bool loadingTariffs = true;
 
     showModalBottomSheet(
       context: context,
@@ -164,204 +169,350 @@ class _PedidosPageState extends State<PedidosPage>
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
+            // Load tariffs on first build
+            if (loadingTariffs) {
+              loadingTariffs = false;
+              final prov = context.read<PedidosProvider>();
+              PedidosService.getProductDetail(
+                product.code,
+                clientCode: prov.hasClient ? prov.clientCode : null,
+              ).then((detail) {
+                if (ctx.mounted) {
+                  setModalState(() {
+                    tariffs = detail.tariffs;
+                    if (detail.clientPrice > 0) {
+                      priceController.text = detail.clientPrice.toStringAsFixed(3);
+                    }
+                  });
+                }
+              }).catchError((_) {});
+            }
+
+            final qty = double.tryParse(qtyController.text) ?? 0;
+            final price = double.tryParse(priceController.text) ?? 0;
+            final total = qty * price;
+
             return Padding(
               padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.name,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: Responsive.fontSize(context,
-                          small: 16, large: 18),
-                      fontWeight: FontWeight.bold,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Handle ──
+                    Center(
+                      child: Container(
+                        width: 40, height: 4,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    product.code,
-                    style: TextStyle(
-                      color: AppTheme.neonBlue,
-                      fontSize: Responsive.fontSize(context,
-                          small: 12, large: 14),
+                    // ── Header: name + code + stock ──
+                    Text(
+                      product.name,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: Responsive.fontSize(context, small: 15, large: 17),
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  // History button — only if client selected
-                  if (context.read<PedidosProvider>().hasClient)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: InkWell(
-                        onTap: () {
-                          final prov = context.read<PedidosProvider>();
-                          ProductHistorySheet.show(
-                            context,
-                            productCode: product.code,
-                            productName: product.name,
-                            clientCode: prov.clientCode!,
-                            clientName: prov.clientName ?? '',
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppTheme.neonPurple.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: AppTheme.neonPurple.withOpacity(0.3)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          product.code,
+                          style: TextStyle(
+                            color: AppTheme.neonBlue,
+                            fontSize: Responsive.fontSize(context, small: 11, large: 13),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.bar_chart_rounded,
-                                  color: AppTheme.neonPurple, size: 16),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Ver historial de compras',
-                                style: TextStyle(
-                                  color: AppTheme.neonPurple,
-                                  fontSize: Responsive.fontSize(context,
-                                      small: 11, large: 13),
-                                  fontWeight: FontWeight.w600,
+                        ),
+                        const Spacer(),
+                        Icon(Icons.inventory_outlined,
+                            color: product.hasStock ? AppTheme.neonGreen : AppTheme.error, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${product.stockEnvases.toStringAsFixed(0)} c / ${product.stockUnidades.toStringAsFixed(0)} u',
+                          style: TextStyle(
+                            color: product.hasStock ? AppTheme.neonGreen : AppTheme.error,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // ── Quick links row ──
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        // Product detail button
+                        _buildQuickLink(
+                          icon: Icons.info_outline,
+                          label: 'Datos producto',
+                          color: AppTheme.neonBlue,
+                          onTap: () {
+                            final prov = context.read<PedidosProvider>();
+                            ProductDetailSheet.show(
+                              context,
+                              productCode: product.code,
+                              productName: product.name,
+                              clientCode: prov.hasClient ? prov.clientCode : null,
+                              clientName: prov.hasClient ? prov.clientName : null,
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        // History button
+                        if (context.read<PedidosProvider>().hasClient)
+                          _buildQuickLink(
+                            icon: Icons.bar_chart_rounded,
+                            label: 'Historial compras',
+                            color: AppTheme.neonPurple,
+                            onTap: () {
+                              final prov = context.read<PedidosProvider>();
+                              ProductHistorySheet.show(
+                                context,
+                                productCode: product.code,
+                                productName: product.name,
+                                clientCode: prov.clientCode!,
+                                clientName: prov.clientName ?? '',
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                    // ── Tariff chips ──
+                    if (tariffs.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text('Tarifas', style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                      )),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 36,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: tariffs.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 6),
+                          itemBuilder: (_, i) {
+                            final t = tariffs[i];
+                            final isSelected = priceController.text == t.price.toStringAsFixed(3);
+                            return GestureDetector(
+                              onTap: () {
+                                setModalState(() {
+                                  priceController.text = t.price.toStringAsFixed(3);
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppTheme.neonGreen.withOpacity(0.2)
+                                      : AppTheme.darkCard,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isSelected ? AppTheme.neonGreen : AppTheme.borderColor,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      t.description.isNotEmpty ? t.description : 'T${t.code}',
+                                      style: TextStyle(
+                                        color: isSelected ? AppTheme.neonGreen : Colors.white54,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '\u20AC${t.price.toStringAsFixed(3)}',
+                                      style: TextStyle(
+                                        color: isSelected ? AppTheme.neonGreen : Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  // Unit selector
-                  Text(
-                    'Unidad de medida',
-                    style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: Responsive.fontSize(context,
-                            small: 12, large: 14)),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: ['CAJAS', 'PIEZAS', 'KILOGRAMOS'].map((unit) {
-                      final selected = selectedUnit == unit;
-                      return ChoiceChip(
-                        label: Text(unit),
-                        selected: selected,
-                        selectedColor: AppTheme.neonBlue.withOpacity(0.3),
-                        backgroundColor: AppTheme.darkCard,
-                        labelStyle: TextStyle(
-                          color: selected ? AppTheme.neonBlue : Colors.white70,
-                          fontSize: Responsive.fontSize(context,
-                              small: 11, large: 13),
-                        ),
-                        side: BorderSide(
-                          color: selected
-                              ? AppTheme.neonBlue
-                              : AppTheme.borderColor,
-                        ),
-                        onSelected: (_) {
-                          setModalState(() => selectedUnit = unit);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  // Quantity + Price row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: qtyController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            labelText: 'Cantidad',
-                            labelStyle:
-                                const TextStyle(color: Colors.white70),
-                            filled: true,
-                            fillColor: AppTheme.darkCard,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  const BorderSide(color: AppTheme.borderColor),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  const BorderSide(color: AppTheme.borderColor),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  const BorderSide(color: AppTheme.neonBlue),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: priceController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            labelText: 'Precio',
-                            prefixText: '\u20AC ',
-                            prefixStyle:
-                                const TextStyle(color: AppTheme.neonGreen),
-                            labelStyle:
-                                const TextStyle(color: Colors.white70),
-                            filled: true,
-                            fillColor: AppTheme.darkCard,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  const BorderSide(color: AppTheme.borderColor),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  const BorderSide(color: AppTheme.borderColor),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  const BorderSide(color: AppTheme.neonBlue),
-                            ),
-                          ),
+                            );
+                          },
                         ),
                       ),
                     ],
-                  ),
-                  // Price warning
-                  if (product.precioMinimo > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        'Precio minimo: \u20AC${product.precioMinimo.toStringAsFixed(3)}',
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: Responsive.fontSize(context,
-                              small: 10, large: 12),
+                    // ── Unit selector (5 options like screenshot) ──
+                    const SizedBox(height: 14),
+                    Text('Unidad de medida', style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                    )),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: ['PIEZAS', 'BANDEJAS', 'ESTUCHE', 'KILOGRAMOS', 'CAJAS'].map((unit) {
+                        final selected = selectedUnit == unit;
+                        return SizedBox(
+                          width: (MediaQuery.of(ctx).size.width - 56) / 3,
+                          height: 40,
+                          child: ElevatedButton(
+                            onPressed: () => setModalState(() => selectedUnit = unit),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: selected
+                                  ? AppTheme.neonBlue.withOpacity(0.2)
+                                  : AppTheme.darkCard,
+                              foregroundColor: selected ? AppTheme.neonBlue : Colors.white70,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: BorderSide(
+                                  color: selected ? AppTheme.neonBlue : AppTheme.borderColor,
+                                  width: selected ? 1.5 : 1,
+                                ),
+                              ),
+                              elevation: 0,
+                              padding: EdgeInsets.zero,
+                            ),
+                            child: Text(unit, style: TextStyle(
+                              fontSize: Responsive.fontSize(context, small: 11, large: 12),
+                              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                            )),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    // ── Quantity with +/- ──
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        // Minus button
+                        _buildQtyButton(Icons.remove, AppTheme.error, () {
+                          final cur = double.tryParse(qtyController.text) ?? 0;
+                          if (cur > 1) setModalState(() => qtyController.text = (cur - 1).toStringAsFixed(0));
+                        }),
+                        const SizedBox(width: 10),
+                        // Qty field
+                        Expanded(
+                          child: TextField(
+                            controller: qtyController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            onChanged: (_) => setModalState(() {}),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: AppTheme.neonGreen.withOpacity(0.1),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: AppTheme.neonGreen),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: AppTheme.neonGreen),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: AppTheme.neonGreen, width: 2),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Plus button
+                        _buildQtyButton(Icons.add, AppTheme.neonBlue, () {
+                          final cur = double.tryParse(qtyController.text) ?? 0;
+                          setModalState(() => qtyController.text = (cur + 1).toStringAsFixed(0));
+                        }),
+                      ],
+                    ),
+                    // ── Price field ──
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: priceController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      onChanged: (_) => setModalState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Precio',
+                        prefixText: '\u20AC ',
+                        prefixStyle: const TextStyle(color: AppTheme.neonGreen, fontSize: 16),
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        filled: true,
+                        fillColor: AppTheme.darkCard,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppTheme.neonBlue),
                         ),
                       ),
                     ),
-                  const SizedBox(height: 20),
-                  // Add button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton.icon(
+                    // Price warning + total
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        if (product.precioMinimo > 0)
+                          Text(
+                            'Min: \u20AC${product.precioMinimo.toStringAsFixed(3)}',
+                            style: TextStyle(
+                              color: price > 0 && price < product.precioMinimo
+                                  ? AppTheme.error : Colors.white38,
+                              fontSize: 11,
+                            ),
+                          ),
+                        const Spacer(),
+                        Text(
+                          'Total: \u20AC${total.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: AppTheme.neonGreen,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // ── Action buttons ──
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        // LIMPIAR CANTIDAD
+                        Expanded(
+                          child: SizedBox(
+                            height: 46,
+                            child: OutlinedButton(
+                              onPressed: () {
+                                setModalState(() => qtyController.text = '0');
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.error,
+                                side: const BorderSide(color: AppTheme.error),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('LIMPIAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // ACEPTAR
+                        Expanded(
+                          flex: 2,
+                          child: SizedBox(
+                            height: 46,
+                            child: ElevatedButton.icon(
                       onPressed: () {
                         final qty =
                             double.tryParse(qtyController.text) ?? 0;
@@ -393,10 +544,21 @@ class _PedidosPageState extends State<PedidosPage>
                         }
 
                         HapticFeedback.mediumImpact();
-                        provider.addLine(
+                        final errorFromAdd = provider.addLine(
                             product, envases, unidades, selectedUnit, price);
+
+                        if (errorFromAdd != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(errorFromAdd, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              backgroundColor: AppTheme.error,
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+                          return;
+                        }
+
                         Navigator.pop(ctx);
-                        // Load complementary products after adding to cart
                         Future.delayed(const Duration(milliseconds: 300), () {
                           if (mounted) {
                             context.read<PedidosProvider>().loadComplementaryProducts();
@@ -411,16 +573,67 @@ class _PedidosPageState extends State<PedidosPage>
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                          textStyle: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
-                ],
-              ),
-            );
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
           },
         );
       },
+    );
+  }
+
+  Widget _buildQuickLink({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 14),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQtyButton(IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.4)),
+        ),
+        child: Icon(icon, color: color, size: 24),
+      ),
     );
   }
 
@@ -465,8 +678,8 @@ class _PedidosPageState extends State<PedidosPage>
     if (drafts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No hay borradores guardados'),
-          backgroundColor: AppTheme.darkSurface,
+          content: Text('No hay borradores guardados', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          backgroundColor: AppTheme.darkCard,
         ),
       );
       return;
@@ -552,6 +765,47 @@ class _PedidosPageState extends State<PedidosPage>
           ),
         ),
         actions: [
+          // View Promotions button
+          Consumer<PedidosProvider>(
+            builder: (ctx, prov, _) {
+              final promos = prov.activePromotionsList;
+              if (promos.isEmpty) return const SizedBox.shrink();
+              return Stack(
+                children: [
+                   IconButton(
+                     icon: const Icon(Icons.local_offer_outlined, color: AppTheme.neonPurple),
+                     tooltip: 'Ver Promociones',
+                     onPressed: () {
+                       Navigator.push(
+                         context,
+                         MaterialPageRoute(
+                           builder: (_) => PromotionsListPage(
+                             promotions: promos,
+                             onProductTap: (code, name) => _onProductTap(Product(code: code, name: name)),
+                           ),
+                         ),
+                       );
+                     },
+                   ),
+                   Positioned(
+                     right: 6,
+                     top: 6,
+                     child: Container(
+                       padding: const EdgeInsets.all(4),
+                       decoration: const BoxDecoration(
+                         color: AppTheme.neonPurple,
+                         shape: BoxShape.circle,
+                       ),
+                       child: Text(
+                         '${promos.length}',
+                         style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                       ),
+                     ),
+                   ),
+                ],
+              );
+            },
+          ),
           // Save draft button
           Consumer<PedidosProvider>(
             builder: (ctx, prov, _) {
@@ -932,6 +1186,7 @@ class _PedidosPageState extends State<PedidosPage>
           product: product,
           onTap: () => _onProductTap(product),
           isFavorite: provider.isFavorite(product.code),
+          promo: provider.getPromo(product.code),
           onToggleFavorite: () {
             HapticFeedback.selectionClick();
             provider.toggleFavorite(product.code);

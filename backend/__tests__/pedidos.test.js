@@ -418,3 +418,68 @@ describe('Route input validation patterns', () => {
         expect(validTypes.includes('')).toBe(false);
     });
 });
+
+// =============================================================================
+// PROMOTIONS
+// =============================================================================
+
+describe('getActivePromotions', () => {
+    test('should return empty array when no promotions exist', async () => {
+        mockQueryWithParams.mockResolvedValue([]);
+
+        const result = await pedidosService.getActivePromotions();
+
+        expect(Array.isArray(result)).toBe(true);
+        expect(result.length).toBe(0);
+        expect(mockQueryWithParams).toHaveBeenCalled();
+    });
+
+    test('should return formatted promotions when data exists', async () => {
+        mockQueryWithParams.mockResolvedValue([{
+            CLIENTCODE: '4300009044',
+            LOCALIZACION: '',
+            PREFIJOPROMOCION: 'P',
+            CODIGOARTICULO: 'ART001',
+            MARCA: 'PREMIUM',
+            FAMILIA: 'PAN',
+            SUBEMPRESA: 'GMP',
+            SECUENCIA: 1,
+            DIAINICIO: 1, MESINICIO: 3, ANOINICIO: 2026,
+            DIAFINAL: 31, MESFINAL: 12, ANOFINAL: 2026,
+            PRECIO: 5.5000,
+            PRECIOCOSTO: 3.2000,
+            DIMENSION1: '',
+            DIMENSION2: '',
+        }]);
+
+        const result = await pedidosService.getActivePromotions();
+
+        expect(result.length).toBe(1);
+        expect(result[0].codigoArticulo).toBe('ART001');
+        expect(result[0].precio).toBe(5.5);
+        expect(result[0].precioCosto).toBe(3.2);
+        expect(result[0].fechaInicio).toBe('2026-03-01');
+        expect(result[0].fechaFinal).toBe('2026-12-31');
+    });
+
+    test('should pass clientCode filter when provided', async () => {
+        mockQueryWithParams.mockResolvedValue([]);
+
+        await pedidosService.getActivePromotions('4300009044');
+
+        expect(mockQueryWithParams).toHaveBeenCalled();
+        const call = mockQueryWithParams.mock.calls[0];
+        // Should have 3 params: today (x2) + clientCode
+        expect(call[1].length).toBe(3);
+        expect(call[1][2]).toBe('4300009044');
+    });
+
+    test('should return empty array on error (non-critical)', async () => {
+        mockQueryWithParams.mockRejectedValue(new Error('Table not found'));
+
+        const result = await pedidosService.getActivePromotions();
+
+        expect(Array.isArray(result)).toBe(true);
+        expect(result.length).toBe(0);
+    });
+});

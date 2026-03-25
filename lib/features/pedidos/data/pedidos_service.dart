@@ -15,6 +15,7 @@ class Product {
   final String name;
   final String brand;
   final String family;
+  final String ean;
   final double unitsPerBox;
   final double unitsFraction;
   final double unitsRetractil;
@@ -31,6 +32,7 @@ class Product {
     required this.name,
     this.brand = '',
     this.family = '',
+    this.ean = '',
     this.unitsPerBox = 1,
     this.unitsFraction = 0,
     this.unitsRetractil = 0,
@@ -49,6 +51,7 @@ class Product {
       name: (json['name'] ?? '').toString().trim(),
       brand: (json['brand'] ?? '').toString().trim(),
       family: (json['family'] ?? '').toString().trim(),
+      ean: (json['ean'] ?? '').toString().trim(),
       unitsPerBox: _toDouble(json['unitsPerBox']),
       unitsFraction: _toDouble(json['unitsFraction']),
       unitsRetractil: _toDouble(json['unitsRetractil']),
@@ -96,11 +99,53 @@ class StockEntry {
   StockEntry({required this.almacenCode, required this.almacenName, required this.envases, required this.unidades});
 
   factory StockEntry.fromJson(Map<String, dynamic> json) {
+    final code = json['almacenCode'] ?? json['almacen'];
+    final name = json['almacenName'] ?? json['almacenDesc'] ?? '';
     return StockEntry(
-      almacenCode: json['almacenCode'] is int ? json['almacenCode'] as int : int.tryParse(json['almacenCode']?.toString() ?? '0') ?? 0,
-      almacenName: (json['almacenName'] ?? '').toString().trim(),
+      almacenCode: code is int
+          ? code
+          : int.tryParse(code?.toString() ?? '0') ?? 0,
+      almacenName: name.toString().trim(),
       envases: _toDouble(json['envases']),
       unidades: _toDouble(json['unidades']),
+    );
+  }
+}
+
+/// Promotion item from backend
+class PromotionItem {
+  final String code;
+  final String name;
+  final String promoDesc;
+  final String promoType;
+  final double promoPrice;
+  final double regularPrice;
+  final String dateFrom;
+  final String dateTo;
+
+  PromotionItem({
+    required this.code,
+    required this.name,
+    required this.promoDesc,
+    this.promoType = '',
+    this.promoPrice = 0,
+    this.regularPrice = 0,
+    this.dateFrom = '',
+    this.dateTo = '',
+  });
+
+  bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
+
+  factory PromotionItem.fromJson(Map<String, dynamic> json) {
+    return PromotionItem(
+      code: (json['code'] ?? '').toString().trim(),
+      name: (json['name'] ?? '').toString().trim(),
+      promoDesc: (json['promoDesc'] ?? json['description'] ?? '').toString().trim(),
+      promoType: (json['promoType'] ?? '').toString().trim(),
+      promoPrice: _toDouble(json['promoPrice'] ?? json['price']),
+      regularPrice: _toDouble(json['regularPrice']),
+      dateFrom: (json['dateFrom'] ?? '').toString(),
+      dateTo: (json['dateTo'] ?? '').toString(),
     );
   }
 }
@@ -120,11 +165,21 @@ class ProductDetail {
   });
 
   factory ProductDetail.fromJson(Map<String, dynamic> json) {
+    // Backend nests tariffs/stock inside 'product', so look in both places
+    final inner = json['product'] as Map<String, dynamic>? ?? json;
+    final tariffsList = json['tariffs'] as List? ?? inner['tariffs'] as List? ?? [];
+    final stockList = json['stockByWarehouse'] as List?
+        ?? json['stock'] as List?
+        ?? inner['stockByWarehouse'] as List?
+        ?? inner['stock'] as List?
+        ?? [];
+    final cPrice = json['clientPrice'] ?? json['precioCliente']
+        ?? inner['clientPrice'] ?? inner['precioCliente'];
     return ProductDetail(
-      product: Product.fromJson((json['product'] ?? json) as Map<String, dynamic>),
-      tariffs: (json['tariffs'] as List? ?? []).map((t) => TariffEntry.fromJson(t as Map<String, dynamic>)).toList(),
-      stockByWarehouse: (json['stockByWarehouse'] as List? ?? []).map((s) => StockEntry.fromJson(s as Map<String, dynamic>)).toList(),
-      clientPrice: _toDouble(json['clientPrice']),
+      product: Product.fromJson(inner),
+      tariffs: tariffsList.map((t) => TariffEntry.fromJson(t as Map<String, dynamic>)).toList(),
+      stockByWarehouse: stockList.map((s) => StockEntry.fromJson(s as Map<String, dynamic>)).toList(),
+      clientPrice: _toDouble(cPrice),
     );
   }
 }

@@ -7,57 +7,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/api/api_client.dart';
-
-class PromotionItem {
-  final String code;
-  final String name;
-  final int tariffCode;
-  final double promoPrice;
-  final double regularPrice;
-  final double discountPct;
-  final String dateFrom;
-  final String dateTo;
-
-  PromotionItem({
-    required this.code,
-    required this.name,
-    required this.tariffCode,
-    required this.promoPrice,
-    required this.regularPrice,
-    required this.discountPct,
-    required this.dateFrom,
-    required this.dateTo,
-  });
-
-  factory PromotionItem.fromJson(Map<String, dynamic> json) {
-    final dayFrom = json['dayFrom'] ?? 0;
-    final monthFrom = json['monthFrom'] ?? 0;
-    final yearFrom = json['yearFrom'] ?? 0;
-    final dayTo = json['dayTo'] ?? 0;
-    final monthTo = json['monthTo'] ?? 0;
-    final yearTo = json['yearTo'] ?? 0;
-
-    return PromotionItem(
-      code: (json['code'] ?? '').toString().trim(),
-      name: (json['name'] ?? '').toString().trim(),
-      tariffCode: (json['tariffCode'] is int) ? json['tariffCode'] as int : int.tryParse(json['tariffCode']?.toString() ?? '0') ?? 0,
-      promoPrice: _toDouble(json['promoPrice']),
-      regularPrice: _toDouble(json['regularPrice']),
-      discountPct: _toDouble(json['discountPct']),
-      dateFrom: '$dayFrom/$monthFrom/$yearFrom',
-      dateTo: '$dayTo/$monthTo/$yearTo',
-    );
-  }
-
-  bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
-  double get savingPct => regularPrice > 0 ? ((regularPrice - promoPrice) / regularPrice) * 100 : discountPct;
-}
-
-double _toDouble(dynamic value) {
-  if (value == null) return 0;
-  if (value is num) return value.toDouble();
-  return double.tryParse(value.toString()) ?? 0;
-}
+import '../../data/pedidos_service.dart';
 
 class PromotionsBanner extends StatefulWidget {
   final Function(String code, String name)? onProductTap;

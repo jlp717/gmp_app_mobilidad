@@ -11,7 +11,7 @@ import '../../providers/pedidos_provider.dart';
 import 'order_line_tile.dart';
 import '../dialogs/delete_line_dialog.dart';
 
-class OrderSummaryWidget extends StatelessWidget {
+class OrderSummaryWidget extends StatefulWidget {
   final String vendedorCode;
   final ScrollController? scrollController;
 
@@ -20,6 +20,19 @@ class OrderSummaryWidget extends StatelessWidget {
     required this.vendedorCode,
     this.scrollController,
   }) : super(key: key);
+
+  @override
+  State<OrderSummaryWidget> createState() => _OrderSummaryWidgetState();
+}
+
+class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
+  final TextEditingController _obsCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _obsCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +134,7 @@ class OrderSummaryWidget extends StatelessWidget {
 
   Widget _buildLinesList(BuildContext context, PedidosProvider provider) {
     return ListView.builder(
-      controller: scrollController,
+      controller: widget.scrollController,
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: provider.lines.length,
       itemBuilder: (ctx, i) {
@@ -140,6 +153,29 @@ class OrderSummaryWidget extends StatelessWidget {
           },
           onTap: () {
             _showEditLineDialog(context, provider, line, i);
+          },
+          onIncrement: () {
+            final isBoxes = line.cantidadEnvases > 0;
+            final qty = isBoxes ? line.cantidadEnvases + 1 : line.cantidadUnidades + 1;
+            final error = provider.updateLine(
+               i, 
+               cantidadEnvases: isBoxes ? qty : null, 
+               cantidadUnidades: isBoxes ? null : qty
+            );
+            if (error != null) {
+               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: AppTheme.error));
+            }
+          },
+          onDecrement: () {
+            final isBoxes = line.cantidadEnvases > 0;
+            final currentQty = isBoxes ? line.cantidadEnvases : line.cantidadUnidades;
+            if (currentQty <= 1) return; // Prevent 0, use swipe to delete
+            final qty = currentQty - 1;
+            provider.updateLine(
+               i,
+               cantidadEnvases: isBoxes ? qty : null, 
+               cantidadUnidades: isBoxes ? null : qty
+            );
           },
         );
       },
@@ -203,6 +239,21 @@ class OrderSummaryWidget extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Observaciones field
+          TextField(
+            controller: _obsCtrl,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Añadir observaciones al pedido...',
+              hintStyle: const TextStyle(color: Colors.white38),
+              prefixIcon: const Icon(Icons.comment_outlined, color: Colors.white54, size: 18),
+              filled: true,
+              fillColor: AppTheme.darkCard,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 12),
           // Stats row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -484,8 +535,9 @@ class OrderSummaryWidget extends StatelessWidget {
       return;
     }
 
-    final result = await provider.confirmOrder(vendedorCode);
+    final result = await provider.confirmOrder(widget.vendedorCode, observaciones: _obsCtrl.text.trim());
     if (result != null && context.mounted) {
+      _obsCtrl.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

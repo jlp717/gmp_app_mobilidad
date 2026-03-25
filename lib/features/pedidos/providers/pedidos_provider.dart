@@ -4,6 +4,7 @@
 /// Manages cart (current order), product catalog, and order history
 
 import 'package:flutter/foundation.dart';
+import '../../../core/api/api_client.dart';
 import '../data/pedidos_service.dart';
 import '../data/pedidos_offline_service.dart';
 
@@ -44,8 +45,9 @@ class PedidosProvider with ChangeNotifier {
   // ── Favorites (Hive-based, local) ──
   final Set<String> _favoriteProductCodes = {};
 
-  // ── Complementary Products ──
+  // ── Complementary Products & Promotions ──
   List<Map<String, dynamic>> _complementaryProducts = [];
+  final Map<String, PromotionItem> _activePromotions = {};
 
   // ── Analytics ──
   Map<String, dynamic> _analytics = {};
@@ -75,6 +77,8 @@ class PedidosProvider with ChangeNotifier {
   double get clientSaldoPendiente => (_clientBalance['saldoPendiente'] as num?)?.toDouble() ?? 0;
   Set<String> get favoriteProductCodes => _favoriteProductCodes;
   List<Map<String, dynamic>> get complementaryProducts => _complementaryProducts;
+  PromotionItem? getPromo(String productCode) => _activePromotions[productCode];
+  List<PromotionItem> get activePromotionsList => _activePromotions.values.toList();
   Map<String, dynamic> get analytics => _analytics;
   bool get isLoadingAnalytics => _isLoadingAnalytics;
 
@@ -220,14 +224,33 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Cart Operations ──
 
-  void addLine(Product product, double cantidadEnvases, double cantidadUnidades, String unidadMedida, double precioVenta) {
+  String? addLine(Product product, double cantidadEnvases, double cantidadUnidades, String unidadMedida, double precioVenta) {
+    // === STRICT STOCK VALIDATION ===
+    if (cantidadEnvases > product.stockEnvases || cantidadUnidades > product.stockUnidades) {
+      final msg = 'Stock insuficiente: Disponible ${product.stockEnvases.toInt()} cajas y ${product.stockUnidades.toInt()} uds.';
+      _error = msg;
+      notifyListeners();
+      return msg; // Return the error message
+    }
+
     // Check if product already in cart
     final existingIdx = _lines.indexWhere((l) => l.codigoArticulo == product.code);
     if (existingIdx >= 0) {
-      // Update existing line
+      // Prevent exceeding stock with existing line
       final line = _lines[existingIdx];
-      line.cantidadEnvases += cantidadEnvases;
-      line.cantidadUnidades += cantidadUnidades;
+      final newTotalEnvases = line.cantidadEnvases + cantidadEnvases;
+      final newTotalUnidades = line.cantidadUnidades + cantidadUnidades;
+      
+      if (newTotalEnvases > product.stockEnvases || newTotalUnidades > product.stockUnidades) {
+        final msg = 'Stock insuficiente: Disponible ${product.stockEnvases.toInt()} cajas, ya tienes ${line.cantidadEnvases.toInt()} en el carrito.';
+        _error = msg;
+        notifyListeners();
+        return msg;
+      }
+      
+      // Update existing line
+      line.cantidadEnvases = newTotalEnvases;
+      line.cantidadUnidades = newTotalUnidades;
       line.precioVenta = precioVenta;
       line.recalculate();
     } else {
@@ -250,17 +273,35 @@ class PedidosProvider with ChangeNotifier {
     }
     _error = null;
     notifyListeners();
+    return null; // Null means success
   }
 
-  void updateLine(int index, {double? cantidadEnvases, double? cantidadUnidades, double? precioVenta, String? unidadMedida}) {
-    if (index < 0 || index >= _lines.length) return;
+  String? updateLine(int index, {double? cantidadEnvases, double? cantidadUnidades, double? precioVenta, String? unidadMedida}) {
+    if (index < 0 || index >= _lines.length) return 'Line not found';
     final line = _lines[index];
+
+    final newEnvases = cantidadEnvases ?? line.cantidadEnvases;
+    final newUnidades = cantidadUnidades ?? line.cantidadUnidades;
+
+    // === STRICT STOCK VALIDATION ===
+    final pIdx = _products.indexWhere((p) => p.code == line.codigoArticulo);
+    if (pIdx >= 0) {
+      final product = _products[pIdx];
+      if (newEnvases > product.stockEnvases || newUnidades > product.stockUnidades) {
+        final msg = 'Stock insuficiente: Solo hay ${product.stockEnvases.toInt()} cajas y ${product.stockUnidades.toInt()} uds.';
+        _error = msg;
+        notifyListeners();
+        return msg;
+      }
+    }
+
     if (cantidadEnvases != null) line.cantidadEnvases = cantidadEnvases;
     if (cantidadUnidades != null) line.cantidadUnidades = cantidadUnidades;
     if (precioVenta != null) line.precioVenta = precioVenta;
     if (unidadMedida != null) line.unidadMedida = unidadMedida;
     line.recalculate();
     notifyListeners();
+    return null;
   }
 
   void removeLine(int index) {
@@ -280,7 +321,7 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Order Persistence ──
 
-  Future<Map<String, dynamic>?> confirmOrder(String vendedorCode) async {
+  Future<Map<String, dynamic>?> confirmOrder(String vendedorCode, {String observaciones = ''}) async {
     if (!hasClient || !hasLines) {
       _error = 'Seleccione un cliente y añada al menos un producto';
       notifyListeners();
@@ -298,6 +339,7 @@ class PedidosProvider with ChangeNotifier {
         vendedorCode: vendedorCode,
         tipoVenta: _saleType,
         lines: _lines,
+        observaciones: observaciones,
       );
       // Clear cart after successful creation
       _lines.clear();
@@ -368,6 +410,7 @@ class PedidosProvider with ChangeNotifier {
         vendedorCode: vendedorCode,
         lines: _lines,
       );
+      notifyListeners();
     } catch (e) {
       debugPrint('[PedidosProvider] saveDraft error: $e');
     }
@@ -391,6 +434,7 @@ class PedidosProvider with ChangeNotifier {
   Future<void> deleteDraft(String key) async {
     try {
       await PedidosOfflineService.deleteDraft(key);
+      notifyListeners();
     } catch (e) {
       debugPrint('[PedidosProvider] deleteDraft error: $e');
     }
@@ -423,7 +467,7 @@ class PedidosProvider with ChangeNotifier {
 
   bool isFavorite(String productCode) => _favoriteProductCodes.contains(productCode);
 
-  // ── Complementary Products ──
+  // ── Complementary Products & Promotions ──
   Future<void> loadComplementaryProducts() async {
     if (_lines.isEmpty) {
       _complementaryProducts = [];
@@ -436,6 +480,23 @@ class PedidosProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[PedidosProvider] loadComplementaryProducts error: $e');
+    }
+  }
+
+  Future<void> loadPromotions() async {
+    try {
+      final response = await ApiClient.get('/pedidos/promotions', queryParameters: _clientCode != null ? {'clientCode': _clientCode} : null);
+      final list = response['promotions'] as List? ?? [];
+      _activePromotions.clear();
+      for (final p in list) {
+        final item = PromotionItem.fromJson(p as Map<String, dynamic>);
+        if (item.code.isNotEmpty) {
+          _activePromotions[item.code] = item;
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[PedidosProvider] loadPromotions error: $e');
     }
   }
 
