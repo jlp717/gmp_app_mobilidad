@@ -77,6 +77,16 @@ CREATE TABLE JAVIER.PEDIDOS_SEQ (
     ULTIMO_NUMERO NUMERIC(6) DEFAULT 0
 )`;
 
+const CREATE_PEDIDOS_STOCK_RESERVE = `
+CREATE TABLE JAVIER.PEDIDOS_STOCK_RESERVE (
+    ID INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PEDIDO_ID INTEGER NOT NULL,
+    CODIGOARTICULO CHAR(10) NOT NULL,
+    CANTIDADENVASES NUMERIC(7,2) DEFAULT 0,
+    CANTIDADUNIDADES NUMERIC(10,5) DEFAULT 0,
+    CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`;
+
 // ============================================================================
 // HELPERS
 // ============================================================================
@@ -108,6 +118,7 @@ async function initPedidosTables() {
         { name: 'JAVIER.PEDIDOS_CAB', ddl: CREATE_PEDIDOS_CAB },
         { name: 'JAVIER.PEDIDOS_LIN', ddl: CREATE_PEDIDOS_LIN },
         { name: 'JAVIER.PEDIDOS_SEQ', ddl: CREATE_PEDIDOS_SEQ },
+        { name: 'JAVIER.PEDIDOS_STOCK_RESERVE', ddl: CREATE_PEDIDOS_STOCK_RESERVE },
     ];
 
     let conn;
@@ -171,8 +182,8 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
             A.UNIDADESRETRACTIL AS unitsRetractil,
             TRIM(A.UNIDADMEDIDA) AS unitMeasure,
             A.PESO AS weight,
-            COALESCE(S.ENVASES_DISP, 0) AS stockEnvases,
-            COALESCE(S.UNIDADES_DISP, 0) AS stockUnidades,
+            COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS stockEnvases,
+            COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS stockUnidades,
             COALESCE(T1.PRECIOTARIFA, 0) AS precioTarifa1,
             COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo
         FROM DSEDAC.ART A
@@ -184,6 +195,14 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
             WHERE CODIGOALMACEN = 1
             GROUP BY CODIGOARTICULO
         ) S ON A.CODIGOARTICULO = S.CODIGOARTICULO
+        LEFT JOIN (
+            SELECT SR.CODIGOARTICULO,
+                SUM(SR.CANTIDADENVASES) AS RES_ENV,
+                SUM(SR.CANTIDADUNIDADES) AS RES_UNI
+            FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
+            JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+            GROUP BY SR.CODIGOARTICULO
+        ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
         LEFT JOIN DSEDAC.ARA T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
         LEFT JOIN DSEDAC.ARA T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
         ${where}
@@ -230,7 +249,7 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
 async function getProductDetail(code, clientCode) {
     const trimCode = code.trim();
 
-    // Base product
+    // Base product — expanded with ALL useful fields from ART
     const baseSql = `
         SELECT TRIM(A.CODIGOARTICULO) AS code,
             TRIM(A.DESCRIPCIONARTICULO) AS name,
@@ -241,8 +260,21 @@ async function getProductDetail(code, clientCode) {
             A.UNIDADESFRACCION AS unitsFraction,
             A.UNIDADESRETRACTIL AS unitsRetractil,
             TRIM(A.UNIDADMEDIDA) AS unitMeasure,
-            A.PESO AS weight
+            A.PESO AS weight,
+            TRIM(A.CODIGOSUBFAMILIA) AS subFamily,
+            TRIM(A.CODIGOPROVEEDOR) AS providerCode,
+            TRIM(COALESCE(P.NOMBREPROVEEDOR, '')) AS providerName,
+            TRIM(COALESCE(A.CODIGOGRUPOARTICULO, '')) AS grupoGeneral,
+            TRIM(COALESCE(A.CODIGOSUBGRUPOARTICULO, '')) AS subgrupo,
+            TRIM(COALESCE(A.TIPOARTICULO, '')) AS tipoProducto,
+            TRIM(COALESCE(A.CLASEARTICULO, '')) AS claseArticulo,
+            COALESCE(A.CODIGOIVA, 0) AS codigoIva,
+            COALESCE(A.PESO, 0) AS pesoNeto,
+            COALESCE(A.VOLUMEN, 0) AS volumen,
+            A.ANOBAJA AS anoBaja,
+            A.MESBAJA AS mesBaja
         FROM DSEDAC.ART A
+        LEFT JOIN DSEDAC.PRV P ON A.CODIGOPROVEEDOR = P.CODIGOPROVEEDOR
         WHERE TRIM(A.CODIGOARTICULO) = ?`;
 
     // All tariffs
@@ -252,7 +284,7 @@ async function getProductDetail(code, clientCode) {
             T.PRECIOTARIFA
         FROM DSEDAC.ARA T
         JOIN DSEDAC.TRF TRF ON T.CODIGOTARIFA = TRF.CODIGOTARIFA
-        WHERE TRIM(T.CODIGOARTICULO) = ?`;
+        WHERE TRIM(T.CODIGOARTICULO) = ? AND T.PRECIOTARIFA > 0`;
 
     // Stock by warehouse
     const stockSql = `
@@ -282,11 +314,24 @@ async function getProductDetail(code, clientCode) {
             name: (raw.NAME || '').trim(),
             brand: (raw.BRAND || '').trim(),
             family: (raw.FAMILY || '').trim(),
+            ean: (raw.EAN || '').trim(),
             unitsPerBox: parseFloat(raw.UNITSPERBOX) || 1,
             unitsFraction: parseFloat(raw.UNITSFRACTION) || 0,
             unitsRetractil: parseFloat(raw.UNITSRETRACTIL) || 0,
             unitMeasure: (raw.UNITMEASURE || '').trim(),
             weight: parseFloat(raw.WEIGHT) || 0,
+            subFamily: (raw.SUBFAMILY || '').trim(),
+            providerCode: (raw.PROVIDERCODE || '').trim(),
+            providerName: (raw.PROVIDERNAME || '').trim(),
+            grupoGeneral: (raw.GRUPOGENERAL || '').trim(),
+            subgrupo: (raw.SUBGRUPO || '').trim(),
+            tipoProducto: (raw.TIPOPRODUCTO || '').trim(),
+            claseArticulo: (raw.CLASEARTICULO || '').trim(),
+            codigoIva: parseInt(raw.CODIGOIVA) || 0,
+            pesoNeto: parseFloat(raw.PESONETO) || 0,
+            volumen: parseFloat(raw.VOLUMEN) || 0,
+            anoBaja: parseInt(raw.ANOBAJA) || 0,
+            mesBaja: parseInt(raw.MESBAJA) || 0,
         };
         product.tariffs = (tariffRows || []).map(t => ({
             code: t.CODIGOTARIFA,
@@ -330,25 +375,40 @@ async function getProductDetail(code, clientCode) {
 // ============================================================================
 
 async function getStock(code, almacen = 1) {
+    // Real stock minus reserved stock from confirmed orders
     const sql = `
-        SELECT SUM(ENVASESDISPONIBLES) AS envases,
-            SUM(UNIDADESDISPONIBLES) AS unidades
-        FROM DSEDAC.ARO
-        WHERE TRIM(CODIGOARTICULO) = ? AND CODIGOALMACEN = ?`;
+        SELECT
+            COALESCE(S.ENVASES, 0) - COALESCE(R.RES_ENVASES, 0) AS envases,
+            COALESCE(S.UNIDADES, 0) - COALESCE(R.RES_UNIDADES, 0) AS unidades
+        FROM (
+            SELECT SUM(ENVASESDISPONIBLES) AS ENVASES,
+                   SUM(UNIDADESDISPONIBLES) AS UNIDADES
+            FROM DSEDAC.ARO
+            WHERE TRIM(CODIGOARTICULO) = ? AND CODIGOALMACEN = ?
+        ) S,
+        (
+            SELECT COALESCE(SUM(SR.CANTIDADENVASES), 0) AS RES_ENVASES,
+                   COALESCE(SUM(SR.CANTIDADUNIDADES), 0) AS RES_UNIDADES
+            FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
+            JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID
+            WHERE TRIM(SR.CODIGOARTICULO) = ?
+              AND C.ESTADO = 'CONFIRMADO'
+        ) R`;
 
-    const cacheKey = `pedidos:stock:${code.trim()}:${almacen}`;
+    const trimCode = code.trim();
+    const cacheKey = `pedidos:stock:${trimCode}:${almacen}`;
 
     try {
         const rows = await cachedQuery(
-            (sql) => queryWithParams(sql, [code.trim(), almacen]),
+            (sql) => queryWithParams(sql, [trimCode, almacen, trimCode]),
             sql,
             cacheKey,
-            60 // 1 min TTL
+            30 // 30s TTL - more frequent for real-time stock
         );
         const row = rows && rows[0];
         return {
-            envases: parseFloat(row?.ENVASES) || 0,
-            unidades: parseFloat(row?.UNIDADES) || 0,
+            envases: Math.max(0, parseFloat(row?.ENVASES) || 0),
+            unidades: Math.max(0, parseFloat(row?.UNIDADES) || 0),
         };
     } catch (error) {
         logger.error(`[PEDIDOS] getStock error: ${error.message}`);
@@ -421,7 +481,7 @@ async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = '
 
     const cabParams = [
         ejercicio, numeroPedido, dia, mes, ano, hora,
-        clientCode.trim(), (clientName || '').substring(0, 60), vendedorCode.trim(),
+        clientCode.trim(), (clientName || '').substring(0, 60), (vendedorCode || '').split(',')[0].trim().substring(0, 2),
         formaPago, tarifa, almacen, tipoventa, (observaciones || '').substring(0, 200)
     ];
 
@@ -537,9 +597,9 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             numeroPedido: r.NUMEROPEDIDO,
             serie: r.SERIEPEDIDO,
             fecha: `${String(r.DIADOCUMENTO).padStart(2, '0')}/${String(r.MESDOCUMENTO).padStart(2, '0')}/${r.ANODOCUMENTO}`,
-            clienteId: r.CODIGOCLIENTE,
-            clienteNombre: r.NOMBRECLIENTE || `Cliente ${r.CODIGOCLIENTE}`,
-            vendedor: r.CODIGOVENDEDOR,
+            clienteCode: r.CODIGOCLIENTE,
+            clienteName: r.NOMBRECLIENTE || `Cliente ${r.CODIGOCLIENTE}`,
+            vendedorCode: r.CODIGOVENDEDOR,
             tipoventa: r.TIPOVENTA,
             estado: r.ESTADO,
             total: parseFloat(r.IMPORTETOTAL) || 0,
@@ -841,6 +901,26 @@ async function confirmOrder(orderId, saleType) {
     sql += ` WHERE ID = ?`;
 
     await queryWithParams(sql, params, false);
+
+    // ── Stock reservation: insert rows for each line ──
+    try {
+        for (const line of lines) {
+            const code = (line.CODIGOARTICULO || '').trim();
+            if (!code) continue;
+            const resEnv = parseFloat(line.CANTIDADENVASES) || 0;
+            const resUni = parseFloat(line.CANTIDADUNIDADES) || 0;
+            if (resEnv > 0 || resUni > 0) {
+                await queryWithParams(
+                    `INSERT INTO JAVIER.PEDIDOS_STOCK_RESERVE (PEDIDO_ID, CODIGOARTICULO, CANTIDADENVASES, CANTIDADUNIDADES) VALUES (?, ?, ?, ?)`,
+                    [id, code, resEnv, resUni], false
+                );
+            }
+        }
+        logger.info(`[PEDIDOS] Stock reserved for order #${id}`);
+    } catch (resErr) {
+        logger.warn(`[PEDIDOS] Stock reservation error (non-fatal): ${resErr.message}`);
+    }
+
     const order = await getOrderDetail(id);
 
     return { ...order, stockWarnings };
@@ -854,6 +934,13 @@ async function cancelOrder(orderId) {
         `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = 'ANULADO', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
         [id], false
     );
+    // Release stock reservations
+    try {
+        await queryWithParams(`DELETE FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id], false);
+        logger.info(`[PEDIDOS] Stock reservations released for cancelled order #${id}`);
+    } catch (e) {
+        logger.warn(`[PEDIDOS] Stock reservation release error: ${e.message}`);
+    }
     return getOrderDetail(id);
 }
 
@@ -937,7 +1024,7 @@ async function getRecommendations(clientCode, vendedorCode) {
         }
     }
 
-    return { history, similar };
+    return { clientHistory: history, similarClients: similar };
 }
 
 // ============================================================================

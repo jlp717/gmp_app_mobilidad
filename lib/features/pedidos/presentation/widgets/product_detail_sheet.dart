@@ -4,6 +4,7 @@
 /// client price, stock by warehouse, and a link to purchase history.
 
 import 'package:flutter/material.dart';
+import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
@@ -239,28 +240,44 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
 
   // ── Section 1: Product Data ──
   Widget _buildProductData(Product p) {
+    // IVA type label
+    String ivaLabel(int code) {
+      switch (code) {
+        case 0: return 'Exento';
+        case 1: return 'General (21%)';
+        case 2: return 'Reducido (10%)';
+        case 3: return 'Super Reducido (4%)';
+        default: return 'Tipo $code';
+      }
+    }
+
     final rows = <_DataRow>[
       _DataRow('Referencia', p.code),
       if (p.ean.isNotEmpty) _DataRow('Cód. EAN', p.ean),
-      _DataRow('Grupo General', p.family),
-      _DataRow('Grupo 1', p.brand),
+      _DataRow('Familia', p.family),
+      if (p.subFamily.isNotEmpty) _DataRow('Subfamilia', p.subFamily),
+      _DataRow('Marca', p.brand),
+      if (p.grupoGeneral.isNotEmpty) _DataRow('Grupo General', p.grupoGeneral),
+      if (p.subgrupo.isNotEmpty) _DataRow('Subgrupo', p.subgrupo),
+      if (p.tipoProducto.isNotEmpty) _DataRow('Tipo Producto', p.tipoProducto),
+      if (p.claseArticulo.isNotEmpty) _DataRow('Clase Articulo', p.claseArticulo),
+      if (p.providerCode.isNotEmpty)
+        _DataRow('Proveedor', p.providerName.isNotEmpty
+            ? '${p.providerName} (${p.providerCode})'
+            : p.providerCode),
       _DataRow('Unidad de Medida', p.unitMeasure),
-      _DataRow(
-        'Unidades por Caja',
-        p.unitsPerBox.toStringAsFixed(0),
-      ),
+      _DataRow('Unidades por Caja', p.unitsPerBox.toStringAsFixed(0)),
       if (p.unitsFraction > 0)
-        _DataRow(
-          'Estuches (Fracción)',
-          p.unitsFraction.toStringAsFixed(0),
-        ),
+        _DataRow('Uds. Fraccion (Bandeja)', p.unitsFraction.toStringAsFixed(0)),
       if (p.unitsRetractil > 0)
-        _DataRow(
-          'Bandejas (Retráctil)',
-          p.unitsRetractil.toStringAsFixed(0),
-        ),
+        _DataRow('Uds. Retractil (Estuche)', p.unitsRetractil.toStringAsFixed(0)),
       if (p.weight > 0)
-        _DataRow('Peso', '${p.weight.toStringAsFixed(3)} kg'),
+        _DataRow('Peso Neto', '${p.pesoNeto.toStringAsFixed(3)} kg'),
+      if (p.volumen > 0)
+        _DataRow('Volumen', '${p.volumen.toStringAsFixed(3)}'),
+      _DataRow('IVA', ivaLabel(p.codigoIva)),
+      if (p.isDiscontinued)
+        _DataRow('Baja', '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}'),
     ];
 
     return _buildSection(
@@ -321,6 +338,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               color: AppTheme.darkBase,
               child: Image.network(
                 imageUrl,
+                headers: ApiClient.authHeaders,
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => const Center(
                   child: Column(
@@ -359,7 +377,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () async {
-                final uri = Uri.parse(fichaUrl);
+                // Build authenticated URL with token as query param for browser access
+                final token = ApiClient.authToken ?? '';
+                final uri = Uri.parse('$fichaUrl?token=$token');
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(
                     uri,

@@ -26,6 +26,19 @@ class Product {
   final double precioTarifa1;
   final double precioMinimo;
   final double precioCliente;
+  // Extended fields from ART table
+  final String subFamily;
+  final String providerCode;
+  final String providerName;
+  final String grupoGeneral;
+  final String subgrupo;
+  final String tipoProducto;
+  final String claseArticulo;
+  final int codigoIva;
+  final double pesoNeto;
+  final double volumen;
+  final int anoBaja;
+  final int mesBaja;
 
   Product({
     required this.code,
@@ -43,6 +56,18 @@ class Product {
     this.precioTarifa1 = 0,
     this.precioMinimo = 0,
     this.precioCliente = 0,
+    this.subFamily = '',
+    this.providerCode = '',
+    this.providerName = '',
+    this.grupoGeneral = '',
+    this.subgrupo = '',
+    this.tipoProducto = '',
+    this.claseArticulo = '',
+    this.codigoIva = 0,
+    this.pesoNeto = 0,
+    this.volumen = 0,
+    this.anoBaja = 0,
+    this.mesBaja = 0,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -62,6 +87,18 @@ class Product {
       precioTarifa1: _toDouble(json['precioTarifa1']),
       precioMinimo: _toDouble(json['precioMinimo']),
       precioCliente: _toDouble(json['precioCliente']),
+      subFamily: (json['subFamily'] ?? '').toString().trim(),
+      providerCode: (json['providerCode'] ?? '').toString().trim(),
+      providerName: (json['providerName'] ?? json['nombreProveedor'] ?? '').toString().trim(),
+      grupoGeneral: (json['grupoGeneral'] ?? '').toString().trim(),
+      subgrupo: (json['subgrupo'] ?? '').toString().trim(),
+      tipoProducto: (json['tipoProducto'] ?? '').toString().trim(),
+      claseArticulo: (json['claseArticulo'] ?? '').toString().trim(),
+      codigoIva: json['codigoIva'] is int ? json['codigoIva'] as int : int.tryParse(json['codigoIva']?.toString() ?? '0') ?? 0,
+      pesoNeto: _toDouble(json['pesoNeto']),
+      volumen: _toDouble(json['volumen']),
+      anoBaja: json['anoBaja'] is int ? json['anoBaja'] as int : int.tryParse(json['anoBaja']?.toString() ?? '0') ?? 0,
+      mesBaja: json['mesBaja'] is int ? json['mesBaja'] as int : int.tryParse(json['mesBaja']?.toString() ?? '0') ?? 0,
     );
   }
 
@@ -70,6 +107,42 @@ class Product {
 
   /// Whether stock is available
   bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
+
+  /// Whether the product is discontinued
+  bool get isDiscontinued => anoBaja > 0;
+
+  /// Price per piece (divides tariff by units per box)
+  double get pricePerPiece => unitsPerBox > 0 ? precioTarifa1 / unitsPerBox : precioTarifa1;
+
+  /// Price per kg
+  double get pricePerKg => weight > 0 ? precioTarifa1 / weight : precioTarifa1;
+
+  /// Price for given unit type
+  double priceForUnit(String unit) {
+    switch (unit) {
+      case 'PIEZAS':
+        return unitsPerBox > 0 ? precioTarifa1 / unitsPerBox : precioTarifa1;
+      case 'BANDEJAS':
+        return unitsFraction > 0 ? precioTarifa1 / unitsFraction : precioTarifa1;
+      case 'ESTUCHE':
+        return unitsRetractil > 0 ? precioTarifa1 / unitsRetractil : precioTarifa1;
+      case 'KILOGRAMOS':
+        return weight > 0 ? precioTarifa1 / weight : precioTarifa1;
+      case 'CAJAS':
+      default:
+        return precioTarifa1;
+    }
+  }
+
+  /// Available unit types for this product
+  List<String> get availableUnits {
+    final units = <String>['CAJAS'];
+    if (unitsPerBox > 1) units.add('PIEZAS');
+    if (unitsFraction > 0) units.add('BANDEJAS');
+    if (unitsRetractil > 0) units.add('ESTUCHE');
+    if (weight > 0) units.add('KILOGRAMOS');
+    return units;
+  }
 }
 
 /// Tariff entry for product detail

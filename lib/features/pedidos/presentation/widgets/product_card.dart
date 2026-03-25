@@ -3,6 +3,8 @@
 /// Catalog product card showing name, code, stock, price, and U/C
 
 import 'package:flutter/material.dart';
+import '../../../../core/api/api_client.dart';
+import '../../../../core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
@@ -44,7 +46,10 @@ class ProductCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             children: [
-              // Product info (left)
+              // Product thumbnail (left)
+              _buildThumbnail(product.code),
+              const SizedBox(width: 10),
+              // Product info (center)
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,6 +161,44 @@ class ProductCard extends StatelessWidget {
               Icon(Icons.chevron_right, color: Colors.white24, size: 18),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThumbnail(String code) {
+    final url = '${ApiConfig.baseUrl}/products/'
+        '${Uri.encodeComponent(code.trim())}/image';
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 48,
+        height: 48,
+        color: AppTheme.darkBase,
+        child: Image.network(
+          url,
+          headers: ApiClient.authHeaders,
+          fit: BoxFit.cover,
+          width: 48,
+          height: 48,
+          errorBuilder: (_, __, ___) => const Icon(
+            Icons.image_not_supported_outlined,
+            color: Colors.white24,
+            size: 24,
+          ),
+          loadingBuilder: (_, child, progress) {
+            if (progress == null) return child;
+            return const Center(
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  color: AppTheme.neonBlue,
+                  strokeWidth: 1.5,
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

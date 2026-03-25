@@ -106,6 +106,22 @@ class ApiClient {
     }
   }
 
+  /// Get current auth token (for Image.network headers etc.)
+  static String? get authToken {
+    final header = dio.options.headers['Authorization']?.toString();
+    if (header != null && header.startsWith('Bearer ')) {
+      return header.substring(7);
+    }
+    return null;
+  }
+
+  /// Auth headers map for Image.network, url_launcher, etc.
+  static Map<String, String> get authHeaders {
+    final token = authToken;
+    if (token != null) return {'Authorization': 'Bearer $token'};
+    return {};
+  }
+
   /// Set authentication token
   static void setAuthToken(String token) {
     dio.options.headers['Authorization'] = 'Bearer $token';

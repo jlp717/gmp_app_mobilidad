@@ -376,7 +376,7 @@ class _PedidosPageState extends State<PedidosPage>
                         ),
                       ),
                     ],
-                    // ── Unit selector (5 options like screenshot) ──
+                    // ── Unit selector (only available units for this product) ──
                     const SizedBox(height: 14),
                     Text('Unidad de medida', style: TextStyle(
                       color: Colors.white70,
@@ -386,13 +386,21 @@ class _PedidosPageState extends State<PedidosPage>
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
-                      children: ['PIEZAS', 'BANDEJAS', 'ESTUCHE', 'KILOGRAMOS', 'CAJAS'].map((unit) {
+                      children: product.availableUnits.map((unit) {
                         final selected = selectedUnit == unit;
+                        // Show unit price hint below the name
+                        final unitPrice = product.priceForUnit(unit);
                         return SizedBox(
                           width: (MediaQuery.of(ctx).size.width - 56) / 3,
-                          height: 40,
+                          height: 48,
                           child: ElevatedButton(
-                            onPressed: () => setModalState(() => selectedUnit = unit),
+                            onPressed: () {
+                              setModalState(() {
+                                selectedUnit = unit;
+                                // Auto-update price based on unit type
+                                priceController.text = unitPrice.toStringAsFixed(3);
+                              });
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: selected
                                   ? AppTheme.neonBlue.withOpacity(0.2)
@@ -406,18 +414,38 @@ class _PedidosPageState extends State<PedidosPage>
                                 ),
                               ),
                               elevation: 0,
-                              padding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(vertical: 2),
                             ),
-                            child: Text(unit, style: TextStyle(
-                              fontSize: Responsive.fontSize(context, small: 11, large: 12),
-                              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                            )),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(unit, style: TextStyle(
+                                  fontSize: Responsive.fontSize(context, small: 10, large: 11),
+                                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                                )),
+                                Text(
+                                  '\u20AC${unitPrice.toStringAsFixed(3)}',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: selected ? AppTheme.neonGreen : Colors.white38,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       }).toList(),
                     ),
                     // ── Quantity with +/- ──
                     const SizedBox(height: 14),
+                    Text(
+                      'Cantidad (${selectedUnit == 'KILOGRAMOS' ? 'kg' : selectedUnit.toLowerCase()})',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         // Minus button
