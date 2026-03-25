@@ -135,6 +135,7 @@ class PromotionItem {
   });
 
   bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
+  double get savingPct => regularPrice > 0 ? ((regularPrice - promoPrice) / regularPrice * 100) : 0;
 
   factory PromotionItem.fromJson(Map<String, dynamic> json) {
     return PromotionItem(
