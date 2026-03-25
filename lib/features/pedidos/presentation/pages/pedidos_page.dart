@@ -805,38 +805,47 @@ class _PedidosPageState extends State<PedidosPage>
                         : AppTheme.borderColor,
                   ),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.person_outline,
-                      color: provider.hasClient
-                          ? AppTheme.neonBlue
-                          : Colors.white54,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        provider.hasClient
-                            ? '${provider.clientName} (${provider.clientCode})'
-                            : 'Seleccionar cliente...',
-                        style: TextStyle(
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.person_outline,
                           color: provider.hasClient
-                              ? Colors.white
+                              ? AppTheme.neonBlue
                               : Colors.white54,
-                          fontSize: Responsive.fontSize(context,
-                              small: 13, large: 14),
+                          size: 18,
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            provider.hasClient
+                                ? '${provider.clientName} (${provider.clientCode})'
+                                : 'Seleccionar cliente...',
+                            style: TextStyle(
+                              color: provider.hasClient
+                                  ? Colors.white
+                                  : Colors.white54,
+                              fontSize: Responsive.fontSize(context,
+                                  small: 13, large: 14),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right,
+                            color: Colors.white38, size: 18),
+                      ],
                     ),
-                    const Icon(Icons.chevron_right,
-                        color: Colors.white38, size: 18),
+                    // Client balance badge
+                    if (provider.hasClient && provider.clientBalance.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: ClientBalanceBadge(balance: provider.clientBalance),
+                      ),
                   ],
                 ),
-                // Client balance badge
-                if (provider.hasClient && provider.clientBalance.isNotEmpty)
-                  ClientBalanceBadge(balance: provider.clientBalance),
               ),
             ),
           ),
