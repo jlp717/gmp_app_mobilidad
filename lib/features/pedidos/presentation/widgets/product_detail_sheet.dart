@@ -241,43 +241,55 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   // ── Section 1: Product Data ──
   Widget _buildProductData(Product p) {
     // IVA type label
-    String ivaLabel(int code) {
+    String ivaLabel(String code) {
       switch (code) {
-        case 0: return 'Exento';
-        case 1: return 'General (21%)';
-        case 2: return 'Reducido (10%)';
-        case 3: return 'Super Reducido (4%)';
+        case '0': return 'Exento';
+        case '1': return 'General (21%)';
+        case '2': return 'Reducido (10%)';
+        case '3': return 'Super Reducido (4%)';
         default: return 'Tipo $code';
       }
     }
 
     final rows = <_DataRow>[
       _DataRow('Referencia', p.code),
-      if (p.ean.isNotEmpty) _DataRow('Cód. EAN', p.ean),
+      if (p.ean.isNotEmpty) _DataRow('Cod. EAN', p.ean),
       _DataRow('Familia', p.family),
-      if (p.subFamily.isNotEmpty) _DataRow('Subfamilia', p.subFamily),
+      if (p.subFamily.isNotEmpty)
+        _DataRow('Subfamilia', p.subFamily),
       _DataRow('Marca', p.brand),
-      if (p.grupoGeneral.isNotEmpty) _DataRow('Grupo General', p.grupoGeneral),
-      if (p.subgrupo.isNotEmpty) _DataRow('Subgrupo', p.subgrupo),
-      if (p.tipoProducto.isNotEmpty) _DataRow('Tipo Producto', p.tipoProducto),
-      if (p.claseArticulo.isNotEmpty) _DataRow('Clase Articulo', p.claseArticulo),
-      if (p.providerCode.isNotEmpty)
-        _DataRow('Proveedor', p.providerName.isNotEmpty
-            ? '${p.providerName} (${p.providerCode})'
-            : p.providerCode),
+      if (p.grupoGeneral.isNotEmpty)
+        _DataRow('Grupo', p.grupoGeneral),
+      if (p.tipoProducto.isNotEmpty)
+        _DataRow('Tipo', p.tipoProducto),
+      if (p.claseArticulo.isNotEmpty)
+        _DataRow('Clasificacion', p.claseArticulo),
+      if (p.categoria.isNotEmpty)
+        _DataRow('Categoria', p.categoria),
+      if (p.presentacion.isNotEmpty)
+        _DataRow('Presentacion', p.presentacion),
+      if (p.grados.isNotEmpty)
+        _DataRow('Grados', p.grados),
       _DataRow('Unidad de Medida', p.unitMeasure),
-      _DataRow('Unidades por Caja', p.unitsPerBox.toStringAsFixed(0)),
+      _DataRow('Uds. por Caja', p.unitsPerBox.toStringAsFixed(0)),
       if (p.unitsFraction > 0)
-        _DataRow('Uds. Fraccion (Bandeja)', p.unitsFraction.toStringAsFixed(0)),
+        _DataRow('Uds. Fraccion (Bandeja)',
+            p.unitsFraction.toStringAsFixed(0)),
       if (p.unitsRetractil > 0)
-        _DataRow('Uds. Retractil (Estuche)', p.unitsRetractil.toStringAsFixed(0)),
+        _DataRow('Uds. Retractil (Estuche)',
+            p.unitsRetractil.toStringAsFixed(0)),
       if (p.weight > 0)
-        _DataRow('Peso Neto', '${p.pesoNeto.toStringAsFixed(3)} kg'),
+        _DataRow('Peso', '${p.pesoNeto.toStringAsFixed(3)} kg'),
       if (p.volumen > 0)
-        _DataRow('Volumen', '${p.volumen.toStringAsFixed(3)}'),
+        _DataRow('Volumen', p.volumen.toStringAsFixed(3)),
       _DataRow('IVA', ivaLabel(p.codigoIva)),
+      if (p.observacion1.isNotEmpty)
+        _DataRow('Obs. 1', p.observacion1),
+      if (p.observacion2.isNotEmpty)
+        _DataRow('Obs. 2', p.observacion2),
       if (p.isDiscontinued)
-        _DataRow('Baja', '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}'),
+        _DataRow('Baja',
+            '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}'),
     ];
 
     return _buildSection(

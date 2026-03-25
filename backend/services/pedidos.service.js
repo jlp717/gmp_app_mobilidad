@@ -250,31 +250,33 @@ async function getProductDetail(code, clientCode) {
     const trimCode = code.trim();
 
     // Base product — expanded with ALL useful fields from ART
+    // Column names verified against DSEDAC.ART schema (discover_pedidos_output.txt)
     const baseSql = `
         SELECT TRIM(A.CODIGOARTICULO) AS code,
             TRIM(A.DESCRIPCIONARTICULO) AS name,
             TRIM(A.CODIGOMARCA) AS brand,
             TRIM(A.CODIGOFAMILIA) AS family,
-            TRIM(A.CODIGOEAN) AS ean,
+            TRIM(COALESCE(A.CODIGOEAN, '')) AS ean,
             A.UNIDADESCAJA AS unitsPerBox,
             A.UNIDADESFRACCION AS unitsFraction,
             A.UNIDADESRETRACTIL AS unitsRetractil,
             TRIM(A.UNIDADMEDIDA) AS unitMeasure,
-            A.PESO AS weight,
-            TRIM(A.CODIGOSUBFAMILIA) AS subFamily,
-            TRIM(A.CODIGOPROVEEDOR) AS providerCode,
-            TRIM(COALESCE(P.NOMBREPROVEEDOR, '')) AS providerName,
-            TRIM(COALESCE(A.CODIGOGRUPOARTICULO, '')) AS grupoGeneral,
-            TRIM(COALESCE(A.CODIGOSUBGRUPOARTICULO, '')) AS subgrupo,
-            TRIM(COALESCE(A.TIPOARTICULO, '')) AS tipoProducto,
-            TRIM(COALESCE(A.CLASEARTICULO, '')) AS claseArticulo,
-            COALESCE(A.CODIGOIVA, 0) AS codigoIva,
+            COALESCE(A.PESO, 0) AS weight,
+            TRIM(COALESCE(A.CODIGOSUBFAMILIA, '')) AS subFamily,
+            TRIM(COALESCE(A.CODIGOGRUPO, '')) AS grupoGeneral,
+            TRIM(COALESCE(A.CODIGOTIPO, '')) AS tipoProducto,
+            TRIM(COALESCE(A.CLASIFICACION, '')) AS claseArticulo,
+            TRIM(COALESCE(A.CATEGORIAARTICULO, '')) AS categoria,
+            TRIM(COALESCE(A.CODIGOIVA, '0')) AS codigoIva,
             COALESCE(A.PESO, 0) AS pesoNeto,
             COALESCE(A.VOLUMEN, 0) AS volumen,
+            COALESCE(A.GRADOS, '') AS grados,
+            TRIM(COALESCE(A.OBSERVACION1, '')) AS observacion1,
+            TRIM(COALESCE(A.OBSERVACION2, '')) AS observacion2,
+            TRIM(COALESCE(A.CODIGOPRESENTACION, '')) AS presentacion,
             A.ANOBAJA AS anoBaja,
             A.MESBAJA AS mesBaja
         FROM DSEDAC.ART A
-        LEFT JOIN DSEDAC.PRV P ON A.CODIGOPROVEEDOR = P.CODIGOPROVEEDOR
         WHERE TRIM(A.CODIGOARTICULO) = ?`;
 
     // All tariffs
@@ -321,15 +323,17 @@ async function getProductDetail(code, clientCode) {
             unitMeasure: (raw.UNITMEASURE || '').trim(),
             weight: parseFloat(raw.WEIGHT) || 0,
             subFamily: (raw.SUBFAMILY || '').trim(),
-            providerCode: (raw.PROVIDERCODE || '').trim(),
-            providerName: (raw.PROVIDERNAME || '').trim(),
             grupoGeneral: (raw.GRUPOGENERAL || '').trim(),
-            subgrupo: (raw.SUBGRUPO || '').trim(),
             tipoProducto: (raw.TIPOPRODUCTO || '').trim(),
             claseArticulo: (raw.CLASEARTICULO || '').trim(),
-            codigoIva: parseInt(raw.CODIGOIVA) || 0,
+            categoria: (raw.CATEGORIA || '').trim(),
+            codigoIva: (raw.CODIGOIVA || '0').toString().trim(),
             pesoNeto: parseFloat(raw.PESONETO) || 0,
             volumen: parseFloat(raw.VOLUMEN) || 0,
+            grados: (raw.GRADOS || '').trim(),
+            observacion1: (raw.OBSERVACION1 || '').trim(),
+            observacion2: (raw.OBSERVACION2 || '').trim(),
+            presentacion: (raw.PRESENTACION || '').trim(),
             anoBaja: parseInt(raw.ANOBAJA) || 0,
             mesBaja: parseInt(raw.MESBAJA) || 0,
         };
@@ -990,6 +994,9 @@ async function getRecommendations(clientCode, vendedorCode) {
     // Strategy 2: Similar clients (only if vendor is provided)
     let similar = [];
     if (trimVendor) {
+        // Handle multi-vendor codes (comma-separated) — use first code only
+        // CODIGOVENDEDOR is CHAR(2), can't hold the full comma string
+        const singleVendor = trimVendor.split(',')[0].trim().substring(0, 2);
         const similarSql = `
             SELECT TRIM(L.CODIGOARTICULO) AS code,
                 TRIM(L.DESCRIPCION) AS name,
@@ -1012,7 +1019,7 @@ async function getRecommendations(clientCode, vendedorCode) {
             ORDER BY clientCount DESC
             FETCH FIRST 10 ROWS ONLY`;
         try {
-            const similarRows = await queryWithParams(similarSql, [trimVendor, trimClient]);
+            const similarRows = await queryWithParams(similarSql, [singleVendor, trimClient]);
             similar = (similarRows || []).map(r => ({
                 code: (r.CODE || '').trim(),
                 name: (r.NAME || '').trim(),

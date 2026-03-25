@@ -28,15 +28,17 @@ class Product {
   final double precioCliente;
   // Extended fields from ART table
   final String subFamily;
-  final String providerCode;
-  final String providerName;
   final String grupoGeneral;
-  final String subgrupo;
   final String tipoProducto;
   final String claseArticulo;
-  final int codigoIva;
+  final String categoria;
+  final String codigoIva;
   final double pesoNeto;
   final double volumen;
+  final String grados;
+  final String observacion1;
+  final String observacion2;
+  final String presentacion;
   final int anoBaja;
   final int mesBaja;
 
@@ -57,15 +59,17 @@ class Product {
     this.precioMinimo = 0,
     this.precioCliente = 0,
     this.subFamily = '',
-    this.providerCode = '',
-    this.providerName = '',
     this.grupoGeneral = '',
-    this.subgrupo = '',
     this.tipoProducto = '',
     this.claseArticulo = '',
-    this.codigoIva = 0,
+    this.categoria = '',
+    this.codigoIva = '0',
     this.pesoNeto = 0,
     this.volumen = 0,
+    this.grados = '',
+    this.observacion1 = '',
+    this.observacion2 = '',
+    this.presentacion = '',
     this.anoBaja = 0,
     this.mesBaja = 0,
   });
@@ -88,17 +92,23 @@ class Product {
       precioMinimo: _toDouble(json['precioMinimo']),
       precioCliente: _toDouble(json['precioCliente']),
       subFamily: (json['subFamily'] ?? '').toString().trim(),
-      providerCode: (json['providerCode'] ?? '').toString().trim(),
-      providerName: (json['providerName'] ?? json['nombreProveedor'] ?? '').toString().trim(),
       grupoGeneral: (json['grupoGeneral'] ?? '').toString().trim(),
-      subgrupo: (json['subgrupo'] ?? '').toString().trim(),
       tipoProducto: (json['tipoProducto'] ?? '').toString().trim(),
       claseArticulo: (json['claseArticulo'] ?? '').toString().trim(),
-      codigoIva: json['codigoIva'] is int ? json['codigoIva'] as int : int.tryParse(json['codigoIva']?.toString() ?? '0') ?? 0,
+      categoria: (json['categoria'] ?? '').toString().trim(),
+      codigoIva: (json['codigoIva'] ?? '0').toString().trim(),
       pesoNeto: _toDouble(json['pesoNeto']),
       volumen: _toDouble(json['volumen']),
-      anoBaja: json['anoBaja'] is int ? json['anoBaja'] as int : int.tryParse(json['anoBaja']?.toString() ?? '0') ?? 0,
-      mesBaja: json['mesBaja'] is int ? json['mesBaja'] as int : int.tryParse(json['mesBaja']?.toString() ?? '0') ?? 0,
+      grados: (json['grados'] ?? '').toString().trim(),
+      observacion1: (json['observacion1'] ?? '').toString().trim(),
+      observacion2: (json['observacion2'] ?? '').toString().trim(),
+      presentacion: (json['presentacion'] ?? '').toString().trim(),
+      anoBaja: json['anoBaja'] is int
+          ? json['anoBaja'] as int
+          : int.tryParse(json['anoBaja']?.toString() ?? '0') ?? 0,
+      mesBaja: json['mesBaja'] is int
+          ? json['mesBaja'] as int
+          : int.tryParse(json['mesBaja']?.toString() ?? '0') ?? 0,
     );
   }
 
@@ -111,26 +121,63 @@ class Product {
   /// Whether the product is discontinued
   bool get isDiscontinued => anoBaja > 0;
 
-  /// Price per piece (divides tariff by units per box)
-  double get pricePerPiece => unitsPerBox > 0 ? precioTarifa1 / unitsPerBox : precioTarifa1;
+  /// Total pieces in stock (envases * unitsPerBox + loose unidades)
+  double get totalPieces => stockEnvases * unitsPerBox + stockUnidades;
 
-  /// Price per kg
-  double get pricePerKg => weight > 0 ? precioTarifa1 / weight : precioTarifa1;
-
-  /// Price for given unit type
+  /// Price for given unit type (unit = packaging that contains X pieces)
+  /// precioTarifa1 is always the price per CAJA (box)
+  /// BANDEJAS contain unitsFraction pieces, ESTUCHE contains unitsRetractil pieces
   double priceForUnit(String unit) {
+    final base = bestPrice;
     switch (unit) {
       case 'PIEZAS':
-        return unitsPerBox > 0 ? precioTarifa1 / unitsPerBox : precioTarifa1;
+        return unitsPerBox > 0 ? base / unitsPerBox : base;
       case 'BANDEJAS':
-        return unitsFraction > 0 ? precioTarifa1 / unitsFraction : precioTarifa1;
+        // 1 bandeja = unitsFraction pieces → price = base * (unitsFraction / unitsPerBox)
+        return (unitsPerBox > 0 && unitsFraction > 0)
+            ? base * unitsFraction / unitsPerBox
+            : base;
       case 'ESTUCHE':
-        return unitsRetractil > 0 ? precioTarifa1 / unitsRetractil : precioTarifa1;
+        // 1 estuche = unitsRetractil pieces → price = base * (unitsRetractil / unitsPerBox)
+        return (unitsPerBox > 0 && unitsRetractil > 0)
+            ? base * unitsRetractil / unitsPerBox
+            : base;
       case 'KILOGRAMOS':
-        return weight > 0 ? precioTarifa1 / weight : precioTarifa1;
+        // weight = total kg per box → price per kg = base / weight
+        return weight > 0 ? base / weight : base;
       case 'CAJAS':
       default:
-        return precioTarifa1;
+        return base;
+    }
+  }
+
+  /// Stock available expressed in the given unit type
+  double stockForUnit(String unit) {
+    final pieces = totalPieces;
+    switch (unit) {
+      case 'PIEZAS':
+        return pieces;
+      case 'BANDEJAS':
+        return unitsFraction > 0 ? pieces / unitsFraction : pieces;
+      case 'ESTUCHE':
+        return unitsRetractil > 0 ? pieces / unitsRetractil : pieces;
+      case 'KILOGRAMOS':
+        return weight > 0 ? stockEnvases * weight : 0;
+      case 'CAJAS':
+      default:
+        return stockEnvases;
+    }
+  }
+
+  /// Unit label abbreviation for display
+  static String unitLabel(String unit) {
+    switch (unit) {
+      case 'PIEZAS': return 'uds';
+      case 'BANDEJAS': return 'band.';
+      case 'ESTUCHE': return 'est.';
+      case 'KILOGRAMOS': return 'kg';
+      case 'CAJAS':
+      default: return 'cajas';
     }
   }
 

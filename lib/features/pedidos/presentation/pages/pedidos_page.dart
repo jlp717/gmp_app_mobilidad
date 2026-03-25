@@ -388,16 +388,16 @@ class _PedidosPageState extends State<PedidosPage>
                       runSpacing: 6,
                       children: product.availableUnits.map((unit) {
                         final selected = selectedUnit == unit;
-                        // Show unit price hint below the name
                         final unitPrice = product.priceForUnit(unit);
+                        final unitStock = product.stockForUnit(unit);
+                        final stockLabel = Product.unitLabel(unit);
                         return SizedBox(
                           width: (MediaQuery.of(ctx).size.width - 56) / 3,
-                          height: 48,
+                          height: 56,
                           child: ElevatedButton(
                             onPressed: () {
                               setModalState(() {
                                 selectedUnit = unit;
-                                // Auto-update price based on unit type
                                 priceController.text = unitPrice.toStringAsFixed(3);
                               });
                             },
@@ -428,6 +428,13 @@ class _PedidosPageState extends State<PedidosPage>
                                   style: TextStyle(
                                     fontSize: 9,
                                     color: selected ? AppTheme.neonGreen : Colors.white38,
+                                  ),
+                                ),
+                                Text(
+                                  '${unitStock.toStringAsFixed(0)} $stockLabel',
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: unitStock > 0 ? Colors.white30 : AppTheme.error.withOpacity(0.6),
                                   ),
                                 ),
                               ],
@@ -924,11 +931,23 @@ class _PedidosPageState extends State<PedidosPage>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _buildNuevoPedidoTab(),
-          _buildMisPedidosTab(),
+          // "Ver como" vendor selector for JEFE_VENTAS — visible on BOTH tabs
+          if (widget.isJefeVentas)
+            GlobalVendorSelector(
+              isJefeVentas: true,
+              onChanged: _onVendorFilterChanged,
+            ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildNuevoPedidoTab(),
+                _buildMisPedidosTab(),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1019,12 +1038,6 @@ class _PedidosPageState extends State<PedidosPage>
   Widget _buildCatalogPanel(PedidosProvider provider) {
     return Column(
       children: [
-        // "Ver como" vendor selector for JEFE_VENTAS
-        if (widget.isJefeVentas)
-          GlobalVendorSelector(
-            isJefeVentas: true,
-            onChanged: _onVendorFilterChanged,
-          ),
         // Client & sale type header
         _buildOrderHeader(provider),
         // Search + filters
