@@ -3,6 +3,8 @@
 /// Single order line in the cart summary with swipe-to-delete
 
 import 'package:flutter/material.dart';
+import '../../../../core/api/api_client.dart';
+import '../../../../core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
@@ -34,7 +36,7 @@ class OrderLineTile extends StatelessWidget {
             : AppTheme.error;
 
     return Dismissible(
-      key: ValueKey('line_${line.codigoArticulo}_$index'),
+      key: ObjectKey(line),
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
@@ -64,6 +66,24 @@ class OrderLineTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
+                // Product thumbnail (Mejora 7)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Image.network(
+                      '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(line.codigoArticulo.trim())}/image',
+                      headers: ApiClient.authHeaders,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: AppTheme.darkBase,
+                        child: const Icon(Icons.image_not_supported_outlined, color: Colors.white24, size: 18),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 // Product name + VT badge
                 Expanded(
                   flex: 3,

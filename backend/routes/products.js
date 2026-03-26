@@ -171,34 +171,53 @@ async function findImageHttp(code) {
   const items = await listHttpDirectory(`${code}/`);
   if (!items) { setCache(cacheKey, null); return null; }
 
-  // Filter to image files only
+  // Filter to image files only (root level)
   const imageFiles = items.filter(f => {
     if (f.endsWith('/')) return false; // skip subdirectories
     const ext = f.split('.').pop().toLowerCase();
     return IMAGE_EXTENSIONS.has(ext);
   });
 
-  if (imageFiles.length === 0) { setCache(cacheKey, null); return null; }
-
-  // Prefer exact match: {code}.{ext}
-  let best = imageFiles.find(f => {
-    const name = f.split('.').slice(0, -1).join('.');
-    return name === code;
-  });
-
-  // Then prefer files starting with the code
-  if (!best) {
-    best = imageFiles.find(f => f.startsWith(code));
+  // Helper: pick best image from a list
+  function pickBest(files) {
+    let best = files.find(f => {
+      const name = f.split('.').slice(0, -1).join('.');
+      return name === code;
+    });
+    if (!best) best = files.find(f => f.startsWith(code));
+    if (!best) best = files[0];
+    return best;
   }
 
-  // Otherwise take the first image file
-  if (!best) {
-    best = imageFiles[0];
+  if (imageFiles.length > 0) {
+    const best = pickBest(imageFiles);
+    const result = `${code}/${encodeURIComponent(best)}`;
+    setCache(cacheKey, result);
+    return result;
   }
 
-  const result = `${code}/${best}`;
-  setCache(cacheKey, result);
-  return result;
+  // Fallback: check FOTOS/ subfolder (some products only have images there)
+  const fotosDir = items.find(f => f.endsWith('/') && f.toUpperCase().startsWith('FOTO'));
+  if (fotosDir) {
+    const dirName = fotosDir.replace(/\/$/, '');
+    const subItems = await listHttpDirectory(`${code}/${encodeURIComponent(dirName)}/`);
+    if (subItems) {
+      const subImages = subItems.filter(f => {
+        if (f.endsWith('/')) return false;
+        const ext = f.split('.').pop().toLowerCase();
+        return IMAGE_EXTENSIONS.has(ext);
+      });
+      if (subImages.length > 0) {
+        const best = pickBest(subImages);
+        const result = `${code}/${encodeURIComponent(dirName)}/${encodeURIComponent(best)}`;
+        setCache(cacheKey, result);
+        return result;
+      }
+    }
+  }
+
+  setCache(cacheKey, null);
+  return null;
 }
 
 /**
@@ -297,22 +316,39 @@ function findLocalImage(code) {
   const folder = path.join(IMAGES_BASE, code);
   if (!fs.existsSync(folder)) return null;
 
+  const resolvedBase = path.resolve(IMAGES_BASE);
+
+  function pickBestLocal(imageList, baseDir) {
+    let best = imageList.find(f => f.split('.').slice(0, -1).join('.') === code);
+    if (!best) best = imageList.find(f => f.startsWith(code));
+    if (!best) best = imageList[0];
+    const resolved = path.resolve(path.join(baseDir, best));
+    return resolved.startsWith(resolvedBase) ? resolved : null;
+  }
+
   try {
     const files = fs.readdirSync(folder);
     const images = files.filter(f => {
       const ext = f.split('.').pop().toLowerCase();
       return IMAGE_EXTENSIONS.has(ext);
     });
-    if (images.length === 0) return null;
+    if (images.length > 0) return pickBestLocal(images, folder);
 
-    // Prefer exact match
-    let best = images.find(f => f.split('.').slice(0, -1).join('.') === code);
-    if (!best) best = images.find(f => f.startsWith(code));
-    if (!best) best = images[0];
+    // Fallback: check FOTOS/ subfolder
+    const fotosDir = files.find(f => {
+      try { return f.toUpperCase().startsWith('FOTO') && fs.statSync(path.join(folder, f)).isDirectory(); }
+      catch { return false; }
+    });
+    if (fotosDir) {
+      const subFiles = fs.readdirSync(path.join(folder, fotosDir));
+      const subImages = subFiles.filter(f => {
+        const ext = f.split('.').pop().toLowerCase();
+        return IMAGE_EXTENSIONS.has(ext);
+      });
+      if (subImages.length > 0) return pickBestLocal(subImages, path.join(folder, fotosDir));
+    }
 
-    const resolved = path.resolve(path.join(folder, best));
-    const resolvedBase = path.resolve(IMAGES_BASE);
-    return resolved.startsWith(resolvedBase) ? resolved : null;
+    return null;
   } catch { return null; }
 }
 

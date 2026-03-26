@@ -27,10 +27,14 @@ class OrderSummaryWidget extends StatefulWidget {
 
 class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
   final TextEditingController _obsCtrl = TextEditingController();
+  final TextEditingController _discountCtrl = TextEditingController();
+  final FocusNode _discountFocusNode = FocusNode();
 
   @override
   void dispose() {
     _obsCtrl.dispose();
+    _discountCtrl.dispose();
+    _discountFocusNode.dispose();
     super.dispose();
   }
 
@@ -127,19 +131,61 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 ),
               ),
             ),
+          // Clear cart button (Mejora 8)
+          if (provider.hasLines)
+            IconButton(
+              icon: const Icon(Icons.delete_sweep_outlined, color: AppTheme.error, size: 20),
+              tooltip: 'Vaciar carrito',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: AppTheme.darkSurface,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: const Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 22),
+                        SizedBox(width: 8),
+                        Text('Vaciar carrito', style: TextStyle(color: Colors.white, fontSize: 16)),
+                      ],
+                    ),
+                    content: const Text(
+                      '¿Seguro que quieres eliminar todas las líneas del pedido?',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          provider.clearOrder();
+                          Navigator.pop(ctx);
+                        },
+                        child: const Text('Vaciar', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );
   }
 
   Widget _buildLinesList(BuildContext context, PedidosProvider provider) {
-    return ListView.builder(
-      controller: widget.scrollController,
+    return ReorderableListView.builder(
+      scrollController: widget.scrollController,
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: provider.lines.length,
+      buildDefaultDragHandles: true,
+      onReorder: (oldIndex, newIndex) => provider.reorderLines(oldIndex, newIndex),
       itemBuilder: (ctx, i) {
         final line = provider.lines[i];
         return OrderLineTile(
+          key: ObjectKey(line),
           line: line,
           index: i,
           onDismissed: () async {
@@ -169,7 +215,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
           onDecrement: () {
             final isBoxes = line.cantidadEnvases > 0;
             final currentQty = isBoxes ? line.cantidadEnvases : line.cantidadUnidades;
-            if (currentQty <= 1) return; // Prevent 0, use swipe to delete
+            if (currentQty <= 1) return;
             final qty = currentQty - 1;
             provider.updateLine(
                i,
@@ -220,6 +266,23 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
         : margin >= 5
             ? Colors.orange
             : AppTheme.error;
+    final totalShown = provider.globalDiscountPct > 0
+        ? provider.totalConDescuento
+        : provider.totalImporte;
+
+    if (!_discountFocusNode.hasFocus) {
+      final discountText = provider.globalDiscountPct > 0
+          ? (provider.globalDiscountPct % 1 == 0
+              ? provider.globalDiscountPct.toStringAsFixed(0)
+              : provider.globalDiscountPct.toStringAsFixed(1))
+          : '';
+      if (_discountCtrl.text != discountText) {
+        _discountCtrl.value = TextEditingValue(
+          text: discountText,
+          selection: TextSelection.collapsed(offset: discountText.length),
+        );
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -254,6 +317,70 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
             ),
           ),
           const SizedBox(height: 12),
+          // C5 — Global discount
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                const Icon(Icons.discount_outlined, color: Colors.white54, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  'Descuento:',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: Responsive.fontSize(context, small: 12, large: 13),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 64,
+                  child: TextField(
+                    controller: _discountCtrl,
+                    focusNode: _discountFocusNode,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    onChanged: (v) => provider.setGlobalDiscount(double.tryParse(v) ?? 0),
+                    decoration: InputDecoration(
+                      suffixText: '%',
+                      suffixStyle: const TextStyle(color: Colors.white54, fontSize: 12),
+                      filled: true,
+                      fillColor: AppTheme.darkCard,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppTheme.borderColor),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppTheme.borderColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppTheme.neonBlue),
+                      ),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                if (provider.globalDiscountPct > 0) ...[
+                  Text(
+                    '\u20ac${provider.totalConDescuento.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      color: AppTheme.neonGreen,
+                      fontWeight: FontWeight.bold,
+                      fontSize: Responsive.fontSize(context, small: 14, large: 15),
+                    ),
+                  ),
+                  Text(
+                    ' (-\u20ac${provider.totalDescuento.toStringAsFixed(2)})',
+                    style: const TextStyle(color: AppTheme.error, fontSize: 11),
+                  ),
+                ],
+              ],
+            ),
+          ),
           // Stats row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -272,7 +399,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
               ),
               _buildStatItem(
                 context,
-                '\u20AC${provider.totalImporte.toStringAsFixed(2)}',
+                '\u20AC${totalShown.toStringAsFixed(2)}',
                 Icons.euro,
                 AppTheme.neonGreen,
               ),
@@ -284,15 +411,39 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
               ),
             ],
           ),
+          // C3 — IVA breakdown
+          if (provider.ivaBreakdown.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    'Base: \u20ac${provider.totalBase.toStringAsFixed(2)}',
+                    style: const TextStyle(color: Colors.white38, fontSize: 10),
+                  ),
+                  Text(
+                    'IVA: \u20ac${provider.totalIva.toStringAsFixed(2)}',
+                    style: const TextStyle(color: Colors.white38, fontSize: 10),
+                  ),
+                  ...provider.ivaBreakdown.entries.map((e) => Text(
+                      'IVA ${(e.key * 100).toStringAsFixed(0)}%: \u20ac${e.value.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white38, fontSize: 10),
+                    )),
+                ],
+              ),
+            ),
           const SizedBox(height: 10),
-          // Confirm button
+          // E1 — Preview before confirm
           SizedBox(
             width: double.infinity,
             height: 48,
             child: ElevatedButton.icon(
               onPressed: provider.isSaving
                   ? null
-                  : () => _onConfirm(context, provider),
+                  : () => _showOrderPreview(context, provider),
               icon: provider.isSaving
                   ? const SizedBox(
                       width: 18,
@@ -302,9 +453,9 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                         color: AppTheme.darkBase,
                       ),
                     )
-                  : const Icon(Icons.check_circle),
+                  : const Icon(Icons.preview_outlined),
               label: Text(
-                provider.isSaving ? 'Guardando...' : 'Definitivo',
+                provider.isSaving ? 'Guardando...' : 'Confirmar pedido',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -538,6 +689,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
     final result = await provider.confirmOrder(widget.vendedorCode, observaciones: _obsCtrl.text.trim());
     if (result != null && context.mounted) {
       _obsCtrl.clear();
+      _discountCtrl.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -546,5 +698,135 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
         ),
       );
     }
+  }
+
+  // E1 — Preview dialog before confirm
+  void _showOrderPreview(BuildContext context, PedidosProvider provider) {
+    if (!provider.hasClient) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona un cliente primero'), backgroundColor: AppTheme.error),
+      );
+      return;
+    }
+
+    final lines = provider.lines;
+    final margin = provider.porcentajeMargen;
+    final marginColor = margin >= 15 ? AppTheme.neonGreen : margin >= 5 ? Colors.orange : AppTheme.error;
+    final hasDiscount = provider.globalDiscountPct > 0;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.receipt_outlined, color: AppTheme.neonBlue, size: 22),
+            SizedBox(width: 8),
+            Text('Resumen del pedido', style: TextStyle(color: Colors.white, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Client
+            Row(
+              children: [
+                const Icon(Icons.storefront_outlined, color: AppTheme.neonBlue, size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${provider.clientName} (${provider.clientCode})',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Divider(color: AppTheme.borderColor, height: 1),
+            const SizedBox(height: 8),
+            // First 3 lines
+            ...lines.take(3).map((l) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l.descripcion,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    '${l.cantidadEnvases > 0 ? l.cantidadEnvases.toStringAsFixed(0) : l.cantidadUnidades.toStringAsFixed(0)} x \u20ac${(hasDiscount ? (l.precioVenta * (1 - provider.globalDiscountPct / 100)) : l.precioVenta).toStringAsFixed(3)}',
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                ],
+              ),
+            )),
+            if (lines.length > 3)
+              Text(
+                '... y ${lines.length - 3} lineas mas',
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            const SizedBox(height: 8),
+            const Divider(color: AppTheme.borderColor, height: 1),
+            const SizedBox(height: 8),
+            // Totals
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('${provider.lineCount} lineas', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (hasDiscount) ...[
+                      Text(
+                        'Dto. ${provider.globalDiscountPct.toStringAsFixed(1)}%: -\u20ac${provider.totalDescuento.toStringAsFixed(2)}',
+                        style: const TextStyle(color: AppTheme.error, fontSize: 11),
+                      ),
+                      Text(
+                        'Total: \u20ac${provider.totalConDescuento.toStringAsFixed(2)}',
+                        style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ] else
+                      Text(
+                        'Total: \u20ac${provider.totalImporte.toStringAsFixed(2)}',
+                        style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    Text(
+                      'Margen: ${margin.toStringAsFixed(1)}%',
+                      style: TextStyle(color: marginColor, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Revisar', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _onConfirm(context, provider);
+            },
+            icon: const Icon(Icons.check_circle, size: 18),
+            label: const Text('Definitivo', style: TextStyle(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonGreen,
+              foregroundColor: AppTheme.darkBase,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

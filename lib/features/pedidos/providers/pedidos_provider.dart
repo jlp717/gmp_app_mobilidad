@@ -45,6 +45,15 @@ class PedidosProvider with ChangeNotifier {
   // ── Favorites (Hive-based, local) ──
   final Set<String> _favoriteProductCodes = {};
 
+  // ── Stock Filter ──
+  bool _onlyWithStock = false;
+
+  // ── Last Qty per Product (B3) ──
+  final Map<String, double> _lastQtyByProduct = {};
+
+  // ── Global Discount (C5) ──
+  double _globalDiscountPct = 0.0;
+
   // ── Complementary Products & Promotions ──
   List<Map<String, dynamic>> _complementaryProducts = [];
   final Map<String, PromotionItem> _activePromotions = {};
@@ -52,6 +61,14 @@ class PedidosProvider with ChangeNotifier {
   // ── Analytics ──
   Map<String, dynamic> _analytics = {};
   bool _isLoadingAnalytics = false;
+
+  String _qtyKey(String productCode, [String? clientCode]) {
+    final product = productCode.trim();
+    final client = (clientCode ?? _clientCode ?? '').trim();
+    return '${client.isEmpty ? '_noclient_' : client}|$product';
+  }
+
+  double get _discountFactor => 1 - (_globalDiscountPct / 100);
 
   // ── Getters ──
   List<OrderLine> get lines => List.unmodifiable(_lines);
@@ -82,6 +99,35 @@ class PedidosProvider with ChangeNotifier {
   Map<String, dynamic> get analytics => _analytics;
   bool get isLoadingAnalytics => _isLoadingAnalytics;
 
+  bool get onlyWithStock => _onlyWithStock;
+  double lastQtyForProduct(String code, {String? clientCode}) {
+    final key = _qtyKey(code, clientCode);
+    if (_lastQtyByProduct.containsKey(key)) {
+      return _lastQtyByProduct[key]!;
+    }
+    return _lastQtyByProduct[code] ?? 1.0;
+  }
+
+  double get globalDiscountPct => _globalDiscountPct;
+  double get totalDescuento => totalImporte * _globalDiscountPct / 100;
+  double get totalConDescuento => totalImporte - totalDescuento;
+  double get totalBase => _lines.fold(0.0, (s, l) {
+    final saleAfterDiscount = l.importeVenta * _discountFactor;
+    return s + saleAfterDiscount / (1 + l.ivaRate);
+  });
+  double get totalIva => totalConDescuento - totalBase;
+  Map<double, double> get ivaBreakdown {
+    final map = <double, double>{};
+    for (final l in _lines) {
+      if (l.ivaRate > 0) {
+        final saleAfterDiscount = l.importeVenta * _discountFactor;
+        final iva = saleAfterDiscount - (saleAfterDiscount / (1 + l.ivaRate));
+        map[l.ivaRate] = (map[l.ivaRate] ?? 0) + iva;
+      }
+    }
+    return map;
+  }
+
   bool get hasClient => _clientCode != null && _clientCode!.isNotEmpty;
   bool get hasLines => _lines.isNotEmpty;
   int get lineCount => _lines.length;
@@ -90,8 +136,9 @@ class PedidosProvider with ChangeNotifier {
   double get totalUnidades => _lines.fold(0, (sum, l) => sum + l.cantidadUnidades);
   double get totalImporte => _lines.fold(0, (sum, l) => sum + l.importeVenta);
   double get totalCosto => _lines.fold(0, (sum, l) => sum + l.importeCosto);
-  double get totalMargen => _lines.fold(0, (sum, l) => sum + l.importeMargen);
-  double get porcentajeMargen => totalImporte > 0 ? (totalMargen / totalImporte) * 100 : 0;
+  double get totalMargen => totalConDescuento - totalCosto;
+  double get porcentajeMargen =>
+      totalConDescuento > 0 ? (totalMargen / totalConDescuento) * 100 : 0;
 
   String get saleTypeLabel {
     switch (_saleType) {
@@ -118,6 +165,23 @@ class PedidosProvider with ChangeNotifier {
 
   void setSaleType(String type) {
     _saleType = type;
+    notifyListeners();
+  }
+
+  void setStockFilter(bool value) {
+    _onlyWithStock = value;
+    notifyListeners();
+  }
+
+  void setGlobalDiscount(double pct) {
+    _globalDiscountPct = pct.clamp(0, 100);
+    notifyListeners();
+  }
+
+  void reorderLines(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex--;
+    final item = _lines.removeAt(oldIndex);
+    _lines.insert(newIndex, item);
     notifyListeners();
   }
 
@@ -153,10 +217,11 @@ class PedidosProvider with ChangeNotifier {
         forceRefresh: forceRefresh,
       );
 
+      final filtered = _onlyWithStock ? results.where((p) => p.hasStock).toList() : results;
       if (reset) {
-        _products = results;
+        _products = filtered;
       } else {
-        _products = [..._products, ...results];
+        _products = [..._products, ...filtered];
       }
       _hasMoreProducts = results.length >= 50;
       _productOffset += results.length;
@@ -238,6 +303,22 @@ class PedidosProvider with ChangeNotifier {
     if (existingIdx >= 0) {
       // Prevent exceeding stock with existing line
       final line = _lines[existingIdx];
+      final existingUsesBoxes = line.cantidadEnvases > 0;
+      final addingUsesBoxes = cantidadEnvases > 0;
+
+      if (existingUsesBoxes != addingUsesBoxes &&
+          (cantidadEnvases > 0 || cantidadUnidades > 0)) {
+        final unitLabel = existingUsesBoxes
+            ? 'cajas'
+            : (line.unidadMedida.isNotEmpty
+                ? line.unidadMedida.toLowerCase()
+                : 'unidad actual');
+        final msg = 'Este producto ya esta en el carrito en $unitLabel. Edita esa linea para cambiar unidad.';
+        _error = msg;
+        notifyListeners();
+        return msg;
+      }
+
       final newTotalEnvases = line.cantidadEnvases + cantidadEnvases;
       final newTotalUnidades = line.cantidadUnidades + cantidadUnidades;
       
@@ -253,8 +334,12 @@ class PedidosProvider with ChangeNotifier {
       line.cantidadUnidades = newTotalUnidades;
       line.precioVenta = precioVenta;
       line.recalculate();
+      _lastQtyByProduct[_qtyKey(product.code)] =
+          newTotalEnvases > 0 ? newTotalEnvases : newTotalUnidades;
     } else {
       // Add new line
+      final ivaCode = product.codigoIva;
+      final ivaRate = ivaCode == '1' ? 0.10 : ivaCode == '2' ? 0.04 : ivaCode == '3' ? 0.0 : 0.21;
       final line = OrderLine(
         codigoArticulo: product.code,
         descripcion: product.name,
@@ -263,13 +348,16 @@ class PedidosProvider with ChangeNotifier {
         unidadMedida: unidadMedida,
         unidadesCaja: product.unitsPerBox,
         precioVenta: precioVenta,
-        precioCosto: product.precioMinimo > 0 ? product.precioMinimo * 0.7 : product.precioTarifa1 * 0.7, // Approximate cost
+        precioCosto: product.precioMinimo > 0 ? product.precioMinimo * 0.7 : product.precioTarifa1 * 0.7,
         precioTarifa: product.precioTarifa1,
         precioTarifaCliente: product.precioCliente,
         precioMinimo: product.precioMinimo,
+        ivaRate: ivaRate,
       );
       line.recalculate();
       _lines.add(line);
+      _lastQtyByProduct[_qtyKey(product.code)] =
+          cantidadEnvases > 0 ? cantidadEnvases : cantidadUnidades;
     }
     _error = null;
     notifyListeners();
@@ -300,6 +388,8 @@ class PedidosProvider with ChangeNotifier {
     if (precioVenta != null) line.precioVenta = precioVenta;
     if (unidadMedida != null) line.unidadMedida = unidadMedida;
     line.recalculate();
+    _lastQtyByProduct[_qtyKey(line.codigoArticulo)] =
+        line.cantidadEnvases > 0 ? line.cantidadEnvases : line.cantidadUnidades;
     notifyListeners();
     return null;
   }
@@ -307,6 +397,10 @@ class PedidosProvider with ChangeNotifier {
   void removeLine(int index) {
     if (index < 0 || index >= _lines.length) return;
     _lines.removeAt(index);
+    if (_lines.isEmpty) {
+      _globalDiscountPct = 0;
+      _complementaryProducts = [];
+    }
     notifyListeners();
   }
 
@@ -315,8 +409,38 @@ class PedidosProvider with ChangeNotifier {
     _clientCode = null;
     _clientName = null;
     _saleType = 'CC';
+    _globalDiscountPct = 0;
+    _complementaryProducts = [];
+    _clientBalance = {};
     _error = null;
     notifyListeners();
+  }
+
+  List<OrderLine> _buildLinesForSubmit() {
+    if (_globalDiscountPct <= 0) return _lines;
+
+    final factor = _discountFactor;
+    return _lines.map((line) {
+      final discountedPrice =
+          double.parse((line.precioVenta * factor).toStringAsFixed(4));
+      final copy = OrderLine(
+        id: line.id,
+        codigoArticulo: line.codigoArticulo,
+        descripcion: line.descripcion,
+        cantidadEnvases: line.cantidadEnvases,
+        cantidadUnidades: line.cantidadUnidades,
+        unidadMedida: line.unidadMedida,
+        unidadesCaja: line.unidadesCaja,
+        precioVenta: discountedPrice,
+        precioCosto: line.precioCosto,
+        precioTarifa: line.precioTarifa,
+        precioTarifaCliente: line.precioTarifaCliente,
+        precioMinimo: line.precioMinimo,
+        ivaRate: line.ivaRate,
+      );
+      copy.recalculate();
+      return copy;
+    }).toList();
   }
 
   // ── Order Persistence ──
@@ -333,19 +457,32 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      final linesForSubmit = _buildLinesForSubmit();
+      final obs = observaciones.trim();
+      final discountTag = _globalDiscountPct > 0
+          ? '[DTO ${_globalDiscountPct.toStringAsFixed(1)}%]'
+          : '';
+      final fullObservaciones = [discountTag, obs]
+          .where((s) => s.isNotEmpty)
+          .join(' ')
+          .trim();
+
       final result = await PedidosService.createOrder(
         clientCode: _clientCode!,
         clientName: _clientName ?? '',
         vendedorCode: vendedorCode,
         tipoVenta: _saleType,
-        lines: _lines,
-        observaciones: observaciones,
+        lines: linesForSubmit,
+        observaciones: fullObservaciones,
       );
       // Clear cart after successful creation
       _lines.clear();
       _clientCode = null;
       _clientName = null;
       _saleType = 'CC';
+      _globalDiscountPct = 0;
+      _complementaryProducts = [];
+      _clientBalance = {};
       return result;
     } catch (e) {
       _error = e.toString();
@@ -420,12 +557,17 @@ class PedidosProvider with ChangeNotifier {
     _clientCode = draft['clientCode'] as String?;
     _clientName = draft['clientName'] as String?;
     _saleType = (draft['saleType'] as String?) ?? 'CC';
+    _globalDiscountPct = 0;
+    _complementaryProducts = [];
     _lines.clear();
     final linesData = draft['lines'] as List? ?? [];
     for (final l in linesData) {
       final line = OrderLine.fromJson(l as Map<String, dynamic>);
       line.recalculate();
       _lines.add(line);
+      _lastQtyByProduct[_qtyKey(line.codigoArticulo)] = line.cantidadEnvases > 0
+          ? line.cantidadEnvases
+          : line.cantidadUnidades;
     }
     _error = null;
     notifyListeners();
@@ -521,12 +663,16 @@ class PedidosProvider with ChangeNotifier {
       _clientCode = data['clientCode'] as String?;
       _clientName = data['clientName'] as String?;
       _saleType = (data['tipoventa'] as String?) ?? 'CC';
+      _globalDiscountPct = 0;
+      _complementaryProducts = [];
       _lines.clear();
       final linesData = data['lines'] as List? ?? [];
       for (final l in linesData) {
         final line = OrderLine.fromJson(l as Map<String, dynamic>);
         line.recalculate();
         _lines.add(line);
+        _lastQtyByProduct[_qtyKey(line.codigoArticulo)] =
+            line.cantidadEnvases > 0 ? line.cantidadEnvases : line.cantidadUnidades;
       }
       _error = null;
       notifyListeners();
@@ -541,6 +687,8 @@ class PedidosProvider with ChangeNotifier {
     for (final product in products) {
       final existingIdx = _lines.indexWhere((l) => l.codigoArticulo == product.code);
       if (existingIdx < 0) {
+        final ivaCode = product.codigoIva;
+        final ivaRate = ivaCode == '1' ? 0.10 : ivaCode == '2' ? 0.04 : ivaCode == '3' ? 0.0 : 0.21;
         final line = OrderLine(
           codigoArticulo: product.code,
           descripcion: product.name,
@@ -553,9 +701,11 @@ class PedidosProvider with ChangeNotifier {
           precioTarifa: product.precioTarifa1,
           precioTarifaCliente: product.precioCliente,
           precioMinimo: product.precioMinimo,
+          ivaRate: ivaRate,
         );
         line.recalculate();
         _lines.add(line);
+        _lastQtyByProduct[_qtyKey(product.code)] = defaultQty;
       }
     }
     _error = null;

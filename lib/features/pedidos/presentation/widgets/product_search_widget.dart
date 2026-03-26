@@ -111,42 +111,71 @@ class _ProductSearchWidgetState extends State<ProductSearchWidget> {
               ),
             ),
           ),
-          // Family chips
-          if (provider.families.isNotEmpty)
-            SizedBox(
-              height: 40,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.symmetric(horizontal: pad.left),
-                itemCount: provider.families.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (ctx, i) {
-                  final family = provider.families[i];
-                  final selected = provider.selectedFamily == family;
-                  return FilterChip(
-                    label: Text(family),
-                    selected: selected,
-                    selectedColor: AppTheme.neonBlue.withOpacity(0.2),
+          // Stock filter chip + Family chips
+          SizedBox(
+            height: 40,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: pad.left),
+              children: [
+                // "Solo con stock" chip (Mejora 3)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    avatar: Icon(
+                      Icons.inventory_2_outlined,
+                      size: 14,
+                      color: provider.onlyWithStock ? AppTheme.neonGreen : Colors.white54,
+                    ),
+                    label: const Text('Solo con stock'),
+                    selected: provider.onlyWithStock,
+                    selectedColor: AppTheme.neonGreen.withOpacity(0.2),
                     backgroundColor: AppTheme.darkCard,
                     labelStyle: TextStyle(
-                      color:
-                          selected ? AppTheme.neonBlue : Colors.white70,
-                      fontSize: Responsive.fontSize(context,
-                          small: 11, large: 13),
+                      color: provider.onlyWithStock ? AppTheme.neonGreen : Colors.white70,
+                      fontSize: Responsive.fontSize(context, small: 11, large: 13),
                     ),
                     side: BorderSide(
-                      color: selected
-                          ? AppTheme.neonBlue
-                          : AppTheme.borderColor,
+                      color: provider.onlyWithStock ? AppTheme.neonGreen : AppTheme.borderColor,
                     ),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
-                    onSelected: (_) =>
-                        _onFamilySelected(provider, family),
+                    onSelected: (_) {
+                      provider.setStockFilter(!provider.onlyWithStock);
+                      provider.loadProducts(
+                        vendedorCodes: widget.vendedorCodes,
+                        search: _searchController.text.isEmpty ? null : _searchController.text,
+                        reset: true,
+                      );
+                    },
+                  ),
+                ),
+                // Family chips
+                ...provider.families.map((family) {
+                  final selected = provider.selectedFamily == family;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(family),
+                      selected: selected,
+                      selectedColor: AppTheme.neonBlue.withOpacity(0.2),
+                      backgroundColor: AppTheme.darkCard,
+                      labelStyle: TextStyle(
+                        color: selected ? AppTheme.neonBlue : Colors.white70,
+                        fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                      ),
+                      side: BorderSide(
+                        color: selected ? AppTheme.neonBlue : AppTheme.borderColor,
+                      ),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (_) => _onFamilySelected(provider, family),
+                    ),
                   );
-                },
-              ),
+                }),
+              ],
             ),
+          ),
           const SizedBox(height: 4),
         ],
       ),

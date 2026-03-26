@@ -15,6 +15,8 @@ class ProductCard extends StatelessWidget {
   final bool isFavorite;
   final PromotionItem? promo;
   final VoidCallback? onToggleFavorite;
+  final double cartQty;
+  final VoidCallback? onQuickAdd;
 
   const ProductCard({
     Key? key,
@@ -23,20 +25,27 @@ class ProductCard extends StatelessWidget {
     this.isFavorite = false,
     this.promo,
     this.onToggleFavorite,
+    this.cartQty = 0,
+    this.onQuickAdd,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final stockColor = product.hasStock ? AppTheme.neonGreen : AppTheme.error;
+    final inCart = cartQty > 0;
 
     return Card(
-      color: AppTheme.darkCard,
+      color: inCart ? AppTheme.darkCard.withOpacity(0.92) : AppTheme.darkCard,
       margin: const EdgeInsets.only(bottom: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: promo != null ? AppTheme.neonPurple : AppTheme.borderColor.withOpacity(0.3),
-          width: promo != null ? 1.5 : 1.0,
+          color: inCart
+              ? AppTheme.neonGreen
+              : promo != null
+                  ? AppTheme.neonPurple
+                  : AppTheme.borderColor.withOpacity(0.3),
+          width: inCart ? 1.5 : (promo != null ? 1.5 : 1.0),
         ),
       ),
       child: InkWell(
@@ -46,8 +55,35 @@ class ProductCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             children: [
-              // Product thumbnail (left)
-              _buildThumbnail(product.code),
+              // Product thumbnail (left) — tap to zoom
+              Stack(
+                children: [
+                  GestureDetector(
+                    onTap: () => _showFullscreenImage(context, product.code, product.name),
+                    child: _buildThumbnail(product.code),
+                  ),
+                  if (inCart)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonGreen,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${cartQty.toStringAsFixed(0)}c',
+                          style: const TextStyle(
+                            color: AppTheme.darkBase,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(width: 10),
               // Product info (center)
               Expanded(
@@ -150,6 +186,23 @@ class ProductCard extends StatelessWidget {
                   ),
                 ],
               ),
+              // Quick add button (Mejora 2)
+              if (onQuickAdd != null && product.hasStock) ...[
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: onQuickAdd,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonBlue.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.neonBlue.withOpacity(0.4)),
+                    ),
+                    child: const Icon(Icons.add, color: AppTheme.neonBlue, size: 18),
+                  ),
+                ),
+              ],
               if (onToggleFavorite != null) ...[
                 const SizedBox(width: 2),
                 GestureDetector(
@@ -225,6 +278,73 @@ class ProductCard extends StatelessWidget {
             );
           },
         ),
+      ),
+    );
+  }
+
+  void _showFullscreenImage(BuildContext context, String code, String name) {
+    final imageUrl = '${ApiConfig.baseUrl}/products/'
+        '${Uri.encodeComponent(code.trim())}/image';
+    Navigator.of(context).push<void>(
+      PageRouteBuilder<void>(
+        opaque: false,
+        barrierColor: Colors.black87,
+        barrierDismissible: true,
+        pageBuilder: (ctx, anim, secondAnim) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              elevation: 0,
+              title: Text(
+                name,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                overflow: TextOverflow.ellipsis,
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+            body: Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5.0,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  headers: ApiClient.authHeaders,
+                  loadingBuilder: (ctx, child, progress) {
+                    if (progress == null) return child;
+                    final percent = progress.expectedTotalBytes != null
+                        ? progress.cumulativeBytesLoaded /
+                            progress.expectedTotalBytes!
+                        : null;
+                    return Center(
+                      child: CircularProgressIndicator(
+                        value: percent,
+                        color: AppTheme.neonBlue,
+                      ),
+                    );
+                  },
+                  errorBuilder: (ctx, err, stack) => const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image_outlined,
+                          color: Colors.white38, size: 64),
+                      SizedBox(height: 12),
+                      Text('No se pudo cargar la imagen',
+                          style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (ctx, anim, secondAnim, child) {
+          return FadeTransition(opacity: anim, child: child);
+        },
       ),
     );
   }
