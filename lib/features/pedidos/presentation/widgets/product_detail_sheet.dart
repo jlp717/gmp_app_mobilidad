@@ -251,25 +251,34 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       }
     }
 
+    // Build family display: "code - description" if name available
+    final familyDisplay = p.familyName.isNotEmpty
+        ? '${p.family} - ${p.familyName}'
+        : p.family;
+
     final rows = <_DataRow>[
+      // Identification
       _DataRow('Referencia', p.code),
       if (p.ean.isNotEmpty) _DataRow('Cod. EAN', p.ean),
-      _DataRow('Familia', p.family),
+      if (p.nameExt.isNotEmpty) _DataRow('Descripcion ext.', p.nameExt),
+      // Classification groups
+      _DataRow('Familia (Grupo 1)', familyDisplay),
       if (p.subFamily.isNotEmpty)
-        _DataRow('Subfamilia', p.subFamily),
+        _DataRow('Subfamilia (Grupo 2)', p.subFamily),
       _DataRow('Marca', p.brand),
       if (p.grupoGeneral.isNotEmpty)
-        _DataRow('Grupo', p.grupoGeneral),
+        _DataRow('Grupo General', p.grupoGeneral),
       if (p.tipoProducto.isNotEmpty)
-        _DataRow('Tipo', p.tipoProducto),
-      if (p.claseArticulo.isNotEmpty)
-        _DataRow('Clasificacion', p.claseArticulo),
+        _DataRow('Tipo (Grupo 4)', p.tipoProducto),
       if (p.categoria.isNotEmpty)
         _DataRow('Categoria', p.categoria),
-      if (p.presentacion.isNotEmpty)
-        _DataRow('Presentacion', p.presentacion),
-      if (p.grados.isNotEmpty)
-        _DataRow('Grados', p.grados),
+      if (p.gama.isNotEmpty)
+        _DataRow('Gama', p.gama),
+      if (p.claseArticulo.isNotEmpty)
+        _DataRow('Clasificacion', p.claseArticulo),
+      if (p.prefamilia.isNotEmpty)
+        _DataRow('Prefamilia', p.prefamilia),
+      // Packaging & units
       _DataRow('Unidad de Medida', p.unitMeasure),
       _DataRow('Uds. por Caja', p.unitsPerBox.toStringAsFixed(0)),
       if (p.unitsFraction > 0)
@@ -278,18 +287,42 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       if (p.unitsRetractil > 0)
         _DataRow('Uds. Retractil (Estuche)',
             p.unitsRetractil.toStringAsFixed(0)),
+      if (p.presentacion.isNotEmpty)
+        _DataRow('Presentacion', p.presentacion),
+      if (p.formato.isNotEmpty)
+        _DataRow('Formato', p.formato),
+      if (p.calibre.isNotEmpty)
+        _DataRow('Calibre', p.calibre),
+      if (p.unidadPale > 0)
+        _DataRow('Uds. por Pale',
+            p.unidadPale.toStringAsFixed(0)),
+      if (p.unidadFilaPale > 0)
+        _DataRow('Uds. por Fila Pale',
+            p.unidadFilaPale.toStringAsFixed(0)),
+      // Physical
       if (p.weight > 0)
         _DataRow('Peso', '${p.pesoNeto.toStringAsFixed(3)} kg'),
       if (p.volumen > 0)
         _DataRow('Volumen', p.volumen.toStringAsFixed(3)),
+      if (p.grados.isNotEmpty)
+        _DataRow('Grados', p.grados),
+      // Flags
       _DataRow('IVA', ivaLabel(p.codigoIva)),
+      if (p.productoPesado)
+        _DataRow('Producto Pesado', 'Si'),
+      if (p.trazable)
+        _DataRow('Trazable', 'Si'),
+      // Dates
+      if (p.fechaAlta != null && p.fechaAlta!.isNotEmpty)
+        _DataRow('Fecha Alta', p.fechaAlta!),
+      if (p.isDiscontinued)
+        _DataRow('Fecha Baja',
+            '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}'),
+      // Observations
       if (p.observacion1.isNotEmpty)
         _DataRow('Obs. 1', p.observacion1),
       if (p.observacion2.isNotEmpty)
         _DataRow('Obs. 2', p.observacion2),
-      if (p.isDiscontinued)
-        _DataRow('Baja',
-            '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}'),
     ];
 
     return _buildSection(

@@ -27,18 +27,29 @@ class Product {
   final double precioMinimo;
   final double precioCliente;
   // Extended fields from ART table
+  final String nameExt;
+  final String familyName;
+  final String prefamilia;
   final String subFamily;
   final String grupoGeneral;
   final String tipoProducto;
   final String claseArticulo;
   final String categoria;
+  final String gama;
   final String codigoIva;
   final double pesoNeto;
   final double volumen;
   final String grados;
+  final String calibre;
   final String observacion1;
   final String observacion2;
   final String presentacion;
+  final String formato;
+  final bool productoPesado;
+  final bool trazable;
+  final double unidadPale;
+  final double unidadFilaPale;
+  final String? fechaAlta;
   final int anoBaja;
   final int mesBaja;
 
@@ -58,18 +69,29 @@ class Product {
     this.precioTarifa1 = 0,
     this.precioMinimo = 0,
     this.precioCliente = 0,
+    this.nameExt = '',
+    this.familyName = '',
+    this.prefamilia = '',
     this.subFamily = '',
     this.grupoGeneral = '',
     this.tipoProducto = '',
     this.claseArticulo = '',
     this.categoria = '',
+    this.gama = '',
     this.codigoIva = '0',
     this.pesoNeto = 0,
     this.volumen = 0,
     this.grados = '',
+    this.calibre = '',
     this.observacion1 = '',
     this.observacion2 = '',
     this.presentacion = '',
+    this.formato = '',
+    this.productoPesado = false,
+    this.trazable = false,
+    this.unidadPale = 0,
+    this.unidadFilaPale = 0,
+    this.fechaAlta,
     this.anoBaja = 0,
     this.mesBaja = 0,
   });
@@ -91,18 +113,29 @@ class Product {
       precioTarifa1: _toDouble(json['precioTarifa1']),
       precioMinimo: _toDouble(json['precioMinimo']),
       precioCliente: _toDouble(json['precioCliente']),
+      nameExt: (json['nameExt'] ?? '').toString().trim(),
+      familyName: (json['familyName'] ?? '').toString().trim(),
+      prefamilia: (json['prefamilia'] ?? '').toString().trim(),
       subFamily: (json['subFamily'] ?? '').toString().trim(),
       grupoGeneral: (json['grupoGeneral'] ?? '').toString().trim(),
       tipoProducto: (json['tipoProducto'] ?? '').toString().trim(),
       claseArticulo: (json['claseArticulo'] ?? '').toString().trim(),
       categoria: (json['categoria'] ?? '').toString().trim(),
+      gama: (json['gama'] ?? '').toString().trim(),
       codigoIva: (json['codigoIva'] ?? '0').toString().trim(),
       pesoNeto: _toDouble(json['pesoNeto']),
       volumen: _toDouble(json['volumen']),
       grados: (json['grados'] ?? '').toString().trim(),
+      calibre: (json['calibre'] ?? '').toString().trim(),
       observacion1: (json['observacion1'] ?? '').toString().trim(),
       observacion2: (json['observacion2'] ?? '').toString().trim(),
       presentacion: (json['presentacion'] ?? '').toString().trim(),
+      formato: (json['formato'] ?? '').toString().trim(),
+      productoPesado: json['productoPesado'] == true,
+      trazable: json['trazable'] == true,
+      unidadPale: _toDouble(json['unidadPale']),
+      unidadFilaPale: _toDouble(json['unidadFilaPale']),
+      fechaAlta: json['fechaAlta']?.toString(),
       anoBaja: json['anoBaja'] is int
           ? json['anoBaja'] as int
           : int.tryParse(json['anoBaja']?.toString() ?? '0') ?? 0,

@@ -249,34 +249,48 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
 async function getProductDetail(code, clientCode) {
     const trimCode = code.trim();
 
-    // Base product — expanded with ALL useful fields from ART
+    // Base product — expanded with ALL useful fields from ART + FAM description
     // Column names verified against DSEDAC.ART schema (discover_pedidos_output.txt)
     const baseSql = `
         SELECT TRIM(A.CODIGOARTICULO) AS code,
             TRIM(A.DESCRIPCIONARTICULO) AS name,
+            TRIM(COALESCE(A.EXTENSIONDESCRIPCION, '')) AS nameExt,
             TRIM(A.CODIGOMARCA) AS brand,
             TRIM(A.CODIGOFAMILIA) AS family,
+            TRIM(COALESCE(F.DESCRIPCIONFAMILIA, '')) AS familyName,
             TRIM(COALESCE(A.CODIGOEAN, '')) AS ean,
             A.UNIDADESCAJA AS unitsPerBox,
             A.UNIDADESFRACCION AS unitsFraction,
             A.UNIDADESRETRACTIL AS unitsRetractil,
             TRIM(A.UNIDADMEDIDA) AS unitMeasure,
             COALESCE(A.PESO, 0) AS weight,
+            TRIM(COALESCE(A.CODIGOPREFAMILIA, '')) AS prefamilia,
             TRIM(COALESCE(A.CODIGOSUBFAMILIA, '')) AS subFamily,
             TRIM(COALESCE(A.CODIGOGRUPO, '')) AS grupoGeneral,
             TRIM(COALESCE(A.CODIGOTIPO, '')) AS tipoProducto,
             TRIM(COALESCE(A.CLASIFICACION, '')) AS claseArticulo,
             TRIM(COALESCE(A.CATEGORIAARTICULO, '')) AS categoria,
+            TRIM(COALESCE(A.CODIGOGAMA, '')) AS gama,
             TRIM(COALESCE(A.CODIGOIVA, '0')) AS codigoIva,
             COALESCE(A.PESO, 0) AS pesoNeto,
             COALESCE(A.VOLUMEN, 0) AS volumen,
-            COALESCE(A.GRADOS, '') AS grados,
+            TRIM(COALESCE(A.GRADOS, '')) AS grados,
+            TRIM(COALESCE(A.CALIBRE, '')) AS calibre,
             TRIM(COALESCE(A.OBSERVACION1, '')) AS observacion1,
             TRIM(COALESCE(A.OBSERVACION2, '')) AS observacion2,
             TRIM(COALESCE(A.CODIGOPRESENTACION, '')) AS presentacion,
+            TRIM(COALESCE(A.FORMATO, '')) AS formato,
+            COALESCE(A.PRODUCTOPESADOSN, '') AS productoPesado,
+            COALESCE(A.TRAZABLESN, '') AS trazable,
+            COALESCE(A.UNIDADPALE, 0) AS unidadPale,
+            COALESCE(A.UNIDADFILAPALE, 0) AS unidadFilaPale,
+            A.DIAALTA AS diaAlta,
+            A.MESALTA AS mesAlta,
+            A.ANOALTA AS anoAlta,
             A.ANOBAJA AS anoBaja,
             A.MESBAJA AS mesBaja
         FROM DSEDAC.ART A
+        LEFT JOIN DSEDAC.FAM F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
         WHERE TRIM(A.CODIGOARTICULO) = ?`;
 
     // All tariffs
@@ -314,26 +328,37 @@ async function getProductDetail(code, clientCode) {
         const product = {
             code: (raw.CODE || '').trim(),
             name: (raw.NAME || '').trim(),
+            nameExt: (raw.NAMEEXT || '').trim(),
             brand: (raw.BRAND || '').trim(),
             family: (raw.FAMILY || '').trim(),
+            familyName: (raw.FAMILYNAME || '').trim(),
             ean: (raw.EAN || '').trim(),
             unitsPerBox: parseFloat(raw.UNITSPERBOX) || 1,
             unitsFraction: parseFloat(raw.UNITSFRACTION) || 0,
             unitsRetractil: parseFloat(raw.UNITSRETRACTIL) || 0,
             unitMeasure: (raw.UNITMEASURE || '').trim(),
             weight: parseFloat(raw.WEIGHT) || 0,
+            prefamilia: (raw.PREFAMILIA || '').trim(),
             subFamily: (raw.SUBFAMILY || '').trim(),
             grupoGeneral: (raw.GRUPOGENERAL || '').trim(),
             tipoProducto: (raw.TIPOPRODUCTO || '').trim(),
             claseArticulo: (raw.CLASEARTICULO || '').trim(),
             categoria: (raw.CATEGORIA || '').trim(),
+            gama: (raw.GAMA || '').trim(),
             codigoIva: (raw.CODIGOIVA || '0').toString().trim(),
             pesoNeto: parseFloat(raw.PESONETO) || 0,
             volumen: parseFloat(raw.VOLUMEN) || 0,
             grados: (raw.GRADOS || '').trim(),
+            calibre: (raw.CALIBRE || '').trim(),
             observacion1: (raw.OBSERVACION1 || '').trim(),
             observacion2: (raw.OBSERVACION2 || '').trim(),
             presentacion: (raw.PRESENTACION || '').trim(),
+            formato: (raw.FORMATO || '').trim(),
+            productoPesado: (raw.PRODUCTOPESADO || '').trim() === 'S',
+            trazable: (raw.TRAZABLE || '').trim() === 'S',
+            unidadPale: parseFloat(raw.UNIDADPALE) || 0,
+            unidadFilaPale: parseFloat(raw.UNIDADFILAPALE) || 0,
+            fechaAlta: raw.ANOALTA > 0 ? `${String(raw.DIAALTA || 1).padStart(2, '0')}/${String(raw.MESALTA || 1).padStart(2, '0')}/${raw.ANOALTA}` : null,
             anoBaja: parseInt(raw.ANOBAJA) || 0,
             mesBaja: parseInt(raw.MESBAJA) || 0,
         };

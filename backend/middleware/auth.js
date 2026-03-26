@@ -23,15 +23,17 @@ function signToken(payload) {
  * Header: Authorization: Bearer <token>
  */
 function verifyToken(req, res, next) {
-    // 1. Check Header
+    // 1. Check Header OR query param (for browser-opened URLs like ficha PDF)
     const authHeader = req.headers['authorization'];
-    if (!authHeader) {
+    const queryToken = req.query && req.query.token;
+
+    if (!authHeader && !queryToken) {
         logger.warn(`⛔ Access attempt without token: ${req.method} ${req.path} (${req.ip})`);
         return res.status(401).json({ error: 'Acceso denegado. Se requiere autenticación.' });
     }
 
-    // 2. Parse Bearer Token
-    const token = authHeader.split(' ')[1];
+    // 2. Parse Bearer Token (header takes priority, fallback to query param)
+    const token = authHeader ? authHeader.split(' ')[1] : queryToken;
     if (!token) {
         return res.status(401).json({ error: 'Token con formato inválido.' });
     }

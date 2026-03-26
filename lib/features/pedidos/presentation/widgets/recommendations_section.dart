@@ -1,6 +1,6 @@
 /// Recommendations Section
 /// =======================
-/// Horizontal scrollable sections for "Productos habituales" and "Otros clientes compran"
+/// Collapsible horizontal scrollable sections for "Productos habituales" and "Otros clientes compran"
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,13 +9,20 @@ import '../../../../core/utils/responsive.dart';
 import '../../providers/pedidos_provider.dart';
 import '../../data/pedidos_service.dart';
 
-class RecommendationsSection extends StatelessWidget {
+class RecommendationsSection extends StatefulWidget {
   final void Function(String code, String name) onProductTap;
 
   const RecommendationsSection({
     Key? key,
     required this.onProductTap,
   }) : super(key: key);
+
+  @override
+  State<RecommendationsSection> createState() => _RecommendationsSectionState();
+}
+
+class _RecommendationsSectionState extends State<RecommendationsSection> {
+  bool _isExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -25,12 +32,64 @@ class RecommendationsSection extends StatelessWidget {
 
     if (!hasHistory && !hasSimilar) return const SizedBox.shrink();
 
-    return Container(
-      color: AppTheme.darkBase,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    final totalCount =
+        provider.clientHistory.length + provider.similarClients.length;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Collapsible header
+        InkWell(
+          onTap: () => setState(() => _isExpanded = !_isExpanded),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppTheme.neonBlue.withOpacity(0.15),
+                        Colors.deepPurple.withOpacity(0.15),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border:
+                        Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.recommend,
+                          color: AppTheme.neonBlue, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Recomendaciones ($totalCount)',
+                        style: TextStyle(
+                          color: AppTheme.neonBlue,
+                          fontWeight: FontWeight.w600,
+                          fontSize: Responsive.fontSize(context,
+                              small: 12, large: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Expandable content
+        if (_isExpanded) ...[
           if (hasHistory)
             _buildSection(
               context,
@@ -48,7 +107,7 @@ class RecommendationsSection extends StatelessWidget {
               badgeBuilder: (r) => '${r.clientCount} cl.',
             ),
         ],
-      ),
+      ],
     );
   }
 
@@ -66,25 +125,25 @@ class RecommendationsSection extends StatelessWidget {
       children: [
         Padding(
           padding: EdgeInsets.only(
-              left: pad.left, right: pad.right, top: 8, bottom: 4),
+              left: pad.left, right: pad.right, top: 4, bottom: 4),
           child: Row(
             children: [
-              Icon(icon, color: AppTheme.neonBlue, size: 16),
-              const SizedBox(width: 6),
+              Icon(icon, color: Colors.white54, size: 14),
+              const SizedBox(width: 4),
               Text(
                 title,
                 style: TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w600,
+                  color: Colors.white54,
+                  fontWeight: FontWeight.w500,
                   fontSize:
-                      Responsive.fontSize(context, small: 12, large: 14),
+                      Responsive.fontSize(context, small: 11, large: 12),
                 ),
               ),
             ],
           ),
         ),
         SizedBox(
-          height: 72,
+          height: 68,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: EdgeInsets.symmetric(horizontal: pad.left),
@@ -103,7 +162,7 @@ class RecommendationsSection extends StatelessWidget {
   Widget _buildRecoCard(
       BuildContext context, Recommendation item, String badge) {
     return InkWell(
-      onTap: () => onProductTap(item.code, item.name),
+      onTap: () => widget.onProductTap(item.code, item.name),
       borderRadius: BorderRadius.circular(10),
       child: Container(
         width: 140,

@@ -41,6 +41,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         setState(() {
           _promotions = list
               .map((p) => PromotionItem.fromJson(p as Map<String, dynamic>))
+              .where((p) => p.promoPrice > 0)
               .toList();
           _isLoading = false;
         });
@@ -153,7 +154,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
               children: [
                 // Promo price
                 Text(
-                  '\u20AC${promo.promoPrice.toStringAsFixed(3)}',
+                  '${promo.promoPrice.toStringAsFixed(3)}\u20AC',
                   style: TextStyle(
                     color: AppTheme.neonGreen,
                     fontWeight: FontWeight.bold,
@@ -161,10 +162,9 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                // Regular price crossed out
                 if (promo.hasSaving)
                   Text(
-                    '\u20AC${promo.regularPrice.toStringAsFixed(3)}',
+                    '${promo.regularPrice.toStringAsFixed(3)}\u20AC',
                     style: TextStyle(
                       color: Colors.white38,
                       fontSize: Responsive.fontSize(context, small: 10, large: 11),
