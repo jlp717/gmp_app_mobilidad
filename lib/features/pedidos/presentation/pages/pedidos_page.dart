@@ -646,7 +646,7 @@ class _PedidosPageState extends State<PedidosPage>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Unidades (${_fmtNum(product.unitsPerBox)} U/C)',
+                                Text('Unidades (${product.unitsPerBox.toStringAsFixed(0)} U/C)',
                                     style: TextStyle(
                                         color: Colors.white70,
                                         fontSize: Responsive.fontSize(context,
