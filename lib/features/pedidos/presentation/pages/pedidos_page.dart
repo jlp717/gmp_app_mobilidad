@@ -265,12 +265,16 @@ class _PedidosPageState extends State<PedidosPage>
                         Icon(Icons.inventory_outlined,
                             color: product.hasStock ? AppTheme.neonGreen : AppTheme.error, size: 14),
                         const SizedBox(width: 4),
-                        Text(
-                          '${product.stockEnvases.toStringAsFixed(0)} c / ${product.stockUnidades.toStringAsFixed(0)} u',
-                          style: TextStyle(
-                            color: product.hasStock ? AppTheme.neonGreen : AppTheme.error,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                        Flexible(
+                          child: Text(
+                            _buildStockText(product),
+                            style: TextStyle(
+                              color: product.hasStock ? AppTheme.neonGreen : AppTheme.error,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -679,6 +683,27 @@ class _PedidosPageState extends State<PedidosPage>
         ),
       ),
     );
+  }
+
+  String _buildStockText(Product product) {
+    final parts = <String>[];
+    parts.add('${product.stockEnvases.toStringAsFixed(0)} cj');
+    if (product.unitsPerBox > 1) {
+      parts.add('${product.totalPieces.toStringAsFixed(0)} uds');
+    }
+    if (product.unitsFraction > 0) {
+      final bands = product.stockForUnit('BANDEJAS');
+      parts.add('${bands.toStringAsFixed(0)} band');
+    }
+    if (product.unitsRetractil > 0) {
+      final est = product.stockForUnit('ESTUCHE');
+      parts.add('${est.toStringAsFixed(0)} est');
+    }
+    if (product.weight > 0) {
+      final kg = product.stockForUnit('KILOGRAMOS');
+      parts.add('${kg.toStringAsFixed(1)} kg');
+    }
+    return parts.join(' / ');
   }
 
   Widget _buildQtyButton(IconData icon, Color color, VoidCallback onTap) {

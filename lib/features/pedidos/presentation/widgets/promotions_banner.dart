@@ -1,6 +1,7 @@
 /// Promotions Banner Widget
 /// ========================
-/// Horizontal scrollable banner showing products with active date-limited price offers
+/// Horizontal scrollable banner showing products with active promotions.
+/// Handles PRICE promos (price reduction) and GIFT promos (buy X get Y free).
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -40,8 +41,8 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
       if (mounted) {
         setState(() {
           _promotions = list
-              .map((p) => PromotionItem.fromJson(p as Map<String, dynamic>))
-              .where((p) => p.promoPrice > 0)
+              .map((p) =>
+                  PromotionItem.fromJson(p as Map<String, dynamic>))
               .toList();
           _isLoading = false;
         });
@@ -63,29 +64,38 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         InkWell(
           onTap: () => setState(() => _isExpanded = !_isExpanded),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [AppTheme.neonGreen.withOpacity(0.2), AppTheme.neonBlue.withOpacity(0.2)],
+                      colors: [
+                        AppTheme.neonGreen.withValues(alpha: 0.2),
+                        AppTheme.neonBlue.withValues(alpha: 0.2),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.neonGreen.withOpacity(0.4)),
+                    border: Border.all(
+                        color:
+                            AppTheme.neonGreen.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.local_offer, color: AppTheme.neonGreen, size: 16),
+                      const Icon(Icons.local_offer,
+                          color: AppTheme.neonGreen, size: 16),
                       const SizedBox(width: 6),
                       Text(
                         'Ofertas activas (${_promotions.length})',
                         style: TextStyle(
                           color: AppTheme.neonGreen,
                           fontWeight: FontWeight.w600,
-                          fontSize: Responsive.fontSize(context, small: 12, large: 14),
+                          fontSize: Responsive.fontSize(context,
+                              small: 12, large: 14),
                         ),
                       ),
                     ],
@@ -93,7 +103,9 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                 ),
                 const Spacer(),
                 Icon(
-                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  _isExpanded
+                      ? Icons.expand_less
+                      : Icons.expand_more,
                   color: Colors.white38,
                   size: 20,
                 ),
@@ -109,7 +121,8 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               itemCount: _promotions.length,
-              itemBuilder: (ctx, i) => _buildPromoCard(_promotions[i]),
+              itemBuilder: (ctx, i) =>
+                  _buildPromoCard(_promotions[i]),
             ),
           ),
       ],
@@ -117,8 +130,11 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
   }
 
   Widget _buildPromoCard(PromotionItem promo) {
+    final isGift = promo.promoType == 'GIFT';
+
     return GestureDetector(
-      onTap: () => widget.onProductTap?.call(promo.code, promo.name),
+      onTap: () =>
+          widget.onProductTap?.call(promo.code, promo.name),
       child: Container(
         width: 180,
         margin: const EdgeInsets.only(right: 8, bottom: 4),
@@ -126,7 +142,11 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         decoration: BoxDecoration(
           color: AppTheme.darkCard,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+          border: Border.all(
+            color: isGift
+                ? AppTheme.neonPurple.withValues(alpha: 0.4)
+                : AppTheme.neonGreen.withValues(alpha: 0.3),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -136,7 +156,8 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
-                fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                fontSize: Responsive.fontSize(context,
+                    small: 11, large: 13),
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -146,61 +167,115 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
               promo.code,
               style: TextStyle(
                 color: Colors.white38,
-                fontSize: Responsive.fontSize(context, small: 10, large: 11),
+                fontSize: Responsive.fontSize(context,
+                    small: 10, large: 11),
               ),
             ),
             const Spacer(),
-            Row(
-              children: [
-                // Promo price
-                Text(
-                  '${promo.promoPrice.toStringAsFixed(3)}\u20AC',
-                  style: TextStyle(
-                    color: AppTheme.neonGreen,
-                    fontWeight: FontWeight.bold,
-                    fontSize: Responsive.fontSize(context, small: 13, large: 15),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                if (promo.hasSaving)
-                  Text(
-                    '${promo.regularPrice.toStringAsFixed(3)}\u20AC',
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: Responsive.fontSize(context, small: 10, large: 11),
-                      decoration: TextDecoration.lineThrough,
-                    ),
-                  ),
-              ],
-            ),
+            if (isGift)
+              // GIFT promo: show description (e.g., "14+4 GRATIS")
+              _buildGiftRow(promo)
+            else
+              // PRICE promo: show promo price vs regular
+              _buildPriceRow(promo),
             const SizedBox(height: 2),
             Row(
               children: [
-                if (promo.savingPct > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonGreen.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      '-${promo.savingPct.toStringAsFixed(0)}%',
-                      style: const TextStyle(color: AppTheme.neonGreen, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
+                // Badge: type indicator
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: isGift
+                        ? AppTheme.neonPurple.withValues(alpha: 0.15)
+                        : AppTheme.neonGreen.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                const Spacer(),
-                Text(
-                  'hasta ${promo.dateTo}',
-                  style: TextStyle(
-                    color: Colors.white38,
-                    fontSize: Responsive.fontSize(context, small: 9, large: 10),
+                  child: Text(
+                    isGift ? 'REGALO' : _buildDiscountLabel(promo),
+                    style: TextStyle(
+                      color: isGift
+                          ? AppTheme.neonPurple
+                          : AppTheme.neonGreen,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
+                const Spacer(),
+                if (promo.dateTo.isNotEmpty)
+                  Text(
+                    'hasta ${promo.dateTo}',
+                    style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: Responsive.fontSize(context,
+                          small: 9, large: 10),
+                    ),
+                  ),
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildPriceRow(PromotionItem promo) {
+    return Row(
+      children: [
+        Text(
+          '${promo.promoPrice.toStringAsFixed(3)}\u20AC',
+          style: TextStyle(
+            color: AppTheme.neonGreen,
+            fontWeight: FontWeight.bold,
+            fontSize: Responsive.fontSize(context,
+                small: 13, large: 15),
+          ),
+        ),
+        const SizedBox(width: 6),
+        if (promo.hasSaving)
+          Text(
+            '${promo.regularPrice.toStringAsFixed(3)}\u20AC',
+            style: TextStyle(
+              color: Colors.white38,
+              fontSize: Responsive.fontSize(context,
+                  small: 10, large: 11),
+              decoration: TextDecoration.lineThrough,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildGiftRow(PromotionItem promo) {
+    return Row(
+      children: [
+        const Icon(Icons.card_giftcard,
+            color: AppTheme.neonPurple, size: 16),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            promo.promoDesc.isNotEmpty
+                ? promo.promoDesc
+                : 'Promocion regalo',
+            style: TextStyle(
+              color: AppTheme.neonPurple,
+              fontWeight: FontWeight.bold,
+              fontSize: Responsive.fontSize(context,
+                  small: 11, large: 13),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _buildDiscountLabel(PromotionItem promo) {
+    if (promo.savingPct > 0) {
+      return '-${promo.savingPct.toStringAsFixed(0)}%';
+    }
+    return 'OFERTA';
   }
 }

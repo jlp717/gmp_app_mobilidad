@@ -3,14 +3,16 @@
 /// Bottom sheet showing full product information: data, image, tariffs,
 /// client price, stock by warehouse, and a link to purchase history.
 
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
 import 'product_history_sheet.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class ProductDetailSheet extends StatefulWidget {
   final String productCode;
@@ -98,9 +100,61 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       '${ApiConfig.baseUrl}/products/'
       '${Uri.encodeComponent(code.trim())}/image';
 
-  String _fichaUrl(String code) =>
-      '${ApiConfig.baseUrl}/products/'
-      '${Uri.encodeComponent(code.trim())}/ficha';
+  Future<void> _openFichaTecnica(BuildContext ctx) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(ctx);
+    final navigator = Navigator.of(ctx);
+    final code = widget.productCode.trim();
+    final url = '${ApiConfig.baseUrl}/products/'
+        '${Uri.encodeComponent(code)}/ficha';
+
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white),
+            ),
+            SizedBox(width: 12),
+            Text('Descargando ficha tecnica...'),
+          ],
+        ),
+        duration: Duration(seconds: 10),
+      ),
+    );
+
+    try {
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/${code}_ficha.pdf';
+      await ApiClient.dio.download(url, filePath);
+      scaffoldMessenger.hideCurrentSnackBar();
+
+      if (!File(filePath).existsSync()) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+                'No se encontro la ficha tecnica para este producto'),
+          ),
+        );
+        return;
+      }
+
+      navigator.push(MaterialPageRoute(
+        builder: (_) => _PdfViewerPage(
+          filePath: filePath,
+          title: 'Ficha Tecnica - $code',
+        ),
+      ));
+    } catch (e) {
+      scaffoldMessenger.hideCurrentSnackBar();
+      final msg = e.toString().contains('404')
+          ? 'No hay ficha tecnica para este producto'
+          : 'Error al descargar: $e';
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -368,7 +422,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   // ── Section 2: Product Image ──
   Widget _buildImageSection(String code) {
     final imageUrl = _imageUrl(code);
-    final fichaUrl = _fichaUrl(code);
 
     return _buildSection(
       title: 'Imagen del Producto',
@@ -421,17 +474,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () async {
-                // Build authenticated URL with token as query param for browser access
-                final token = ApiClient.authToken ?? '';
-                final uri = Uri.parse('$fichaUrl?token=$token');
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(
-                    uri,
-                    mode: LaunchMode.externalApplication,
-                  );
-                }
-              },
+              onPressed: () => _openFichaTecnica(context),
               icon: const Icon(
                 Icons.description_outlined,
                 size: 18,
@@ -737,4 +780,35 @@ class _DataRow {
   final String label;
   final String value;
   const _DataRow(this.label, this.value);
+}
+
+class _PdfViewerPage extends StatelessWidget {
+  final String filePath;
+  final String title;
+
+  const _PdfViewerPage({required this.filePath, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: Text(title, style: const TextStyle(fontSize: 14)),
+        backgroundColor: AppTheme.darkSurface,
+        elevation: 0,
+      ),
+      body: PDFView(
+        filePath: filePath,
+        enableSwipe: true,
+        swipeHorizontal: false,
+        autoSpacing: true,
+        pageFling: true,
+        onError: (error) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al abrir PDF: $error')),
+          );
+        },
+      ),
+    );
+  }
 }

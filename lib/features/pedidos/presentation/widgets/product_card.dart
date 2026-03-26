@@ -90,19 +90,23 @@ class ProductCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    // Stock row
+                    // Stock row — all available units
                     Row(
                       children: [
                         Icon(Icons.inventory_outlined,
                             color: stockColor, size: 13),
                         const SizedBox(width: 4),
-                        Text(
-                          '${product.stockEnvases.toStringAsFixed(0)} cajas / ${product.stockUnidades.toStringAsFixed(0)} uds',
-                          style: TextStyle(
-                            color: stockColor,
-                            fontSize: Responsive.fontSize(context,
-                                small: 11, large: 12),
-                            fontWeight: FontWeight.w500,
+                        Expanded(
+                          child: Text(
+                            _buildStockText(product),
+                            style: TextStyle(
+                              color: stockColor,
+                              fontSize: Responsive.fontSize(context,
+                                  small: 11, large: 12),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -164,6 +168,27 @@ class ProductCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _buildStockText(Product p) {
+    final parts = <String>[];
+    parts.add('${p.stockEnvases.toStringAsFixed(0)} cj');
+    if (p.unitsPerBox > 1) {
+      parts.add('${p.totalPieces.toStringAsFixed(0)} uds');
+    }
+    if (p.unitsFraction > 0) {
+      final bands = p.stockForUnit('BANDEJAS');
+      parts.add('${bands.toStringAsFixed(0)} band');
+    }
+    if (p.unitsRetractil > 0) {
+      final est = p.stockForUnit('ESTUCHE');
+      parts.add('${est.toStringAsFixed(0)} est');
+    }
+    if (p.weight > 0) {
+      final kg = p.stockForUnit('KILOGRAMOS');
+      parts.add('${kg.toStringAsFixed(1)} kg');
+    }
+    return parts.join(' / ');
   }
 
   Widget _buildThumbnail(String code) {
