@@ -93,9 +93,11 @@ class PedidosProvider with ChangeNotifier {
   bool get isSaving => _isSaving;
   String? get error => _error;
   Map<String, dynamic> get clientBalance => _clientBalance;
-  double get clientSaldoPendiente => (_clientBalance['saldoPendiente'] as num?)?.toDouble() ?? 0;
+  double get clientSaldoPendiente =>
+      (_clientBalance['saldoPendiente'] as num?)?.toDouble() ?? 0;
   Set<String> get favoriteProductCodes => _favoriteProductCodes;
-  List<Map<String, dynamic>> get complementaryProducts => _complementaryProducts;
+  List<Map<String, dynamic>> get complementaryProducts =>
+      _complementaryProducts;
   PromotionItem? getPromo(String productCode) => _activePromotions[productCode];
   List<PromotionItem> get activePromotionsList =>
       List.unmodifiable(_activePromotionsList);
@@ -123,9 +125,9 @@ class PedidosProvider with ChangeNotifier {
   double get totalDescuento => totalImporte * _globalDiscountPct / 100;
   double get totalConDescuento => totalImporte - totalDescuento;
   double get totalBase => _lines.fold(0.0, (s, l) {
-    final saleAfterDiscount = l.importeVenta * _discountFactor;
-    return s + saleAfterDiscount / (1 + l.ivaRate);
-  });
+        final saleAfterDiscount = l.importeVenta * _discountFactor;
+        return s + saleAfterDiscount / (1 + l.ivaRate);
+      });
   double get totalIva => totalConDescuento - totalBase;
   Map<double, double> get ivaBreakdown {
     final map = <double, double>{};
@@ -143,8 +145,10 @@ class PedidosProvider with ChangeNotifier {
   bool get hasLines => _lines.isNotEmpty;
   int get lineCount => _lines.length;
 
-  double get totalEnvases => _lines.fold(0, (sum, l) => sum + l.cantidadEnvases);
-  double get totalUnidades => _lines.fold(0, (sum, l) => sum + l.cantidadUnidades);
+  double get totalEnvases =>
+      _lines.fold(0, (sum, l) => sum + l.cantidadEnvases);
+  double get totalUnidades =>
+      _lines.fold(0, (sum, l) => sum + l.cantidadUnidades);
   double get totalImporte => _lines.fold(0, (sum, l) => sum + l.importeVenta);
   double get totalCosto => _lines.fold(0, (sum, l) => sum + l.importeCosto);
   double get totalMargen => totalConDescuento - totalCosto;
@@ -153,10 +157,14 @@ class PedidosProvider with ChangeNotifier {
 
   String get saleTypeLabel {
     switch (_saleType) {
-      case 'CC': return 'Venta';
-      case 'VC': return 'Venta Sin Nombre';
-      case 'NV': return 'No Venta';
-      default: return 'Venta';
+      case 'CC':
+        return 'Venta';
+      case 'VC':
+        return 'Venta Sin Nombre';
+      case 'NV':
+        return 'No Venta';
+      default:
+        return 'Venta';
     }
   }
 
@@ -228,7 +236,8 @@ class PedidosProvider with ChangeNotifier {
         forceRefresh: forceRefresh,
       );
 
-      final filtered = _onlyWithStock ? results.where((p) => p.hasStock).toList() : results;
+      final filtered =
+          _onlyWithStock ? results.where((p) => p.hasStock).toList() : results;
       if (reset) {
         _products = filtered;
       } else {
@@ -282,13 +291,19 @@ class PedidosProvider with ChangeNotifier {
       if (idx >= 0) {
         final p = _products[idx];
         _products[idx] = Product(
-          code: p.code, name: p.name, brand: p.brand, family: p.family,
-          unitsPerBox: p.unitsPerBox, unitsFraction: p.unitsFraction,
-          unitsRetractil: p.unitsRetractil, unitMeasure: p.unitMeasure,
+          code: p.code,
+          name: p.name,
+          brand: p.brand,
+          family: p.family,
+          unitsPerBox: p.unitsPerBox,
+          unitsFraction: p.unitsFraction,
+          unitsRetractil: p.unitsRetractil,
+          unitMeasure: p.unitMeasure,
           weight: p.weight,
           stockEnvases: stock['envases'] ?? p.stockEnvases,
           stockUnidades: stock['unidades'] ?? p.stockUnidades,
-          precioTarifa1: p.precioTarifa1, precioMinimo: p.precioMinimo,
+          precioTarifa1: p.precioTarifa1,
+          precioMinimo: p.precioMinimo,
           precioCliente: p.precioCliente,
         );
         notifyListeners();
@@ -300,8 +315,8 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Cart Operations ──
 
-  String? addLine(Product product, double cantidadEnvases, double cantidadUnidades,
-      String unidadMedida, double precioVenta) {
+  String? addLine(Product product, double cantidadEnvases,
+      double cantidadUnidades, String unidadMedida, double precioVenta) {
     final unit = unidadMedida.trim().isEmpty
         ? 'CAJAS'
         : unidadMedida.trim().toUpperCase();
@@ -318,7 +333,8 @@ class PedidosProvider with ChangeNotifier {
       return msg;
     }
 
-    final existingIdx = _lines.indexWhere((l) => l.codigoArticulo == product.code);
+    final existingIdx =
+        _lines.indexWhere((l) => l.codigoArticulo == product.code);
     if (existingIdx >= 0) {
       final line = _lines[existingIdx];
       final lineUnit = line.unidadMedida.trim().toUpperCase();
@@ -337,8 +353,9 @@ class PedidosProvider with ChangeNotifier {
       final currentQty =
           lineUnit == 'CAJAS' ? line.cantidadEnvases : line.cantidadUnidades;
       final newQty = currentQty + requestQty;
-      final maxQty =
-          lineUnit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(lineUnit);
+      final maxQty = lineUnit == 'CAJAS'
+          ? product.stockEnvases
+          : product.stockForUnit(lineUnit);
 
       if (newQty > maxQty) {
         final msg = lineUnit == 'CAJAS'
@@ -363,8 +380,13 @@ class PedidosProvider with ChangeNotifier {
       _lastUnitByProduct[_qtyKey(product.code)] = line.unidadMedida;
     } else {
       final ivaCode = product.codigoIva;
-      final ivaRate =
-          ivaCode == '1' ? 0.10 : ivaCode == '2' ? 0.04 : ivaCode == '3' ? 0.0 : 0.21;
+      final ivaRate = ivaCode == '1'
+          ? 0.10
+          : ivaCode == '2'
+              ? 0.04
+              : ivaCode == '3'
+                  ? 0.0
+                  : 0.21;
       final line = OrderLine(
         codigoArticulo: product.code,
         descripcion: product.name,
@@ -426,8 +448,9 @@ class PedidosProvider with ChangeNotifier {
     final pIdx = _products.indexWhere((p) => p.code == line.codigoArticulo);
     if (pIdx >= 0) {
       final product = _products[pIdx];
-      final maxQty =
-          nextUnit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(nextUnit);
+      final maxQty = nextUnit == 'CAJAS'
+          ? product.stockEnvases
+          : product.stockForUnit(nextUnit);
       if (nextQty > maxQty) {
         final msg = nextUnit == 'CAJAS'
             ? 'Stock insuficiente: Solo hay ${product.stockEnvases.toInt()} cajas.'
@@ -508,7 +531,8 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Order Persistence ──
 
-  Future<Map<String, dynamic>?> confirmOrder(String vendedorCode, {String observaciones = ''}) async {
+  Future<Map<String, dynamic>?> confirmOrder(String vendedorCode,
+      {String observaciones = ''}) async {
     if (!hasClient || !hasLines) {
       _error = 'Seleccione un cliente y añada al menos un producto';
       notifyListeners();
@@ -525,10 +549,8 @@ class PedidosProvider with ChangeNotifier {
       final discountTag = _globalDiscountPct > 0
           ? '[DTO ${_globalDiscountPct.toStringAsFixed(1)}%]'
           : '';
-      final fullObservaciones = [discountTag, obs]
-          .where((s) => s.isNotEmpty)
-          .join(' ')
-          .trim();
+      final fullObservaciones =
+          [discountTag, obs].where((s) => s.isNotEmpty).join(' ').trim();
 
       final result = await PedidosService.createOrder(
         clientCode: _clientCode!,
@@ -584,7 +606,8 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Recommendations ──
 
-  Future<void> loadRecommendations({required String clientCode, required String vendedorCode}) async {
+  Future<void> loadRecommendations(
+      {required String clientCode, required String vendedorCode}) async {
     try {
       final reco = await PedidosService.getRecommendations(
         clientCode: clientCode,
@@ -671,7 +694,8 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  bool isFavorite(String productCode) => _favoriteProductCodes.contains(productCode);
+  bool isFavorite(String productCode) =>
+      _favoriteProductCodes.contains(productCode);
 
   // ── Complementary Products & Promotions ──
   Future<void> loadComplementaryProducts() async {
@@ -682,7 +706,9 @@ class PedidosProvider with ChangeNotifier {
     }
     try {
       final codes = _lines.map((l) => l.codigoArticulo).toList();
-      _complementaryProducts = await PedidosService.getComplementaryProducts(codes, clientCode: _clientCode);
+      _complementaryProducts = await PedidosService.getComplementaryProducts(
+          codes,
+          clientCode: _clientCode);
       notifyListeners();
     } catch (e) {
       debugPrint('[PedidosProvider] loadComplementaryProducts error: $e');
@@ -691,7 +717,9 @@ class PedidosProvider with ChangeNotifier {
 
   Future<void> loadPromotions() async {
     try {
-      final response = await ApiClient.get('/pedidos/promotions', queryParameters: _clientCode != null ? {'clientCode': _clientCode} : null);
+      final response = await ApiClient.get('/pedidos/promotions',
+          queryParameters:
+              _clientCode != null ? {'clientCode': _clientCode} : null);
       final list = response['promotions'] as List? ?? [];
       _activePromotionsList.clear();
       _activePromotions.clear();
@@ -738,7 +766,9 @@ class PedidosProvider with ChangeNotifier {
         line.recalculate();
         _lines.add(line);
         _lastQtyByProduct[_qtyKey(line.codigoArticulo)] =
-            line.cantidadEnvases > 0 ? line.cantidadEnvases : line.cantidadUnidades;
+            line.cantidadEnvases > 0
+                ? line.cantidadEnvases
+                : line.cantidadUnidades;
         _lastUnitByProduct[_qtyKey(line.codigoArticulo)] = line.unidadMedida;
       }
       _error = null;
@@ -752,10 +782,17 @@ class PedidosProvider with ChangeNotifier {
   // ── Batch Add from Recommendations ──
   void addMultipleProducts(List<Product> products, double defaultQty) {
     for (final product in products) {
-      final existingIdx = _lines.indexWhere((l) => l.codigoArticulo == product.code);
+      final existingIdx =
+          _lines.indexWhere((l) => l.codigoArticulo == product.code);
       if (existingIdx < 0) {
         final ivaCode = product.codigoIva;
-        final ivaRate = ivaCode == '1' ? 0.10 : ivaCode == '2' ? 0.04 : ivaCode == '3' ? 0.0 : 0.21;
+        final ivaRate = ivaCode == '1'
+            ? 0.10
+            : ivaCode == '2'
+                ? 0.04
+                : ivaCode == '3'
+                    ? 0.0
+                    : 0.21;
         final line = OrderLine(
           codigoArticulo: product.code,
           descripcion: product.name,
@@ -764,7 +801,9 @@ class PedidosProvider with ChangeNotifier {
           unidadMedida: 'CAJAS',
           unidadesCaja: product.unitsPerBox,
           precioVenta: product.bestPrice,
-          precioCosto: product.precioMinimo > 0 ? product.precioMinimo * 0.7 : product.precioTarifa1 * 0.7,
+          precioCosto: product.precioMinimo > 0
+              ? product.precioMinimo * 0.7
+              : product.precioTarifa1 * 0.7,
           precioTarifa: product.precioTarifa1,
           precioTarifaCliente: product.precioCliente,
           precioMinimo: product.precioMinimo,
@@ -786,28 +825,37 @@ class PedidosProvider with ChangeNotifier {
       try {
         final stock = await PedidosService.getStock(_lines[i].codigoArticulo);
         // Update the product in catalog if exists
-        final pIdx = _products.indexWhere((p) => p.code == _lines[i].codigoArticulo);
+        final pIdx =
+            _products.indexWhere((p) => p.code == _lines[i].codigoArticulo);
         if (pIdx >= 0) {
           final p = _products[pIdx];
           _products[pIdx] = Product(
-            code: p.code, name: p.name, brand: p.brand, family: p.family,
-            unitsPerBox: p.unitsPerBox, unitsFraction: p.unitsFraction,
-            unitsRetractil: p.unitsRetractil, unitMeasure: p.unitMeasure,
+            code: p.code,
+            name: p.name,
+            brand: p.brand,
+            family: p.family,
+            unitsPerBox: p.unitsPerBox,
+            unitsFraction: p.unitsFraction,
+            unitsRetractil: p.unitsRetractil,
+            unitMeasure: p.unitMeasure,
             weight: p.weight,
             stockEnvases: stock['envases'] ?? p.stockEnvases,
             stockUnidades: stock['unidades'] ?? p.stockUnidades,
-            precioTarifa1: p.precioTarifa1, precioMinimo: p.precioMinimo,
+            precioTarifa1: p.precioTarifa1,
+            precioMinimo: p.precioMinimo,
             precioCliente: p.precioCliente,
           );
         }
       } catch (e) {
-        debugPrint('[PedidosProvider] refreshCartStock error for ${_lines[i].codigoArticulo}: $e');
+        debugPrint(
+            '[PedidosProvider] refreshCartStock error for ${_lines[i].codigoArticulo}: $e');
       }
     }
     notifyListeners();
   }
 
-  List<Map<String, dynamic>> get savedDrafts => PedidosOfflineService.getDrafts();
+  List<Map<String, dynamic>> get savedDrafts =>
+      PedidosOfflineService.getDrafts();
   int get draftCount => PedidosOfflineService.draftCount;
   int get pendingSyncCount => PedidosOfflineService.pendingSyncCount;
 

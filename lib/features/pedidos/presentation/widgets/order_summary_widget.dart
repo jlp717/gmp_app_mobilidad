@@ -108,16 +108,15 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                     'Seleccionar cliente',
                     style: TextStyle(
                       color: Colors.white38,
-                      fontSize: Responsive.fontSize(context,
-                          small: 13, large: 15),
+                      fontSize:
+                          Responsive.fontSize(context, small: 13, large: 15),
                     ),
                   ),
           ),
           // Line count badge
           if (provider.hasLines)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: AppTheme.neonBlue.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(10),
@@ -126,8 +125,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 '${provider.lineCount} lineas',
                 style: TextStyle(
                   color: AppTheme.neonBlue,
-                  fontSize:
-                      Responsive.fontSize(context, small: 11, large: 12),
+                  fontSize: Responsive.fontSize(context, small: 11, large: 12),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -135,19 +133,24 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
           // Clear cart button (Mejora 8)
           if (provider.hasLines)
             IconButton(
-              icon: const Icon(Icons.delete_sweep_outlined, color: AppTheme.error, size: 20),
+              icon: const Icon(Icons.delete_sweep_outlined,
+                  color: AppTheme.error, size: 20),
               tooltip: 'Vaciar carrito',
               onPressed: () {
                 showDialog<void>(
                   context: context,
                   builder: (ctx) => AlertDialog(
                     backgroundColor: AppTheme.darkSurface,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
                     title: const Row(
                       children: [
-                        Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 22),
+                        Icon(Icons.warning_amber_rounded,
+                            color: AppTheme.error, size: 22),
                         SizedBox(width: 8),
-                        Text('Vaciar carrito', style: TextStyle(color: Colors.white, fontSize: 16)),
+                        Text('Vaciar carrito',
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 16)),
                       ],
                     ),
                     content: const Text(
@@ -157,15 +160,19 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                        child: const Text('Cancelar',
+                            style: TextStyle(color: Colors.white54)),
                       ),
                       TextButton(
-                        onPressed: () {
+                        onPressed: () async {
                           provider.clearOrder();
-                          provider.loadPromotions();
+                          await provider.loadPromotions();
                           Navigator.pop(ctx);
                         },
-                        child: const Text('Vaciar', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.bold)),
+                        child: const Text('Vaciar',
+                            style: TextStyle(
+                                color: AppTheme.error,
+                                fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
@@ -183,7 +190,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: provider.lines.length,
       buildDefaultDragHandles: true,
-      onReorder: (oldIndex, newIndex) => provider.reorderLines(oldIndex, newIndex),
+      onReorder: (oldIndex, newIndex) =>
+          provider.reorderLines(oldIndex, newIndex),
       itemBuilder: (ctx, i) {
         final line = provider.lines[i];
         return OrderLineTile(
@@ -204,26 +212,28 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
           },
           onIncrement: () {
             final isBoxes = line.cantidadEnvases > 0;
-            final qty = isBoxes ? line.cantidadEnvases + 1 : line.cantidadUnidades + 1;
-            final error = provider.updateLine(
-               i, 
-               cantidadEnvases: isBoxes ? qty : null, 
-               cantidadUnidades: isBoxes ? null : qty
-            );
+            final qty =
+                isBoxes ? line.cantidadEnvases + 1 : line.cantidadUnidades + 1;
+            final error = provider.updateLine(i,
+                cantidadEnvases: isBoxes ? qty : null,
+                cantidadUnidades: isBoxes ? null : qty);
             if (error != null) {
-               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: AppTheme.error));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(error,
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  backgroundColor: AppTheme.error));
             }
           },
           onDecrement: () {
             final isBoxes = line.cantidadEnvases > 0;
-            final currentQty = isBoxes ? line.cantidadEnvases : line.cantidadUnidades;
+            final currentQty =
+                isBoxes ? line.cantidadEnvases : line.cantidadUnidades;
             if (currentQty <= 1) return;
             final qty = currentQty - 1;
-            provider.updateLine(
-               i,
-               cantidadEnvases: isBoxes ? qty : null, 
-               cantidadUnidades: isBoxes ? null : qty
-            );
+            provider.updateLine(i,
+                cantidadEnvases: isBoxes ? qty : null,
+                cantidadUnidades: isBoxes ? null : qty);
           },
         );
       },
@@ -235,15 +245,13 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.shopping_cart_outlined,
-              color: Colors.white24, size: 56),
+          Icon(Icons.shopping_cart_outlined, color: Colors.white24, size: 56),
           const SizedBox(height: 12),
           Text(
             'Pedido vacio',
             style: TextStyle(
               color: Colors.white38,
-              fontSize:
-                  Responsive.fontSize(context, small: 15, large: 17),
+              fontSize: Responsive.fontSize(context, small: 15, large: 17),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -252,8 +260,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
             'Toca un producto para anadirlo',
             style: TextStyle(
               color: Colors.white24,
-              fontSize:
-                  Responsive.fontSize(context, small: 12, large: 14),
+              fontSize: Responsive.fontSize(context, small: 12, large: 14),
             ),
           ),
         ],
@@ -311,11 +318,14 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
             decoration: InputDecoration(
               hintText: 'Añadir observaciones al pedido...',
               hintStyle: const TextStyle(color: Colors.white38),
-              prefixIcon: const Icon(Icons.comment_outlined, color: Colors.white54, size: 18),
+              prefixIcon: const Icon(Icons.comment_outlined,
+                  color: Colors.white54, size: 18),
               filled: true,
               fillColor: AppTheme.darkCard,
               contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none),
             ),
           ),
           const SizedBox(height: 12),
@@ -324,13 +334,15 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               children: [
-                const Icon(Icons.discount_outlined, color: Colors.white54, size: 16),
+                const Icon(Icons.discount_outlined,
+                    color: Colors.white54, size: 16),
                 const SizedBox(width: 6),
                 Text(
                   'Descuento:',
                   style: TextStyle(
                     color: Colors.white70,
-                    fontSize: Responsive.fontSize(context, small: 12, large: 13),
+                    fontSize:
+                        Responsive.fontSize(context, small: 12, large: 13),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -339,27 +351,33 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                   child: TextField(
                     controller: _discountCtrl,
                     focusNode: _discountFocusNode,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     onChanged: (v) {
                       final normalized = v.replaceAll(',', '.').trim();
-                      provider.setGlobalDiscount(double.tryParse(normalized) ?? 0);
+                      provider
+                          .setGlobalDiscount(double.tryParse(normalized) ?? 0);
                     },
                     decoration: InputDecoration(
                       suffixText: '%',
-                      suffixStyle: const TextStyle(color: Colors.white54, fontSize: 12),
+                      suffixStyle:
+                          const TextStyle(color: Colors.white54, fontSize: 12),
                       filled: true,
                       fillColor: AppTheme.darkCard,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
                       isDense: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.borderColor),
+                        borderSide:
+                            const BorderSide(color: AppTheme.borderColor),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.borderColor),
+                        borderSide:
+                            const BorderSide(color: AppTheme.borderColor),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -375,7 +393,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                     style: TextStyle(
                       color: AppTheme.neonGreen,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.fontSize(context, small: 14, large: 15),
+                      fontSize:
+                          Responsive.fontSize(context, small: 14, large: 15),
                     ),
                   ),
                   Text(
@@ -434,9 +453,10 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                     style: const TextStyle(color: Colors.white38, fontSize: 10),
                   ),
                   ...provider.ivaBreakdown.entries.map((e) => Text(
-                      'IVA ${(e.key * 100).toStringAsFixed(0)}%: ${PedidosFormatters.money(e.value)}',
-                      style: const TextStyle(color: Colors.white38, fontSize: 10),
-                    )),
+                        'IVA ${(e.key * 100).toStringAsFixed(0)}%: ${PedidosFormatters.money(e.value)}',
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 10),
+                      )),
                 ],
               ),
             ),
@@ -544,8 +564,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 line.descripcion,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize:
-                      Responsive.fontSize(context, small: 16, large: 18),
+                  fontSize: Responsive.fontSize(context, small: 16, large: 18),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -554,8 +573,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 line.codigoArticulo,
                 style: TextStyle(
                   color: AppTheme.neonBlue,
-                  fontSize:
-                      Responsive.fontSize(context, small: 12, large: 14),
+                  fontSize: Responsive.fontSize(context, small: 12, large: 14),
                 ),
               ),
               const SizedBox(height: 16),
@@ -564,8 +582,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                   Expanded(
                     child: TextField(
                       controller: qtyController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: 'Cantidad',
@@ -594,8 +612,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                   Expanded(
                     child: TextField(
                       controller: priceController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: 'Precio',
@@ -641,10 +659,12 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 height: 48,
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    final qty =
-                        double.tryParse(qtyController.text.replaceAll(',', '.')) ?? 0;
-                    final price =
-                        double.tryParse(priceController.text.replaceAll(',', '.')) ?? 0;
+                    final qty = double.tryParse(
+                            qtyController.text.replaceAll(',', '.')) ??
+                        0;
+                    final price = double.tryParse(
+                            priceController.text.replaceAll(',', '.')) ??
+                        0;
                     if (qty <= 0) return;
 
                     final isBoxes = line.cantidadEnvases > 0;
@@ -665,8 +685,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    textStyle:
-                        const TextStyle(fontWeight: FontWeight.bold),
+                    textStyle: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -689,11 +708,12 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
       return;
     }
 
-    final result = await provider.confirmOrder(widget.vendedorCode, observaciones: _obsCtrl.text.trim());
+    final result = await provider.confirmOrder(widget.vendedorCode,
+        observaciones: _obsCtrl.text.trim());
     if (result != null && context.mounted) {
       _obsCtrl.clear();
       _discountCtrl.clear();
-      provider.loadPromotions();
+      await provider.loadPromotions();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -708,14 +728,20 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
   void _showOrderPreview(BuildContext context, PedidosProvider provider) {
     if (!provider.hasClient) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona un cliente primero'), backgroundColor: AppTheme.error),
+        const SnackBar(
+            content: Text('Selecciona un cliente primero'),
+            backgroundColor: AppTheme.error),
       );
       return;
     }
 
     final lines = provider.lines;
     final margin = provider.porcentajeMargen;
-    final marginColor = margin >= 15 ? AppTheme.neonGreen : margin >= 5 ? Colors.orange : AppTheme.error;
+    final marginColor = margin >= 15
+        ? AppTheme.neonGreen
+        : margin >= 5
+            ? Colors.orange
+            : AppTheme.error;
     final hasDiscount = provider.globalDiscountPct > 0;
 
     showDialog<void>(
@@ -727,7 +753,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
           children: [
             Icon(Icons.receipt_outlined, color: AppTheme.neonBlue, size: 22),
             SizedBox(width: 8),
-            Text('Resumen del pedido', style: TextStyle(color: Colors.white, fontSize: 16)),
+            Text('Resumen del pedido',
+                style: TextStyle(color: Colors.white, fontSize: 16)),
           ],
         ),
         content: Column(
@@ -737,12 +764,16 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
             // Client
             Row(
               children: [
-                const Icon(Icons.storefront_outlined, color: AppTheme.neonBlue, size: 16),
+                const Icon(Icons.storefront_outlined,
+                    color: AppTheme.neonBlue, size: 16),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     '${provider.clientName} (${provider.clientCode})',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -753,24 +784,26 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
             const SizedBox(height: 8),
             // First 3 lines
             ...lines.take(3).map((l) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      l.descripcion,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l.descripcion,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '${l.cantidadEnvases > 0 ? PedidosFormatters.number(l.cantidadEnvases) : PedidosFormatters.number(l.cantidadUnidades, decimals: 2)} x ${PedidosFormatters.money((hasDiscount ? (l.precioVenta * (1 - provider.globalDiscountPct / 100)) : l.precioVenta), decimals: 3)}',
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 11),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '${l.cantidadEnvases > 0 ? PedidosFormatters.number(l.cantidadEnvases) : PedidosFormatters.number(l.cantidadUnidades, decimals: 2)} x ${PedidosFormatters.money((hasDiscount ? (l.precioVenta * (1 - provider.globalDiscountPct / 100)) : l.precioVenta), decimals: 3)}',
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
-                  ),
-                ],
-              ),
-            )),
+                )),
             if (lines.length > 3)
               Text(
                 '... y ${lines.length - 3} lineas mas',
@@ -783,27 +816,39 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('${provider.lineCount} lineas', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                Text('${provider.lineCount} lineas',
+                    style:
+                        const TextStyle(color: Colors.white54, fontSize: 12)),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     if (hasDiscount) ...[
                       Text(
                         'Dto. ${provider.globalDiscountPct.toStringAsFixed(1)}%: -${PedidosFormatters.money(provider.totalDescuento)}',
-                        style: const TextStyle(color: AppTheme.error, fontSize: 11),
+                        style: const TextStyle(
+                            color: AppTheme.error, fontSize: 11),
                       ),
                       Text(
                         'Total: ${PedidosFormatters.money(provider.totalConDescuento)}',
-                        style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 15),
+                        style: const TextStyle(
+                            color: AppTheme.neonGreen,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15),
                       ),
                     ] else
                       Text(
                         'Total: ${PedidosFormatters.money(provider.totalImporte)}',
-                        style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 15),
+                        style: const TextStyle(
+                            color: AppTheme.neonGreen,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15),
                       ),
                     Text(
                       'Margen: ${margin.toStringAsFixed(1)}%',
-                      style: TextStyle(color: marginColor, fontSize: 12, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                          color: marginColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -814,7 +859,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Revisar', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Revisar', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton.icon(
             onPressed: () {
@@ -822,11 +868,13 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
               _onConfirm(context, provider);
             },
             icon: const Icon(Icons.check_circle, size: 18),
-            label: const Text('Definitivo', style: TextStyle(fontWeight: FontWeight.bold)),
+            label: const Text('Definitivo',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.neonGreen,
               foregroundColor: AppTheme.darkBase,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
           ),
         ],

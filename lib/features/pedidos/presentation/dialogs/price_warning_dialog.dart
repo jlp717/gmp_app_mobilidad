@@ -35,8 +35,7 @@ class PriceWarningDialog extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Row(
         children: [
-          Icon(Icons.warning_amber_rounded,
-              color: AppTheme.warning, size: 24),
+          Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 24),
           const SizedBox(width: 8),
           const Text('Precio bajo',
               style: TextStyle(color: Colors.white, fontSize: 18)),
@@ -49,13 +48,13 @@ class PriceWarningDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancelar',
-              style: TextStyle(color: Colors.white54)),
+          child:
+              const Text('Cancelar', style: TextStyle(color: Colors.white54)),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('Aceptar',
-              style: TextStyle(color: AppTheme.warning)),
+          child:
+              const Text('Aceptar', style: TextStyle(color: AppTheme.warning)),
         ),
       ],
     );

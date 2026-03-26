@@ -16,10 +16,8 @@ class ClientBalanceBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final saldo = (balance['saldoPendiente'] as num?)?.toDouble() ?? 0;
     final cobrado = (balance['cobradoAnual'] as num?)?.toDouble() ?? 0;
-    final facturado =
-        (balance['facturadoAnual'] as num?)?.toDouble() ?? 0;
-    final year =
-        (balance['year'] as num?)?.toInt() ?? DateTime.now().year;
+    final facturado = (balance['facturadoAnual'] as num?)?.toDouble() ?? 0;
+    final year = (balance['year'] as num?)?.toInt() ?? DateTime.now().year;
 
     if (facturado == 0 && saldo == 0) return const SizedBox.shrink();
 
@@ -141,8 +139,7 @@ class ClientBalanceBadge extends StatelessWidget {
         backgroundColor: AppTheme.darkSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-              color: AppTheme.borderColor.withOpacity(0.3)),
+          side: BorderSide(color: AppTheme.borderColor.withOpacity(0.3)),
         ),
         title: Row(
           children: [
@@ -195,8 +192,7 @@ class ClientBalanceBadge extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppTheme.darkCard,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: color.withOpacity(0.3)),
+                  border: Border.all(color: color.withOpacity(0.3)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,8 +251,7 @@ class ClientBalanceBadge extends StatelessWidget {
     );
   }
 
-  Widget _infoRow(
-      String title, String value, String desc, Color color) {
+  Widget _infoRow(String title, String value, String desc, Color color) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -279,15 +274,12 @@ class ClientBalanceBadge extends StatelessWidget {
               ),
               Text(value,
                   style: TextStyle(
-                      color: color,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold)),
+                      color: color, fontSize: 13, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 4),
           Text(desc,
-              style: const TextStyle(
-                  color: Colors.white38, fontSize: 10)),
+              style: const TextStyle(color: Colors.white38, fontSize: 10)),
         ],
       ),
     );
@@ -301,22 +293,18 @@ class ClientBalanceBadge extends StatelessWidget {
           Container(
             width: 8,
             height: 8,
-            decoration: BoxDecoration(
-                color: color, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           Text(
             '$label: ',
             style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.w600),
+                color: color, fontSize: 10, fontWeight: FontWeight.w600),
           ),
           Flexible(
             child: Text(
               desc,
-              style: const TextStyle(
-                  color: Colors.white38, fontSize: 10),
+              style: const TextStyle(color: Colors.white38, fontSize: 10),
             ),
           ),
         ],

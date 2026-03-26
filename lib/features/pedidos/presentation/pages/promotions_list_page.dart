@@ -260,8 +260,8 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                 runSpacing: 6,
                 children: [
                   ...group.items.take(8).map((item) {
-                    final hasStock =
-                        widget.hasStockResolver?.call(item.code) ?? item.hasStock;
+                    final hasStock = widget.hasStockResolver?.call(item.code) ??
+                        item.hasStock;
                     final stockColor = hasStock == true
                         ? AppTheme.neonGreen
                         : hasStock == false
@@ -269,7 +269,8 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                             : Colors.white38;
 
                     return ActionChip(
-                      onPressed: () => widget.onProductTap(item.code, item.name),
+                      onPressed: () =>
+                          widget.onProductTap(item.code, item.name),
                       backgroundColor: AppTheme.darkSurface,
                       side: BorderSide(color: stockColor.withOpacity(0.45)),
                       avatar: Icon(
@@ -295,8 +296,8 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                       side: BorderSide(color: AppTheme.borderColor),
                       label: Text(
                         '+${group.items.length - 8} más',
-                        style:
-                            const TextStyle(color: Colors.white54, fontSize: 11),
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 11),
                       ),
                     ),
                 ],

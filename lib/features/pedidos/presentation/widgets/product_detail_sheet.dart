@@ -41,8 +41,7 @@ class ProductDetailSheet extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: AppTheme.darkSurface,
       shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) => DraggableScrollableSheet(
         initialChildSize: 0.88,
@@ -60,8 +59,7 @@ class ProductDetailSheet extends StatefulWidget {
   }
 
   @override
-  State<ProductDetailSheet> createState() =>
-      _ProductDetailSheetState();
+  State<ProductDetailSheet> createState() => _ProductDetailSheetState();
 }
 
 class _ProductDetailSheetState extends State<ProductDetailSheet> {
@@ -97,8 +95,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     }
   }
 
-  String _imageUrl(String code) =>
-      '${ApiConfig.baseUrl}/products/'
+  String _imageUrl(String code) => '${ApiConfig.baseUrl}/products/'
       '${Uri.encodeComponent(code.trim())}/image';
 
   Future<void> _openFichaTecnica(BuildContext ctx) async {
@@ -135,8 +132,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       if (!File(filePath).existsSync()) {
         scaffoldMessenger.showSnackBar(
           const SnackBar(
-            content: Text(
-                'No se encontro la ficha tecnica para este producto'),
+            content: Text('No se encontro la ficha tecnica para este producto'),
           ),
         );
         return;
@@ -298,18 +294,22 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     // IVA type label
     String ivaLabel(String code) {
       switch (code) {
-        case '0': return 'Exento';
-        case '1': return 'General (21%)';
-        case '2': return 'Reducido (10%)';
-        case '3': return 'Super Reducido (4%)';
-        default: return 'Tipo $code';
+        case '0':
+          return 'Exento';
+        case '1':
+          return 'General (21%)';
+        case '2':
+          return 'Reducido (10%)';
+        case '3':
+          return 'Super Reducido (4%)';
+        default:
+          return 'Tipo $code';
       }
     }
 
     // Build family display: "code - description" if name available
-    final familyDisplay = p.familyName.isNotEmpty
-        ? '${p.family} - ${p.familyName}'
-        : p.family;
+    final familyDisplay =
+        p.familyName.isNotEmpty ? '${p.family} - ${p.familyName}' : p.family;
 
     final rows = <_DataRow>[
       // Identification
@@ -318,55 +318,38 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       if (p.nameExt.isNotEmpty) _DataRow('Descripcion ext.', p.nameExt),
       // Classification groups
       _DataRow('Familia (Grupo 1)', familyDisplay),
-      if (p.subFamily.isNotEmpty)
-        _DataRow('Subfamilia (Grupo 2)', p.subFamily),
+      if (p.subFamily.isNotEmpty) _DataRow('Subfamilia (Grupo 2)', p.subFamily),
       _DataRow('Marca', p.brand),
-      if (p.grupoGeneral.isNotEmpty)
-        _DataRow('Grupo General', p.grupoGeneral),
-      if (p.tipoProducto.isNotEmpty)
-        _DataRow('Tipo (Grupo 4)', p.tipoProducto),
-      if (p.categoria.isNotEmpty)
-        _DataRow('Categoria', p.categoria),
-      if (p.gama.isNotEmpty)
-        _DataRow('Gama', p.gama),
+      if (p.grupoGeneral.isNotEmpty) _DataRow('Grupo General', p.grupoGeneral),
+      if (p.tipoProducto.isNotEmpty) _DataRow('Tipo (Grupo 4)', p.tipoProducto),
+      if (p.categoria.isNotEmpty) _DataRow('Categoria', p.categoria),
+      if (p.gama.isNotEmpty) _DataRow('Gama', p.gama),
       if (p.claseArticulo.isNotEmpty)
         _DataRow('Clasificacion', p.claseArticulo),
-      if (p.prefamilia.isNotEmpty)
-        _DataRow('Prefamilia', p.prefamilia),
+      if (p.prefamilia.isNotEmpty) _DataRow('Prefamilia', p.prefamilia),
       // Packaging & units
       _DataRow('Unidad de Medida', p.unitMeasure),
       _DataRow('Uds. por Caja', p.unitsPerBox.toStringAsFixed(0)),
       if (p.unitsFraction > 0)
-        _DataRow('Uds. Fraccion (Bandeja)',
-            p.unitsFraction.toStringAsFixed(0)),
+        _DataRow('Uds. Fraccion (Bandeja)', p.unitsFraction.toStringAsFixed(0)),
       if (p.unitsRetractil > 0)
-        _DataRow('Uds. Retractil (Estuche)',
-            p.unitsRetractil.toStringAsFixed(0)),
-      if (p.presentacion.isNotEmpty)
-        _DataRow('Presentacion', p.presentacion),
-      if (p.formato.isNotEmpty)
-        _DataRow('Formato', p.formato),
-      if (p.calibre.isNotEmpty)
-        _DataRow('Calibre', p.calibre),
+        _DataRow(
+            'Uds. Retractil (Estuche)', p.unitsRetractil.toStringAsFixed(0)),
+      if (p.presentacion.isNotEmpty) _DataRow('Presentacion', p.presentacion),
+      if (p.formato.isNotEmpty) _DataRow('Formato', p.formato),
+      if (p.calibre.isNotEmpty) _DataRow('Calibre', p.calibre),
       if (p.unidadPale > 0)
-        _DataRow('Uds. por Pale',
-            p.unidadPale.toStringAsFixed(0)),
+        _DataRow('Uds. por Pale', p.unidadPale.toStringAsFixed(0)),
       if (p.unidadFilaPale > 0)
-        _DataRow('Uds. por Fila Pale',
-            p.unidadFilaPale.toStringAsFixed(0)),
+        _DataRow('Uds. por Fila Pale', p.unidadFilaPale.toStringAsFixed(0)),
       // Physical
-      if (p.weight > 0)
-        _DataRow('Peso', '${p.pesoNeto.toStringAsFixed(3)} kg'),
-      if (p.volumen > 0)
-        _DataRow('Volumen', p.volumen.toStringAsFixed(3)),
-      if (p.grados.isNotEmpty)
-        _DataRow('Grados', p.grados),
+      if (p.weight > 0) _DataRow('Peso', '${p.pesoNeto.toStringAsFixed(3)} kg'),
+      if (p.volumen > 0) _DataRow('Volumen', p.volumen.toStringAsFixed(3)),
+      if (p.grados.isNotEmpty) _DataRow('Grados', p.grados),
       // Flags
       _DataRow('IVA', ivaLabel(p.codigoIva)),
-      if (p.productoPesado)
-        _DataRow('Producto Pesado', 'Si'),
-      if (p.trazable)
-        _DataRow('Trazable', 'Si'),
+      if (p.productoPesado) _DataRow('Producto Pesado', 'Si'),
+      if (p.trazable) _DataRow('Trazable', 'Si'),
       // Dates
       if (p.fechaAlta != null && p.fechaAlta!.isNotEmpty)
         _DataRow('Fecha Alta', p.fechaAlta!),
@@ -374,10 +357,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         _DataRow('Fecha Baja',
             '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}'),
       // Observations
-      if (p.observacion1.isNotEmpty)
-        _DataRow('Obs. 1', p.observacion1),
-      if (p.observacion2.isNotEmpty)
-        _DataRow('Obs. 2', p.observacion2),
+      if (p.observacion1.isNotEmpty) _DataRow('Obs. 1', p.observacion1),
+      if (p.observacion2.isNotEmpty) _DataRow('Obs. 2', p.observacion2),
     ];
 
     return _buildSection(

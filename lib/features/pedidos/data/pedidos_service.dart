@@ -161,7 +161,8 @@ class Product {
   String get _normalizedUnit {
     final um = unitMeasure.toUpperCase().trim();
     if (um.isEmpty || um == 'CAJA' || um == 'CAJAS') return 'CAJAS';
-    if (um == 'KILO' || um == 'KILOGRAMOS' || um == 'KG' || um == 'KILOS') return 'KILOGRAMOS';
+    if (um == 'KILO' || um == 'KILOGRAMOS' || um == 'KG' || um == 'KILOS')
+      return 'KILOGRAMOS';
     if (um == 'UNIDAD' || um == 'UNIDADES' || um == 'UDS') return 'UNIDADES';
     if (um == 'LITRO' || um == 'LITROS' || um == 'LT') return 'LITROS';
     if (um == 'PIEZA' || um == 'PIEZAS') return 'PIEZAS';
@@ -188,8 +189,10 @@ class Product {
     }
     if (norm == 'KILOGRAMOS') {
       // Peso per box
-      if (weight > 0 && weight != 1) return '${weight.toStringAsFixed(weight == weight.truncateToDouble() ? 0 : 1)} kg';
-      if (unitsPerBox > 0) return '${unitsPerBox.toStringAsFixed(unitsPerBox == unitsPerBox.truncateToDouble() ? 0 : 1)} kg';
+      if (weight > 0 && weight != 1)
+        return '${weight.toStringAsFixed(weight == weight.truncateToDouble() ? 0 : 1)} kg';
+      if (unitsPerBox > 0)
+        return '${unitsPerBox.toStringAsFixed(unitsPerBox == unitsPerBox.truncateToDouble() ? 0 : 1)} kg';
       return '';
     }
     if (norm == 'LITROS') {
@@ -264,22 +267,37 @@ class Product {
   /// Unit label abbreviation for display
   static String unitLabel(String unit) {
     switch (unit) {
-      case 'UNIDADES': return 'uds';
-      case 'PIEZAS': return 'uds';
-      case 'KILOGRAMOS': return 'kg';
-      case 'LITROS': return 'litros';
-      case 'BOLSAS': return 'bolsas';
-      case 'ESTUCHES': return 'est.';
-      case 'BANDEJAS': return 'band.';
-      case 'BOTELLAS': return 'bot.';
-      case 'PAQUETES': return 'paq.';
-      case 'BOTES': return 'botes';
-      case 'LATAS': return 'latas';
-      case 'GARRAFAS': return 'garr.';
-      case 'SACOS': return 'sacos';
-      case 'ROLLOS': return 'rollos';
+      case 'UNIDADES':
+        return 'uds';
+      case 'PIEZAS':
+        return 'uds';
+      case 'KILOGRAMOS':
+        return 'kg';
+      case 'LITROS':
+        return 'litros';
+      case 'BOLSAS':
+        return 'bolsas';
+      case 'ESTUCHES':
+        return 'est.';
+      case 'BANDEJAS':
+        return 'band.';
+      case 'BOTELLAS':
+        return 'bot.';
+      case 'PAQUETES':
+        return 'paq.';
+      case 'BOTES':
+        return 'botes';
+      case 'LATAS':
+        return 'latas';
+      case 'GARRAFAS':
+        return 'garr.';
+      case 'SACOS':
+        return 'sacos';
+      case 'ROLLOS':
+        return 'rollos';
       case 'CAJAS':
-      default: return 'cajas';
+      default:
+        return 'cajas';
     }
   }
 
@@ -305,11 +323,14 @@ class TariffEntry {
   final String description;
   final double price;
 
-  TariffEntry({required this.code, required this.description, required this.price});
+  TariffEntry(
+      {required this.code, required this.description, required this.price});
 
   factory TariffEntry.fromJson(Map<String, dynamic> json) {
     return TariffEntry(
-      code: json['code'] is int ? json['code'] as int : int.tryParse(json['code']?.toString() ?? '0') ?? 0,
+      code: json['code'] is int
+          ? json['code'] as int
+          : int.tryParse(json['code']?.toString() ?? '0') ?? 0,
       description: (json['description'] ?? '').toString().trim(),
       price: _toDouble(json['price']),
     );
@@ -323,15 +344,18 @@ class StockEntry {
   final double envases;
   final double unidades;
 
-  StockEntry({required this.almacenCode, required this.almacenName, required this.envases, required this.unidades});
+  StockEntry(
+      {required this.almacenCode,
+      required this.almacenName,
+      required this.envases,
+      required this.unidades});
 
   factory StockEntry.fromJson(Map<String, dynamic> json) {
     final code = json['almacenCode'] ?? json['almacen'];
     final name = json['almacenName'] ?? json['almacenDesc'] ?? '';
     return StockEntry(
-      almacenCode: code is int
-          ? code
-          : int.tryParse(code?.toString() ?? '0') ?? 0,
+      almacenCode:
+          code is int ? code : int.tryParse(code?.toString() ?? '0') ?? 0,
       almacenName: name.toString().trim(),
       envases: _toDouble(json['envases']),
       unidades: _toDouble(json['unidades']),
@@ -366,7 +390,8 @@ class PromotionItem {
   });
 
   bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
-  double get savingPct => regularPrice > 0 ? ((regularPrice - promoPrice) / regularPrice * 100) : 0;
+  double get savingPct =>
+      regularPrice > 0 ? ((regularPrice - promoPrice) / regularPrice * 100) : 0;
   bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
 
   factory PromotionItem.fromJson(Map<String, dynamic> json) {
@@ -393,7 +418,8 @@ class PromotionItem {
     return PromotionItem(
       code: (json['code'] ?? '').toString().trim(),
       name: (json['name'] ?? '').toString().trim(),
-      promoDesc: (json['promoDesc'] ?? json['description'] ?? '').toString().trim(),
+      promoDesc:
+          (json['promoDesc'] ?? json['description'] ?? '').toString().trim(),
       promoType: (json['promoType'] ?? '').toString().trim(),
       promoPrice: _toDouble(json['promoPrice'] ?? json['price']),
       regularPrice: _toDouble(json['regularPrice']),
@@ -422,18 +448,25 @@ class ProductDetail {
   factory ProductDetail.fromJson(Map<String, dynamic> json) {
     // Backend nests tariffs/stock inside 'product', so look in both places
     final inner = json['product'] as Map<String, dynamic>? ?? json;
-    final tariffsList = json['tariffs'] as List? ?? inner['tariffs'] as List? ?? [];
-    final stockList = json['stockByWarehouse'] as List?
-        ?? json['stock'] as List?
-        ?? inner['stockByWarehouse'] as List?
-        ?? inner['stock'] as List?
-        ?? [];
-    final cPrice = json['clientPrice'] ?? json['precioCliente']
-        ?? inner['clientPrice'] ?? inner['precioCliente'];
+    final tariffsList =
+        json['tariffs'] as List? ?? inner['tariffs'] as List? ?? [];
+    final stockList = json['stockByWarehouse'] as List? ??
+        json['stock'] as List? ??
+        inner['stockByWarehouse'] as List? ??
+        inner['stock'] as List? ??
+        [];
+    final cPrice = json['clientPrice'] ??
+        json['precioCliente'] ??
+        inner['clientPrice'] ??
+        inner['precioCliente'];
     return ProductDetail(
       product: Product.fromJson(inner),
-      tariffs: tariffsList.map((t) => TariffEntry.fromJson(t as Map<String, dynamic>)).toList(),
-      stockByWarehouse: stockList.map((s) => StockEntry.fromJson(s as Map<String, dynamic>)).toList(),
+      tariffs: tariffsList
+          .map((t) => TariffEntry.fromJson(t as Map<String, dynamic>))
+          .toList(),
+      stockByWarehouse: stockList
+          .map((s) => StockEntry.fromJson(s as Map<String, dynamic>))
+          .toList(),
       clientPrice: _toDouble(cPrice),
     );
   }
@@ -481,48 +514,64 @@ class OrderLine {
 
   factory OrderLine.fromJson(Map<String, dynamic> json) {
     return OrderLine(
-      id: json['id'] is int ? json['id'] as int : int.tryParse(json['id']?.toString() ?? ''),
-      codigoArticulo: (json['codigoArticulo'] ?? json['CODIGOARTICULO'] ?? '').toString().trim(),
-      descripcion: (json['descripcion'] ?? json['DESCRIPCION'] ?? '').toString().trim(),
-      cantidadEnvases: _toDouble(json['cantidadEnvases'] ?? json['CANTIDADENVASES']),
-      cantidadUnidades: _toDouble(json['cantidadUnidades'] ?? json['CANTIDADUNIDADES']),
-      unidadMedida: (json['unidadMedida'] ?? json['UNIDADMEDIDA'] ?? 'CAJAS').toString(),
-      unidadesCaja: _toDouble(json['unidadesCaja'] ?? json['UNIDADESCAJA'], fallback: 1),
+      id: json['id'] is int
+          ? json['id'] as int
+          : int.tryParse(json['id']?.toString() ?? ''),
+      codigoArticulo: (json['codigoArticulo'] ?? json['CODIGOARTICULO'] ?? '')
+          .toString()
+          .trim(),
+      descripcion:
+          (json['descripcion'] ?? json['DESCRIPCION'] ?? '').toString().trim(),
+      cantidadEnvases:
+          _toDouble(json['cantidadEnvases'] ?? json['CANTIDADENVASES']),
+      cantidadUnidades:
+          _toDouble(json['cantidadUnidades'] ?? json['CANTIDADUNIDADES']),
+      unidadMedida:
+          (json['unidadMedida'] ?? json['UNIDADMEDIDA'] ?? 'CAJAS').toString(),
+      unidadesCaja:
+          _toDouble(json['unidadesCaja'] ?? json['UNIDADESCAJA'], fallback: 1),
       precioVenta: _toDouble(json['precioVenta'] ?? json['PRECIOVENTA']),
       precioCosto: _toDouble(json['precioCosto'] ?? json['PRECIOCOSTO']),
       precioTarifa: _toDouble(json['precioTarifa'] ?? json['PRECIOTARIFA']),
-      precioTarifaCliente: _toDouble(json['precioTarifaCliente'] ?? json['PRECIOTARIFACLIENTE']),
+      precioTarifaCliente:
+          _toDouble(json['precioTarifaCliente'] ?? json['PRECIOTARIFACLIENTE']),
       precioMinimo: _toDouble(json['precioMinimo'] ?? json['PRECIOMINIMO']),
       importeVenta: _toDouble(json['importeVenta'] ?? json['IMPORTEVENTA']),
       importeCosto: _toDouble(json['importeCosto'] ?? json['IMPORTECOSTO']),
       importeMargen: _toDouble(json['importeMargen'] ?? json['IMPORTEMARGEN']),
-      porcentajeMargen: _toDouble(json['porcentajeMargen'] ?? json['PORCENTAJEMARGEN']),
-      ivaRate: _toDouble(json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'], fallback: 0.21),
+      porcentajeMargen:
+          _toDouble(json['porcentajeMargen'] ?? json['PORCENTAJEMARGEN']),
+      ivaRate: _toDouble(json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'],
+          fallback: 0.21),
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'codigoArticulo': codigoArticulo,
-    'descripcion': descripcion,
-    'cantidadEnvases': cantidadEnvases,
-    'cantidadUnidades': cantidadUnidades,
-    'unidadMedida': unidadMedida,
-    'unidadesCaja': unidadesCaja,
-    'precioVenta': precioVenta,
-    'precioCosto': precioCosto,
-    'precioTarifa': precioTarifa,
-    'precioTarifaCliente': precioTarifaCliente,
-    'precioMinimo': precioMinimo,
-    'ivaRate': ivaRate,
-  };
+        'codigoArticulo': codigoArticulo,
+        'descripcion': descripcion,
+        'cantidadEnvases': cantidadEnvases,
+        'cantidadUnidades': cantidadUnidades,
+        'unidadMedida': unidadMedida,
+        'unidadesCaja': unidadesCaja,
+        'precioVenta': precioVenta,
+        'precioCosto': precioCosto,
+        'precioTarifa': precioTarifa,
+        'precioTarifaCliente': precioTarifaCliente,
+        'precioMinimo': precioMinimo,
+        'ivaRate': ivaRate,
+      };
 
   /// Recalculate amounts based on current qty and price
   void recalculate() {
     final qty = cantidadEnvases > 0 ? cantidadEnvases : cantidadUnidades;
     importeVenta = double.parse((precioVenta * qty).toStringAsFixed(2));
     importeCosto = double.parse((precioCosto * qty).toStringAsFixed(2));
-    importeMargen = double.parse((importeVenta - importeCosto).toStringAsFixed(2));
-    porcentajeMargen = importeVenta > 0 ? double.parse(((importeMargen / importeVenta) * 100).toStringAsFixed(2)) : 0;
+    importeMargen =
+        double.parse((importeVenta - importeCosto).toStringAsFixed(2));
+    porcentajeMargen = importeVenta > 0
+        ? double.parse(
+            ((importeMargen / importeVenta) * 100).toStringAsFixed(2))
+        : 0;
   }
 }
 
@@ -556,8 +605,12 @@ class OrderSummary {
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
     return OrderSummary(
-      id: json['id'] is int ? json['id'] as int : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
-      numeroPedido: json['numeroPedido'] is int ? json['numeroPedido'] as int : int.tryParse(json['numeroPedido']?.toString() ?? '0') ?? 0,
+      id: json['id'] is int
+          ? json['id'] as int
+          : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
+      numeroPedido: json['numeroPedido'] is int
+          ? json['numeroPedido'] as int
+          : int.tryParse(json['numeroPedido']?.toString() ?? '0') ?? 0,
       clienteCode: (json['clienteCode'] ?? '').toString().trim(),
       clienteName: (json['clienteName'] ?? '').toString().trim(),
       vendedorCode: (json['vendedorCode'] ?? '').toString().trim(),
@@ -566,7 +619,9 @@ class OrderSummary {
       tipoVenta: (json['tipoVenta'] ?? 'CC').toString().trim(),
       total: _toDouble(json['total']),
       margen: _toDouble(json['margen']),
-      lineCount: json['lineCount'] is int ? json['lineCount'] as int : int.tryParse(json['lineCount']?.toString() ?? '0') ?? 0,
+      lineCount: json['lineCount'] is int
+          ? json['lineCount'] as int
+          : int.tryParse(json['lineCount']?.toString() ?? '0') ?? 0,
     );
   }
 }
@@ -582,7 +637,9 @@ class OrderDetail {
     final linesJson = json['lines'] as List? ?? [];
     return OrderDetail(
       header: OrderSummary.fromJson(json),
-      lines: linesJson.map((l) => OrderLine.fromJson(l as Map<String, dynamic>)).toList(),
+      lines: linesJson
+          .map((l) => OrderLine.fromJson(l as Map<String, dynamic>))
+          .toList(),
     );
   }
 }
@@ -607,9 +664,13 @@ class Recommendation {
     return Recommendation(
       code: (json['code'] ?? '').toString().trim(),
       name: (json['name'] ?? '').toString().trim(),
-      frequency: json['frequency'] is int ? json['frequency'] as int : int.tryParse(json['frequency']?.toString() ?? '0') ?? 0,
+      frequency: json['frequency'] is int
+          ? json['frequency'] as int
+          : int.tryParse(json['frequency']?.toString() ?? '0') ?? 0,
       totalUnits: _toDouble(json['totalUnits']),
-      clientCount: json['clientCount'] is int ? json['clientCount'] as int : int.tryParse(json['clientCount']?.toString() ?? '0') ?? 0,
+      clientCount: json['clientCount'] is int
+          ? json['clientCount'] as int
+          : int.tryParse(json['clientCount']?.toString() ?? '0') ?? 0,
     );
   }
 }
@@ -637,11 +698,13 @@ class PedidosService {
       'offset': offset.toString(),
     };
     if (search != null && search.isNotEmpty) params['search'] = search;
-    if (clientCode != null && clientCode.isNotEmpty) params['clientCode'] = clientCode;
+    if (clientCode != null && clientCode.isNotEmpty)
+      params['clientCode'] = clientCode;
     if (family != null && family.isNotEmpty) params['family'] = family;
     if (marca != null && marca.isNotEmpty) params['marca'] = marca;
 
-    final cacheKey = 'pedidos:products:${search ?? ''}:${family ?? ''}:${marca ?? ''}:$offset';
+    final cacheKey =
+        'pedidos:products:${search ?? ''}:${family ?? ''}:${marca ?? ''}:$offset';
     try {
       final response = await ApiClient.get(
         '$_base/products',
@@ -651,14 +714,17 @@ class PedidosService {
         forceRefresh: forceRefresh,
       );
       final list = response['products'] as List? ?? [];
-      return list.map((p) => Product.fromJson(p as Map<String, dynamic>)).toList();
+      return list
+          .map((p) => Product.fromJson(p as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       debugPrint('[PedidosService] Error getProducts: $e');
       rethrow;
     }
   }
 
-  static Future<ProductDetail> getProductDetail(String code, {String? clientCode}) async {
+  static Future<ProductDetail> getProductDetail(String code,
+      {String? clientCode}) async {
     final params = <String, dynamic>{};
     if (clientCode != null) params['clientCode'] = clientCode;
 
@@ -703,7 +769,9 @@ class PedidosService {
         cacheKey: 'pedidos:families',
         cacheTTL: const Duration(hours: 1),
       );
-      return (response['families'] as List? ?? []).map((f) => f.toString()).toList();
+      return (response['families'] as List? ?? [])
+          .map((f) => f.toString())
+          .toList();
     } catch (e) {
       debugPrint('[PedidosService] Error getFamilies: $e');
       return [];
@@ -717,7 +785,9 @@ class PedidosService {
         cacheKey: 'pedidos:brands',
         cacheTTL: const Duration(hours: 1),
       );
-      return (response['brands'] as List? ?? []).map((b) => b.toString()).toList();
+      return (response['brands'] as List? ?? [])
+          .map((b) => b.toString())
+          .toList();
     } catch (e) {
       debugPrint('[PedidosService] Error getBrands: $e');
       return [];
@@ -778,12 +848,15 @@ class PedidosService {
       final response = await ApiClient.get(
         _base,
         queryParameters: params,
-        cacheKey: 'pedidos:orders:$vendedorCodes:${status ?? ''}:${year ?? ''}:$offset',
+        cacheKey:
+            'pedidos:orders:$vendedorCodes:${status ?? ''}:${year ?? ''}:$offset',
         cacheTTL: const Duration(minutes: 2),
         forceRefresh: forceRefresh,
       );
       final list = response['orders'] as List? ?? [];
-      return list.map((o) => OrderSummary.fromJson(o as Map<String, dynamic>)).toList();
+      return list
+          .map((o) => OrderSummary.fromJson(o as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       debugPrint('[PedidosService] Error getOrders: $e');
       rethrow;
@@ -815,7 +888,8 @@ class PedidosService {
     }
   }
 
-  static Future<void> updateLine(int orderId, int lineId, Map<String, dynamic> data) async {
+  static Future<void> updateLine(
+      int orderId, int lineId, Map<String, dynamic> data) async {
     try {
       await ApiClient.put('$_base/$orderId/lines/$lineId', data: data);
       CacheService.invalidate('pedidos:order:$orderId');
@@ -837,9 +911,11 @@ class PedidosService {
     }
   }
 
-  static Future<Map<String, dynamic>> confirmOrder(int orderId, String saleType) async {
+  static Future<Map<String, dynamic>> confirmOrder(
+      int orderId, String saleType) async {
     try {
-      final response = await ApiClient.put('$_base/$orderId/confirm', data: {'saleType': saleType});
+      final response = await ApiClient.put('$_base/$orderId/confirm',
+          data: {'saleType': saleType});
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
       return response;
@@ -890,7 +966,8 @@ class PedidosService {
   }
 
   // ── Client Balance ──
-  static Future<Map<String, dynamic>> getClientBalance(String clientCode) async {
+  static Future<Map<String, dynamic>> getClientBalance(
+      String clientCode) async {
     try {
       final response = await ApiClient.get(
         '$_base/client-balance/$clientCode',
@@ -920,7 +997,9 @@ class PedidosService {
   }
 
   // ── Complementary Products ──
-  static Future<List<Map<String, dynamic>>> getComplementaryProducts(List<String> productCodes, {String? clientCode}) async {
+  static Future<List<Map<String, dynamic>>> getComplementaryProducts(
+      List<String> productCodes,
+      {String? clientCode}) async {
     try {
       final response = await ApiClient.post('$_base/complementary', {
         'productCodes': productCodes,

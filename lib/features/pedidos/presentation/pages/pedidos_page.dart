@@ -184,7 +184,8 @@ class _PedidosPageState extends State<PedidosPage>
     _showAddToOrderDialog(product);
   }
 
-  Future<void> _openProductByCode(String code, {String fallbackName = ''}) async {
+  Future<void> _openProductByCode(String code,
+      {String fallbackName = ''}) async {
     final productCode = code.trim();
     if (productCode.isEmpty) return;
 
@@ -246,9 +247,12 @@ class _PedidosPageState extends State<PedidosPage>
           : product.availableUnits.first;
     }
     final initQty = existingLine != null
-      ? (existingLine.cantidadEnvases > 0 ? existingLine.cantidadEnvases : existingLine.cantidadUnidades)
-      : prov0.lastQtyForProduct(product.code);
-    final initialPrice = existingLine?.precioVenta ?? product.priceForUnit(selectedUnit);
+        ? (existingLine.cantidadEnvases > 0
+            ? existingLine.cantidadEnvases
+            : existingLine.cantidadUnidades)
+        : prov0.lastQtyForProduct(product.code);
+    final initialPrice =
+        existingLine?.precioVenta ?? product.priceForUnit(selectedUnit);
     final qtyController = TextEditingController(
       text: _formatQtyForInput(initQty, selectedUnit),
     );
@@ -282,7 +286,8 @@ class _PedidosPageState extends State<PedidosPage>
                     tariffs = detail.tariffs;
                     stockByWarehouse = detail.stockByWarehouse;
                     if (detail.clientPrice > 0) {
-                      priceController.text = _formatPriceForInput(detail.clientPrice);
+                      priceController.text =
+                          _formatPriceForInput(detail.clientPrice);
                     }
                   });
                 }
@@ -308,7 +313,8 @@ class _PedidosPageState extends State<PedidosPage>
                     // â”€â”€ Handle â”€â”€
                     Center(
                       child: Container(
-                        width: 40, height: 4,
+                        width: 40,
+                        height: 4,
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
                           color: Colors.white24,
@@ -319,7 +325,8 @@ class _PedidosPageState extends State<PedidosPage>
                     // â”€â”€ Mejora 4: Product image â”€â”€
                     Center(
                       child: GestureDetector(
-                        onTap: () => _showFullscreenImage(context, product.code, product.name),
+                        onTap: () => _showFullscreenImage(
+                            context, product.code, product.name),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: Image.network(
@@ -327,7 +334,8 @@ class _PedidosPageState extends State<PedidosPage>
                             headers: ApiClient.authHeaders,
                             height: 80,
                             fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                            errorBuilder: (_, __, ___) =>
+                                const SizedBox.shrink(),
                           ),
                         ),
                       ),
@@ -338,7 +346,8 @@ class _PedidosPageState extends State<PedidosPage>
                       product.name,
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: Responsive.fontSize(context, small: 15, large: 17),
+                        fontSize:
+                            Responsive.fontSize(context, small: 15, large: 17),
                         fontWeight: FontWeight.bold,
                       ),
                       maxLines: 2,
@@ -351,22 +360,29 @@ class _PedidosPageState extends State<PedidosPage>
                           product.code,
                           style: TextStyle(
                             color: AppTheme.neonBlue,
-                            fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                            fontSize: Responsive.fontSize(context,
+                                small: 11, large: 13),
                           ),
                         ),
                         const Spacer(),
                         Icon(Icons.inventory_outlined,
-                            color: product.hasStock ? AppTheme.neonGreen : AppTheme.error, size: 14),
+                            color: product.hasStock
+                                ? AppTheme.neonGreen
+                                : AppTheme.error,
+                            size: 14),
                         const SizedBox(width: 4),
                         Flexible(
                           child: GestureDetector(
-                            onTap: () => setModalState(() => showWarehouseStock = !showWarehouseStock),
+                            onTap: () => setModalState(
+                                () => showWarehouseStock = !showWarehouseStock),
                             child: Row(
                               children: [
                                 Text(
                                   _buildStockText(product),
                                   style: TextStyle(
-                                    color: product.hasStock ? AppTheme.neonGreen : AppTheme.error,
+                                    color: product.hasStock
+                                        ? AppTheme.neonGreen
+                                        : AppTheme.error,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -375,7 +391,9 @@ class _PedidosPageState extends State<PedidosPage>
                                 ),
                                 if (stockByWarehouse.isNotEmpty)
                                   Icon(
-                                    showWarehouseStock ? Icons.expand_less : Icons.expand_more,
+                                    showWarehouseStock
+                                        ? Icons.expand_less
+                                        : Icons.expand_more,
                                     color: Colors.white38,
                                     size: 16,
                                   ),
@@ -387,28 +405,35 @@ class _PedidosPageState extends State<PedidosPage>
                     ),
                     if (showWarehouseStock && stockByWarehouse.isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 2, right: 2, bottom: 4),
+                        padding: const EdgeInsets.only(
+                            top: 4, left: 2, right: 2, bottom: 4),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: stockByWarehouse.map((s) => Row(
-                            children: [
-                              Icon(Icons.warehouse, color: AppTheme.neonBlue, size: 13),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  s.almacenName.isNotEmpty
-                                      ? s.almacenName
-                                      : 'Almacen ${s.almacenCode}',
-                                  style: const TextStyle(
-                                      color: Colors.white70, fontSize: 11),
-                                ),
-                              ),
-                              Text(
-                                _buildWarehouseStockText(product, s),
-                                style: const TextStyle(color: Colors.white54, fontSize: 11),
-                              ),
-                            ],
-                          )).toList(),
+                          children: stockByWarehouse
+                              .map((s) => Row(
+                                    children: [
+                                      Icon(Icons.warehouse,
+                                          color: AppTheme.neonBlue, size: 13),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          s.almacenName.isNotEmpty
+                                              ? s.almacenName
+                                              : 'Almacen ${s.almacenCode}',
+                                          style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 11),
+                                        ),
+                                      ),
+                                      Text(
+                                        _buildWarehouseStockText(product, s),
+                                        style: const TextStyle(
+                                            color: Colors.white54,
+                                            fontSize: 11),
+                                      ),
+                                    ],
+                                  ))
+                              .toList(),
                         ),
                       ),
                     // â”€â”€ Quick links row â”€â”€
@@ -426,8 +451,10 @@ class _PedidosPageState extends State<PedidosPage>
                               context,
                               productCode: product.code,
                               productName: product.name,
-                              clientCode: prov.hasClient ? prov.clientCode : null,
-                              clientName: prov.hasClient ? prov.clientName : null,
+                              clientCode:
+                                  prov.hasClient ? prov.clientCode : null,
+                              clientName:
+                                  prov.hasClient ? prov.clientName : null,
                             );
                           },
                         ),
@@ -454,10 +481,12 @@ class _PedidosPageState extends State<PedidosPage>
                     // â”€â”€ Tariff chips â”€â”€
                     if (tariffs.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      Text('Tarifas', style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: Responsive.fontSize(context, small: 11, large: 13),
-                      )),
+                      Text('Tarifas',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: Responsive.fontSize(context,
+                                small: 11, large: 13),
+                          )),
                       const SizedBox(height: 6),
                       SizedBox(
                         height: 36,
@@ -468,39 +497,53 @@ class _PedidosPageState extends State<PedidosPage>
                           itemBuilder: (_, i) {
                             final t = tariffs[i];
                             final isSelected =
-                                (_parseInputNumber(priceController.text) - t.price).abs() < 0.0005;
+                                (_parseInputNumber(priceController.text) -
+                                            t.price)
+                                        .abs() <
+                                    0.0005;
                             return GestureDetector(
                               onTap: () {
                                 setModalState(() {
-                                  priceController.text = _formatPriceForInput(t.price);
+                                  priceController.text =
+                                      _formatPriceForInput(t.price);
                                 });
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
                                   color: isSelected
                                       ? AppTheme.neonGreen.withOpacity(0.2)
                                       : AppTheme.darkCard,
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: isSelected ? AppTheme.neonGreen : AppTheme.borderColor,
+                                    color: isSelected
+                                        ? AppTheme.neonGreen
+                                        : AppTheme.borderColor,
                                   ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      t.description.isNotEmpty ? t.description : 'T${t.code}',
+                                      t.description.isNotEmpty
+                                          ? t.description
+                                          : 'T${t.code}',
                                       style: TextStyle(
-                                        color: isSelected ? AppTheme.neonGreen : Colors.white54,
+                                        color: isSelected
+                                            ? AppTheme.neonGreen
+                                            : Colors.white54,
                                         fontSize: 11,
                                       ),
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      PedidosFormatters.money(t.price, decimals: 3),
+                                      PedidosFormatters.money(t.price,
+                                          decimals: 3),
                                       style: TextStyle(
-                                        color: isSelected ? AppTheme.neonGreen : Colors.white,
+                                        color: isSelected
+                                            ? AppTheme.neonGreen
+                                            : Colors.white,
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -515,10 +558,12 @@ class _PedidosPageState extends State<PedidosPage>
                     ],
                     // â”€â”€ Unit selector (only available units for this product) â”€â”€
                     const SizedBox(height: 14),
-                    Text('Unidad de medida', style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: Responsive.fontSize(context, small: 11, large: 13),
-                    )),
+                    Text('Unidad de medida',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: Responsive.fontSize(context,
+                              small: 11, large: 13),
+                        )),
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 6,
@@ -535,20 +580,26 @@ class _PedidosPageState extends State<PedidosPage>
                             onPressed: () {
                               setModalState(() {
                                 selectedUnit = unit;
-                                priceController.text = _formatPriceForInput(unitPrice);
-                                final currentQty = _parseInputNumber(qtyController.text);
-                                qtyController.text = _formatQtyForInput(currentQty, selectedUnit);
+                                priceController.text =
+                                    _formatPriceForInput(unitPrice);
+                                final currentQty =
+                                    _parseInputNumber(qtyController.text);
+                                qtyController.text = _formatQtyForInput(
+                                    currentQty, selectedUnit);
                               });
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: selected
                                   ? AppTheme.neonBlue.withOpacity(0.2)
                                   : AppTheme.darkCard,
-                              foregroundColor: selected ? AppTheme.neonBlue : Colors.white70,
+                              foregroundColor:
+                                  selected ? AppTheme.neonBlue : Colors.white70,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                                 side: BorderSide(
-                                  color: selected ? AppTheme.neonBlue : AppTheme.borderColor,
+                                  color: selected
+                                      ? AppTheme.neonBlue
+                                      : AppTheme.borderColor,
                                   width: selected ? 1.5 : 1,
                                 ),
                               ),
@@ -558,22 +609,31 @@ class _PedidosPageState extends State<PedidosPage>
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(unit, style: TextStyle(
-                                  fontSize: Responsive.fontSize(context, small: 10, large: 11),
-                                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                                )),
+                                Text(unit,
+                                    style: TextStyle(
+                                      fontSize: Responsive.fontSize(context,
+                                          small: 10, large: 11),
+                                      fontWeight: selected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    )),
                                 Text(
-                                  PedidosFormatters.money(unitPrice, decimals: 3),
+                                  PedidosFormatters.money(unitPrice,
+                                      decimals: 3),
                                   style: TextStyle(
                                     fontSize: 9,
-                                    color: selected ? AppTheme.neonGreen : Colors.white38,
+                                    color: selected
+                                        ? AppTheme.neonGreen
+                                        : Colors.white38,
                                   ),
                                 ),
                                 Text(
                                   '${_formatUnitQty(unitStock, unit)} $stockLabel',
                                   style: TextStyle(
                                     fontSize: 8,
-                                    color: unitStock > 0 ? Colors.white30 : AppTheme.error.withOpacity(0.6),
+                                    color: unitStock > 0
+                                        ? Colors.white30
+                                        : AppTheme.error.withOpacity(0.6),
                                   ),
                                 ),
                               ],
@@ -585,16 +645,19 @@ class _PedidosPageState extends State<PedidosPage>
                     const SizedBox(height: 8),
                     Builder(
                       builder: (_) {
-                        final selectedUnitPrice = product.priceForUnit(selectedUnit);
-                        final selectedStock = product.stockForUnit(selectedUnit);
+                        final selectedUnitPrice =
+                            product.priceForUnit(selectedUnit);
+                        final selectedStock =
+                            product.stockForUnit(selectedUnit);
                         final selectedLabel = Product.unitLabel(selectedUnit);
-                        final qtyPerBox = product.quantityPerBoxForUnit(selectedUnit);
+                        final qtyPerBox =
+                            product.quantityPerBoxForUnit(selectedUnit);
                         final boxPrice = product.priceForUnit('CAJAS');
 
                         return Container(
                           width: double.infinity,
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
                           decoration: BoxDecoration(
                             color: AppTheme.darkCard,
                             borderRadius: BorderRadius.circular(10),
@@ -643,7 +706,8 @@ class _PedidosPageState extends State<PedidosPage>
                       'Cantidad (${selectedUnit == 'KILOGRAMOS' ? 'kg' : selectedUnit.toLowerCase()})',
                       style: TextStyle(
                         color: Colors.white70,
-                        fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                        fontSize:
+                            Responsive.fontSize(context, small: 11, large: 13),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -653,8 +717,8 @@ class _PedidosPageState extends State<PedidosPage>
                         _buildQtyButton(Icons.remove, AppTheme.error, () {
                           final cur = _parseInputNumber(qtyController.text);
                           if (cur > 1) {
-                            setModalState(() =>
-                                qtyController.text = _formatQtyForInput(cur - 1, selectedUnit));
+                            setModalState(() => qtyController.text =
+                                _formatQtyForInput(cur - 1, selectedUnit));
                           }
                         }),
                         const SizedBox(width: 10),
@@ -662,25 +726,33 @@ class _PedidosPageState extends State<PedidosPage>
                         Expanded(
                           child: TextField(
                             controller: qtyController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold),
                             onChanged: (_) => setModalState(() {}),
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: AppTheme.neonGreen.withOpacity(0.1),
-                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 12),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: AppTheme.neonGreen),
+                                borderSide:
+                                    const BorderSide(color: AppTheme.neonGreen),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: AppTheme.neonGreen),
+                                borderSide:
+                                    const BorderSide(color: AppTheme.neonGreen),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: AppTheme.neonGreen, width: 2),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.neonGreen, width: 2),
                               ),
                             ),
                           ),
@@ -689,8 +761,8 @@ class _PedidosPageState extends State<PedidosPage>
                         // Plus button
                         _buildQtyButton(Icons.add, AppTheme.neonBlue, () {
                           final cur = _parseInputNumber(qtyController.text);
-                          setModalState(() =>
-                              qtyController.text = _formatQtyForInput(cur + 1, selectedUnit));
+                          setModalState(() => qtyController.text =
+                              _formatQtyForInput(cur + 1, selectedUnit));
                         }),
                       ],
                     ),
@@ -704,18 +776,23 @@ class _PedidosPageState extends State<PedidosPage>
                           child: OutlinedButton(
                             onPressed: () {
                               final cur = _parseInputNumber(qtyController.text);
-                              setModalState(() =>
-                                  qtyController.text = _formatQtyForInput(cur + v, selectedUnit));
+                              setModalState(() => qtyController.text =
+                                  _formatQtyForInput(cur + v, selectedUnit));
                             },
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppTheme.neonBlue,
-                              side: BorderSide(color: AppTheme.neonBlue.withOpacity(0.4)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              side: BorderSide(
+                                  color: AppTheme.neonBlue.withOpacity(0.4)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            child: Text('+$v', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            child: Text('+$v',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 13)),
                           ),
                         );
                       }).toList(),
@@ -724,25 +801,29 @@ class _PedidosPageState extends State<PedidosPage>
                     const SizedBox(height: 12),
                     TextField(
                       controller: priceController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       onChanged: (_) => setModalState(() {}),
                       decoration: InputDecoration(
                         labelText: 'Precio',
                         suffixText: ' \u20AC',
-                        suffixStyle:
-                            const TextStyle(color: AppTheme.neonGreen, fontSize: 16),
+                        suffixStyle: const TextStyle(
+                            color: AppTheme.neonGreen, fontSize: 16),
                         labelStyle: const TextStyle(color: Colors.white70),
                         filled: true,
                         fillColor: AppTheme.darkCard,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.borderColor),
+                          borderSide:
+                              const BorderSide(color: AppTheme.borderColor),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.neonBlue),
+                          borderSide:
+                              const BorderSide(color: AppTheme.neonBlue),
                         ),
                       ),
                     ),
@@ -755,7 +836,8 @@ class _PedidosPageState extends State<PedidosPage>
                             'Min: ${PedidosFormatters.money(product.precioMinimo, decimals: 3)}',
                             style: TextStyle(
                               color: price > 0 && price < product.precioMinimo
-                                  ? AppTheme.error : Colors.white38,
+                                  ? AppTheme.error
+                                  : Colors.white38,
                               fontSize: 11,
                             ),
                           ),
@@ -775,7 +857,8 @@ class _PedidosPageState extends State<PedidosPage>
                       final costo = product.precioMinimo > 0
                           ? product.precioMinimo * 0.7
                           : product.precioTarifa1 * 0.7;
-                      final margen = price > 0 ? ((price - costo) / price * 100) : 0.0;
+                      final margen =
+                          price > 0 ? ((price - costo) / price * 100) : 0.0;
                       final margenColor = margen >= 15
                           ? AppTheme.neonGreen
                           : margen >= 5
@@ -785,7 +868,8 @@ class _PedidosPageState extends State<PedidosPage>
                         padding: const EdgeInsets.only(top: 4),
                         child: Row(
                           children: [
-                            Icon(Icons.trending_up, color: margenColor, size: 14),
+                            Icon(Icons.trending_up,
+                                color: margenColor, size: 14),
                             const SizedBox(width: 4),
                             Text(
                               'Margen est.: ${margen.toStringAsFixed(1)}%',
@@ -814,9 +898,13 @@ class _PedidosPageState extends State<PedidosPage>
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppTheme.error,
                                 side: const BorderSide(color: AppTheme.error),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
-                              child: const Text('LIMPIAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              child: const Text('LIMPIAR',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13)),
                             ),
                           ),
                         ),
@@ -827,102 +915,118 @@ class _PedidosPageState extends State<PedidosPage>
                           child: SizedBox(
                             height: 46,
                             child: ElevatedButton.icon(
-                      onPressed: () {
-                        final qty = _parseInputNumber(qtyController.text);
-                        final price = _parseInputNumber(priceController.text);
-                        if (qty <= 0) return;
+                              onPressed: () {
+                                final qty =
+                                    _parseInputNumber(qtyController.text);
+                                final price =
+                                    _parseInputNumber(priceController.text);
+                                if (qty <= 0) return;
 
-                        final provider = context.read<PedidosProvider>();
-                        final envases =
-                            selectedUnit == 'CAJAS' ? qty : 0.0;
-                        final unidades =
-                            selectedUnit != 'CAJAS' ? qty : 0.0;
+                                final provider =
+                                    context.read<PedidosProvider>();
+                                final envases =
+                                    selectedUnit == 'CAJAS' ? qty : 0.0;
+                                final unidades =
+                                    selectedUnit != 'CAJAS' ? qty : 0.0;
 
-                        // Check price warning
-                        if (product.precioMinimo > 0 &&
-                            price < product.precioMinimo) {
-                          _showPriceWarning(
-                            context,
-                            price,
-                            product.precioMinimo,
-                          ).then((proceed) {
-                            if (proceed == true) {
-                              final errorFromAdd = provider.addLine(
-                                product,
-                                envases,
-                                unidades,
-                                selectedUnit,
-                                price,
-                              );
-                              if (errorFromAdd != null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      errorFromAdd,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    backgroundColor: AppTheme.error,
-                                    duration: const Duration(seconds: 3),
-                                  ),
-                                );
-                                return;
-                              }
-                              Navigator.pop(ctx);
-                              Future.delayed(const Duration(milliseconds: 300), () {
-                                if (mounted) {
-                                  context.read<PedidosProvider>().loadComplementaryProducts();
+                                // Check price warning
+                                if (product.precioMinimo > 0 &&
+                                    price < product.precioMinimo) {
+                                  _showPriceWarning(
+                                    context,
+                                    price,
+                                    product.precioMinimo,
+                                  ).then((proceed) {
+                                    if (proceed == true) {
+                                      final errorFromAdd = provider.addLine(
+                                        product,
+                                        envases,
+                                        unidades,
+                                        selectedUnit,
+                                        price,
+                                      );
+                                      if (errorFromAdd != null) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              errorFromAdd,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            backgroundColor: AppTheme.error,
+                                            duration:
+                                                const Duration(seconds: 3),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      Navigator.pop(ctx);
+                                      Future.delayed(
+                                          const Duration(milliseconds: 300),
+                                          () {
+                                        if (mounted) {
+                                          context
+                                              .read<PedidosProvider>()
+                                              .loadComplementaryProducts();
+                                        }
+                                      });
+                                    }
+                                  });
+                                  return;
                                 }
-                              });
-                            }
-                          });
-                          return;
-                        }
 
-                        HapticFeedback.mediumImpact();
-                        final errorFromAdd = provider.addLine(
-                            product, envases, unidades, selectedUnit, price);
+                                HapticFeedback.mediumImpact();
+                                final errorFromAdd = provider.addLine(product,
+                                    envases, unidades, selectedUnit, price);
 
-                        if (errorFromAdd != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(errorFromAdd, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              backgroundColor: AppTheme.error,
-                              duration: const Duration(seconds: 3),
+                                if (errorFromAdd != null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(errorFromAdd,
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold)),
+                                      backgroundColor: AppTheme.error,
+                                      duration: const Duration(seconds: 3),
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                Navigator.pop(ctx);
+                                Future.delayed(
+                                    const Duration(milliseconds: 300), () {
+                                  if (mounted) {
+                                    context
+                                        .read<PedidosProvider>()
+                                        .loadComplementaryProducts();
+                                  }
+                                });
+                              },
+                              icon: const Icon(Icons.add_shopping_cart),
+                              label: const Text('Anadir al pedido'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.neonBlue,
+                                foregroundColor: AppTheme.darkBase,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                textStyle: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          );
-                          return;
-                        }
-
-                        Navigator.pop(ctx);
-                        Future.delayed(const Duration(milliseconds: 300), () {
-                          if (mounted) {
-                            context.read<PedidosProvider>().loadComplementaryProducts();
-                          }
-                        });
-                      },
-                      icon: const Icon(Icons.add_shopping_cart),
-                      label: const Text('Anadir al pedido'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonBlue,
-                        foregroundColor: AppTheme.darkBase,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                          textStyle: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
+              ),
+            );
           },
         );
       },
@@ -1005,7 +1109,8 @@ class _PedidosPageState extends State<PedidosPage>
             const SizedBox(width: 4),
             Text(
               label,
-              style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                  color: color, fontSize: 11, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -1031,7 +1136,8 @@ class _PedidosPageState extends State<PedidosPage>
     final parts = <String>[];
     for (final unit in product.availableUnits) {
       if (unit == 'CAJAS') {
-        parts.add('${PedidosFormatters.number(stock.envases)} ${Product.unitLabel(unit)}');
+        parts.add(
+            '${PedidosFormatters.number(stock.envases)} ${Product.unitLabel(unit)}');
         continue;
       }
       final qty = unit == 'KILOGRAMOS'
@@ -1104,8 +1210,7 @@ class _PedidosPageState extends State<PedidosPage>
             Icon(Icons.warning_amber_rounded,
                 color: AppTheme.warning, size: 24),
             const SizedBox(width: 8),
-            const Text('Precio bajo',
-                style: TextStyle(color: Colors.white)),
+            const Text('Precio bajo', style: TextStyle(color: Colors.white)),
           ],
         ),
         content: Text(
@@ -1133,7 +1238,9 @@ class _PedidosPageState extends State<PedidosPage>
     if (drafts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No hay borradores guardados', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Text('No hay borradores guardados',
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           backgroundColor: AppTheme.darkCard,
         ),
       );
@@ -1173,25 +1280,34 @@ class _PedidosPageState extends State<PedidosPage>
                 color: AppTheme.darkCard,
                 margin: const EdgeInsets.only(bottom: 6),
                 child: ListTile(
-                  leading: const Icon(Icons.description_outlined, color: AppTheme.neonBlue),
-                  title: Text(client.toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                  subtitle: Text('$lines lineas - $savedAtLabel', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  leading: const Icon(Icons.description_outlined,
+                      color: AppTheme.neonBlue),
+                  title: Text(client.toString(),
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w600)),
+                  subtitle: Text('$lines lineas - $savedAtLabel',
+                      style:
+                          const TextStyle(color: Colors.white54, fontSize: 12)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.restore, color: AppTheme.neonGreen, size: 20),
+                        icon: const Icon(Icons.restore,
+                            color: AppTheme.neonGreen, size: 20),
                         onPressed: () {
                           provider.loadDraft(draft);
                           Navigator.pop(ctx);
                           _tabController.animateTo(0);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Borrador cargado'), backgroundColor: AppTheme.neonGreen),
+                            const SnackBar(
+                                content: Text('Borrador cargado'),
+                                backgroundColor: AppTheme.neonGreen),
                           );
                         },
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline, color: AppTheme.error, size: 20),
+                        icon: const Icon(Icons.delete_outline,
+                            color: AppTheme.error, size: 20),
                         onPressed: () async {
                           await provider.deleteDraft(key);
                           Navigator.pop(ctx);
@@ -1231,47 +1347,52 @@ class _PedidosPageState extends State<PedidosPage>
               if (promos.isEmpty) return const SizedBox.shrink();
               return Stack(
                 children: [
-                   IconButton(
-                     icon: const Icon(Icons.local_offer_outlined, color: AppTheme.neonPurple),
-                     tooltip: 'Ver Promociones',
-                     onPressed: () {
-                       Navigator.push(
-                         context,
-                          MaterialPageRoute<void>(
-                           builder: (_) => PromotionsListPage(
-                             promotions: promos,
-                             onProductTap: (code, name) => _openProductByCode(code, fallbackName: name),
-                             hasStockResolver: (code) {
-                               for (final p in prov.products) {
-                                 if (p.code == code) return p.hasStock;
-                               }
-                               for (final promo in promos) {
-                                 if (promo.code == code) {
-                                   return promo.hasStock;
-                                 }
-                               }
-                               return null;
-                             },
-                           ),
-                         ),
-                       );
-                     },
-                   ),
-                   Positioned(
-                     right: 6,
-                     top: 6,
-                     child: Container(
-                       padding: const EdgeInsets.all(4),
-                       decoration: const BoxDecoration(
-                         color: AppTheme.neonPurple,
-                         shape: BoxShape.circle,
-                       ),
-                       child: Text(
-                         '${promos.length}',
-                         style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                       ),
-                     ),
-                   ),
+                  IconButton(
+                    icon: const Icon(Icons.local_offer_outlined,
+                        color: AppTheme.neonPurple),
+                    tooltip: 'Ver Promociones',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => PromotionsListPage(
+                            promotions: promos,
+                            onProductTap: (code, name) =>
+                                _openProductByCode(code, fallbackName: name),
+                            hasStockResolver: (code) {
+                              for (final p in prov.products) {
+                                if (p.code == code) return p.hasStock;
+                              }
+                              for (final promo in promos) {
+                                if (promo.code == code) {
+                                  return promo.hasStock;
+                                }
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: AppTheme.neonPurple,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '${promos.length}',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
                 ],
               );
             },
@@ -1305,7 +1426,8 @@ class _PedidosPageState extends State<PedidosPage>
               return Stack(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.drafts_outlined, color: Colors.white70),
+                    icon: const Icon(Icons.drafts_outlined,
+                        color: Colors.white70),
                     tooltip: 'Borradores guardados',
                     onPressed: () => _showDraftsDialog(prov),
                   ),
@@ -1321,7 +1443,10 @@ class _PedidosPageState extends State<PedidosPage>
                         ),
                         child: Text(
                           '$count',
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -1336,7 +1461,10 @@ class _PedidosPageState extends State<PedidosPage>
           labelColor: AppTheme.neonBlue,
           unselectedLabelColor: Colors.white54,
           tabs: const [
-            Tab(height: 40, text: 'Nuevo Pedido', icon: Icon(Icons.add_circle_outline)),
+            Tab(
+                height: 40,
+                text: 'Nuevo Pedido',
+                icon: Icon(Icons.add_circle_outline)),
             Tab(height: 40, text: 'Mis Pedidos', icon: Icon(Icons.list_alt)),
           ],
         ),
@@ -1565,7 +1693,8 @@ class _PedidosPageState extends State<PedidosPage>
                     if (provider.hasClient && provider.clientBalance.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: ClientBalanceBadge(balance: provider.clientBalance),
+                        child:
+                            ClientBalanceBadge(balance: provider.clientBalance),
                       ),
                   ],
                 ),
@@ -1593,15 +1722,13 @@ class _PedidosPageState extends State<PedidosPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline,
-                color: AppTheme.error, size: 48),
+            Icon(Icons.error_outline, color: AppTheme.error, size: 48),
             const SizedBox(height: 12),
             Text(
               'Error al cargar productos',
               style: TextStyle(
                   color: Colors.white,
-                  fontSize: Responsive.fontSize(context,
-                      small: 14, large: 16)),
+                  fontSize: Responsive.fontSize(context, small: 14, large: 16)),
             ),
             const SizedBox(height: 8),
             TextButton.icon(
@@ -1621,15 +1748,13 @@ class _PedidosPageState extends State<PedidosPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.inventory_2_outlined,
-                color: Colors.white38, size: 48),
+            Icon(Icons.inventory_2_outlined, color: Colors.white38, size: 48),
             const SizedBox(height: 12),
             Text(
               'No se encontraron productos',
               style: TextStyle(
                   color: Colors.white54,
-                  fontSize: Responsive.fontSize(context,
-                      small: 14, large: 16)),
+                  fontSize: Responsive.fontSize(context, small: 14, large: 16)),
             ),
           ],
         ),
@@ -1638,16 +1763,15 @@ class _PedidosPageState extends State<PedidosPage>
 
     // Mejora 9 â€” Favoritos primero
     final sortedProducts = [...provider.products]..sort((a, b) {
-      final aF = provider.isFavorite(a.code) ? 0 : 1;
-      final bF = provider.isFavorite(b.code) ? 0 : 1;
-      return aF.compareTo(bF);
-    });
+        final aF = provider.isFavorite(a.code) ? 0 : 1;
+        final bF = provider.isFavorite(b.code) ? 0 : 1;
+        return aF.compareTo(bF);
+      });
 
     return ListView.builder(
       controller: _catalogScrollController,
       padding: Responsive.contentPadding(context),
-      itemCount:
-          sortedProducts.length + (provider.hasMoreProducts ? 1 : 0),
+      itemCount: sortedProducts.length + (provider.hasMoreProducts ? 1 : 0),
       itemBuilder: (ctx, i) {
         if (i >= sortedProducts.length) {
           return const Padding(
@@ -1684,22 +1808,32 @@ class _PedidosPageState extends State<PedidosPage>
           onQuickAdd: (lineInCart != null && lineInCart.cantidadEnvases <= 0)
               ? null
               : () {
-            // Mejora 2 â€” Quick add 1 caja
-            HapticFeedback.lightImpact();
-            final messenger = ScaffoldMessenger.of(context);
-            messenger.hideCurrentSnackBar();
-            final err = provider.addLine(product, 1.0, 0.0, 'CAJAS', product.bestPrice);
-            if (err != null) {
-              messenger.showSnackBar(
-                SnackBar(content: Text(err, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: AppTheme.error, duration: const Duration(seconds: 2)),
-              );
-            } else {
-              provider.loadComplementaryProducts();
-              messenger.showSnackBar(
-                SnackBar(content: Text('+1 caja de ${product.name}'), backgroundColor: AppTheme.neonGreen, duration: const Duration(seconds: 1)),
-              );
-            }
-          },
+                  // Mejora 2 â€” Quick add 1 caja
+                  HapticFeedback.lightImpact();
+                  final messenger = ScaffoldMessenger.of(context);
+                  messenger.hideCurrentSnackBar();
+                  final err = provider.addLine(
+                      product, 1.0, 0.0, 'CAJAS', product.bestPrice);
+                  if (err != null) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                          content: Text(err,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                          backgroundColor: AppTheme.error,
+                          duration: const Duration(seconds: 2)),
+                    );
+                  } else {
+                    provider.loadComplementaryProducts();
+                    messenger.showSnackBar(
+                      SnackBar(
+                          content: Text('+1 caja de ${product.name}'),
+                          backgroundColor: AppTheme.neonGreen,
+                          duration: const Duration(seconds: 1)),
+                    );
+                  }
+                },
           onToggleFavorite: () {
             HapticFeedback.selectionClick();
             provider.toggleFavorite(product.code);
@@ -1745,11 +1879,15 @@ class _PedidosPageState extends State<PedidosPage>
                 decoration: InputDecoration(
                   hintText: 'Buscar pedido, cliente...',
                   hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(Icons.search, color: AppTheme.neonBlue, size: 18),
+                  prefixIcon: const Icon(Icons.search,
+                      color: AppTheme.neonBlue, size: 18),
                   filled: true,
                   fillColor: AppTheme.darkCard,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none),
                   isDense: true,
                 ),
               ),
@@ -1771,10 +1909,14 @@ class _PedidosPageState extends State<PedidosPage>
                           color: selected ? AppTheme.neonBlue : Colors.white70,
                           fontSize: 11,
                         ),
-                        side: BorderSide(color: selected ? AppTheme.neonBlue : AppTheme.borderColor),
+                        side: BorderSide(
+                            color: selected
+                                ? AppTheme.neonBlue
+                                : AppTheme.borderColor),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
-                        onSelected: (_) => setState(() => _orderDateFilter = label),
+                        onSelected: (_) =>
+                            setState(() => _orderDateFilter = label),
                       ),
                     );
                   }).toList(),
@@ -1796,10 +1938,12 @@ class _PedidosPageState extends State<PedidosPage>
     // Text filter
     if (_orderSearch.isNotEmpty) {
       final q = _orderSearch.toLowerCase();
-      filtered = filtered.where((o) =>
-          o.clienteName.toLowerCase().contains(q) ||
-          o.clienteCode.toLowerCase().contains(q) ||
-          o.numeroPedido.toString().contains(q)).toList();
+      filtered = filtered
+          .where((o) =>
+              o.clienteName.toLowerCase().contains(q) ||
+              o.clienteCode.toLowerCase().contains(q) ||
+              o.numeroPedido.toString().contains(q))
+          .toList();
     }
 
     // Date filter
@@ -1807,11 +1951,14 @@ class _PedidosPageState extends State<PedidosPage>
       final now = DateTime.now();
       filtered = filtered.where((o) {
         try {
-          final dateStr = o.fecha.length >= 10 ? o.fecha.substring(0, 10) : o.fecha;
+          final dateStr =
+              o.fecha.length >= 10 ? o.fecha.substring(0, 10) : o.fecha;
           final d = DateTime.parse(dateStr);
           final days = now.difference(d).inDays;
           if (_orderDateFilter == 'Hoy') {
-            return d.year == now.year && d.month == now.month && d.day == now.day;
+            return d.year == now.year &&
+                d.month == now.month &&
+                d.day == now.day;
           } else if (_orderDateFilter == 'Semana') {
             return days >= 0 && days <= 7;
           } else if (_orderDateFilter == 'Mes') {
@@ -1869,7 +2016,9 @@ class _PedidosPageState extends State<PedidosPage>
     final displayOrders = _filteredOrders(provider.orders);
     final showDrafts = provider.orderStatusFilter == null ||
         provider.orderStatusFilter == 'BORRADOR';
-    final displayDrafts = showDrafts ? _filteredDrafts(provider.savedDrafts) : <Map<String, dynamic>>[];
+    final displayDrafts = showDrafts
+        ? _filteredDrafts(provider.savedDrafts)
+        : <Map<String, dynamic>>[];
 
     return RefreshIndicator(
       color: AppTheme.neonBlue,
@@ -1901,7 +2050,8 @@ class _PedidosPageState extends State<PedidosPage>
           // Orders list
           if (provider.isLoadingOrders)
             const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator(color: AppTheme.neonBlue)),
+              child: Center(
+                  child: CircularProgressIndicator(color: AppTheme.neonBlue)),
             )
           else if (displayOrders.isEmpty && displayDrafts.isEmpty)
             SliverFillRemaining(
@@ -1909,54 +2059,57 @@ class _PedidosPageState extends State<PedidosPage>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.receipt_long_outlined, color: Colors.white38, size: 48),
+                    Icon(Icons.receipt_long_outlined,
+                        color: Colors.white38, size: 48),
                     const SizedBox(height: 12),
                     Text('No hay pedidos',
-                        style: TextStyle(color: Colors.white54,
-                            fontSize: Responsive.fontSize(context, small: 14, large: 16))),
+                        style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: Responsive.fontSize(context,
+                                small: 14, large: 16))),
                   ],
                 ),
               ),
             )
-          else
-            ...[
-              if (displayDrafts.isNotEmpty)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: Text(
-                      'Borradores locales',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w700,
-                        fontSize: Responsive.fontSize(context, small: 13, large: 15),
-                      ),
+          else ...[
+            if (displayDrafts.isNotEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                sliver: SliverToBoxAdapter(
+                  child: Text(
+                    'Borradores locales',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w700,
+                      fontSize:
+                          Responsive.fontSize(context, small: 13, large: 15),
                     ),
                   ),
                 ),
-              if (displayDrafts.isNotEmpty)
-                SliverPadding(
-                  padding: Responsive.contentPadding(context),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (ctx, i) => _buildDraftCard(provider, displayDrafts[i]),
-                      childCount: displayDrafts.length,
-                    ),
+              ),
+            if (displayDrafts.isNotEmpty)
+              SliverPadding(
+                padding: Responsive.contentPadding(context),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) => _buildDraftCard(provider, displayDrafts[i]),
+                    childCount: displayDrafts.length,
                   ),
                 ),
-              if (displayOrders.isNotEmpty)
-                SliverPadding(
-                  padding: displayDrafts.isEmpty
-                      ? Responsive.contentPadding(context)
-                      : const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (ctx, i) => _buildOrderCard(displayOrders[i]),
-                      childCount: displayOrders.length,
-                    ),
+              ),
+            if (displayOrders.isNotEmpty)
+              SliverPadding(
+                padding: displayDrafts.isEmpty
+                    ? Responsive.contentPadding(context)
+                    : const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) => _buildOrderCard(displayOrders[i]),
+                    childCount: displayOrders.length,
                   ),
                 ),
-            ],
+              ),
+          ],
         ],
       ),
     );
@@ -1990,8 +2143,7 @@ class _PedidosPageState extends State<PedidosPage>
                   color: provider.orderStatusFilter == null
                       ? AppTheme.neonBlue
                       : Colors.white70,
-                  fontSize:
-                      Responsive.fontSize(context, small: 12, large: 14),
+                  fontSize: Responsive.fontSize(context, small: 12, large: 14),
                 ),
                 side: BorderSide(
                   color: provider.orderStatusFilter == null
@@ -2079,8 +2231,10 @@ class _PedidosPageState extends State<PedidosPage>
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppTheme.darkSurface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Eliminar borrador', style: TextStyle(color: Colors.white)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Eliminar borrador',
+              style: TextStyle(color: Colors.white)),
           content: const Text(
             'Este borrador local se eliminara definitivamente.',
             style: TextStyle(color: Colors.white70),
@@ -2088,11 +2242,13 @@ class _PedidosPageState extends State<PedidosPage>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+              child: const Text('Cancelar',
+                  style: TextStyle(color: Colors.white54)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Eliminar', style: TextStyle(color: AppTheme.error)),
+              child: const Text('Eliminar',
+                  style: TextStyle(color: AppTheme.error)),
             ),
           ],
         ),
@@ -2119,7 +2275,8 @@ class _PedidosPageState extends State<PedidosPage>
             children: [
               Row(
                 children: [
-                  const Icon(Icons.drafts_outlined, color: Colors.orange, size: 18),
+                  const Icon(Icons.drafts_outlined,
+                      color: Colors.orange, size: 18),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -2127,13 +2284,15 @@ class _PedidosPageState extends State<PedidosPage>
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: Responsive.fontSize(context, small: 14, large: 16),
+                        fontSize:
+                            Responsive.fontSize(context, small: 14, large: 16),
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.orange.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(8),
@@ -2160,23 +2319,27 @@ class _PedidosPageState extends State<PedidosPage>
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Icon(Icons.shopping_bag_outlined, color: Colors.white38, size: 14),
+                  Icon(Icons.shopping_bag_outlined,
+                      color: Colors.white38, size: 14),
                   const SizedBox(width: 4),
                   Text(
                     '${lines.length} lineas',
                     style: TextStyle(
                       color: Colors.white54,
-                      fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                      fontSize:
+                          Responsive.fontSize(context, small: 11, large: 13),
                     ),
                   ),
                   if (dateLabel.isNotEmpty) ...[
                     const SizedBox(width: 12),
-                    Icon(Icons.schedule_outlined, color: Colors.white38, size: 14),
+                    Icon(Icons.schedule_outlined,
+                        color: Colors.white38, size: 14),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
                         dateLabel,
-                        style: const TextStyle(color: Colors.white38, fontSize: 11),
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 11),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -2187,7 +2350,8 @@ class _PedidosPageState extends State<PedidosPage>
                     style: TextStyle(
                       color: AppTheme.neonGreen,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.fontSize(context, small: 14, large: 16),
+                      fontSize:
+                          Responsive.fontSize(context, small: 14, large: 16),
                     ),
                   ),
                 ],
@@ -2201,10 +2365,12 @@ class _PedidosPageState extends State<PedidosPage>
                     label: const Text('Cargar'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.neonBlue,
-                      side: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5)),
+                      side:
+                          BorderSide(color: AppTheme.neonBlue.withOpacity(0.5)),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2217,7 +2383,8 @@ class _PedidosPageState extends State<PedidosPage>
                       side: BorderSide(color: AppTheme.error.withOpacity(0.5)),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                     ),
                   ),
                 ],
@@ -2228,7 +2395,6 @@ class _PedidosPageState extends State<PedidosPage>
       ),
     );
   }
-
 
   Widget _buildOrderCard(OrderSummary order) {
     final statusColors = {
@@ -2254,12 +2420,13 @@ class _PedidosPageState extends State<PedidosPage>
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () async {
-          final result = await OrderDetailSheet.show(context, orderId: order.id);
+          final result =
+              await OrderDetailSheet.show(context, orderId: order.id);
           if (result == 'cancelled' && mounted) {
             context.read<PedidosProvider>().loadOrders(
-              vendedorCodes: _vendedorCodes,
-              forceRefresh: true,
-            );
+                  vendedorCodes: _vendedorCodes,
+                  forceRefresh: true,
+                );
           } else if (result != null && result.startsWith('clone:') && mounted) {
             final cloneId = int.tryParse(result.substring(6));
             if (cloneId != null) {
@@ -2269,7 +2436,8 @@ class _PedidosPageState extends State<PedidosPage>
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Pedido #${order.numeroPedido} clonado al carrito'),
+                    content: Text(
+                        'Pedido #${order.numeroPedido} clonado al carrito'),
                     backgroundColor: AppTheme.neonBlue,
                   ),
                 );
@@ -2290,8 +2458,8 @@ class _PedidosPageState extends State<PedidosPage>
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.fontSize(context,
-                          small: 15, large: 17),
+                      fontSize:
+                          Responsive.fontSize(context, small: 15, large: 17),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2308,8 +2476,8 @@ class _PedidosPageState extends State<PedidosPage>
                       order.estado,
                       style: TextStyle(
                         color: color,
-                        fontSize: Responsive.fontSize(context,
-                            small: 10, large: 12),
+                        fontSize:
+                            Responsive.fontSize(context, small: 10, large: 12),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -2319,8 +2487,8 @@ class _PedidosPageState extends State<PedidosPage>
                     order.fecha,
                     style: TextStyle(
                       color: Colors.white54,
-                      fontSize: Responsive.fontSize(context,
-                          small: 11, large: 13),
+                      fontSize:
+                          Responsive.fontSize(context, small: 11, large: 13),
                     ),
                   ),
                 ],
@@ -2331,8 +2499,7 @@ class _PedidosPageState extends State<PedidosPage>
                 '${order.clienteName} (${order.clienteCode})',
                 style: TextStyle(
                   color: Colors.white70,
-                  fontSize:
-                      Responsive.fontSize(context, small: 13, large: 15),
+                  fontSize: Responsive.fontSize(context, small: 13, large: 15),
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -2347,8 +2514,8 @@ class _PedidosPageState extends State<PedidosPage>
                     '${order.lineCount} lineas',
                     style: TextStyle(
                       color: Colors.white54,
-                      fontSize: Responsive.fontSize(context,
-                          small: 11, large: 13),
+                      fontSize:
+                          Responsive.fontSize(context, small: 11, large: 13),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2362,7 +2529,8 @@ class _PedidosPageState extends State<PedidosPage>
                         _tabController.animateTo(0);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Pedido #${order.numeroPedido} clonado al carrito'),
+                            content: Text(
+                                'Pedido #${order.numeroPedido} clonado al carrito'),
                             backgroundColor: AppTheme.neonBlue,
                           ),
                         );
@@ -2370,18 +2538,25 @@ class _PedidosPageState extends State<PedidosPage>
                     },
                     borderRadius: BorderRadius.circular(6),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppTheme.neonPurple.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+                        border: Border.all(
+                            color: AppTheme.neonPurple.withOpacity(0.3)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.copy, color: AppTheme.neonPurple, size: 12),
+                          Icon(Icons.copy,
+                              color: AppTheme.neonPurple, size: 12),
                           const SizedBox(width: 3),
-                          Text('Clonar', style: TextStyle(color: AppTheme.neonPurple, fontSize: 10, fontWeight: FontWeight.w600)),
+                          Text('Clonar',
+                              style: TextStyle(
+                                  color: AppTheme.neonPurple,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -2392,14 +2567,18 @@ class _PedidosPageState extends State<PedidosPage>
                     onTap: () async {
                       HapticFeedback.lightImpact();
                       try {
-                        final detail = await PedidosService.getOrderDetail(order.id);
+                        final detail =
+                            await PedidosService.getOrderDetail(order.id);
                         if (mounted) {
-                          await OrderPdfGenerator.generateAndShare(context, detail);
+                          await OrderPdfGenerator.generateAndShare(
+                              context, detail);
                         }
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Error generando PDF: $e'), backgroundColor: AppTheme.error),
+                            SnackBar(
+                                content: Text('Error generando PDF: $e'),
+                                backgroundColor: AppTheme.error),
                           );
                         }
                       }
@@ -2411,7 +2590,8 @@ class _PedidosPageState extends State<PedidosPage>
                         color: AppTheme.neonGreen.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Icon(Icons.picture_as_pdf, color: AppTheme.neonGreen, size: 16),
+                      child: Icon(Icons.picture_as_pdf,
+                          color: AppTheme.neonGreen, size: 16),
                     ),
                   ),
                   // WhatsApp button
@@ -2424,7 +2604,8 @@ class _PedidosPageState extends State<PedidosPage>
                           'Estado: ${order.estado}\n'
                           'Total: ${PedidosFormatters.money(order.total)}\n'
                           '${order.lineCount} lineas';
-                      final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
+                      final uri = Uri.parse(
+                          'https://wa.me/?text=${Uri.encodeComponent(text)}');
                       try {
                         final launched = await launchUrl(
                           uri,
@@ -2456,13 +2637,15 @@ class _PedidosPageState extends State<PedidosPage>
                         color: const Color(0xFF25D366).withOpacity(0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Icon(Icons.chat, color: Color(0xFF25D366), size: 16),
+                      child: const Icon(Icons.chat,
+                          color: Color(0xFF25D366), size: 16),
                     ),
                   ),
                   const Spacer(),
                   // Mejora 10 \u2014 Margin display
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                     decoration: BoxDecoration(
                       color: marginColor.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(6),
@@ -2482,8 +2665,8 @@ class _PedidosPageState extends State<PedidosPage>
                     style: TextStyle(
                       color: AppTheme.neonGreen,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.fontSize(context,
-                          small: 15, large: 17),
+                      fontSize:
+                          Responsive.fontSize(context, small: 15, large: 17),
                     ),
                   ),
                 ],

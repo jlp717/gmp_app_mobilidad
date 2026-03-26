@@ -1,4 +1,4 @@
-﻿import 'package:intl/intl.dart';
+import 'package:intl/intl.dart';
 
 class PedidosFormatters {
   PedidosFormatters._();
