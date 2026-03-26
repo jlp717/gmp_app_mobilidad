@@ -254,7 +254,7 @@ class ProductCard extends StatelessWidget {
       child: Container(
         width: 48,
         height: 48,
-        color: AppTheme.darkBase,
+        color: AppTheme.darkCard,
         child: Image.network(
           url,
           headers: ApiClient.authHeaders,

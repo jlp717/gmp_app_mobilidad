@@ -94,7 +94,7 @@ class OrderLineTile extends StatelessWidget {
                       headers: ApiClient.authHeaders,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
-                        color: AppTheme.darkBase,
+                        color: AppTheme.darkCard,
                         child: const Icon(Icons.image_not_supported_outlined, color: Colors.white24, size: 18),
                       ),
                     ),

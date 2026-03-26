@@ -362,8 +362,19 @@ class _PedidosPageState extends State<PedidosPage>
                             headers: ApiClient.authHeaders,
                             height: 80,
                             fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) =>
-                                const SizedBox.shrink(),
+                            errorBuilder: (_, __, ___) => Container(
+                              height: 80,
+                              width: 80,
+                              decoration: BoxDecoration(
+                                color: AppTheme.darkCard,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.image_not_supported_outlined,
+                                color: Colors.white24,
+                                size: 32,
+                              ),
+                            ),
                           ),
                         ),
                       ),
