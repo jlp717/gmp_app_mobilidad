@@ -157,14 +157,17 @@ class Product {
   /// Total pieces in stock (envases * unitsPerBox + loose unidades)
   double get totalPieces => stockEnvases * unitsPerBox + stockUnidades;
 
-  /// Normalized primary sale unit from DB UNIDADMEDIDA field
+  /// Normalized primary sale unit from DB UNIDADMEDIDA + FORMATO fields.
+  /// Most products have UM="" in DB; FORMATO='K' and productoPesado='S'
+  /// distinguish weight-sold (kg) products.
   String get _normalizedUnit {
     final um = unitMeasure.toUpperCase().trim();
-    if (um.isEmpty || um == 'CAJA' || um == 'CAJAS') return 'CAJAS';
-    if (um == 'KILO' || um == 'KILOGRAMOS' || um == 'KG' || um == 'KILOS')
+    // Explicit UM in DB
+    if (um == 'KILO' || um == 'KILOGRAMOS' || um == 'KG' || um == 'KILOS') {
       return 'KILOGRAMOS';
-    if (um == 'UNIDAD' || um == 'UNIDADES' || um == 'UDS') return 'UNIDADES';
+    }
     if (um == 'LITRO' || um == 'LITROS' || um == 'LT') return 'LITROS';
+    if (um == 'UNIDAD' || um == 'UNIDADES' || um == 'UDS') return 'UNIDADES';
     if (um == 'PIEZA' || um == 'PIEZAS') return 'PIEZAS';
     if (um == 'BOLSA' || um == 'BOLSAS') return 'BOLSAS';
     if (um == 'ESTUCHE' || um == 'ESTUCHES') return 'ESTUCHES';
@@ -176,53 +179,91 @@ class Product {
     if (um == 'GARRAFA' || um == 'GARRAFAS') return 'GARRAFAS';
     if (um == 'SACO' || um == 'SACOS') return 'SACOS';
     if (um == 'ROLLO' || um == 'ROLLOS') return 'ROLLOS';
+    if (um == 'CAJA' || um == 'CAJAS') return 'CAJAS';
+    // UM empty → detect via FORMATO='K' or productoPesado
+    if (um.isEmpty) {
+      if (formato.toUpperCase().trim() == 'K' || productoPesado) {
+        return 'KILOGRAMOS';
+      }
+      return 'CAJAS';
+    }
     return um; // fallback: use as-is
   }
 
-  /// Content description: what each caja contains (e.g., "10 litros", "6 kg")
+  /// True if this is a weight-sold product (KILOGRAMOS/LITROS)
+  /// These show the CANTIDAD button with unit selector in the legacy app.
+  bool get isWeightProduct {
+    final norm = _normalizedUnit;
+    return norm == 'KILOGRAMOS' || norm == 'LITROS';
+  }
+
+  /// True if this product should show dual-field entry (cajas + unidades linked).
+  /// Standard products with U/C > 1 that are NOT weight products.
+  bool get isDualFieldProduct {
+    if (isWeightProduct) return false;
+    return unitsPerBox > 1;
+  }
+
+  /// Kg per box for weight products. For KILO products UC = kg per box.
+  double get kgPerBox {
+    if (_normalizedUnit == 'KILOGRAMOS') {
+      // UC is the kg-per-box for KILO products
+      return unitsPerBox > 0 ? unitsPerBox : 1;
+    }
+    if (_normalizedUnit == 'LITROS') {
+      return unitsPerBox > 0 ? unitsPerBox : 1;
+    }
+    return unitsPerBox > 0 ? unitsPerBox : 1;
+  }
+
+  /// Convert boxes to the primary unit quantity
+  double unidadesFromEnvases(double envases) => envases * unitsPerBox;
+
+  /// Convert primary unit quantity to boxes (can be fractional)
+  double envasesFromUnidades(double unidades) =>
+      unitsPerBox > 0 ? unidades / unitsPerBox : unidades;
+
+  /// Content description: what each caja contains (e.g., "10 uds", "6 kg")
   String get boxContentDesc {
     final norm = _normalizedUnit;
-    if (norm == 'CAJAS') {
-      // CAJAS as primary → show unitsPerBox piezas
-      if (unitsPerBox > 1) return '${unitsPerBox.toStringAsFixed(0)} uds';
-      return '';
-    }
     if (norm == 'KILOGRAMOS') {
-      // Peso per box
-      if (weight > 0 && weight != 1)
-        return '${weight.toStringAsFixed(weight == weight.truncateToDouble() ? 0 : 1)} kg';
-      if (unitsPerBox > 0)
-        return '${unitsPerBox.toStringAsFixed(unitsPerBox == unitsPerBox.truncateToDouble() ? 0 : 1)} kg';
+      final kpb = kgPerBox;
+      if (kpb > 0) {
+        return '${_fmtNum(kpb)} kg';
+      }
       return '';
     }
     if (norm == 'LITROS') {
-      if (unitsPerBox > 0) return '${unitsPerBox.toStringAsFixed(0)} litros';
+      if (unitsPerBox > 0) return '${_fmtNum(unitsPerBox)} L';
       return '';
     }
-    // For everything else: unitsPerBox is the count per caja
+    if (norm == 'CAJAS') {
+      if (unitsPerBox > 1) return '${_fmtNum(unitsPerBox)} uds';
+      return '';
+    }
+    // For ESTUCHES, BANDEJAS, etc.
     if (unitsPerBox > 1) {
-      return '${unitsPerBox.toStringAsFixed(0)} ${unitLabel(norm).toLowerCase()}';
+      return '${_fmtNum(unitsPerBox)} ${unitLabel(norm).toLowerCase()}';
     }
     return '';
   }
 
-  /// Price for given unit type
-  /// bestPrice is always per CAJA (box)
+  /// Price for given unit type.
+  /// bestPrice is always per CAJA (box).
   double priceForUnit(String unit) {
     final base = bestPrice;
-    final norm = _normalizedUnit;
     if (unit == 'CAJAS') return base;
+    final norm = _normalizedUnit;
 
-    // Unit price = box price / units-per-box
-    if (unit == norm && unitsPerBox > 0) {
-      if (norm == 'KILOGRAMOS') {
-        // For KILO products: price per kg = box price / kg-per-box
-        final kgPerBox = (weight > 0 && weight != 1) ? weight : unitsPerBox;
-        return base / kgPerBox;
-      }
-      if (norm == 'LITROS') {
-        return unitsPerBox > 0 ? base / unitsPerBox : base;
-      }
+    // Weight products: UC = kg per box
+    if (norm == 'KILOGRAMOS' && (unit == 'KILOGRAMOS' || unit == norm)) {
+      return kgPerBox > 0 ? base / kgPerBox : base;
+    }
+    if (norm == 'LITROS' && (unit == 'LITROS' || unit == norm)) {
+      return unitsPerBox > 0 ? base / unitsPerBox : base;
+    }
+    // Standard products: UC = units per box
+    if (unit == 'UNIDADES' || unit == norm) {
       return unitsPerBox > 0 ? base / unitsPerBox : base;
     }
     return base;
@@ -232,36 +273,38 @@ class Product {
   double stockForUnit(String unit) {
     if (unit == 'CAJAS') return stockEnvases;
     final norm = _normalizedUnit;
-    if (unit == norm) {
-      if (norm == 'KILOGRAMOS') {
-        final kgPerBox = (weight > 0 && weight != 1) ? weight : unitsPerBox;
-        return stockEnvases * kgPerBox + stockUnidades;
-      }
-      // For other units: total = envases * unitsPerBox + loose unidades
-      return stockEnvases * unitsPerBox + stockUnidades;
+    if (norm == 'KILOGRAMOS' && (unit == 'KILOGRAMOS' || unit == norm)) {
+      return stockEnvases * kgPerBox + stockUnidades;
     }
-    return stockEnvases;
+    // For all other units: total = envases * unitsPerBox + loose unidades
+    return stockEnvases * unitsPerBox + stockUnidades;
   }
 
   /// Quantity of the selected unit contained in one box
   double quantityPerBoxForUnit(String unit) {
     if (unit == 'CAJAS') return 1;
-
     final norm = _normalizedUnit;
-    if (unit != norm) {
-      return unitsPerBox > 0 ? unitsPerBox : 1;
+    if (norm == 'KILOGRAMOS' && (unit == 'KILOGRAMOS' || unit == norm)) {
+      return kgPerBox;
     }
-
-    if (norm == 'KILOGRAMOS') {
-      final kgPerBox = (weight > 0 && weight != 1) ? weight : unitsPerBox;
-      return kgPerBox > 0 ? kgPerBox : 1;
-    }
-
-    if (norm == 'LITROS') {
-      return unitsPerBox > 0 ? unitsPerBox : 1;
-    }
-
+    // For LITROS, UNIDADES, etc.: unitsPerBox
     return unitsPerBox > 0 ? unitsPerBox : 1;
+  }
+
+  /// Unit price description for display.
+  /// E.g., "3,456 €/kg", "0,540 €/ud", "11,621 €/cj"
+  String unitPriceDesc({int decimals = 3}) {
+    final norm = _normalizedUnit;
+    if (norm == 'KILOGRAMOS') {
+      return '${priceForUnit('KILOGRAMOS').toStringAsFixed(decimals)} €/kg';
+    }
+    if (norm == 'LITROS') {
+      return '${priceForUnit('LITROS').toStringAsFixed(decimals)} €/L';
+    }
+    if (unitsPerBox > 1) {
+      return '${priceForUnit('UNIDADES').toStringAsFixed(decimals)} €/ud';
+    }
+    return '${bestPrice.toStringAsFixed(decimals)} €/cj';
   }
 
   /// Unit label abbreviation for display
@@ -274,7 +317,7 @@ class Product {
       case 'KILOGRAMOS':
         return 'kg';
       case 'LITROS':
-        return 'litros';
+        return 'L';
       case 'BOLSAS':
         return 'bolsas';
       case 'ESTUCHES':
@@ -301,19 +344,34 @@ class Product {
     }
   }
 
-  /// Available unit types for this product — driven by DB UNIDADMEDIDA
-  /// Always includes CAJAS + the product's primary sale unit (if different)
+  /// Available unit types for this product.
+  /// Weight products: CAJAS + KILOGRAMOS (with CANTIDAD selector)
+  /// Standard with U/C>1: CAJAS + UNIDADES (dual-field)
+  /// Simple boxes: CAJAS only
   List<String> get availableUnits {
     final norm = _normalizedUnit;
+    if (norm == 'KILOGRAMOS') {
+      return ['CAJAS', 'KILOGRAMOS'];
+    }
+    if (norm == 'LITROS') {
+      return ['CAJAS', 'LITROS'];
+    }
     if (norm == 'CAJAS') {
-      // Primary unit IS cajas — only add sub-unit if unitsPerBox > 1
       final units = <String>['CAJAS'];
       if (unitsPerBox > 1) units.add('UNIDADES');
       return units;
     }
-    // Primary unit is something else (KILOGRAMOS, LITROS, etc.)
-    // Show CAJAS + primary unit
+    // Other specialized units (ESTUCHES, BANDEJAS, etc.)
     return ['CAJAS', norm];
+  }
+
+  /// Format a numeric value for display (remove trailing zeros)
+  static String _fmtNum(double v) {
+    if (v == v.truncateToDouble()) return v.toStringAsFixed(0);
+    final s = v.toStringAsFixed(2);
+    // Remove trailing zeros: 2.50 → 2.5, 2.00 → 2
+    if (s.endsWith('0')) return s.substring(0, s.length - 1);
+    return s;
   }
 }
 
@@ -561,11 +619,32 @@ class OrderLine {
         'ivaRate': ivaRate,
       };
 
-  /// Recalculate amounts based on current qty and price
+  /// Recalculate amounts based on current qty and price.
+  /// Also auto-computes the complementary quantity field:
+  /// - CAJAS: cantidadUnidades = cantidadEnvases * unidadesCaja
+  /// - KILOGRAMOS/other: cantidadEnvases = cantidadUnidades / unidadesCaja
   void recalculate() {
-    final qty = cantidadEnvases > 0 ? cantidadEnvases : cantidadUnidades;
-    importeVenta = double.parse((precioVenta * qty).toStringAsFixed(2));
-    importeCosto = double.parse((precioCosto * qty).toStringAsFixed(2));
+    final unit = unidadMedida.trim().toUpperCase();
+    // Auto-compute complementary field
+    if (unit == 'CAJAS' || unit.isEmpty) {
+      // Selling by boxes → compute total units
+      if (cantidadEnvases > 0 && unidadesCaja > 0) {
+        cantidadUnidades = double.parse(
+            (cantidadEnvases * unidadesCaja).toStringAsFixed(5));
+      }
+    } else {
+      // Selling by kg/litros/units → compute box equivalent
+      if (cantidadUnidades > 0 && unidadesCaja > 0) {
+        cantidadEnvases = double.parse(
+            (cantidadUnidades / unidadesCaja).toStringAsFixed(2));
+      }
+    }
+
+    // The billing qty is always the primary field for the selected unit
+    final billingQty =
+        (unit == 'CAJAS' || unit.isEmpty) ? cantidadEnvases : cantidadUnidades;
+    importeVenta = double.parse((precioVenta * billingQty).toStringAsFixed(2));
+    importeCosto = double.parse((precioCosto * billingQty).toStringAsFixed(2));
     importeMargen =
         double.parse((importeVenta - importeCosto).toStringAsFixed(2));
     porcentajeMargen = importeVenta > 0

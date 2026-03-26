@@ -532,11 +532,18 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
 
   void _showEditLineDialog(BuildContext context, PedidosProvider provider,
       OrderLine line, int index) {
+      
+    final isDual = line.unidadMedida == 'CAJAS' && line.unidadesCaja > 1;
+    String formatQty(double v) => v.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '').replaceAll(RegExp(r'\.$'), '').replaceAll(RegExp(r'0$'), '').replaceAll(RegExp(r'\.$'), '');
+
     final qtyController = TextEditingController(
-      text: (line.cantidadEnvases > 0
-              ? line.cantidadEnvases
-              : line.cantidadUnidades)
-          .toStringAsFixed(0),
+      text: formatQty(line.cantidadEnvases > 0 ? line.cantidadEnvases : line.cantidadUnidades),
+    );
+    final cajasController = TextEditingController(
+      text: line.cantidadEnvases > 0 ? formatQty(line.cantidadEnvases) : '',
+    );
+    final unidadesController = TextEditingController(
+      text: line.cantidadUnidades > 0 ? formatQty(line.cantidadUnidades) : '',
     );
     final priceController =
         TextEditingController(text: line.precioVenta.toStringAsFixed(3));
@@ -577,70 +584,134 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: qtyController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Cantidad',
-                        labelStyle: const TextStyle(color: Colors.white70),
-                        filled: true,
-                        fillColor: AppTheme.darkCard,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: AppTheme.borderColor),
+              if (isDual) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: cajasController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Cajas',
+                          labelStyle: const TextStyle(color: Colors.white70),
+                          filled: true,
+                          fillColor: AppTheme.darkCard,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonGreen)),
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: AppTheme.borderColor),
+                        onChanged: (val) {
+                          final cur = double.tryParse(val.replaceAll(',', '.')) ?? 0;
+                          unidadesController.text = formatQty(cur * line.unidadesCaja);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: unidadesController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Unid. (${formatQty(line.unidadesCaja)} U/C)',
+                          labelStyle: const TextStyle(color: Colors.white70),
+                          filled: true,
+                          fillColor: AppTheme.darkCard,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: AppTheme.neonBlue),
+                        onChanged: (val) {
+                          final cur = double.tryParse(val.replaceAll(',', '.')) ?? 0;
+                          cajasController.text = formatQty(cur / line.unidadesCaja);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Precio',
+                    suffixText: ' €',
+                    labelStyle: const TextStyle(color: Colors.white70),
+                    filled: true,
+                    fillColor: AppTheme.darkCard,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
+                  ),
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: qtyController,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Cantidad',
+                          labelStyle: const TextStyle(color: Colors.white70),
+                          filled: true,
+                          fillColor: AppTheme.darkCard,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppTheme.borderColor),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppTheme.borderColor),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppTheme.neonBlue),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: priceController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Precio',
-                        suffixText: ' €',
-                        labelStyle: const TextStyle(color: Colors.white70),
-                        filled: true,
-                        fillColor: AppTheme.darkCard,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: AppTheme.borderColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: AppTheme.borderColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: AppTheme.neonBlue),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: priceController,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Precio',
+                          suffixText: ' €',
+                          labelStyle: const TextStyle(color: Colors.white70),
+                          filled: true,
+                          fillColor: AppTheme.darkCard,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppTheme.borderColor),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppTheme.borderColor),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppTheme.neonBlue),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
               if (line.precioMinimo > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
@@ -659,22 +730,36 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 height: 48,
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    final qty = double.tryParse(
-                            qtyController.text.replaceAll(',', '.')) ??
-                        0;
                     final price = double.tryParse(
                             priceController.text.replaceAll(',', '.')) ??
                         0;
-                    if (qty <= 0) return;
 
-                    final isBoxes = line.cantidadEnvases > 0;
+                    if (isDual) {
+                      final c = double.tryParse(cajasController.text.replaceAll(',', '.')) ?? 0;
+                      final u = double.tryParse(unidadesController.text.replaceAll(',', '.')) ?? 0;
+                      if (c <= 0 && u <= 0) return;
+                      
+                      provider.updateLine(
+                        index,
+                        cantidadEnvases: c,
+                        cantidadUnidades: u,
+                        precioVenta: price,
+                      );
+                    } else {
+                      final qty = double.tryParse(
+                              qtyController.text.replaceAll(',', '.')) ??
+                          0;
+                      if (qty <= 0) return;
 
-                    provider.updateLine(
-                      index,
-                      cantidadEnvases: isBoxes ? qty : null,
-                      cantidadUnidades: isBoxes ? null : qty,
-                      precioVenta: price,
-                    );
+                      final isBoxes = line.cantidadEnvases > 0;
+
+                      provider.updateLine(
+                        index,
+                        cantidadEnvases: isBoxes ? qty : null,
+                        cantidadUnidades: isBoxes ? null : qty,
+                        precioVenta: price,
+                      );
+                    }
                     Navigator.pop(ctx);
                   },
                   icon: const Icon(Icons.save),

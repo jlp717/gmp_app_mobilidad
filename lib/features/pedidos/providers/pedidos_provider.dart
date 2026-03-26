@@ -366,12 +366,17 @@ class PedidosProvider with ChangeNotifier {
         return msg;
       }
 
-      if (lineUnit == 'CAJAS') {
-        line.cantidadEnvases = newQty;
-        line.cantidadUnidades = 0;
+      if (product.isDualFieldProduct) {
+        line.cantidadEnvases += cantidadEnvases;
+        line.cantidadUnidades += cantidadUnidades;
       } else {
-        line.cantidadEnvases = 0;
-        line.cantidadUnidades = newQty;
+        if (lineUnit == 'CAJAS') {
+          line.cantidadEnvases = newQty;
+          line.cantidadUnidades = 0;
+        } else {
+          line.cantidadEnvases = 0;
+          line.cantidadUnidades = newQty;
+        }
       }
       line.precioVenta = precioVenta;
       line.recalculate();
@@ -390,8 +395,8 @@ class PedidosProvider with ChangeNotifier {
       final line = OrderLine(
         codigoArticulo: product.code,
         descripcion: product.name,
-        cantidadEnvases: unit == 'CAJAS' ? requestQty : 0,
-        cantidadUnidades: unit == 'CAJAS' ? 0 : requestQty,
+        cantidadEnvases: product.isDualFieldProduct ? cantidadEnvases : (unit == 'CAJAS' ? requestQty : 0),
+        cantidadUnidades: product.isDualFieldProduct ? cantidadUnidades : (unit == 'CAJAS' ? 0 : requestQty),
         unidadMedida: unit,
         unidadesCaja: product.quantityPerBoxForUnit(unit),
         precioVenta: precioVenta,
@@ -446,29 +451,36 @@ class PedidosProvider with ChangeNotifier {
     }
 
     final pIdx = _products.indexWhere((p) => p.code == line.codigoArticulo);
-    if (pIdx >= 0) {
-      final product = _products[pIdx];
-      final maxQty = nextUnit == 'CAJAS'
-          ? product.stockEnvases
-          : product.stockForUnit(nextUnit);
-      if (nextQty > maxQty) {
-        final msg = nextUnit == 'CAJAS'
-            ? 'Stock insuficiente: Solo hay ${product.stockEnvases.toInt()} cajas.'
-            : 'Stock insuficiente: Solo hay ${maxQty.toStringAsFixed(2)} ${Product.unitLabel(nextUnit)}.';
-        _error = msg;
-        notifyListeners();
-        return msg;
+    final product = pIdx >= 0 ? _products[pIdx] : null;
+
+    if (product != null && product.isDualFieldProduct) {
+      if (cantidadEnvases != null) line.cantidadEnvases = cantidadEnvases;
+      if (cantidadUnidades != null) line.cantidadUnidades = cantidadUnidades;
+    } else {
+      if (pIdx >= 0) {
+        final maxQty = nextUnit == 'CAJAS'
+            ? product!.stockEnvases
+            : product!.stockForUnit(nextUnit);
+        if (nextQty > maxQty) {
+          final msg = nextUnit == 'CAJAS'
+              ? 'Stock insuficiente: Solo hay ${product.stockEnvases.toInt()} cajas.'
+              : 'Stock insuficiente: Solo hay ${maxQty.toStringAsFixed(2)} ${Product.unitLabel(nextUnit)}.';
+          _error = msg;
+          notifyListeners();
+          return msg;
+        }
+      }
+
+      line.unidadMedida = nextUnit;
+      if (nextUnit == 'CAJAS') {
+        line.cantidadEnvases = nextQty;
+        line.cantidadUnidades = 0;
+      } else {
+        line.cantidadEnvases = 0;
+        line.cantidadUnidades = nextQty;
       }
     }
-
-    line.unidadMedida = nextUnit;
-    if (nextUnit == 'CAJAS') {
-      line.cantidadEnvases = nextQty;
-      line.cantidadUnidades = 0;
-    } else {
-      line.cantidadEnvases = 0;
-      line.cantidadUnidades = nextQty;
-    }
+    
     if (precioVenta != null) line.precioVenta = precioVenta;
     if (pIdx >= 0) {
       line.unidadesCaja = _products[pIdx].quantityPerBoxForUnit(nextUnit);

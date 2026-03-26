@@ -246,15 +246,29 @@ class _PedidosPageState extends State<PedidosPage>
           ? 'CAJAS'
           : product.availableUnits.first;
     }
+    final isDual = product.isDualFieldProduct;
+    if (isDual) selectedUnit = 'CAJAS'; // Dual products always lock to CAJAS price
+
     final initQty = existingLine != null
         ? (existingLine.cantidadEnvases > 0
             ? existingLine.cantidadEnvases
             : existingLine.cantidadUnidades)
         : prov0.lastQtyForProduct(product.code);
+        
+    final initCajas = existingLine?.cantidadEnvases ?? (isDual ? initQty : 0.0);
+    final initUds = existingLine?.cantidadUnidades ?? (isDual ? initQty * product.unitsPerBox : 0.0);
+
     final initialPrice =
         existingLine?.precioVenta ?? product.priceForUnit(selectedUnit);
+        
     final qtyController = TextEditingController(
       text: _formatQtyForInput(initQty, selectedUnit),
+    );
+    final cajasController = TextEditingController(
+      text: initCajas > 0 ? _formatQtyForInput(initCajas, 'CAJAS') : '',
+    );
+    final unidadesController = TextEditingController(
+      text: initUds > 0 ? _formatQtyForInput(initUds, 'UNIDADES') : '',
     );
     final priceController =
         TextEditingController(text: _formatPriceForInput(initialPrice));
@@ -262,6 +276,17 @@ class _PedidosPageState extends State<PedidosPage>
     List<StockEntry> stockByWarehouse = [];
     bool showWarehouseStock = false;
     bool loadingTariffs = true;
+
+    InputDecoration _qtyFieldDeco(Color color) {
+      return InputDecoration(
+        filled: true,
+        fillColor: color.withOpacity(0.1),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: color)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: color)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: color, width: 2)),
+      );
+    }
 
     showModalBottomSheet<void>(
       context: context,
@@ -294,9 +319,12 @@ class _PedidosPageState extends State<PedidosPage>
               }).catchError((_) {});
             }
 
-            final qty = _parseInputNumber(qtyController.text);
+            final qty = isDual
+                ? _parseInputNumber(cajasController.text)
+                : _parseInputNumber(qtyController.text);
+            final uds = isDual ? _parseInputNumber(unidadesController.text) : 0.0;
             final price = _parseInputNumber(priceController.text);
-            final total = qty * price;
+            final total = isDual ? (qty * price) : (qty * price);
 
             return Padding(
               padding: EdgeInsets.only(
@@ -556,247 +584,276 @@ class _PedidosPageState extends State<PedidosPage>
                         ),
                       ),
                     ],
-                    // â”€â”€ Unit selector (only available units for this product) â”€â”€
-                    const SizedBox(height: 14),
-                    Text('Unidad de medida',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: Responsive.fontSize(context,
-                              small: 11, large: 13),
-                        )),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: product.availableUnits.map((unit) {
-                        final selected = selectedUnit == unit;
-                        final unitPrice = product.priceForUnit(unit);
-                        final unitStock = product.stockForUnit(unit);
-                        final stockLabel = Product.unitLabel(unit);
-                        return SizedBox(
-                          width: (MediaQuery.of(ctx).size.width - 56) / 3,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              setModalState(() {
-                                selectedUnit = unit;
-                                priceController.text =
-                                    _formatPriceForInput(unitPrice);
-                                final currentQty =
-                                    _parseInputNumber(qtyController.text);
-                                qtyController.text = _formatQtyForInput(
-                                    currentQty, selectedUnit);
-                              });
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: selected
-                                  ? AppTheme.neonBlue.withOpacity(0.2)
-                                  : AppTheme.darkCard,
-                              foregroundColor:
-                                  selected ? AppTheme.neonBlue : Colors.white70,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                side: BorderSide(
-                                  color: selected
-                                      ? AppTheme.neonBlue
-                                      : AppTheme.borderColor,
-                                  width: selected ? 1.5 : 1,
-                                ),
-                              ),
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 2),
-                            ),
+                    // â”€â”€ Quantity Input area â”€â”€
+                    if (isDual) ...[
+                      // DUAL FIELD (Cajas + Unidades)
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
                             child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(unit,
+                                Text('Cajas',
                                     style: TextStyle(
-                                      fontSize: Responsive.fontSize(context,
-                                          small: 10, large: 11),
-                                      fontWeight: selected
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                    )),
-                                Text(
-                                  PedidosFormatters.money(unitPrice,
-                                      decimals: 3),
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    color: selected
-                                        ? AppTheme.neonGreen
-                                        : Colors.white38,
-                                  ),
-                                ),
-                                Text(
-                                  '${_formatUnitQty(unitStock, unit)} $stockLabel',
-                                  style: TextStyle(
-                                    fontSize: 8,
-                                    color: unitStock > 0
-                                        ? Colors.white30
-                                        : AppTheme.error.withOpacity(0.6),
-                                  ),
+                                        color: Colors.white70,
+                                        fontSize: Responsive.fontSize(context,
+                                            small: 11, large: 13))),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    _buildQtyButton(Icons.remove, AppTheme.error, () {
+                                      final cur = _parseInputNumber(cajasController.text);
+                                      if (cur >= 1) {
+                                        final newC = cur - 1;
+                                        setModalState(() {
+                                          cajasController.text = _formatQtyForInput(newC, 'CAJAS');
+                                          unidadesController.text = _formatQtyForInput(newC * product.unitsPerBox, 'UNIDADES');
+                                        });
+                                      }
+                                    }),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: cajasController,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                        onChanged: (val) {
+                                          final cur = _parseInputNumber(val);
+                                          unidadesController.text = _formatQtyForInput(cur * product.unitsPerBox, 'UNIDADES');
+                                          setModalState(() {});
+                                        },
+                                        decoration: _qtyFieldDeco(AppTheme.neonGreen),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _buildQtyButton(Icons.add, AppTheme.neonBlue, () {
+                                      final cur = _parseInputNumber(cajasController.text);
+                                      final newC = cur + 1;
+                                      setModalState(() {
+                                        cajasController.text = _formatQtyForInput(newC, 'CAJAS');
+                                        unidadesController.text = _formatQtyForInput(newC * product.unitsPerBox, 'UNIDADES');
+                                      });
+                                    }),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 8),
-                    Builder(
-                      builder: (_) {
-                        final selectedUnitPrice =
-                            product.priceForUnit(selectedUnit);
-                        final selectedStock =
-                            product.stockForUnit(selectedUnit);
-                        final selectedLabel = Product.unitLabel(selectedUnit);
-                        final qtyPerBox =
-                            product.quantityPerBoxForUnit(selectedUnit);
-                        final boxPrice = product.priceForUnit('CAJAS');
-
-                        return Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: AppTheme.darkCard,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                                color: AppTheme.borderColor.withOpacity(0.6)),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Unidades (${_fmtNum(product.unitsPerBox)} U/C)',
+                                    style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: Responsive.fontSize(context,
+                                            small: 11, large: 13))),
+                                const SizedBox(height: 6),
+                                TextField(
+                                  controller: unidadesController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                  onChanged: (val) {
+                                    final cur = _parseInputNumber(val);
+                                    cajasController.text = _formatQtyForInput(cur / product.unitsPerBox, 'CAJAS');
+                                    setModalState(() {});
+                                  },
+                                  decoration: _qtyFieldDeco(AppTheme.neonBlue),
+                                ),
+                              ],
+                            ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Precio unitario: ${PedidosFormatters.money(selectedUnitPrice, decimals: 3)} / $selectedLabel',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                selectedUnit == 'CAJAS'
-                                    ? 'Precio por caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}'
-                                    : '1 caja = ${_formatUnitQty(qtyPerBox, selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
-                                style: const TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 10,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Stock disponible: ${_formatUnitQty(selectedStock, selectedUnit)} $selectedLabel',
-                                style: TextStyle(
-                                  color: selectedStock > 0
-                                      ? AppTheme.neonGreen
-                                      : AppTheme.error,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Cantidad (${selectedUnit == 'KILOGRAMOS' ? 'kg' : selectedUnit.toLowerCase()})',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize:
-                            Responsive.fontSize(context, small: 11, large: 13),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        // Minus button
-                        _buildQtyButton(Icons.remove, AppTheme.error, () {
-                          final cur = _parseInputNumber(qtyController.text);
-                          if (cur > 1) {
-                            setModalState(() => qtyController.text =
-                                _formatQtyForInput(cur - 1, selectedUnit));
-                          }
-                        }),
-                        const SizedBox(width: 10),
-                        // Qty field
-                        Expanded(
-                          child: TextField(
-                            controller: qtyController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold),
-                            onChanged: (_) => setModalState(() {}),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: AppTheme.neonGreen.withOpacity(0.1),
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 12),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    const BorderSide(color: AppTheme.neonGreen),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      // SINGLE FIELD WITH UNIT SELECTOR (Weight products & simple boxes)
+                      if (product.availableUnits.length > 1) ...[
+                        const SizedBox(height: 14),
+                        Text('Unidad de medida',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                            )),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: product.availableUnits.map((unit) {
+                            final selected = selectedUnit == unit;
+                            final unitPrice = product.priceForUnit(unit);
+                            final unitStock = product.stockForUnit(unit);
+                            final stockLabel = Product.unitLabel(unit);
+                            return SizedBox(
+                              width: (MediaQuery.of(ctx).size.width - 56) / 3,
+                              height: 56,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  setModalState(() {
+                                    selectedUnit = unit;
+                                    priceController.text = _formatPriceForInput(unitPrice);
+                                    final currentQty = _parseInputNumber(qtyController.text);
+                                    qtyController.text = _formatQtyForInput(currentQty, selectedUnit);
+                                  });
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: selected ? AppTheme.neonBlue.withOpacity(0.2) : AppTheme.darkCard,
+                                  foregroundColor: selected ? AppTheme.neonBlue : Colors.white70,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    side: BorderSide(
+                                      color: selected ? AppTheme.neonBlue : AppTheme.borderColor,
+                                      width: selected ? 1.5 : 1,
+                                    ),
+                                  ),
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(unit,
+                                        style: TextStyle(
+                                          fontSize: Responsive.fontSize(context, small: 10, large: 11),
+                                          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                                        )),
+                                    Text(
+                                      PedidosFormatters.money(unitPrice, decimals: 3),
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: selected ? AppTheme.neonGreen : Colors.white38,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${_formatUnitQty(unitStock, unit)} $stockLabel',
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        color: unitStock > 0 ? Colors.white30 : AppTheme.error.withOpacity(0.6),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    const BorderSide(color: AppTheme.neonGreen),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: AppTheme.neonGreen, width: 2),
-                              ),
-                            ),
-                          ),
+                            );
+                          }).toList(),
                         ),
-                        const SizedBox(width: 10),
-                        // Plus button
-                        _buildQtyButton(Icons.add, AppTheme.neonBlue, () {
-                          final cur = _parseInputNumber(qtyController.text);
-                          setModalState(() => qtyController.text =
-                              _formatQtyForInput(cur + 1, selectedUnit));
-                        }),
+                        const SizedBox(height: 8),
                       ],
-                    ),
-                    // â”€â”€ Mejora 5: Quick quantity buttons +5/+10/+25 â”€â”€
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [5, 10, 25].map((v) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: OutlinedButton(
-                            onPressed: () {
-                              final cur = _parseInputNumber(qtyController.text);
-                              setModalState(() => qtyController.text =
-                                  _formatQtyForInput(cur + v, selectedUnit));
-                            },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.neonBlue,
-                              side: BorderSide(
-                                  color: AppTheme.neonBlue.withOpacity(0.4)),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      Builder(
+                        builder: (_) {
+                          final selectedUnitPrice = product.priceForUnit(selectedUnit);
+                          final selectedStock = product.stockForUnit(selectedUnit);
+                          final selectedLabel = Product.unitLabel(selectedUnit);
+                          final qtyPerBox = product.quantityPerBoxForUnit(selectedUnit);
+                          final boxPrice = product.priceForUnit('CAJAS');
+
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.darkCard,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppTheme.borderColor.withOpacity(0.6)),
                             ),
-                            child: Text('+$v',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 13)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Precio unitario: ${PedidosFormatters.money(selectedUnitPrice, decimals: 3)} / $selectedLabel',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  selectedUnit == 'CAJAS'
+                                      ? 'Precio por caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}'
+                                      : '1 caja = ${_formatUnitQty(qtyPerBox, selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Stock disponible: ${_formatUnitQty(selectedStock, selectedUnit)} $selectedLabel',
+                                  style: TextStyle(
+                                    color: selectedStock > 0 ? AppTheme.neonGreen : AppTheme.error,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Cantidad (${selectedUnit == 'KILOGRAMOS' ? 'kg' : selectedUnit.toLowerCase()})',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          _buildQtyButton(Icons.remove, AppTheme.error, () {
+                            final cur = _parseInputNumber(qtyController.text);
+                            if (cur > 1) {
+                              setModalState(() => qtyController.text = _formatQtyForInput(cur - 1, selectedUnit));
+                            }
+                          }),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: qtyController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                              onChanged: (_) => setModalState(() {}),
+                              decoration: _qtyFieldDeco(AppTheme.neonGreen),
+                            ),
                           ),
-                        );
-                      }).toList(),
-                    ),
+                          const SizedBox(width: 10),
+                          _buildQtyButton(Icons.add, AppTheme.neonBlue, () {
+                            final cur = _parseInputNumber(qtyController.text);
+                            setModalState(() => qtyController.text = _formatQtyForInput(cur + 1, selectedUnit));
+                          }),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [5, 10, 25].map((v) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: OutlinedButton(
+                              onPressed: () {
+                                final cur = _parseInputNumber(qtyController.text);
+                                setModalState(() => qtyController.text = _formatQtyForInput(cur + v, selectedUnit));
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.neonBlue,
+                                side: BorderSide(color: AppTheme.neonBlue.withOpacity(0.4)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: Text('+$v', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                     // â”€â”€ Price field â”€â”€
                     const SizedBox(height: 12),
                     TextField(
@@ -893,7 +950,11 @@ class _PedidosPageState extends State<PedidosPage>
                             height: 46,
                             child: OutlinedButton(
                               onPressed: () {
-                                setModalState(() => qtyController.text = '0');
+                                setModalState(() {
+                                  qtyController.text = '0';
+                                  cajasController.text = '0';
+                                  unidadesController.text = '0';
+                                });
                               },
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppTheme.error,
@@ -916,18 +977,40 @@ class _PedidosPageState extends State<PedidosPage>
                             height: 46,
                             child: ElevatedButton.icon(
                               onPressed: () {
-                                final qty =
-                                    _parseInputNumber(qtyController.text);
+                                final inputQty = isDual
+                                    ? _parseInputNumber(cajasController.text)
+                                    : _parseInputNumber(qtyController.text);
+                                final inputUds = isDual
+                                    ? _parseInputNumber(unidadesController.text)
+                                    : 0.0;
                                 final price =
                                     _parseInputNumber(priceController.text);
-                                if (qty <= 0) return;
+                                
+                                if (inputQty <= 0 && inputUds <= 0) return;
 
                                 final provider =
                                     context.read<PedidosProvider>();
-                                final envases =
-                                    selectedUnit == 'CAJAS' ? qty : 0.0;
-                                final unidades =
-                                    selectedUnit != 'CAJAS' ? qty : 0.0;
+                                
+                                double envases = 0.0;
+                                double unidades = 0.0;
+                                
+                                if (isDual) {
+                                  envases = inputQty;
+                                  unidades = inputUds;
+                                } else {
+                                  if (selectedUnit == 'CAJAS') {
+                                    envases = inputQty;
+                                    unidades = inputQty * product.unitsPerBox;
+                                  } else if (product.isWeightProduct && selectedUnit == 'KILOGRAMOS') {
+                                    envases = inputQty;
+                                    unidades = inputQty;
+                                  } else {
+                                    unidades = inputQty;
+                                    envases = product.unitsPerBox > 0 
+                                        ? inputQty / product.unitsPerBox 
+                                        : 0.0;
+                                  }
+                                }
 
                                 // Check price warning
                                 if (product.precioMinimo > 0 &&

@@ -28,6 +28,22 @@ class OrderLineTile extends StatelessWidget {
     required this.onDecrement,
   }) : super(key: key);
 
+  String _getQtyLabel() {
+    bool isWeight = line.unidadMedida == 'KILOGRAMOS' || line.unidadMedida == 'LITROS';
+    if (isWeight && line.cantidadUnidades > 0) {
+      return '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} ${line.unidadMedida == 'LITROS' ? 'L' : 'kg'}';
+    }
+    
+    if (line.cantidadEnvases > 0 && line.cantidadUnidades > 0 && line.unidadMedida == 'CAJAS' && line.unidadesCaja > 1) {
+      return '${PedidosFormatters.number(line.cantidadEnvases)} cj (${PedidosFormatters.number(line.cantidadUnidades)} ud)';
+    }
+
+    if (line.cantidadEnvases > 0) {
+      return '${PedidosFormatters.number(line.cantidadEnvases)} cj';
+    }
+    return '${PedidosFormatters.number(line.cantidadUnidades)} ud';
+  }
+
   @override
   Widget build(BuildContext context) {
     final marginColor = line.porcentajeMargen >= 15
@@ -147,9 +163,7 @@ class OrderLineTile extends StatelessWidget {
                                 Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 4),
                                   child: Text(
-                                    line.cantidadEnvases > 0
-                                        ? '${PedidosFormatters.number(line.cantidadEnvases)} c'
-                                        : '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} u',
+                                    _getQtyLabel(),
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: Responsive.fontSize(context, small: 11, large: 12),
