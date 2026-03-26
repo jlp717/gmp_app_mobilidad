@@ -9,11 +9,17 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/api/api_client.dart';
 import '../../data/pedidos_service.dart';
+import '../utils/pedidos_formatters.dart';
 
 class PromotionsBanner extends StatefulWidget {
-  final Function(String code, String name)? onProductTap;
+  final void Function(String code, String name)? onProductTap;
+  final List<PromotionItem>? promotions;
 
-  const PromotionsBanner({Key? key, this.onProductTap}) : super(key: key);
+  const PromotionsBanner({
+    Key? key,
+    this.onProductTap,
+    this.promotions,
+  }) : super(key: key);
 
   @override
   State<PromotionsBanner> createState() => _PromotionsBannerState();
@@ -27,7 +33,21 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
   @override
   void initState() {
     super.initState();
-    _loadPromotions();
+    if (widget.promotions != null) {
+      _promotions = List<PromotionItem>.from(widget.promotions!);
+      _isLoading = false;
+    } else {
+      _loadPromotions();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant PromotionsBanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.promotions != null) {
+      _promotions = List<PromotionItem>.from(widget.promotions!);
+      _isLoading = false;
+    }
   }
 
   Future<void> _loadPromotions() async {
@@ -224,7 +244,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
     return Row(
       children: [
         Text(
-          '${promo.promoPrice.toStringAsFixed(3)}\u20AC',
+          PedidosFormatters.money(promo.promoPrice, decimals: 3),
           style: TextStyle(
             color: AppTheme.neonGreen,
             fontWeight: FontWeight.bold,
@@ -235,7 +255,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         const SizedBox(width: 6),
         if (promo.hasSaving)
           Text(
-            '${promo.regularPrice.toStringAsFixed(3)}\u20AC',
+            PedidosFormatters.money(promo.regularPrice, decimals: 3),
             style: TextStyle(
               color: Colors.white38,
               fontSize: Responsive.fontSize(context,

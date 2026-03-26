@@ -135,8 +135,8 @@ class OrderPdfGenerator {
         l.descripcion.length > 25 ? '${l.descripcion.substring(0, 25)}...' : l.descripcion,
         l.cantidadEnvases > 0 ? l.cantidadEnvases.toStringAsFixed(0) : '-',
         l.cantidadUnidades > 0 ? l.cantidadUnidades.toStringAsFixed(0) : '-',
-        '\u20AC${l.precioVenta.toStringAsFixed(3)}',
-        '\u20AC${l.importeVenta.toStringAsFixed(2)}',
+        _money(l.precioVenta, decimals: 3),
+        _money(l.importeVenta),
       ]).toList(),
     );
   }
@@ -162,9 +162,9 @@ class OrderPdfGenerator {
             _totalRow('Lineas:', '${lines.length}'),
             _totalRow('Cajas:', totalEnvases.toStringAsFixed(0)),
             pw.Divider(color: PdfColors.grey300),
-            _totalRow('Total:', '\u20AC${totalVenta.toStringAsFixed(2)}',
+            _totalRow('Total:', _money(totalVenta),
                 bold: true, color: PdfColor.fromHex('#003d7a')),
-            _totalRow('Margen:', '\u20AC${totalMargen.toStringAsFixed(2)} (${pctMargen.toStringAsFixed(1)}%)'),
+            _totalRow('Margen:', '${_money(totalMargen)} (${pctMargen.toStringAsFixed(1)}%)'),
           ],
         ),
       ),
@@ -203,5 +203,10 @@ class OrderPdfGenerator {
       case 'NV': return 'No Venta';
       default: return type;
     }
+  }
+
+  static String _money(num value, {int decimals = 2}) {
+    final text = value.toStringAsFixed(decimals).replaceAll('.', ',');
+    return '$text \u20AC';
   }
 }

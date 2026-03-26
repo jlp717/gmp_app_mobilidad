@@ -240,6 +240,27 @@ class Product {
     return stockEnvases;
   }
 
+  /// Quantity of the selected unit contained in one box
+  double quantityPerBoxForUnit(String unit) {
+    if (unit == 'CAJAS') return 1;
+
+    final norm = _normalizedUnit;
+    if (unit != norm) {
+      return unitsPerBox > 0 ? unitsPerBox : 1;
+    }
+
+    if (norm == 'KILOGRAMOS') {
+      final kgPerBox = (weight > 0 && weight != 1) ? weight : unitsPerBox;
+      return kgPerBox > 0 ? kgPerBox : 1;
+    }
+
+    if (norm == 'LITROS') {
+      return unitsPerBox > 0 ? unitsPerBox : 1;
+    }
+
+    return unitsPerBox > 0 ? unitsPerBox : 1;
+  }
+
   /// Unit label abbreviation for display
   static String unitLabel(String unit) {
     switch (unit) {
@@ -328,6 +349,8 @@ class PromotionItem {
   final double regularPrice;
   final String dateFrom;
   final String dateTo;
+  final double stockEnvases;
+  final double stockUnidades;
 
   PromotionItem({
     required this.code,
@@ -338,12 +361,35 @@ class PromotionItem {
     this.regularPrice = 0,
     this.dateFrom = '',
     this.dateTo = '',
+    this.stockEnvases = 0,
+    this.stockUnidades = 0,
   });
 
   bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
   double get savingPct => regularPrice > 0 ? ((regularPrice - promoPrice) / regularPrice * 100) : 0;
+  bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
 
   factory PromotionItem.fromJson(Map<String, dynamic> json) {
+    String dateFrom = (json['dateFrom'] ?? '').toString().trim();
+    String dateTo = (json['dateTo'] ?? '').toString().trim();
+
+    if (dateFrom.isEmpty && json['dayFrom'] != null) {
+      final d = (json['dayFrom'] ?? '').toString().trim().padLeft(2, '0');
+      final m = (json['monthFrom'] ?? '').toString().trim().padLeft(2, '0');
+      final y = (json['yearFrom'] ?? '').toString().trim();
+      if (y.isNotEmpty) {
+        dateFrom = '$d/$m/$y';
+      }
+    }
+    if (dateTo.isEmpty && json['dayTo'] != null) {
+      final d = (json['dayTo'] ?? '').toString().trim().padLeft(2, '0');
+      final m = (json['monthTo'] ?? '').toString().trim().padLeft(2, '0');
+      final y = (json['yearTo'] ?? '').toString().trim();
+      if (y.isNotEmpty) {
+        dateTo = '$d/$m/$y';
+      }
+    }
+
     return PromotionItem(
       code: (json['code'] ?? '').toString().trim(),
       name: (json['name'] ?? '').toString().trim(),
@@ -351,8 +397,10 @@ class PromotionItem {
       promoType: (json['promoType'] ?? '').toString().trim(),
       promoPrice: _toDouble(json['promoPrice'] ?? json['price']),
       regularPrice: _toDouble(json['regularPrice']),
-      dateFrom: (json['dateFrom'] ?? '').toString(),
-      dateTo: (json['dateTo'] ?? '').toString(),
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      stockEnvases: _toDouble(json['stockEnvases']),
+      stockUnidades: _toDouble(json['stockUnidades']),
     );
   }
 }

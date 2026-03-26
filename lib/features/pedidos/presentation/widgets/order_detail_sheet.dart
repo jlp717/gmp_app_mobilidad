@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
 import 'order_pdf_generator.dart';
+import '../utils/pedidos_formatters.dart';
 
 class OrderDetailSheet {
   /// Show order detail as a draggable bottom sheet
@@ -317,7 +318,7 @@ class _OrderDetailBodyState extends State<_OrderDetailBody> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '\u20AC${line.importeVenta.toStringAsFixed(2)}',
+                      PedidosFormatters.money(line.importeVenta),
                       style: TextStyle(
                         color: AppTheme.neonGreen,
                         fontWeight: FontWeight.bold,
@@ -336,18 +337,18 @@ class _OrderDetailBodyState extends State<_OrderDetailBody> {
             Row(
               children: [
                 Text(
-                  'PVP: \u20AC${line.precioVenta.toStringAsFixed(3)}',
+                  'PVP: ${PedidosFormatters.money(line.precioVenta, decimals: 3)}',
                   style: const TextStyle(color: Colors.white54, fontSize: 11),
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Tarifa: \u20AC${line.precioTarifa.toStringAsFixed(3)}',
+                  'Tarifa: ${PedidosFormatters.money(line.precioTarifa, decimals: 3)}',
                   style: const TextStyle(color: Colors.white38, fontSize: 11),
                 ),
                 if (line.precioMinimo > 0) ...[
                   const SizedBox(width: 12),
                   Text(
-                    'Min: \u20AC${line.precioMinimo.toStringAsFixed(3)}',
+                    'Min: ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
                     style: TextStyle(
                       color: line.precioVenta < line.precioMinimo ? AppTheme.warning : Colors.white38,
                       fontSize: 11,
@@ -422,8 +423,8 @@ class _OrderDetailBodyState extends State<_OrderDetailBody> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildTotalItem('Total', '\u20AC${(header.total > 0 ? header.total : totalImporte).toStringAsFixed(2)}', AppTheme.neonGreen),
-              _buildTotalItem('Margen', '\u20AC${totalMargen.toStringAsFixed(2)}', Colors.white70),
+              _buildTotalItem('Total', PedidosFormatters.money(header.total > 0 ? header.total : totalImporte), AppTheme.neonGreen),
+              _buildTotalItem('Margen', PedidosFormatters.money(totalMargen), Colors.white70),
               _buildTotalItem('% Margen', '${pctMargen.toStringAsFixed(1)}%',
                   pctMargen >= 15 ? AppTheme.neonGreen : pctMargen >= 5 ? Colors.orange : AppTheme.error),
             ],

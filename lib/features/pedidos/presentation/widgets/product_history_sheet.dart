@@ -1,8 +1,7 @@
 /// Product History Sheet
 /// ====================
 /// Bottom sheet showing a client's purchase history for a specific product
-/// with year selector, bar chart, trend line, and monthly data table.
-/// Design matches the sales_history ProductHistoryPage style.
+/// with year selector, multiple chart views, trend line, and detailed table.
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -32,7 +31,7 @@ class ProductHistorySheet extends StatefulWidget {
     required String clientCode,
     required String clientName,
   }) {
-    return showModalBottomSheet(
+    return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.darkSurface,
@@ -58,6 +57,9 @@ class ProductHistorySheet extends StatefulWidget {
   State<ProductHistorySheet> createState() => _ProductHistorySheetState();
 }
 
+/// Chart metric options
+enum _ChartMetric { sales, envases, units, avgPrice }
+
 class _ProductHistorySheetState extends State<ProductHistorySheet> {
   bool _loading = true;
   String? _error;
@@ -65,39 +67,16 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
   _GrandTotal _grandTotal = _GrandTotal();
   String _trend = 'stable';
 
-  /// Selected year for detail view (null = most recent)
   String? _selectedYear;
-
-  /// Toggle between envases and ventas €
-  bool _showSales = false;
+  _ChartMetric _chartMetric = _ChartMetric.sales;
 
   static const _monthNames = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre',
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
   ];
   static const _monthShort = [
-    'ENE',
-    'FEB',
-    'MAR',
-    'ABR',
-    'MAY',
-    'JUN',
-    'JUL',
-    'AGO',
-    'SEP',
-    'OCT',
-    'NOV',
-    'DIC',
+    'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
+    'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC',
   ];
 
   @override
@@ -107,10 +86,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
   }
 
   Future<void> _loadHistory() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() { _loading = true; _error = null; });
     try {
       final resp = await ApiClient.get(
         '/pedidos/product-history/'
@@ -124,31 +100,40 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
       }
       final gt = resp['grandTotal'] as Map<String, dynamic>? ?? {};
       final sortedKeys = years.keys.toList()..sort((a, b) => b.compareTo(a));
+
+      // Auto-select best metric: if no envases data, use sales or units
+      var bestMetric = _ChartMetric.sales;
+      if (years.isNotEmpty) {
+        final latest = years[sortedKeys.first]!;
+        final hasEnvases = latest.totals.envases > 0;
+        final hasUnits = latest.totals.units > 0;
+        if (hasEnvases) {
+          bestMetric = _ChartMetric.envases;
+        } else if (hasUnits) {
+          bestMetric = _ChartMetric.units;
+        }
+      }
+
       setState(() {
         _years = years;
         _grandTotal = _GrandTotal.fromJson(gt);
         _trend = (resp['trend'] ?? 'stable').toString();
         _selectedYear = sortedKeys.isNotEmpty ? sortedKeys.first : null;
+        _chartMetric = bestMetric;
         _loading = false;
       });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
-  String _fmtEur(double val, {int decimals = 2}) {
-    if (val >= 1000) {
-      return '${val.toStringAsFixed(decimals)}\u20AC';
-    }
-    return '${val.toStringAsFixed(decimals)}\u20AC';
-  }
+  String _fmtEur(double val, {int decimals = 2}) =>
+      '${val.toStringAsFixed(decimals)}\u20AC';
 
-  String _fmtNum(double val, {int decimals = 0}) {
-    return val.toStringAsFixed(decimals);
-  }
+  String _fmtNum(double val, {int decimals = 0}) =>
+      val.toStringAsFixed(decimals);
+
+  String _fmtPct(double val) => '${val.toStringAsFixed(1)}%';
 
   @override
   Widget build(BuildContext context) {
@@ -159,10 +144,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
           children: [
             CircularProgressIndicator(color: AppTheme.neonBlue),
             SizedBox(height: 12),
-            Text(
-              'Cargando historial...',
-              style: TextStyle(color: Colors.white54),
-            ),
+            Text('Cargando historial...',
+                style: TextStyle(color: Colors.white54)),
           ],
         ),
       );
@@ -178,19 +161,15 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               const Icon(Icons.error_outline,
                   color: AppTheme.error, size: 48),
               const SizedBox(height: 12),
-              Text(
-                'Error: $_error',
-                style: const TextStyle(color: Colors.white70),
-                textAlign: TextAlign.center,
-              ),
+              Text('Error: $_error',
+                  style: const TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center),
               const SizedBox(height: 12),
               TextButton.icon(
                 onPressed: _loadHistory,
                 icon: const Icon(Icons.refresh, color: AppTheme.neonBlue),
-                label: const Text(
-                  'Reintentar',
-                  style: TextStyle(color: AppTheme.neonBlue),
-                ),
+                label: const Text('Reintentar',
+                    style: TextStyle(color: AppTheme.neonBlue)),
               ),
             ],
           ),
@@ -209,8 +188,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               'Sin historial de compras\npara este producto',
               style: TextStyle(
                 color: Colors.white54,
-                fontSize:
-                    Responsive.fontSize(context, small: 14, large: 16),
+                fontSize: Responsive.fontSize(context, small: 14, large: 16),
               ),
               textAlign: TextAlign.center,
             ),
@@ -226,8 +204,10 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         const SizedBox(height: 12),
         _buildYearSelector(),
         const SizedBox(height: 12),
-        _buildSummaryRow(),
+        _buildKpiCards(),
         const SizedBox(height: 16),
+        _buildChartMetricSelector(),
+        const SizedBox(height: 8),
         _buildBarChart(),
         const SizedBox(height: 16),
         if (_years.length >= 2) ...[
@@ -235,12 +215,14 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
           const SizedBox(height: 16),
         ],
         _buildMonthlyTable(),
+        const SizedBox(height: 12),
+        _buildYearComparison(),
         const SizedBox(height: 24),
       ],
     );
   }
 
-  // ── Header: product info + trend badge ──
+  // ── Header ──
   Widget _buildHeader() {
     final trendIcon = _trend == 'up'
         ? Icons.trending_up
@@ -252,8 +234,11 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         : _trend == 'down'
             ? AppTheme.error
             : Colors.white54;
-    final trendLabel =
-        _trend == 'up' ? 'Subiendo' : _trend == 'down' ? 'Bajando' : 'Estable';
+    final trendLabel = _trend == 'up'
+        ? 'Subiendo'
+        : _trend == 'down'
+            ? 'Bajando'
+            : 'Estable';
 
     final imageUrl = '${ApiConfig.baseUrl}/products/'
         '${Uri.encodeComponent(widget.productCode.trim())}/image';
@@ -261,11 +246,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Drag handle
         Center(
           child: Container(
-            width: 40,
-            height: 4,
+            width: 40, height: 4,
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
               color: Colors.white24,
@@ -276,12 +259,10 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product thumbnail
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Container(
-                width: 56,
-                height: 56,
+                width: 56, height: 56,
                 color: AppTheme.darkCard,
                 child: Image.network(
                   imageUrl,
@@ -289,14 +270,12 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => const Icon(
                     Icons.image_not_supported_outlined,
-                    color: Colors.white24,
-                    size: 28,
+                    color: Colors.white24, size: 28,
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 12),
-            // Product name + code + client
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,11 +292,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    'Cod: ${widget.productCode}',
-                    style: const TextStyle(
-                        color: Colors.white38, fontSize: 11),
-                  ),
+                  Text('Cod: ${widget.productCode}',
+                      style: const TextStyle(
+                          color: Colors.white38, fontSize: 11)),
                   const SizedBox(height: 2),
                   Text(
                     'Cliente: ${widget.clientCode}'
@@ -331,10 +308,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               ),
             ),
             const SizedBox(width: 8),
-            // Trend badge
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 5),
               decoration: BoxDecoration(
                 color: trendColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
@@ -346,14 +322,11 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 children: [
                   Icon(trendIcon, color: trendColor, size: 16),
                   const SizedBox(width: 3),
-                  Text(
-                    trendLabel,
-                    style: TextStyle(
-                      color: trendColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  Text(trendLabel,
+                      style: TextStyle(
+                          color: trendColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -363,21 +336,18 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     );
   }
 
-  // ── Year selector chips ──
+  // ── Year selector ──
   Widget _buildYearSelector() {
     final sortedYears = _years.keys.toList()..sort((a, b) => b.compareTo(a));
-
     return Row(
       children: [
         const Icon(Icons.calendar_today, color: Colors.white54, size: 14),
         const SizedBox(width: 6),
-        const Text(
-          'Ejercicio:',
-          style: TextStyle(color: Colors.white54, fontSize: 12),
-        ),
+        const Text('Ejercicio:',
+            style: TextStyle(color: Colors.white54, fontSize: 12)),
         const SizedBox(width: 8),
         ...sortedYears.map((yr) {
-          final isSelected = yr == _selectedYear;
+          final sel = yr == _selectedYear;
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: GestureDetector(
@@ -386,34 +356,26 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isSelected
+                  color: sel
                       ? AppTheme.neonBlue.withValues(alpha: 0.2)
                       : AppTheme.darkCard,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isSelected
-                        ? AppTheme.neonBlue
-                        : AppTheme.borderColor,
-                    width: isSelected ? 1.5 : 1,
+                    color: sel ? AppTheme.neonBlue : AppTheme.borderColor,
+                    width: sel ? 1.5 : 1,
                   ),
                 ),
-                child: Text(
-                  yr,
-                  style: TextStyle(
-                    color:
-                        isSelected ? AppTheme.neonBlue : Colors.white54,
-                    fontSize: 13,
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                  ),
-                ),
+                child: Text(yr,
+                    style: TextStyle(
+                      color: sel ? AppTheme.neonBlue : Colors.white54,
+                      fontSize: 13,
+                      fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                    )),
               ),
             ),
           );
         }),
         const Spacer(),
-        // Refresh
         GestureDetector(
           onTap: _loadHistory,
           child: const Icon(Icons.refresh, color: Colors.white38, size: 18),
@@ -422,26 +384,32 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     );
   }
 
-  // ── Summary row: 4 KPI cards ──
-  Widget _buildSummaryRow() {
+  // ── KPI cards: 6 metrics ──
+  Widget _buildKpiCards() {
     if (_selectedYear == null || !_years.containsKey(_selectedYear)) {
       return const SizedBox.shrink();
     }
     final t = _years[_selectedYear!]!.totals;
+    final margin = t.sales > 0 ? ((t.sales - t.cost) / t.sales * 100) : 0.0;
 
     final items = [
       _KpiItem('Ventas', _fmtEur(t.sales), AppTheme.neonGreen),
+      _KpiItem('Coste', _fmtEur(t.cost), Colors.orange),
+      _KpiItem('Margen', _fmtPct(margin),
+          margin > 15 ? AppTheme.neonGreen : AppTheme.error),
       _KpiItem('Envases', _fmtNum(t.envases), AppTheme.neonBlue),
       _KpiItem('Unidades', _fmtNum(t.units), Colors.amber),
-      _KpiItem('Precio Medio', _fmtEur(t.avgPrice, decimals: 3),
-          AppTheme.neonPurple),
+      _KpiItem('Precio Medio',
+          _fmtEur(t.avgPrice, decimals: 3), AppTheme.neonPurple),
     ];
 
-    return Row(
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
       children: items.map((item) {
-        return Expanded(
+        return SizedBox(
+          width: (MediaQuery.of(context).size.width - 44) / 3,
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 3),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: AppTheme.darkCard,
@@ -452,23 +420,19 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.label,
-                  style: const TextStyle(
-                      color: Colors.white54, fontSize: 9),
-                ),
+                Text(item.label,
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 9)),
                 const SizedBox(height: 3),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(
-                    item.value,
-                    style: TextStyle(
-                      color: item.color,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: Text(item.value,
+                      style: TextStyle(
+                        color: item.color,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      )),
                 ),
               ],
             ),
@@ -478,7 +442,83 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     );
   }
 
-  // ── Bar chart: monthly data for selected year vs previous ──
+  // ── Chart metric selector ──
+  Widget _buildChartMetricSelector() {
+    final options = [
+      (_ChartMetric.sales, 'Ventas \u20AC', Icons.euro_outlined),
+      (_ChartMetric.envases, 'Envases', Icons.inventory_2_outlined),
+      (_ChartMetric.units, 'Unidades', Icons.straighten_outlined),
+      (_ChartMetric.avgPrice, 'Precio Medio', Icons.sell_outlined),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: options.map((opt) {
+          final sel = _chartMetric == opt.$1;
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: GestureDetector(
+              onTap: () => setState(() => _chartMetric = opt.$1),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: sel
+                      ? AppTheme.neonBlue.withValues(alpha: 0.2)
+                      : AppTheme.darkCard,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: sel ? AppTheme.neonBlue : AppTheme.borderColor,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(opt.$3,
+                        size: 12,
+                        color: sel ? AppTheme.neonBlue : Colors.white38),
+                    const SizedBox(width: 4),
+                    Text(opt.$2,
+                        style: TextStyle(
+                          color: sel ? AppTheme.neonBlue : Colors.white54,
+                          fontSize: 11,
+                          fontWeight:
+                              sel ? FontWeight.bold : FontWeight.normal,
+                        )),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  double _getMetricValue(_MonthData? d) {
+    if (d == null) return 0;
+    switch (_chartMetric) {
+      case _ChartMetric.sales: return d.sales;
+      case _ChartMetric.envases: return d.envases;
+      case _ChartMetric.units: return d.units;
+      case _ChartMetric.avgPrice: return d.avgPrice;
+    }
+  }
+
+  String _metricLabel(double val) {
+    switch (_chartMetric) {
+      case _ChartMetric.sales:
+        return '${val.toStringAsFixed(0)}\u20AC';
+      case _ChartMetric.envases:
+        return '${val.toStringAsFixed(0)} env';
+      case _ChartMetric.units:
+        return '${val.toStringAsFixed(0)} uds';
+      case _ChartMetric.avgPrice:
+        return '${val.toStringAsFixed(3)}\u20AC';
+    }
+  }
+
+  // ── Bar chart ──
   Widget _buildBarChart() {
     if (_selectedYear == null) return const SizedBox.shrink();
 
@@ -489,7 +529,6 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         ? sortedYears[currentIdx + 1]
         : null;
 
-    // Only show months that have data in either year
     final currentData = _years[currentYr]!;
     final prevData = prevYr != null ? _years[prevYr] : null;
 
@@ -498,50 +537,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
       children: [
         Row(
           children: [
-            Text(
-              _showSales ? 'Ventas por mes' : 'Envases por mes',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const Spacer(),
-            // Toggle button
-            GestureDetector(
-              onTap: () => setState(() => _showSales = !_showSales),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.darkCard,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _showSales
-                          ? Icons.euro_outlined
-                          : Icons.inventory_2_outlined,
-                      size: 12,
-                      color: AppTheme.neonBlue,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _showSales ? 'Ventas \u20AC' : 'Envases',
-                      style: const TextStyle(
-                          color: AppTheme.neonBlue, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
             _legendDot(AppTheme.neonBlue, currentYr),
             if (prevYr != null) ...[
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               _legendDot(Colors.white30, prevYr),
             ],
           ],
@@ -556,12 +554,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
                     final month = _monthShort[group.x];
                     final yr = rodIndex == 0 ? currentYr : prevYr ?? '';
-                    final val = rod.toY;
-                    final label = _showSales
-                        ? '${val.toStringAsFixed(0)}\u20AC'
-                        : '${val.toStringAsFixed(1)} env';
                     return BarTooltipItem(
-                      '$month $yr\n$label',
+                      '$month $yr\n${_metricLabel(rod.toY)}',
                       const TextStyle(
                           color: Colors.white, fontSize: 11),
                     );
@@ -578,27 +572,23 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                       if (idx < 0 || idx >= 12) {
                         return const SizedBox.shrink();
                       }
-                      return Text(
-                        _monthShort[idx],
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 8),
-                      );
+                      return Text(_monthShort[idx],
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 8));
                     },
                   ),
                 ),
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 40,
+                    reservedSize: 44,
                     getTitlesWidget: (value, meta) {
                       final label = value >= 1000
                           ? '${(value / 1000).toStringAsFixed(1)}k'
                           : value.toStringAsFixed(0);
-                      return Text(
-                        label,
-                        style: const TextStyle(
-                            color: Colors.white24, fontSize: 9),
-                      );
+                      return Text(label,
+                          style: const TextStyle(
+                              color: Colors.white24, fontSize: 9));
                     },
                   ),
                 ),
@@ -616,15 +606,10 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               borderData: FlBorderData(show: false),
               barGroups: List.generate(12, (i) {
                 final mo = '${i + 1}';
-                final curVal = _showSales
-                    ? (currentData.months[mo]?.sales ?? 0)
-                    : (currentData.months[mo]?.envases ?? 0);
+                final curVal = _getMetricValue(currentData.months[mo]);
                 final prevVal = prevData != null
-                    ? (_showSales
-                        ? (prevData.months[mo]?.sales ?? 0)
-                        : (prevData.months[mo]?.envases ?? 0))
+                    ? _getMetricValue(prevData.months[mo])
                     : 0.0;
-
                 return BarChartGroupData(
                   x: i,
                   barRods: [
@@ -653,7 +638,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     );
   }
 
-  // ── Trend line: year-over-year comparison ──
+  // ── Trend line ──
   Widget _buildTrendLine() {
     final sortedYears = _years.keys.toList()..sort();
     if (sortedYears.length < 2) return const SizedBox.shrink();
@@ -665,14 +650,12 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
       children: [
         Row(
           children: [
-            const Text(
-              'Tendencia interanual',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            const Text('Tendencia interanual',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                )),
             const Spacer(),
             ...sortedYears.asMap().entries.map(
                   (e) => Padding(
@@ -694,10 +677,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     return spots.map((spot) {
                       final yr = sortedYears[spot.barIndex];
                       return LineTooltipItem(
-                        '$yr: ${spot.y.toStringAsFixed(0)}\u20AC',
+                        '$yr: ${_metricLabel(spot.y)}',
                         TextStyle(
-                          color:
-                              colors[spot.barIndex % colors.length],
+                          color: colors[spot.barIndex % colors.length],
                           fontSize: 11,
                         ),
                       );
@@ -722,11 +704,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                       if (idx < 0 || idx >= 12) {
                         return const SizedBox.shrink();
                       }
-                      return Text(
-                        _monthShort[idx],
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 9),
-                      );
+                      return Text(_monthShort[idx],
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 9));
                     },
                   ),
                 ),
@@ -738,11 +718,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                       final label = value >= 1000
                           ? '${(value / 1000).toStringAsFixed(0)}k'
                           : value.toStringAsFixed(0);
-                      return Text(
-                        label,
-                        style: const TextStyle(
-                            color: Colors.white24, fontSize: 9),
-                      );
+                      return Text(label,
+                          style: const TextStyle(
+                              color: Colors.white24, fontSize: 9));
                     },
                   ),
                 ),
@@ -752,22 +730,20 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     sideTitles: SideTitles(showTitles: false)),
               ),
               borderData: FlBorderData(show: false),
-              lineBarsData:
-                  sortedYears.asMap().entries.map((entry) {
+              lineBarsData: sortedYears.asMap().entries.map((entry) {
                 final yr = entry.value;
                 final color = colors[entry.key % colors.length];
                 final yearData = _years[yr]!;
                 final spots = <FlSpot>[];
                 for (int m = 1; m <= 12; m++) {
-                  final val = yearData.months['$m']?.sales ?? 0;
+                  final val = _getMetricValue(yearData.months['$m']);
                   if (val > 0 ||
                       m <= DateTime.now().month ||
                       yr != sortedYears.last) {
                     spots.add(FlSpot(m.toDouble() - 1, val));
                   }
                 }
-                final isLatest =
-                    entry.key == sortedYears.length - 1;
+                final isLatest = entry.key == sortedYears.length - 1;
                 return LineChartBarData(
                   spots: spots,
                   isCurved: true,
@@ -789,15 +765,13 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     );
   }
 
-  // ── Monthly data table (only months with data) ──
+  // ── Monthly detail table (expanded) ──
   Widget _buildMonthlyTable() {
     if (_selectedYear == null || !_years.containsKey(_selectedYear)) {
       return const SizedBox.shrink();
     }
 
     final yearData = _years[_selectedYear!]!;
-
-    // Collect months that have data, sorted
     final activeMonths = <int>[];
     for (int m = 1; m <= 12; m++) {
       final d = yearData.months['$m'];
@@ -814,10 +788,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Center(
-          child: Text(
-            'Sin datos para este ejercicio',
-            style: TextStyle(color: Colors.white38, fontSize: 13),
-          ),
+          child: Text('Sin datos para este ejercicio',
+              style: TextStyle(color: Colors.white38, fontSize: 13)),
         ),
       );
     }
@@ -825,14 +797,12 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Detalle mensual $_selectedYear',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        Text('Detalle mensual $_selectedYear',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            )),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
@@ -847,113 +817,207 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               headingRowHeight: 36,
               dataRowMinHeight: 34,
               dataRowMaxHeight: 34,
-              columnSpacing: 14,
-              horizontalMargin: 12,
+              columnSpacing: 12,
+              horizontalMargin: 10,
               headingTextStyle: const TextStyle(
                 color: AppTheme.neonBlue,
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
-              dataTextStyle:
-                  const TextStyle(color: Colors.white70, fontSize: 11),
+              dataTextStyle: const TextStyle(
+                  color: Colors.white70, fontSize: 10),
               columns: const [
                 DataColumn(label: Text('Mes')),
-                DataColumn(label: Text('Envases'), numeric: true),
+                DataColumn(label: Text('Env'), numeric: true),
                 DataColumn(label: Text('Uds'), numeric: true),
                 DataColumn(label: Text('Ventas'), numeric: true),
-                DataColumn(label: Text('Precio'), numeric: true),
-                DataColumn(label: Text('Dto %'), numeric: true),
+                DataColumn(label: Text('Coste'), numeric: true),
+                DataColumn(label: Text('Margen'), numeric: true),
+                DataColumn(label: Text('P.Medio'), numeric: true),
+                DataColumn(label: Text('P.Tarifa'), numeric: true),
+                DataColumn(label: Text('Dto%'), numeric: true),
+                DataColumn(label: Text('Lineas'), numeric: true),
               ],
               rows: [
-                // Data rows — only months with activity
                 ...activeMonths.map((m) {
                   final d = yearData.months['$m']!;
+                  final margin = d.sales > 0
+                      ? ((d.sales - d.cost) / d.sales * 100)
+                      : 0.0;
+                  final marginColor = margin > 15
+                      ? AppTheme.neonGreen
+                      : margin > 0
+                          ? Colors.orange
+                          : AppTheme.error;
                   return DataRow(cells: [
-                    DataCell(Text(
-                      _monthNames[m - 1],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 11,
-                      ),
-                    )),
+                    DataCell(Text(_monthNames[m - 1].substring(0, 3),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 10,
+                        ))),
                     DataCell(Text(_fmtNum(d.envases))),
                     DataCell(Text(_fmtNum(d.units))),
-                    DataCell(Text(
-                      _fmtEur(d.sales),
-                      style: const TextStyle(
-                          color: AppTheme.neonGreen, fontSize: 11),
-                    )),
-                    DataCell(Text(
-                      d.avgPrice > 0
-                          ? _fmtEur(d.avgPrice, decimals: 3)
-                          : '-',
-                    )),
-                    DataCell(Text(
-                      d.avgDiscount != null
-                          ? '${d.avgDiscount!.toStringAsFixed(1)}%'
-                          : '-',
-                    )),
+                    DataCell(Text(_fmtEur(d.sales),
+                        style: const TextStyle(
+                            color: AppTheme.neonGreen, fontSize: 10))),
+                    DataCell(Text(_fmtEur(d.cost))),
+                    DataCell(Text(_fmtPct(margin),
+                        style: TextStyle(
+                            color: marginColor, fontSize: 10))),
+                    DataCell(Text(d.avgPrice > 0
+                        ? _fmtEur(d.avgPrice, decimals: 3)
+                        : '-')),
+                    DataCell(Text(d.avgTariff > 0
+                        ? _fmtEur(d.avgTariff, decimals: 3)
+                        : '-')),
+                    DataCell(Text(d.avgDiscount != null
+                        ? _fmtPct(d.avgDiscount!)
+                        : '-')),
+                    DataCell(Text('${d.lineCount}')),
                   ]);
                 }),
                 // Totals row
-                DataRow(
-                  cells: [
-                    const DataCell(Text(
-                      'TOTAL',
-                      style: TextStyle(
-                        color: AppTheme.neonGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    )),
-                    DataCell(Text(
-                      _fmtNum(yearData.totals.envases),
-                      style: const TextStyle(
-                        color: AppTheme.neonGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    )),
-                    DataCell(Text(
-                      _fmtNum(yearData.totals.units),
-                      style: const TextStyle(
-                        color: AppTheme.neonGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    )),
-                    DataCell(Text(
-                      _fmtEur(yearData.totals.sales),
-                      style: const TextStyle(
-                        color: AppTheme.neonGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    )),
-                    DataCell(Text(
-                      yearData.totals.avgPrice > 0
-                          ? _fmtEur(yearData.totals.avgPrice,
-                              decimals: 3)
-                          : '-',
-                      style: const TextStyle(
-                        color: AppTheme.neonGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    )),
-                    const DataCell(Text(
-                      '-',
-                      style: TextStyle(
-                          color: AppTheme.neonGreen, fontSize: 11),
-                    )),
-                  ],
-                ),
+                _totalRow(yearData),
               ],
             ),
           ),
         ),
-        // Grand total summary below table
+      ],
+    );
+  }
+
+  DataRow _totalRow(_YearData yearData) {
+    final t = yearData.totals;
+    final margin = t.sales > 0
+        ? ((t.sales - t.cost) / t.sales * 100)
+        : 0.0;
+    const s = TextStyle(
+      color: AppTheme.neonGreen,
+      fontWeight: FontWeight.bold,
+      fontSize: 10,
+    );
+    return DataRow(cells: [
+      const DataCell(Text('TOTAL', style: s)),
+      DataCell(Text(_fmtNum(t.envases), style: s)),
+      DataCell(Text(_fmtNum(t.units), style: s)),
+      DataCell(Text(_fmtEur(t.sales), style: s)),
+      DataCell(Text(_fmtEur(t.cost), style: s)),
+      DataCell(Text(_fmtPct(margin), style: s)),
+      DataCell(Text(
+          t.avgPrice > 0 ? _fmtEur(t.avgPrice, decimals: 3) : '-',
+          style: s)),
+      const DataCell(Text('-', style: s)),
+      const DataCell(Text('-', style: s)),
+      DataCell(Text('${t.lineCount}', style: s)),
+    ]);
+  }
+
+  // ── Year-over-year comparison ──
+  Widget _buildYearComparison() {
+    if (_years.length < 2) return const SizedBox.shrink();
+
+    final sortedYears = _years.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Comparativa por ejercicio',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            )),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppTheme.darkCard,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: AppTheme.borderColor.withValues(alpha: 0.3)),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowHeight: 36,
+              dataRowMinHeight: 36,
+              dataRowMaxHeight: 36,
+              columnSpacing: 14,
+              horizontalMargin: 10,
+              headingTextStyle: const TextStyle(
+                color: AppTheme.neonPurple,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+              dataTextStyle: const TextStyle(
+                  color: Colors.white70, fontSize: 11),
+              columns: const [
+                DataColumn(label: Text('Ano')),
+                DataColumn(label: Text('Ventas'), numeric: true),
+                DataColumn(label: Text('Coste'), numeric: true),
+                DataColumn(label: Text('Margen%'), numeric: true),
+                DataColumn(label: Text('Env'), numeric: true),
+                DataColumn(label: Text('Uds'), numeric: true),
+                DataColumn(label: Text('P.Medio'), numeric: true),
+                DataColumn(label: Text('Lineas'), numeric: true),
+                DataColumn(label: Text('vs Ant.'), numeric: true),
+              ],
+              rows: sortedYears.asMap().entries.map((entry) {
+                final yr = entry.value;
+                final t = _years[yr]!.totals;
+                final margin = t.sales > 0
+                    ? ((t.sales - t.cost) / t.sales * 100)
+                    : 0.0;
+                // YoY change
+                String yoy = '-';
+                Color yoyColor = Colors.white38;
+                if (entry.key + 1 < sortedYears.length) {
+                  final prevT = _years[sortedYears[entry.key + 1]]!.totals;
+                  if (prevT.sales > 0) {
+                    final pct =
+                        ((t.sales - prevT.sales) / prevT.sales * 100);
+                    yoy = '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(0)}%';
+                    yoyColor = pct > 0
+                        ? AppTheme.neonGreen
+                        : pct < 0
+                            ? AppTheme.error
+                            : Colors.white54;
+                  }
+                }
+                return DataRow(cells: [
+                  DataCell(Text(yr,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ))),
+                  DataCell(Text(_fmtEur(t.sales),
+                      style: const TextStyle(
+                          color: AppTheme.neonGreen, fontSize: 11))),
+                  DataCell(Text(_fmtEur(t.cost))),
+                  DataCell(Text(_fmtPct(margin),
+                      style: TextStyle(
+                        color: margin > 15
+                            ? AppTheme.neonGreen
+                            : AppTheme.error,
+                        fontSize: 11,
+                      ))),
+                  DataCell(Text(_fmtNum(t.envases))),
+                  DataCell(Text(_fmtNum(t.units))),
+                  DataCell(Text(t.avgPrice > 0
+                      ? _fmtEur(t.avgPrice, decimals: 3)
+                      : '-')),
+                  DataCell(Text('${t.lineCount}')),
+                  DataCell(Text(yoy, style: TextStyle(
+                      color: yoyColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11))),
+                ]);
+              }).toList(),
+            ),
+          ),
+        ),
+        // Grand total
         if (_years.length > 1) ...[
           const SizedBox(height: 10),
           Container(
@@ -972,34 +1036,35 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 Text(
                   'Total ${_grandTotal.years} ejercicios: ',
                   style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 11,
-                  ),
+                      color: Colors.white54, fontSize: 11),
                 ),
-                Text(
-                  _fmtEur(_grandTotal.sales),
-                  style: const TextStyle(
-                    color: AppTheme.neonGreen,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-                const Text(
-                  ' ventas  |  ',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
-                ),
-                Text(
-                  _fmtNum(_grandTotal.envases),
-                  style: const TextStyle(
-                    color: AppTheme.neonBlue,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-                const Text(
-                  ' envases',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
-                ),
+                Text(_fmtEur(_grandTotal.sales),
+                    style: const TextStyle(
+                      color: AppTheme.neonGreen,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    )),
+                const Text(' ventas  |  ',
+                    style: TextStyle(
+                        color: Colors.white38, fontSize: 11)),
+                Text(_fmtNum(_grandTotal.envases),
+                    style: const TextStyle(
+                      color: AppTheme.neonBlue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    )),
+                const Text(' env  |  ',
+                    style: TextStyle(
+                        color: Colors.white38, fontSize: 11)),
+                Text(_fmtNum(_grandTotal.units),
+                    style: const TextStyle(
+                      color: Colors.amber,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    )),
+                const Text(' uds',
+                    style: TextStyle(
+                        color: Colors.white38, fontSize: 11)),
               ],
             ),
           ),
@@ -1013,8 +1078,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 8,
-          height: 8,
+          width: 8, height: 8,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 3),

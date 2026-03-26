@@ -8,6 +8,7 @@ import '../../../../core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
+import '../utils/pedidos_formatters.dart';
 
 class ProductCard extends StatelessWidget {
   final Product product;
@@ -16,6 +17,7 @@ class ProductCard extends StatelessWidget {
   final PromotionItem? promo;
   final VoidCallback? onToggleFavorite;
   final double cartQty;
+  final String cartQtySuffix;
   final VoidCallback? onQuickAdd;
 
   const ProductCard({
@@ -26,6 +28,7 @@ class ProductCard extends StatelessWidget {
     this.promo,
     this.onToggleFavorite,
     this.cartQty = 0,
+    this.cartQtySuffix = 'c',
     this.onQuickAdd,
   }) : super(key: key);
 
@@ -33,6 +36,9 @@ class ProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final stockColor = product.hasStock ? AppTheme.neonGreen : AppTheme.error;
     final inCart = cartQty > 0;
+    final badgeQty = cartQty == cartQty.truncateToDouble()
+        ? cartQty.toStringAsFixed(0)
+        : cartQty.toStringAsFixed(2);
 
     return Card(
       color: inCart ? AppTheme.darkCard.withOpacity(0.92) : AppTheme.darkCard,
@@ -73,7 +79,7 @@ class ProductCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          '${cartQty.toStringAsFixed(0)}c',
+                          '$badgeQty$cartQtySuffix',
                           style: const TextStyle(
                             color: AppTheme.darkBase,
                             fontSize: 9,
@@ -156,7 +162,7 @@ class ProductCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '\u20AC${product.bestPrice.toStringAsFixed(2)}',
+                    PedidosFormatters.money(product.bestPrice),
                     style: TextStyle(
                       color: AppTheme.neonGreen,
                       fontWeight: FontWeight.bold,
@@ -187,7 +193,7 @@ class ProductCard extends StatelessWidget {
                 ],
               ),
               // Quick add button (Mejora 2)
-              if (onQuickAdd != null && product.hasStock) ...[
+              if (onQuickAdd != null && product.stockEnvases > 0) ...[
                 const SizedBox(width: 4),
                 GestureDetector(
                   onTap: onQuickAdd,
@@ -225,21 +231,17 @@ class ProductCard extends StatelessWidget {
 
   String _buildStockText(Product p) {
     final parts = <String>[];
-    parts.add('${p.stockEnvases.toStringAsFixed(0)} cj');
-    if (p.unitsPerBox > 1) {
-      parts.add('${p.totalPieces.toStringAsFixed(0)} uds');
-    }
-    if (p.unitsFraction > 0) {
-      final bands = p.stockForUnit('BANDEJAS');
-      parts.add('${bands.toStringAsFixed(0)} band');
-    }
-    if (p.unitsRetractil > 0) {
-      final est = p.stockForUnit('ESTUCHE');
-      parts.add('${est.toStringAsFixed(0)} est');
-    }
-    if (p.weight > 0) {
-      final kg = p.stockForUnit('KILOGRAMOS');
-      parts.add('${kg.toStringAsFixed(1)} kg');
+    // Cajas with content description
+    final cjStr = '${PedidosFormatters.number(p.stockEnvases)} cj';
+    final content = p.boxContentDesc;
+    parts.add(content.isNotEmpty ? '$cjStr ($content/cj)' : cjStr);
+    // Primary sale unit (if not CAJAS)
+    for (final unit in p.availableUnits) {
+      if (unit == 'CAJAS') continue;
+      final stock = p.stockForUnit(unit);
+      final label = Product.unitLabel(unit);
+      final dec = (unit == 'KILOGRAMOS') ? 1 : 0;
+      parts.add('${PedidosFormatters.number(stock, decimals: dec)} $label');
     }
     return parts.join(' / ');
   }

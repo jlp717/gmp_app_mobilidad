@@ -50,12 +50,14 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Last Qty per Product (B3) ──
   final Map<String, double> _lastQtyByProduct = {};
+  final Map<String, String> _lastUnitByProduct = {};
 
   // ── Global Discount (C5) ──
   double _globalDiscountPct = 0.0;
 
   // ── Complementary Products & Promotions ──
   List<Map<String, dynamic>> _complementaryProducts = [];
+  final List<PromotionItem> _activePromotionsList = [];
   final Map<String, PromotionItem> _activePromotions = {};
 
   // ── Analytics ──
@@ -95,7 +97,8 @@ class PedidosProvider with ChangeNotifier {
   Set<String> get favoriteProductCodes => _favoriteProductCodes;
   List<Map<String, dynamic>> get complementaryProducts => _complementaryProducts;
   PromotionItem? getPromo(String productCode) => _activePromotions[productCode];
-  List<PromotionItem> get activePromotionsList => _activePromotions.values.toList();
+  List<PromotionItem> get activePromotionsList =>
+      List.unmodifiable(_activePromotionsList);
   Map<String, dynamic> get analytics => _analytics;
   bool get isLoadingAnalytics => _isLoadingAnalytics;
 
@@ -105,7 +108,15 @@ class PedidosProvider with ChangeNotifier {
     if (_lastQtyByProduct.containsKey(key)) {
       return _lastQtyByProduct[key]!;
     }
-    return _lastQtyByProduct[code] ?? 1.0;
+    return _lastQtyByProduct[code.trim()] ?? 1.0;
+  }
+
+  String? lastUnitForProduct(String code, {String? clientCode}) {
+    final key = _qtyKey(code, clientCode);
+    if (_lastUnitByProduct.containsKey(key)) {
+      return _lastUnitByProduct[key];
+    }
+    return _lastUnitByProduct[code.trim()];
   }
 
   double get globalDiscountPct => _globalDiscountPct;
@@ -289,66 +300,82 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Cart Operations ──
 
-  String? addLine(Product product, double cantidadEnvases, double cantidadUnidades, String unidadMedida, double precioVenta) {
-    // === STRICT STOCK VALIDATION ===
-    if (cantidadEnvases > product.stockEnvases || cantidadUnidades > product.stockUnidades) {
-      final msg = 'Stock insuficiente: Disponible ${product.stockEnvases.toInt()} cajas y ${product.stockUnidades.toInt()} uds.';
+  String? addLine(Product product, double cantidadEnvases, double cantidadUnidades,
+      String unidadMedida, double precioVenta) {
+    final unit = unidadMedida.trim().isEmpty
+        ? 'CAJAS'
+        : unidadMedida.trim().toUpperCase();
+    final requestQty = unit == 'CAJAS' ? cantidadEnvases : cantidadUnidades;
+    final availableQty =
+        unit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(unit);
+
+    if (requestQty > availableQty) {
+      final msg = unit == 'CAJAS'
+          ? 'Stock insuficiente: Disponible ${product.stockEnvases.toInt()} cajas.'
+          : 'Stock insuficiente: Disponible ${availableQty.toStringAsFixed(2)} ${Product.unitLabel(unit)}.';
       _error = msg;
       notifyListeners();
-      return msg; // Return the error message
+      return msg;
     }
 
-    // Check if product already in cart
     final existingIdx = _lines.indexWhere((l) => l.codigoArticulo == product.code);
     if (existingIdx >= 0) {
-      // Prevent exceeding stock with existing line
       final line = _lines[existingIdx];
-      final existingUsesBoxes = line.cantidadEnvases > 0;
-      final addingUsesBoxes = cantidadEnvases > 0;
+      final lineUnit = line.unidadMedida.trim().toUpperCase();
 
-      if (existingUsesBoxes != addingUsesBoxes &&
-          (cantidadEnvases > 0 || cantidadUnidades > 0)) {
-        final unitLabel = existingUsesBoxes
-            ? 'cajas'
-            : (line.unidadMedida.isNotEmpty
-                ? line.unidadMedida.toLowerCase()
-                : 'unidad actual');
-        final msg = 'Este producto ya esta en el carrito en $unitLabel. Edita esa linea para cambiar unidad.';
+      if (lineUnit != unit && requestQty > 0) {
+        final unitLabel = line.unidadMedida.isNotEmpty
+            ? line.unidadMedida.toLowerCase()
+            : 'unidad actual';
+        final msg =
+            'Este producto ya esta en el carrito en $unitLabel. Edita esa linea para cambiar unidad.';
         _error = msg;
         notifyListeners();
         return msg;
       }
 
-      final newTotalEnvases = line.cantidadEnvases + cantidadEnvases;
-      final newTotalUnidades = line.cantidadUnidades + cantidadUnidades;
-      
-      if (newTotalEnvases > product.stockEnvases || newTotalUnidades > product.stockUnidades) {
-        final msg = 'Stock insuficiente: Disponible ${product.stockEnvases.toInt()} cajas, ya tienes ${line.cantidadEnvases.toInt()} en el carrito.';
+      final currentQty =
+          lineUnit == 'CAJAS' ? line.cantidadEnvases : line.cantidadUnidades;
+      final newQty = currentQty + requestQty;
+      final maxQty =
+          lineUnit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(lineUnit);
+
+      if (newQty > maxQty) {
+        final msg = lineUnit == 'CAJAS'
+            ? 'Stock insuficiente: Disponible ${product.stockEnvases.toInt()} cajas, ya tienes ${line.cantidadEnvases.toInt()} en el carrito.'
+            : 'Stock insuficiente: Disponible ${maxQty.toStringAsFixed(2)} ${Product.unitLabel(lineUnit)}.';
         _error = msg;
         notifyListeners();
         return msg;
       }
-      
-      // Update existing line
-      line.cantidadEnvases = newTotalEnvases;
-      line.cantidadUnidades = newTotalUnidades;
+
+      if (lineUnit == 'CAJAS') {
+        line.cantidadEnvases = newQty;
+        line.cantidadUnidades = 0;
+      } else {
+        line.cantidadEnvases = 0;
+        line.cantidadUnidades = newQty;
+      }
       line.precioVenta = precioVenta;
       line.recalculate();
       _lastQtyByProduct[_qtyKey(product.code)] =
-          newTotalEnvases > 0 ? newTotalEnvases : newTotalUnidades;
+          lineUnit == 'CAJAS' ? line.cantidadEnvases : line.cantidadUnidades;
+      _lastUnitByProduct[_qtyKey(product.code)] = line.unidadMedida;
     } else {
-      // Add new line
       final ivaCode = product.codigoIva;
-      final ivaRate = ivaCode == '1' ? 0.10 : ivaCode == '2' ? 0.04 : ivaCode == '3' ? 0.0 : 0.21;
+      final ivaRate =
+          ivaCode == '1' ? 0.10 : ivaCode == '2' ? 0.04 : ivaCode == '3' ? 0.0 : 0.21;
       final line = OrderLine(
         codigoArticulo: product.code,
         descripcion: product.name,
-        cantidadEnvases: cantidadEnvases,
-        cantidadUnidades: cantidadUnidades,
-        unidadMedida: unidadMedida,
-        unidadesCaja: product.unitsPerBox,
+        cantidadEnvases: unit == 'CAJAS' ? requestQty : 0,
+        cantidadUnidades: unit == 'CAJAS' ? 0 : requestQty,
+        unidadMedida: unit,
+        unidadesCaja: product.quantityPerBoxForUnit(unit),
         precioVenta: precioVenta,
-        precioCosto: product.precioMinimo > 0 ? product.precioMinimo * 0.7 : product.precioTarifa1 * 0.7,
+        precioCosto: product.precioMinimo > 0
+            ? product.precioMinimo * 0.7
+            : product.precioTarifa1 * 0.7,
         precioTarifa: product.precioTarifa1,
         precioTarifaCliente: product.precioCliente,
         precioMinimo: product.precioMinimo,
@@ -356,40 +383,76 @@ class PedidosProvider with ChangeNotifier {
       );
       line.recalculate();
       _lines.add(line);
-      _lastQtyByProduct[_qtyKey(product.code)] =
-          cantidadEnvases > 0 ? cantidadEnvases : cantidadUnidades;
+      _lastQtyByProduct[_qtyKey(product.code)] = requestQty;
+      _lastUnitByProduct[_qtyKey(product.code)] = unit;
     }
+
     _error = null;
     notifyListeners();
-    return null; // Null means success
+    return null;
   }
 
-  String? updateLine(int index, {double? cantidadEnvases, double? cantidadUnidades, double? precioVenta, String? unidadMedida}) {
+  String? updateLine(int index,
+      {double? cantidadEnvases,
+      double? cantidadUnidades,
+      double? precioVenta,
+      String? unidadMedida}) {
     if (index < 0 || index >= _lines.length) return 'Line not found';
     final line = _lines[index];
+    final nextUnit = (unidadMedida ?? line.unidadMedida).trim().isEmpty
+        ? 'CAJAS'
+        : (unidadMedida ?? line.unidadMedida).trim().toUpperCase();
 
-    final newEnvases = cantidadEnvases ?? line.cantidadEnvases;
-    final newUnidades = cantidadUnidades ?? line.cantidadUnidades;
+    final wasBoxes = line.unidadMedida.trim().toUpperCase() == 'CAJAS';
+    double nextQty;
+    if (nextUnit == 'CAJAS') {
+      if (cantidadEnvases != null) {
+        nextQty = cantidadEnvases;
+      } else if (unidadMedida != null && !wasBoxes) {
+        nextQty = cantidadUnidades ?? line.cantidadUnidades;
+      } else {
+        nextQty = line.cantidadEnvases;
+      }
+    } else {
+      if (cantidadUnidades != null) {
+        nextQty = cantidadUnidades;
+      } else if (unidadMedida != null && wasBoxes) {
+        nextQty = cantidadEnvases ?? line.cantidadEnvases;
+      } else {
+        nextQty = line.cantidadUnidades;
+      }
+    }
 
-    // === STRICT STOCK VALIDATION ===
     final pIdx = _products.indexWhere((p) => p.code == line.codigoArticulo);
     if (pIdx >= 0) {
       final product = _products[pIdx];
-      if (newEnvases > product.stockEnvases || newUnidades > product.stockUnidades) {
-        final msg = 'Stock insuficiente: Solo hay ${product.stockEnvases.toInt()} cajas y ${product.stockUnidades.toInt()} uds.';
+      final maxQty =
+          nextUnit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(nextUnit);
+      if (nextQty > maxQty) {
+        final msg = nextUnit == 'CAJAS'
+            ? 'Stock insuficiente: Solo hay ${product.stockEnvases.toInt()} cajas.'
+            : 'Stock insuficiente: Solo hay ${maxQty.toStringAsFixed(2)} ${Product.unitLabel(nextUnit)}.';
         _error = msg;
         notifyListeners();
         return msg;
       }
     }
 
-    if (cantidadEnvases != null) line.cantidadEnvases = cantidadEnvases;
-    if (cantidadUnidades != null) line.cantidadUnidades = cantidadUnidades;
+    line.unidadMedida = nextUnit;
+    if (nextUnit == 'CAJAS') {
+      line.cantidadEnvases = nextQty;
+      line.cantidadUnidades = 0;
+    } else {
+      line.cantidadEnvases = 0;
+      line.cantidadUnidades = nextQty;
+    }
     if (precioVenta != null) line.precioVenta = precioVenta;
-    if (unidadMedida != null) line.unidadMedida = unidadMedida;
+    if (pIdx >= 0) {
+      line.unidadesCaja = _products[pIdx].quantityPerBoxForUnit(nextUnit);
+    }
     line.recalculate();
-    _lastQtyByProduct[_qtyKey(line.codigoArticulo)] =
-        line.cantidadEnvases > 0 ? line.cantidadEnvases : line.cantidadUnidades;
+    _lastQtyByProduct[_qtyKey(line.codigoArticulo)] = nextQty;
+    _lastUnitByProduct[_qtyKey(line.codigoArticulo)] = line.unidadMedida;
     notifyListeners();
     return null;
   }
@@ -568,6 +631,7 @@ class PedidosProvider with ChangeNotifier {
       _lastQtyByProduct[_qtyKey(line.codigoArticulo)] = line.cantidadEnvases > 0
           ? line.cantidadEnvases
           : line.cantidadUnidades;
+      _lastUnitByProduct[_qtyKey(line.codigoArticulo)] = line.unidadMedida;
     }
     _error = null;
     notifyListeners();
@@ -629,11 +693,13 @@ class PedidosProvider with ChangeNotifier {
     try {
       final response = await ApiClient.get('/pedidos/promotions', queryParameters: _clientCode != null ? {'clientCode': _clientCode} : null);
       final list = response['promotions'] as List? ?? [];
+      _activePromotionsList.clear();
       _activePromotions.clear();
       for (final p in list) {
         final item = PromotionItem.fromJson(p as Map<String, dynamic>);
         if (item.code.isNotEmpty) {
-          _activePromotions[item.code] = item;
+          _activePromotionsList.add(item);
+          _activePromotions.putIfAbsent(item.code, () => item);
         }
       }
       notifyListeners();
@@ -673,6 +739,7 @@ class PedidosProvider with ChangeNotifier {
         _lines.add(line);
         _lastQtyByProduct[_qtyKey(line.codigoArticulo)] =
             line.cantidadEnvases > 0 ? line.cantidadEnvases : line.cantidadUnidades;
+        _lastUnitByProduct[_qtyKey(line.codigoArticulo)] = line.unidadMedida;
       }
       _error = null;
       notifyListeners();
@@ -706,6 +773,7 @@ class PedidosProvider with ChangeNotifier {
         line.recalculate();
         _lines.add(line);
         _lastQtyByProduct[_qtyKey(product.code)] = defaultQty;
+        _lastUnitByProduct[_qtyKey(product.code)] = line.unidadMedida;
       }
     }
     _error = null;

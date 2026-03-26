@@ -8,6 +8,7 @@ import '../../../../core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
+import '../utils/pedidos_formatters.dart';
 
 class OrderLineTile extends StatelessWidget {
   final OrderLine line;
@@ -146,7 +147,9 @@ class OrderLineTile extends StatelessWidget {
                                 Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 4),
                                   child: Text(
-                                    line.cantidadEnvases > 0 ? '${line.cantidadEnvases.toStringAsFixed(0)} c' : '${line.cantidadUnidades.toStringAsFixed(0)} u',
+                                    line.cantidadEnvases > 0
+                                        ? '${PedidosFormatters.number(line.cantidadEnvases)} c'
+                                        : '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} u',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: Responsive.fontSize(context, small: 11, large: 12),
@@ -178,7 +181,7 @@ class OrderLineTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '\u20AC${line.precioVenta.toStringAsFixed(3)}',
+                      PedidosFormatters.money(line.precioVenta, decimals: 3),
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: Responsive.fontSize(context,
@@ -187,7 +190,7 @@ class OrderLineTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '\u20AC${line.importeVenta.toStringAsFixed(2)}',
+                      PedidosFormatters.money(line.importeVenta),
                       style: TextStyle(
                         color: AppTheme.neonGreen,
                         fontWeight: FontWeight.bold,

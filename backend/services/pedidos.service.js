@@ -1093,7 +1093,7 @@ async function getActivePromotions(clientCode) {
     try {
         const now = new Date();
         const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate(); // YYYYMMDD
-        
+
         const paramsCpes = [today, today];
         let sqlCpes = `
             SELECT 'PRICE' AS PROMOTYPE,
@@ -1101,11 +1101,29 @@ async function getActivePromotions(clientCode) {
                    TRIM(A.DESCRIPCIONARTICULO) AS NAME,
                    P.PRECIO AS PROMOPRICE,
                    COALESCE(T.PRECIOTARIFA, 0) AS REGULARPRICE,
+                   COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCKENVASES,
+                   COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCKUNIDADES,
                    P.C9INFC AS DATEFROM, P.C9FIFC AS DATETO,
                    'Precio Especial' AS PROMODESC
             FROM DSEDAC.CPESL1 P
             JOIN DSEDAC.ART A ON P.CODIGOARTICULO = A.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARA T ON P.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            LEFT JOIN (
+                SELECT CODIGOARTICULO,
+                    SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
+                    SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
+                FROM DSEDAC.ARO
+                WHERE CODIGOALMACEN = 1
+                GROUP BY CODIGOARTICULO
+            ) S ON P.CODIGOARTICULO = S.CODIGOARTICULO
+            LEFT JOIN (
+                SELECT SR.CODIGOARTICULO,
+                    SUM(SR.CANTIDADENVASES) AS RES_ENV,
+                    SUM(SR.CANTIDADUNIDADES) AS RES_UNI
+                FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
+                JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+                GROUP BY SR.CODIGOARTICULO
+            ) RES ON P.CODIGOARTICULO = RES.CODIGOARTICULO
             WHERE P.C9INFC <= ? AND P.C9FIFC >= ?`;
 
         if (clientCode) {
@@ -1113,20 +1131,38 @@ async function getActivePromotions(clientCode) {
             paramsCpes.push(clientCode.trim());
         }
 
-        const paramsPmr = [];
+        const paramsPmr = [today, today];
         let sqlPmr = `
             SELECT 'GIFT' AS PROMOTYPE,
                    TRIM(PL.CODIGOARTICULO) AS CODE,
                    TRIM(A.DESCRIPCIONARTICULO) AS NAME,
                    0 AS PROMOPRICE,
                    COALESCE(T.PRECIOTARIFA, 0) AS REGULARPRICE,
+                   COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCKENVASES,
+                   COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCKUNIDADES,
                    H.P1INFC AS DATEFROM, H.P1FNFC AS DATETO,
                    TRIM(H.NOMBREPROMOCIONREGALO) AS PROMODESC
             FROM DSEDAC.PMRL1 H
             JOIN DSEDAC.PMPL1 PL ON TRIM(H.CODIGOPROMOCIONREGALO) = TRIM(PL.CODIGOPROMOCION)
             JOIN DSEDAC.ART A ON PL.CODIGOARTICULO = A.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARA T ON A.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
-            WHERE 1=1`;
+            LEFT JOIN (
+                SELECT CODIGOARTICULO,
+                    SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
+                    SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
+                FROM DSEDAC.ARO
+                WHERE CODIGOALMACEN = 1
+                GROUP BY CODIGOARTICULO
+            ) S ON PL.CODIGOARTICULO = S.CODIGOARTICULO
+            LEFT JOIN (
+                SELECT SR.CODIGOARTICULO,
+                    SUM(SR.CANTIDADENVASES) AS RES_ENV,
+                    SUM(SR.CANTIDADUNIDADES) AS RES_UNI
+                FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
+                JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+                GROUP BY SR.CODIGOARTICULO
+            ) RES ON PL.CODIGOARTICULO = RES.CODIGOARTICULO
+            WHERE H.P1INFC <= ? AND H.P1FNFC >= ?`;
 
         if (clientCode) {
             sqlPmr += ` AND TRIM(H.CODIGOCLIENTE) = ?`;
@@ -1142,6 +1178,8 @@ async function getActivePromotions(clientCode) {
         const formatRow = (r) => {
             const regPrice = parseFloat(r.REGULARPRICE) || 0;
             const promPrice = parseFloat(r.PROMOPRICE) || 0;
+            const stockEnvases = parseFloat(r.STOCKENVASES) || 0;
+            const stockUnidades = parseFloat(r.STOCKUNIDADES) || 0;
             let discount = 0;
             if (regPrice > 0 && promPrice > 0 && r.PROMOTYPE === 'PRICE') {
                 discount = ((regPrice - promPrice) / regPrice) * 100;
@@ -1156,6 +1194,8 @@ async function getActivePromotions(clientCode) {
             };
             const pFrom = parseDate(dFrom);
             const pTo = parseDate(dTo);
+            const dateFrom = pFrom.y ? `${pFrom.d}/${pFrom.m}/${pFrom.y}` : '';
+            const dateTo = pTo.y ? `${pTo.d}/${pTo.m}/${pTo.y}` : '';
 
             return {
                 promoType: r.PROMOTYPE,
@@ -1164,7 +1204,11 @@ async function getActivePromotions(clientCode) {
                 promoDesc: r.PROMODESC || '',
                 promoPrice: promPrice,
                 regularPrice: regPrice,
+                stockEnvases,
+                stockUnidades,
                 discountPct: discount,
+                dateFrom,
+                dateTo,
                 dayFrom: pFrom.d, monthFrom: pFrom.m, yearFrom: pFrom.y,
                 dayTo: pTo.d, monthTo: pTo.m, yearTo: pTo.y
             };

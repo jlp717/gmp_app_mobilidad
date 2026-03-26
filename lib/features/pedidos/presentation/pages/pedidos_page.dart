@@ -27,6 +27,7 @@ import '../widgets/client_balance_badge.dart';
 import '../widgets/complementary_products.dart';
 import '../widgets/order_pdf_generator.dart';
 import '../widgets/product_detail_sheet.dart';
+import '../utils/pedidos_formatters.dart';
 import '../dialogs/client_search_dialog.dart';
 import '../../data/pedidos_offline_service.dart';
 import '../../data/pedidos_favorites_service.dart';
@@ -183,6 +184,47 @@ class _PedidosPageState extends State<PedidosPage>
     _showAddToOrderDialog(product);
   }
 
+  Future<void> _openProductByCode(String code, {String fallbackName = ''}) async {
+    final productCode = code.trim();
+    if (productCode.isEmpty) return;
+
+    final provider = context.read<PedidosProvider>();
+    Product? product;
+
+    for (final p in provider.products) {
+      if (p.code == productCode) {
+        product = p;
+        break;
+      }
+    }
+
+    if (product == null) {
+      try {
+        final detail = await PedidosService.getProductDetail(
+          productCode,
+          clientCode: provider.hasClient ? provider.clientCode : null,
+        );
+        product = detail.product;
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'No se pudo cargar el artículo ${fallbackName.isNotEmpty ? fallbackName : productCode}',
+              ),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (mounted && product != null) {
+      _onProductTap(product);
+    }
+  }
+
   void _showAddToOrderDialog(Product product) {
     final prov0 = context.read<PedidosProvider>();
     OrderLine? existingLine;
@@ -192,19 +234,32 @@ class _PedidosPageState extends State<PedidosPage>
         break;
       }
     }
+    final rememberedUnit = prov0.lastUnitForProduct(product.code);
+    String selectedUnit = existingLine?.unidadMedida ??
+        rememberedUnit ??
+        (product.availableUnits.contains('CAJAS')
+            ? 'CAJAS'
+            : product.availableUnits.first);
+    if (!product.availableUnits.contains(selectedUnit)) {
+      selectedUnit = product.availableUnits.contains('CAJAS')
+          ? 'CAJAS'
+          : product.availableUnits.first;
+    }
     final initQty = existingLine != null
       ? (existingLine.cantidadEnvases > 0 ? existingLine.cantidadEnvases : existingLine.cantidadUnidades)
       : prov0.lastQtyForProduct(product.code);
-    final qtyController = TextEditingController(text: initQty.toStringAsFixed(0));
+    final initialPrice = existingLine?.precioVenta ?? product.priceForUnit(selectedUnit);
+    final qtyController = TextEditingController(
+      text: _formatQtyForInput(initQty, selectedUnit),
+    );
     final priceController =
-        TextEditingController(text: product.bestPrice.toStringAsFixed(3));
-    String selectedUnit = 'CAJAS';
+        TextEditingController(text: _formatPriceForInput(initialPrice));
     List<TariffEntry> tariffs = [];
     List<StockEntry> stockByWarehouse = [];
     bool showWarehouseStock = false;
     bool loadingTariffs = true;
 
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.darkSurface,
@@ -227,15 +282,15 @@ class _PedidosPageState extends State<PedidosPage>
                     tariffs = detail.tariffs;
                     stockByWarehouse = detail.stockByWarehouse;
                     if (detail.clientPrice > 0) {
-                      priceController.text = detail.clientPrice.toStringAsFixed(3);
+                      priceController.text = _formatPriceForInput(detail.clientPrice);
                     }
                   });
                 }
               }).catchError((_) {});
             }
 
-            final qty = double.tryParse(qtyController.text) ?? 0;
-            final price = double.tryParse(priceController.text) ?? 0;
+            final qty = _parseInputNumber(qtyController.text);
+            final price = _parseInputNumber(priceController.text);
             final total = qty * price;
 
             return Padding(
@@ -349,7 +404,7 @@ class _PedidosPageState extends State<PedidosPage>
                                 ),
                               ),
                               Text(
-                                '${s.envases > 0 ? '${_formatStockValue(s.envases)}c' : ''}${s.unidades > 0 ? ' ${_formatStockValue(s.unidades)}u' : ''}',
+                                _buildWarehouseStockText(product, s),
                                 style: const TextStyle(color: Colors.white54, fontSize: 11),
                               ),
                             ],
@@ -412,11 +467,12 @@ class _PedidosPageState extends State<PedidosPage>
                           separatorBuilder: (_, __) => const SizedBox(width: 6),
                           itemBuilder: (_, i) {
                             final t = tariffs[i];
-                            final isSelected = priceController.text == t.price.toStringAsFixed(3);
+                            final isSelected =
+                                (_parseInputNumber(priceController.text) - t.price).abs() < 0.0005;
                             return GestureDetector(
                               onTap: () {
                                 setModalState(() {
-                                  priceController.text = t.price.toStringAsFixed(3);
+                                  priceController.text = _formatPriceForInput(t.price);
                                 });
                               },
                               child: Container(
@@ -442,7 +498,7 @@ class _PedidosPageState extends State<PedidosPage>
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      '\u20AC${t.price.toStringAsFixed(3)}',
+                                      PedidosFormatters.money(t.price, decimals: 3),
                                       style: TextStyle(
                                         color: isSelected ? AppTheme.neonGreen : Colors.white,
                                         fontSize: 12,
@@ -479,7 +535,9 @@ class _PedidosPageState extends State<PedidosPage>
                             onPressed: () {
                               setModalState(() {
                                 selectedUnit = unit;
-                                priceController.text = unitPrice.toStringAsFixed(3);
+                                priceController.text = _formatPriceForInput(unitPrice);
+                                final currentQty = _parseInputNumber(qtyController.text);
+                                qtyController.text = _formatQtyForInput(currentQty, selectedUnit);
                               });
                             },
                             style: ElevatedButton.styleFrom(
@@ -505,14 +563,14 @@ class _PedidosPageState extends State<PedidosPage>
                                   fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                                 )),
                                 Text(
-                                  '\u20AC${unitPrice.toStringAsFixed(3)}',
+                                  PedidosFormatters.money(unitPrice, decimals: 3),
                                   style: TextStyle(
                                     fontSize: 9,
                                     color: selected ? AppTheme.neonGreen : Colors.white38,
                                   ),
                                 ),
                                 Text(
-                                  '${unitStock.toStringAsFixed(0)} $stockLabel',
+                                  '${_formatUnitQty(unitStock, unit)} $stockLabel',
                                   style: TextStyle(
                                     fontSize: 8,
                                     color: unitStock > 0 ? Colors.white30 : AppTheme.error.withOpacity(0.6),
@@ -524,7 +582,62 @@ class _PedidosPageState extends State<PedidosPage>
                         );
                       }).toList(),
                     ),
-                    // â”€â”€ Quantity with +/- â”€â”€
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (_) {
+                        final selectedUnitPrice = product.priceForUnit(selectedUnit);
+                        final selectedStock = product.stockForUnit(selectedUnit);
+                        final selectedLabel = Product.unitLabel(selectedUnit);
+                        final qtyPerBox = product.quantityPerBoxForUnit(selectedUnit);
+                        final boxPrice = product.priceForUnit('CAJAS');
+
+                        return Container(
+                          width: double.infinity,
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.darkCard,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AppTheme.borderColor.withOpacity(0.6)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Precio unitario: ${PedidosFormatters.money(selectedUnitPrice, decimals: 3)} / $selectedLabel',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                selectedUnit == 'CAJAS'
+                                    ? 'Precio por caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}'
+                                    : '1 caja = ${_formatUnitQty(qtyPerBox, selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
+                                style: const TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Stock disponible: ${_formatUnitQty(selectedStock, selectedUnit)} $selectedLabel',
+                                style: TextStyle(
+                                  color: selectedStock > 0
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.error,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                     const SizedBox(height: 14),
                     Text(
                       'Cantidad (${selectedUnit == 'KILOGRAMOS' ? 'kg' : selectedUnit.toLowerCase()})',
@@ -538,8 +651,11 @@ class _PedidosPageState extends State<PedidosPage>
                       children: [
                         // Minus button
                         _buildQtyButton(Icons.remove, AppTheme.error, () {
-                          final cur = double.tryParse(qtyController.text) ?? 0;
-                          if (cur > 1) setModalState(() => qtyController.text = (cur - 1).toStringAsFixed(0));
+                          final cur = _parseInputNumber(qtyController.text);
+                          if (cur > 1) {
+                            setModalState(() =>
+                                qtyController.text = _formatQtyForInput(cur - 1, selectedUnit));
+                          }
                         }),
                         const SizedBox(width: 10),
                         // Qty field
@@ -572,8 +688,9 @@ class _PedidosPageState extends State<PedidosPage>
                         const SizedBox(width: 10),
                         // Plus button
                         _buildQtyButton(Icons.add, AppTheme.neonBlue, () {
-                          final cur = double.tryParse(qtyController.text) ?? 0;
-                          setModalState(() => qtyController.text = (cur + 1).toStringAsFixed(0));
+                          final cur = _parseInputNumber(qtyController.text);
+                          setModalState(() =>
+                              qtyController.text = _formatQtyForInput(cur + 1, selectedUnit));
                         }),
                       ],
                     ),
@@ -586,8 +703,9 @@ class _PedidosPageState extends State<PedidosPage>
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: OutlinedButton(
                             onPressed: () {
-                              final cur = double.tryParse(qtyController.text) ?? 0;
-                              setModalState(() => qtyController.text = (cur + v).toStringAsFixed(0));
+                              final cur = _parseInputNumber(qtyController.text);
+                              setModalState(() =>
+                                  qtyController.text = _formatQtyForInput(cur + v, selectedUnit));
                             },
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppTheme.neonBlue,
@@ -611,8 +729,9 @@ class _PedidosPageState extends State<PedidosPage>
                       onChanged: (_) => setModalState(() {}),
                       decoration: InputDecoration(
                         labelText: 'Precio',
-                        prefixText: '\u20AC ',
-                        prefixStyle: const TextStyle(color: AppTheme.neonGreen, fontSize: 16),
+                        suffixText: ' \u20AC',
+                        suffixStyle:
+                            const TextStyle(color: AppTheme.neonGreen, fontSize: 16),
                         labelStyle: const TextStyle(color: Colors.white70),
                         filled: true,
                         fillColor: AppTheme.darkCard,
@@ -633,7 +752,7 @@ class _PedidosPageState extends State<PedidosPage>
                       children: [
                         if (product.precioMinimo > 0)
                           Text(
-                            'Min: \u20AC${product.precioMinimo.toStringAsFixed(3)}',
+                            'Min: ${PedidosFormatters.money(product.precioMinimo, decimals: 3)}',
                             style: TextStyle(
                               color: price > 0 && price < product.precioMinimo
                                   ? AppTheme.error : Colors.white38,
@@ -642,7 +761,7 @@ class _PedidosPageState extends State<PedidosPage>
                           ),
                         const Spacer(),
                         Text(
-                          'Total: \u20AC${total.toStringAsFixed(2)}',
+                          'Total: ${PedidosFormatters.money(total)}',
                           style: const TextStyle(
                             color: AppTheme.neonGreen,
                             fontSize: 15,
@@ -709,10 +828,8 @@ class _PedidosPageState extends State<PedidosPage>
                             height: 46,
                             child: ElevatedButton.icon(
                       onPressed: () {
-                        final qty =
-                            double.tryParse(qtyController.text) ?? 0;
-                        final price =
-                            double.tryParse(priceController.text) ?? 0;
+                        final qty = _parseInputNumber(qtyController.text);
+                        final price = _parseInputNumber(priceController.text);
                         if (qty <= 0) return;
 
                         final provider = context.read<PedidosProvider>();
@@ -730,9 +847,35 @@ class _PedidosPageState extends State<PedidosPage>
                             product.precioMinimo,
                           ).then((proceed) {
                             if (proceed == true) {
-                              provider.addLine(product, envases, unidades,
-                                  selectedUnit, price);
+                              final errorFromAdd = provider.addLine(
+                                product,
+                                envases,
+                                unidades,
+                                selectedUnit,
+                                price,
+                              );
+                              if (errorFromAdd != null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      errorFromAdd,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    backgroundColor: AppTheme.error,
+                                    duration: const Duration(seconds: 3),
+                                  ),
+                                );
+                                return;
+                              }
                               Navigator.pop(ctx);
+                              Future.delayed(const Duration(milliseconds: 300), () {
+                                if (mounted) {
+                                  context.read<PedidosProvider>().loadComplementaryProducts();
+                                }
+                              });
                             }
                           });
                           return;
@@ -872,30 +1015,65 @@ class _PedidosPageState extends State<PedidosPage>
 
   String _buildStockText(Product product) {
     final parts = <String>[];
-    parts.add('${product.stockEnvases.toStringAsFixed(0)} cj');
-    if (product.unitsPerBox > 1) {
-      parts.add('${product.totalPieces.toStringAsFixed(0)} uds');
-    }
-    if (product.unitsFraction > 0) {
-      final bands = product.stockForUnit('BANDEJAS');
-      parts.add('${bands.toStringAsFixed(0)} band');
-    }
-    if (product.unitsRetractil > 0) {
-      final est = product.stockForUnit('ESTUCHE');
-      parts.add('${est.toStringAsFixed(0)} est');
-    }
-    if (product.weight > 0) {
-      final kg = product.stockForUnit('KILOGRAMOS');
-      parts.add('${kg.toStringAsFixed(1)} kg');
+    final cjStr = '${PedidosFormatters.number(product.stockEnvases)} cj';
+    final content = product.boxContentDesc;
+    parts.add(content.isNotEmpty ? '$cjStr ($content/cj)' : cjStr);
+    for (final unit in product.availableUnits) {
+      if (unit == 'CAJAS') continue;
+      final stock = product.stockForUnit(unit);
+      final label = Product.unitLabel(unit);
+      parts.add('${_formatUnitQty(stock, unit)} $label');
     }
     return parts.join(' / ');
   }
 
-  String _formatStockValue(double value) {
-    if (value == value.truncateToDouble()) {
-      return value.toStringAsFixed(0);
+  String _buildWarehouseStockText(Product product, StockEntry stock) {
+    final parts = <String>[];
+    for (final unit in product.availableUnits) {
+      if (unit == 'CAJAS') {
+        parts.add('${PedidosFormatters.number(stock.envases)} ${Product.unitLabel(unit)}');
+        continue;
+      }
+      final qty = unit == 'KILOGRAMOS'
+          ? stock.envases * product.quantityPerBoxForUnit(unit) + stock.unidades
+          : stock.envases * product.unitsPerBox + stock.unidades;
+      parts.add('${_formatUnitQty(qty, unit)} ${Product.unitLabel(unit)}');
     }
-    return value.toStringAsFixed(2);
+    return parts.join(' / ');
+  }
+
+  String _formatPriceForInput(double value) {
+    return value.toStringAsFixed(3).replaceAll('.', ',');
+  }
+
+  String _formatUnitQty(double value, String unit) {
+    if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
+      return PedidosFormatters.number(value, decimals: 1);
+    }
+    return PedidosFormatters.number(value, decimals: 0);
+  }
+
+  double _parseInputNumber(String raw) {
+    return double.tryParse(raw.replaceAll(',', '.').trim()) ?? 0;
+  }
+
+  String _formatQtyForInput(double value, String unit) {
+    final useDecimals = unit == 'KILOGRAMOS' || unit == 'LITROS';
+    String text;
+    if (!useDecimals) {
+      if (value == value.truncateToDouble()) {
+        text = value.toStringAsFixed(0);
+      } else {
+        text = value.toStringAsFixed(2);
+      }
+      return text.replaceAll('.', ',');
+    }
+    if (value == value.truncateToDouble()) {
+      text = value.toStringAsFixed(0);
+    } else {
+      text = value.toStringAsFixed(2);
+    }
+    return text.replaceAll('.', ',');
   }
 
   Widget _buildQtyButton(IconData icon, Color color, VoidCallback onTap) {
@@ -931,7 +1109,7 @@ class _PedidosPageState extends State<PedidosPage>
           ],
         ),
         content: Text(
-          'El precio (\u20AC${price.toStringAsFixed(3)}) es inferior al minimo (\u20AC${minPrice.toStringAsFixed(3)})',
+          'El precio (${PedidosFormatters.money(price, decimals: 3)}) es inferior al minimo (${PedidosFormatters.money(minPrice, decimals: 3)})',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -962,7 +1140,7 @@ class _PedidosPageState extends State<PedidosPage>
       return;
     }
 
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.darkSurface,
       shape: const RoundedRectangleBorder(
@@ -997,7 +1175,7 @@ class _PedidosPageState extends State<PedidosPage>
                 child: ListTile(
                   leading: const Icon(Icons.description_outlined, color: AppTheme.neonBlue),
                   title: Text(client.toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                  subtitle: Text('$lines lineas Â· $savedAtLabel', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  subtitle: Text('$lines lineas - $savedAtLabel', style: const TextStyle(color: Colors.white54, fontSize: 12)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1036,6 +1214,7 @@ class _PedidosPageState extends State<PedidosPage>
       backgroundColor: AppTheme.darkBase,
       appBar: AppBar(
         backgroundColor: AppTheme.darkSurface,
+        toolbarHeight: 52,
         title: Text(
           'Pedidos',
           style: TextStyle(
@@ -1058,10 +1237,21 @@ class _PedidosPageState extends State<PedidosPage>
                      onPressed: () {
                        Navigator.push(
                          context,
-                         MaterialPageRoute(
+                          MaterialPageRoute<void>(
                            builder: (_) => PromotionsListPage(
                              promotions: promos,
-                             onProductTap: (code, name) => _onProductTap(Product(code: code, name: name)),
+                             onProductTap: (code, name) => _openProductByCode(code, fallbackName: name),
+                             hasStockResolver: (code) {
+                               for (final p in prov.products) {
+                                 if (p.code == code) return p.hasStock;
+                               }
+                               for (final promo in promos) {
+                                 if (promo.code == code) {
+                                   return promo.hasStock;
+                                 }
+                               }
+                               return null;
+                             },
                            ),
                          ),
                        );
@@ -1146,8 +1336,8 @@ class _PedidosPageState extends State<PedidosPage>
           labelColor: AppTheme.neonBlue,
           unselectedLabelColor: Colors.white54,
           tabs: const [
-            Tab(text: 'Nuevo Pedido', icon: Icon(Icons.add_circle_outline)),
-            Tab(text: 'Mis Pedidos', icon: Icon(Icons.list_alt)),
+            Tab(height: 40, text: 'Nuevo Pedido', icon: Icon(Icons.add_circle_outline)),
+            Tab(height: 40, text: 'Mis Pedidos', icon: Icon(Icons.list_alt)),
           ],
         ),
       ),
@@ -1225,7 +1415,7 @@ class _PedidosPageState extends State<PedidosPage>
               foregroundColor: AppTheme.darkBase,
               icon: const Icon(Icons.shopping_cart),
               label: Text(
-                '${provider.lineCount} | \u20AC${(provider.globalDiscountPct > 0 ? provider.totalConDescuento : provider.totalImporte).toStringAsFixed(2)}',
+                '${provider.lineCount} | ${PedidosFormatters.money(provider.globalDiscountPct > 0 ? provider.totalConDescuento : provider.totalImporte)}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -1235,7 +1425,7 @@ class _PedidosPageState extends State<PedidosPage>
   }
 
   void _showCartSheet() {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.darkSurface,
@@ -1266,14 +1456,9 @@ class _PedidosPageState extends State<PedidosPage>
         ),
         // Promotions banner
         PromotionsBanner(
-          onProductTap: (code, name) {
-            final match = provider.products
-                .where((p) => p.code == code)
-                .toList();
-            if (match.isNotEmpty) {
-              _onProductTap(match.first);
-            }
-          },
+          promotions: provider.activePromotionsList,
+          onProductTap: (code, name) =>
+              _openProductByCode(code, fallbackName: name),
         ),
         // Recommendations
         if (provider.hasClient &&
@@ -1281,13 +1466,7 @@ class _PedidosPageState extends State<PedidosPage>
                 provider.similarClients.isNotEmpty))
           RecommendationsSection(
             onProductTap: (code, name) {
-              // Find product in catalog or just show code
-              final match = provider.products
-                  .where((p) => p.code == code)
-                  .toList();
-              if (match.isNotEmpty) {
-                _onProductTap(match.first);
-              }
+              _openProductByCode(code, fallbackName: name);
             },
           ),
         // Complementary products (based on cart contents)
@@ -1295,10 +1474,7 @@ class _PedidosPageState extends State<PedidosPage>
           ComplementaryProducts(
             products: provider.complementaryProducts,
             onAdd: (code, name) {
-              final match = provider.products.where((p) => p.code == code).toList();
-              if (match.isNotEmpty) {
-                _onProductTap(match.first);
-              }
+              _openProductByCode(code, fallbackName: name);
             },
           ),
         // Product list
@@ -1336,6 +1512,7 @@ class _PedidosPageState extends State<PedidosPage>
                     vendedorCode: widget.employeeCode,
                   );
                   prov.loadClientBalance(result['code']!);
+                  prov.loadPromotions();
                 }
               },
               borderRadius: BorderRadius.circular(12),
@@ -1482,16 +1659,31 @@ class _PedidosPageState extends State<PedidosPage>
         }
         final product = sortedProducts[i];
         // Mejora 1 â€” cartQty
-        final cartQty = provider.lines
-            .where((l) => l.codigoArticulo == product.code)
-            .fold<double>(0.0, (sum, l) => sum + l.cantidadEnvases);
+        OrderLine? lineInCart;
+        for (final line in provider.lines) {
+          if (line.codigoArticulo == product.code) {
+            lineInCart = line;
+            break;
+          }
+        }
+        final cartQty = lineInCart == null
+            ? 0.0
+            : (lineInCart.cantidadEnvases > 0
+                ? lineInCart.cantidadEnvases
+                : lineInCart.cantidadUnidades);
+        final cartQtySuffix = lineInCart == null
+            ? 'c'
+            : Product.unitLabel(lineInCart.unidadMedida);
         return ProductCard(
           product: product,
           onTap: () => _onProductTap(product),
           isFavorite: provider.isFavorite(product.code),
           promo: provider.getPromo(product.code),
           cartQty: cartQty,
-          onQuickAdd: () {
+          cartQtySuffix: cartQtySuffix,
+          onQuickAdd: (lineInCart != null && lineInCart.cantidadEnvases <= 0)
+              ? null
+              : () {
             // Mejora 2 â€” Quick add 1 caja
             HapticFeedback.lightImpact();
             final messenger = ScaffoldMessenger.of(context);
@@ -1635,8 +1827,50 @@ class _PedidosPageState extends State<PedidosPage>
     return filtered;
   }
 
+  List<Map<String, dynamic>> _filteredDrafts(List<Map<String, dynamic>> all) {
+    var filtered = all;
+
+    if (_orderSearch.isNotEmpty) {
+      final q = _orderSearch.toLowerCase();
+      filtered = filtered.where((d) {
+        final name = (d['clientName'] ?? '').toString().toLowerCase();
+        final code = (d['clientCode'] ?? '').toString().toLowerCase();
+        final draftKey = (d['draftKey'] ?? '').toString().toLowerCase();
+        return name.contains(q) || code.contains(q) || draftKey.contains(q);
+      }).toList();
+    }
+
+    if (_orderDateFilter != 'Todo') {
+      final now = DateTime.now();
+      filtered = filtered.where((d) {
+        final raw = (d['savedAt'] ?? '').toString();
+        final parsed = DateTime.tryParse(raw);
+        if (parsed == null) return false;
+        final date = DateTime(parsed.year, parsed.month, parsed.day);
+        final today = DateTime(now.year, now.month, now.day);
+        final days = today.difference(date).inDays;
+        if (_orderDateFilter == 'Hoy') {
+          return days == 0;
+        }
+        if (_orderDateFilter == 'Semana') {
+          return days >= 0 && days <= 7;
+        }
+        if (_orderDateFilter == 'Mes') {
+          return days >= 0 && days <= 30;
+        }
+        return true;
+      }).toList();
+    }
+
+    return filtered;
+  }
+
   Widget _buildOrdersListWithAnalytics(PedidosProvider provider) {
     final displayOrders = _filteredOrders(provider.orders);
+    final showDrafts = provider.orderStatusFilter == null ||
+        provider.orderStatusFilter == 'BORRADOR';
+    final displayDrafts = showDrafts ? _filteredDrafts(provider.savedDrafts) : <Map<String, dynamic>>[];
+
     return RefreshIndicator(
       color: AppTheme.neonBlue,
       backgroundColor: AppTheme.darkSurface,
@@ -1669,7 +1903,7 @@ class _PedidosPageState extends State<PedidosPage>
             const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator(color: AppTheme.neonBlue)),
             )
-          else if (displayOrders.isEmpty)
+          else if (displayOrders.isEmpty && displayDrafts.isEmpty)
             SliverFillRemaining(
               child: Center(
                 child: Column(
@@ -1685,15 +1919,44 @@ class _PedidosPageState extends State<PedidosPage>
               ),
             )
           else
-            SliverPadding(
-              padding: Responsive.contentPadding(context),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) => _buildOrderCard(displayOrders[i]),
-                  childCount: displayOrders.length,
+            ...[
+              if (displayDrafts.isNotEmpty)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Text(
+                      'Borradores locales',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w700,
+                        fontSize: Responsive.fontSize(context, small: 13, large: 15),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              if (displayDrafts.isNotEmpty)
+                SliverPadding(
+                  padding: Responsive.contentPadding(context),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, i) => _buildDraftCard(provider, displayDrafts[i]),
+                      childCount: displayDrafts.length,
+                    ),
+                  ),
+                ),
+              if (displayOrders.isNotEmpty)
+                SliverPadding(
+                  padding: displayDrafts.isEmpty
+                      ? Responsive.contentPadding(context)
+                      : const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, i) => _buildOrderCard(displayOrders[i]),
+                      childCount: displayOrders.length,
+                    ),
+                  ),
+                ),
+            ],
         ],
       ),
     );
@@ -1772,6 +2035,195 @@ class _PedidosPageState extends State<PedidosPage>
               );
             }),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDraftCard(PedidosProvider provider, Map<String, dynamic> draft) {
+    final clientName = (draft['clientName'] ?? '').toString();
+    final clientCode = (draft['clientCode'] ?? '').toString();
+    final lines = (draft['lines'] as List?) ?? const [];
+    final draftKey = (draft['draftKey'] ?? '').toString();
+    final savedAt = DateTime.tryParse((draft['savedAt'] ?? '').toString());
+    final dateLabel = savedAt == null
+        ? ''
+        : '${savedAt.day.toString().padLeft(2, '0')}/${savedAt.month.toString().padLeft(2, '0')}/${savedAt.year} ${savedAt.hour.toString().padLeft(2, '0')}:${savedAt.minute.toString().padLeft(2, '0')}';
+
+    double total = 0;
+    for (final row in lines) {
+      if (row is Map) {
+        final data = Map<String, dynamic>.from(row);
+        final envases = (data['cantidadEnvases'] as num?)?.toDouble() ?? 0;
+        final unidades = (data['cantidadUnidades'] as num?)?.toDouble() ?? 0;
+        final price = (data['precioVenta'] as num?)?.toDouble() ?? 0;
+        total += (envases > 0 ? envases : unidades) * price;
+      }
+    }
+
+    Future<void> restoreDraft() async {
+      provider.loadDraft(draft);
+      _tabController.animateTo(0);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Borrador cargado en el carrito'),
+            backgroundColor: AppTheme.neonBlue,
+          ),
+        );
+      }
+    }
+
+    Future<void> deleteDraft() async {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.darkSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Eliminar borrador', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Este borrador local se eliminara definitivamente.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Eliminar', style: TextStyle(color: AppTheme.error)),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true || draftKey.isEmpty) return;
+      await provider.deleteDraft(draftKey);
+    }
+
+    return Card(
+      color: AppTheme.darkCard,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.orange.withOpacity(0.35)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: restoreDraft,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.drafts_outlined, color: Colors.orange, size: 18),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      clientName.isNotEmpty ? clientName : clientCode,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: Responsive.fontSize(context, small: 14, large: 16),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'BORRADOR',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                clientCode,
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.shopping_bag_outlined, color: Colors.white38, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${lines.length} lineas',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                    ),
+                  ),
+                  if (dateLabel.isNotEmpty) ...[
+                    const SizedBox(width: 12),
+                    Icon(Icons.schedule_outlined, color: Colors.white38, size: 14),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        dateLabel,
+                        style: const TextStyle(color: Colors.white38, fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 8),
+                  Text(
+                    PedidosFormatters.money(total),
+                    style: TextStyle(
+                      color: AppTheme.neonGreen,
+                      fontWeight: FontWeight.bold,
+                      fontSize: Responsive.fontSize(context, small: 14, large: 16),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: restoreDraft,
+                    icon: const Icon(Icons.restore, size: 14),
+                    label: const Text('Cargar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.neonBlue,
+                      side: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5)),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: deleteDraft,
+                    icon: const Icon(Icons.delete_outline, size: 14),
+                    label: const Text('Eliminar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.error,
+                      side: BorderSide(color: AppTheme.error.withOpacity(0.5)),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1970,7 +2422,7 @@ class _PedidosPageState extends State<PedidosPage>
                           'Pedido #${order.numeroPedido} - ${order.clienteName}\n'
                           'Fecha: ${order.fecha.length >= 10 ? order.fecha.substring(0, 10) : order.fecha}\n'
                           'Estado: ${order.estado}\n'
-                          'Total: \u20AC${order.total.toStringAsFixed(2)}\n'
+                          'Total: ${PedidosFormatters.money(order.total)}\n'
                           '${order.lineCount} lineas';
                       final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
                       try {
@@ -2026,7 +2478,7 @@ class _PedidosPageState extends State<PedidosPage>
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    '\u20AC${order.total.toStringAsFixed(2)}',
+                    PedidosFormatters.money(order.total),
                     style: TextStyle(
                       color: AppTheme.neonGreen,
                       fontWeight: FontWeight.bold,

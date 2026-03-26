@@ -10,6 +10,7 @@ import '../../data/pedidos_service.dart';
 import '../../providers/pedidos_provider.dart';
 import 'order_line_tile.dart';
 import '../dialogs/delete_line_dialog.dart';
+import '../utils/pedidos_formatters.dart';
 
 class OrderSummaryWidget extends StatefulWidget {
   final String vendedorCode;
@@ -137,7 +138,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
               icon: const Icon(Icons.delete_sweep_outlined, color: AppTheme.error, size: 20),
               tooltip: 'Vaciar carrito',
               onPressed: () {
-                showDialog(
+                showDialog<void>(
                   context: context,
                   builder: (ctx) => AlertDialog(
                     backgroundColor: AppTheme.darkSurface,
@@ -161,6 +162,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                       TextButton(
                         onPressed: () {
                           provider.clearOrder();
+                          provider.loadPromotions();
                           Navigator.pop(ctx);
                         },
                         child: const Text('Vaciar', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.bold)),
@@ -340,7 +342,10 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
-                    onChanged: (v) => provider.setGlobalDiscount(double.tryParse(v) ?? 0),
+                    onChanged: (v) {
+                      final normalized = v.replaceAll(',', '.').trim();
+                      provider.setGlobalDiscount(double.tryParse(normalized) ?? 0);
+                    },
                     decoration: InputDecoration(
                       suffixText: '%',
                       suffixStyle: const TextStyle(color: Colors.white54, fontSize: 12),
@@ -366,7 +371,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 const Spacer(),
                 if (provider.globalDiscountPct > 0) ...[
                   Text(
-                    '\u20ac${provider.totalConDescuento.toStringAsFixed(2)}',
+                    PedidosFormatters.money(provider.totalConDescuento),
                     style: TextStyle(
                       color: AppTheme.neonGreen,
                       fontWeight: FontWeight.bold,
@@ -374,7 +379,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                     ),
                   ),
                   Text(
-                    ' (-\u20ac${provider.totalDescuento.toStringAsFixed(2)})',
+                    ' (-${PedidosFormatters.money(provider.totalDescuento)})',
                     style: const TextStyle(color: AppTheme.error, fontSize: 11),
                   ),
                 ],
@@ -399,7 +404,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
               ),
               _buildStatItem(
                 context,
-                '\u20AC${totalShown.toStringAsFixed(2)}',
+                PedidosFormatters.money(totalShown),
                 Icons.euro,
                 AppTheme.neonGreen,
               ),
@@ -421,15 +426,15 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 runSpacing: 4,
                 children: [
                   Text(
-                    'Base: \u20ac${provider.totalBase.toStringAsFixed(2)}',
+                    'Base: ${PedidosFormatters.money(provider.totalBase)}',
                     style: const TextStyle(color: Colors.white38, fontSize: 10),
                   ),
                   Text(
-                    'IVA: \u20ac${provider.totalIva.toStringAsFixed(2)}',
+                    'IVA: ${PedidosFormatters.money(provider.totalIva)}',
                     style: const TextStyle(color: Colors.white38, fontSize: 10),
                   ),
                   ...provider.ivaBreakdown.entries.map((e) => Text(
-                      'IVA ${(e.key * 100).toStringAsFixed(0)}%: \u20ac${e.value.toStringAsFixed(2)}',
+                      'IVA ${(e.key * 100).toStringAsFixed(0)}%: ${PedidosFormatters.money(e.value)}',
                       style: const TextStyle(color: Colors.white38, fontSize: 10),
                     )),
                 ],
@@ -516,7 +521,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
     final priceController =
         TextEditingController(text: line.precioVenta.toStringAsFixed(3));
 
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.darkSurface,
@@ -594,9 +599,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: 'Precio',
-                        prefixText: '\u20AC ',
-                        prefixStyle:
-                            const TextStyle(color: AppTheme.neonGreen),
+                        suffixText: ' €',
                         labelStyle: const TextStyle(color: Colors.white70),
                         filled: true,
                         fillColor: AppTheme.darkCard,
@@ -624,7 +627,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    'Precio minimo: \u20AC${line.precioMinimo.toStringAsFixed(3)}',
+                    'Precio minimo: ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
                     style: TextStyle(
                       color: Colors.white54,
                       fontSize:
@@ -639,9 +642,9 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     final qty =
-                        double.tryParse(qtyController.text) ?? 0;
+                        double.tryParse(qtyController.text.replaceAll(',', '.')) ?? 0;
                     final price =
-                        double.tryParse(priceController.text) ?? 0;
+                        double.tryParse(priceController.text.replaceAll(',', '.')) ?? 0;
                     if (qty <= 0) return;
 
                     final isBoxes = line.cantidadEnvases > 0;
@@ -690,6 +693,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
     if (result != null && context.mounted) {
       _obsCtrl.clear();
       _discountCtrl.clear();
+      provider.loadPromotions();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -714,7 +718,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
     final marginColor = margin >= 15 ? AppTheme.neonGreen : margin >= 5 ? Colors.orange : AppTheme.error;
     final hasDiscount = provider.globalDiscountPct > 0;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.darkSurface,
@@ -761,7 +765,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                     ),
                   ),
                   Text(
-                    '${l.cantidadEnvases > 0 ? l.cantidadEnvases.toStringAsFixed(0) : l.cantidadUnidades.toStringAsFixed(0)} x \u20ac${(hasDiscount ? (l.precioVenta * (1 - provider.globalDiscountPct / 100)) : l.precioVenta).toStringAsFixed(3)}',
+                    '${l.cantidadEnvases > 0 ? PedidosFormatters.number(l.cantidadEnvases) : PedidosFormatters.number(l.cantidadUnidades, decimals: 2)} x ${PedidosFormatters.money((hasDiscount ? (l.precioVenta * (1 - provider.globalDiscountPct / 100)) : l.precioVenta), decimals: 3)}',
                     style: const TextStyle(color: Colors.white54, fontSize: 11),
                   ),
                 ],
@@ -785,16 +789,16 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                   children: [
                     if (hasDiscount) ...[
                       Text(
-                        'Dto. ${provider.globalDiscountPct.toStringAsFixed(1)}%: -\u20ac${provider.totalDescuento.toStringAsFixed(2)}',
+                        'Dto. ${provider.globalDiscountPct.toStringAsFixed(1)}%: -${PedidosFormatters.money(provider.totalDescuento)}',
                         style: const TextStyle(color: AppTheme.error, fontSize: 11),
                       ),
                       Text(
-                        'Total: \u20ac${provider.totalConDescuento.toStringAsFixed(2)}',
+                        'Total: ${PedidosFormatters.money(provider.totalConDescuento)}',
                         style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                     ] else
                       Text(
-                        'Total: \u20ac${provider.totalImporte.toStringAsFixed(2)}',
+                        'Total: ${PedidosFormatters.money(provider.totalImporte)}',
                         style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                     Text(

@@ -13,6 +13,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
 import 'product_history_sheet.dart';
+import '../utils/pedidos_formatters.dart';
 
 class ProductDetailSheet extends StatefulWidget {
   final String productCode;
@@ -141,7 +142,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         return;
       }
 
-      navigator.push(MaterialPageRoute(
+      navigator.push(MaterialPageRoute<void>(
         builder: (_) => _PdfViewerPage(
           filePath: filePath,
           title: 'Ficha Tecnica - $code',
@@ -553,7 +554,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   ),
                 ),
                 Text(
-                  '\u20AC${t.price.toStringAsFixed(3)}',
+                  PedidosFormatters.money(t.price, decimals: 3),
                   style: const TextStyle(
                     color: AppTheme.neonGreen,
                     fontSize: 14,
@@ -582,7 +583,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           ),
           const SizedBox(width: 8),
           Text(
-            '\u20AC${price.toStringAsFixed(3)}',
+            PedidosFormatters.money(price, decimals: 3),
             style: const TextStyle(
               color: AppTheme.neonGreen,
               fontSize: 18,

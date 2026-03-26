@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../utils/pedidos_formatters.dart';
 
 class PriceWarningDialog extends StatelessWidget {
   final double price;
@@ -42,7 +43,7 @@ class PriceWarningDialog extends StatelessWidget {
         ],
       ),
       content: Text(
-        'El precio (\u20AC${price.toStringAsFixed(3)}) es inferior al minimo (\u20AC${minPrice.toStringAsFixed(3)})',
+        'El precio (${PedidosFormatters.money(price, decimals: 3)}) es inferior al minimo (${PedidosFormatters.money(minPrice, decimals: 3)})',
         style: const TextStyle(color: Colors.white70, fontSize: 14),
       ),
       actions: [

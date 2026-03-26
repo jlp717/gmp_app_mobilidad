@@ -33,6 +33,7 @@ class _ProductSearchWidgetState extends State<ProductSearchWidget> {
   }
 
   void _onSearchChanged(String value) {
+    if (mounted) setState(() {});
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () {
       final provider = context.read<PedidosProvider>();
