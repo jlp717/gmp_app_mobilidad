@@ -415,7 +415,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             child: Container(
               width: double.infinity,
               height: 200,
-              color: AppTheme.darkBase,
+              color: AppTheme.darkCard,
               child: Image.network(
                 imageUrl,
                 headers: ApiClient.authHeaders,
