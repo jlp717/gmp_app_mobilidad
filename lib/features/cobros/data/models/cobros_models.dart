@@ -44,6 +44,22 @@ enum TipoCobro {
   }
 }
 
+enum TipoVenta {
+  contado,
+  credito;
+
+  String get code => this == contado ? 'CC' : 'VC';
+  String get label => this == contado ? 'Contado' : 'Crédito';
+}
+
+enum TipoModoCobro {
+  normal,
+  especial;
+
+  String get code => this == normal ? 'NORMAL' : 'ESPECIAL';
+  String get label => this == normal ? 'Normal' : 'Especial';
+}
+
 // ============================================
 // MODELS
 // ============================================

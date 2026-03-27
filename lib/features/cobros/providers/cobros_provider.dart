@@ -300,6 +300,9 @@ class CobrosProvider extends ChangeNotifier {
     required String referencia,
     required double importe,
     required String formaPago,
+    required TipoVenta tipoVenta,
+    required TipoModoCobro tipoModo,
+    String? codigoUsuario,
     String? observaciones,
   }) async {
     try {
@@ -307,6 +310,10 @@ class CobrosProvider extends ChangeNotifier {
         'referencia': referencia,
         'importe': importe,
         'formaPago': formaPago,
+        'tipoVenta': tipoVenta.code,
+        'tipoModo': tipoModo.code,
+        'tipoUsuario': isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
+        'codigoUsuario': codigoUsuario ?? employeeCode,
         'observaciones': observaciones,
       });
 

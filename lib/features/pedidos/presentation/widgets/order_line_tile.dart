@@ -31,17 +31,24 @@ class OrderLineTile extends StatelessWidget {
   String _getQtyLabel() {
     bool isWeight = line.unidadMedida == 'KILOGRAMOS' || line.unidadMedida == 'LITROS';
     if (isWeight && line.cantidadUnidades > 0) {
-      return '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} ${line.unidadMedida == 'LITROS' ? 'L' : 'kg'}';
+      return '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} ${Product.unitLabel(line.unidadMedida)}';
     }
     
-    if (line.cantidadEnvases > 0 && line.cantidadUnidades > 0 && line.unidadMedida == 'CAJAS' && line.unidadesCaja > 1) {
+    // Check if it's a dual-field product by calculating: U/F > 0 and U/F < U/C 
+    // AND it actually has envases && unidades in the line
+    bool isDualField = line.unidadesCaja > 1 && line.unidadesFraccion > 0 && line.unidadesFraccion < line.unidadesCaja;
+    
+    if (isDualField && line.cantidadEnvases > 0 && line.cantidadUnidades > 0 && line.unidadMedida == 'CAJAS') {
       return '${PedidosFormatters.number(line.cantidadEnvases)} cj (${PedidosFormatters.number(line.cantidadUnidades)} ud)';
     }
 
-    if (line.cantidadEnvases > 0) {
+    if (line.cantidadEnvases > 0 && line.unidadMedida == 'CAJAS') {
       return '${PedidosFormatters.number(line.cantidadEnvases)} cj';
     }
-    return '${PedidosFormatters.number(line.cantidadUnidades)} ud';
+    
+    // For single-field units like BANDEJAS, ESTUCHE, PIEZAS, UNIDADES
+    final label = Product.unitLabel(line.unidadMedida);
+    return '${PedidosFormatters.number(line.cantidadUnidades)} $label';
   }
 
   @override

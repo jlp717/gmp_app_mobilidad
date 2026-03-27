@@ -373,7 +373,11 @@ class PedidosProvider with ChangeNotifier {
         if (lineUnit == 'CAJAS') {
           line.cantidadEnvases = newQty;
           line.cantidadUnidades = 0;
+        } else if (lineUnit == 'KILOGRAMOS' || lineUnit == 'LITROS') {
+          line.cantidadEnvases = 0;
+          line.cantidadUnidades = newQty;
         } else {
+          // Dynamic units (ESTUCHES, BANDEJAS, PIEZAS, UNIDADES, etc)
           line.cantidadEnvases = 0;
           line.cantidadUnidades = newQty;
         }
@@ -399,6 +403,7 @@ class PedidosProvider with ChangeNotifier {
         cantidadUnidades: product.isDualFieldProduct ? cantidadUnidades : (unit == 'CAJAS' ? 0 : requestQty),
         unidadMedida: unit,
         unidadesCaja: product.quantityPerBoxForUnit(unit),
+        unidadesFraccion: product.unitsFraction,
         precioVenta: precioVenta,
         precioCosto: product.precioMinimo > 0
             ? product.precioMinimo * 0.7
@@ -529,6 +534,7 @@ class PedidosProvider with ChangeNotifier {
         cantidadUnidades: line.cantidadUnidades,
         unidadMedida: line.unidadMedida,
         unidadesCaja: line.unidadesCaja,
+        unidadesFraccion: line.unidadesFraccion,
         precioVenta: discountedPrice,
         precioCosto: line.precioCosto,
         precioTarifa: line.precioTarifa,

@@ -9,11 +9,13 @@ import '../../../../core/utils/responsive.dart';
 class UnitSelectorModal extends StatefulWidget {
   final String? initialUnit;
   final double? initialQuantity;
+  final List<String> availableUnits; // Add this parameter
 
   const UnitSelectorModal({
     Key? key,
     this.initialUnit,
     this.initialQuantity,
+    this.availableUnits = const ['CAJAS', 'PIEZAS', 'BANDEJAS', 'ESTUCHE', 'KILOGRAMOS'],
   }) : super(key: key);
 
   /// Show the modal and return { 'unit': String, 'quantity': double } or null
@@ -21,6 +23,7 @@ class UnitSelectorModal extends StatefulWidget {
     BuildContext context, {
     String? initialUnit,
     double? initialQuantity,
+    List<String> availableUnits = const ['CAJAS', 'PIEZAS', 'BANDEJAS', 'ESTUCHE', 'KILOGRAMOS'],
   }) {
     return showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -32,6 +35,7 @@ class UnitSelectorModal extends StatefulWidget {
       builder: (_) => UnitSelectorModal(
         initialUnit: initialUnit,
         initialQuantity: initialQuantity,
+        availableUnits: availableUnits,
       ),
     );
   }
@@ -44,18 +48,13 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
   late String _selectedUnit;
   final TextEditingController _qtyController = TextEditingController();
 
-  static const _units = [
-    'CAJAS',
-    'PIEZAS',
-    'BANDEJAS',
-    'ESTUCHE',
-    'KILOGRAMOS',
-  ];
+  late List<String> _units;
 
   @override
   void initState() {
     super.initState();
-    _selectedUnit = widget.initialUnit ?? 'CAJAS';
+    _units = widget.availableUnits;
+    _selectedUnit = widget.initialUnit ?? (_units.isNotEmpty ? _units.first : 'CAJAS');
     _qtyController.text =
         widget.initialQuantity?.toStringAsFixed(0) ?? '1';
   }

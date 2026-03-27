@@ -527,7 +527,37 @@ async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = '
     // Insert lines
     for (let i = 0; i < lines.length; i++) {
         const ln = lines[i];
-        const importeVenta = parseFloat(ln.importeVenta) || (parseFloat(ln.cantidad || 0) * parseFloat(ln.precio || 0));
+        
+        let cantidadEnvases = parseFloat(ln.cantidadEnvases) || 0;
+        let cantidadUnidades = parseFloat(ln.cantidadUnidades) || parseFloat(ln.cantidad) || 0;
+        let unidadesCaja = parseFloat(ln.unidadesCaja) || 1;
+        let unidadMedida = ln.unidadMedida || 'CAJAS';
+        let precio = parseFloat(ln.precio) || parseFloat(ln.precioVenta) || 0;
+        
+        // Exact price calculation based on DB unit rules:
+        let importeVenta = 0;
+        
+        // Is it weight based?
+        if (unidadMedida === 'KILOGRAMOS' || unidadMedida === 'LITROS') {
+             importeVenta = cantidadUnidades * precio;
+        } 
+        // Is it dual field (has both envases and unidades, AND U/F condition met or just has both)?
+        else if (cantidadEnvases > 0 && cantidadUnidades > 0 && unidadMedida === 'CAJAS') {
+             // In dual mode, price is always per BOX, and units are a fraction of the box price
+             let decimalFraction = cantidadUnidades / unidadesCaja;
+             importeVenta = (cantidadEnvases + decimalFraction) * precio;
+        }
+        else if (unidadMedida === 'CAJAS') {
+             importeVenta = cantidadEnvases * precio;
+        } 
+        else {
+             // Single field generic units (PIEZAS, BANDEJAS, ESTUCHES, UNIDADES)
+             importeVenta = cantidadUnidades * precio;
+        }
+        
+        // Round to exactly 2 decimals for final line sum to avoid DB floating point drift
+        importeVenta = Math.round(importeVenta * 100) / 100;
+        
         const importeCosto = parseFloat(ln.importeCosto) || (parseFloat(ln.cantidad || 0) * parseFloat(ln.precioCosto || 0));
         const importeMargen = importeVenta - importeCosto;
         const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
@@ -544,9 +574,9 @@ async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = '
         const linParams = [
             pedidoId, i + 1,
             (ln.codigoArticulo || '').trim(), (ln.descripcion || '').substring(0, 40),
-            parseFloat(ln.cantidadEnvases) || 0, parseFloat(ln.cantidad || ln.cantidadUnidades) || 0,
-            ln.unidadMedida || 'CAJAS', parseFloat(ln.unidadesCaja) || 1,
-            parseFloat(ln.precio || ln.precioVenta) || 0, parseFloat(ln.precioCosto) || 0,
+            cantidadEnvases, cantidadUnidades,
+            unidadMedida, unidadesCaja,
+            precio, parseFloat(ln.precioCosto) || 0,
             parseFloat(ln.precioTarifa) || 0, parseFloat(ln.precioTarifaCliente) || 0,
             parseFloat(ln.precioMinimo) || 0,
             importeVenta, importeCosto, importeMargen,

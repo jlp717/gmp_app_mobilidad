@@ -807,7 +807,7 @@ class _PedidosPageState extends State<PedidosPage>
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'Cantidad (${selectedUnit == 'KILOGRAMOS' ? 'kg' : selectedUnit.toLowerCase()})',
+                        'Cantidad (${Product.unitLabel(selectedUnit)})',
                         style: TextStyle(
                           color: Colors.white70,
                           fontSize: Responsive.fontSize(context, small: 11, large: 13),

@@ -58,6 +58,16 @@ class CobrosService {
           AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
         WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = ?
           AND COALESCE(CVC.IMPORTEPENDIENTE, CAC.IMPORTETOTAL) > 0
+          -- Excluir los que ya hemos cobrado en nuestra tabla de auditoría (local)
+          -- para evitar duplicados hasta que el sistema central procese
+          AND NOT EXISTS (
+            SELECT 1 FROM JAVIER.COBROS JC 
+            WHERE JC.CODIGO_CLIENTE = CAC.CODIGOCLIENTEFACTURA 
+              AND JC.REFERENCIA LIKE '%' || 
+                (CASE WHEN CAC.NUMEROFACTURA > 0 
+                      THEN TRIM(CAC.SERIEFACTURA) || '-' || CAST(CAC.NUMEROALBARAN AS VARCHAR(20))
+                      ELSE CAST(CAC.NUMEROALBARAN AS VARCHAR(20)) END) || '%'
+          )
         ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC, CAC.DIADOCUMENTO DESC
         FETCH FIRST 100 ROWS ONLY`,
         [sanitizeCode(codigoCliente)]
@@ -278,30 +288,42 @@ class CobrosService {
     referencia: string;
     importe: number;
     formaPago: string;
+    tipoVenta?: string; // CC (Contado), VC (Credito)
+    tipoModo?: string;  // NORMAL, ESPECIAL
+    tipoUsuario?: 'REPARTIDOR' | 'COMERCIAL';
+    codigoUsuario?: string;
     observaciones?: string;
   }): Promise<{ success: boolean; error?: string }> {
     try {
-      logger.info(`[COBROS] Registrando cobro para ${params.codigoCliente}: ${params.importe}€`);
+      const { 
+        codigoCliente, referencia, importe, formaPago, 
+        tipoVenta = 'CC', tipoModo = 'NORMAL', 
+        tipoUsuario = 'COMERCIAL', codigoUsuario = '',
+        observaciones = '' 
+      } = params;
 
-      // Registrar en tabla de cobros si existe
-      try {
-        await odbcPool.query(
-          `INSERT INTO JAVIER.COBROS (
-            ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO,
-            OBSERVACIONES, FECHA
-          ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-          [
-            uuidv4(),
-            sanitizeCode(params.codigoCliente),
-            params.referencia,
-            params.importe,
-            params.formaPago,
-            params.observaciones || '',
-          ]
-        );
-      } catch {
-        logger.warn('[COBROS] Tabla COBROS no existe');
-      }
+      logger.info(`[COBROS] Registrando cobro ${tipoModo}/${tipoVenta} para ${codigoCliente}: ${importe}€ (Por: ${tipoUsuario} ${codigoUsuario})`);
+
+      // Registrar en tabla de cobros
+      await odbcPool.query(
+        `INSERT INTO JAVIER.COBROS (
+          ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO,
+          TIPO_VENTA, TIPO_MODO, TIPO_USUARIO, CODIGO_USUARIO,
+          OBSERVACIONES, FECHA
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [
+          uuidv4(),
+          sanitizeCode(codigoCliente),
+          referencia,
+          importe,
+          formaPago,
+          tipoVenta,
+          tipoModo,
+          tipoUsuario,
+          codigoUsuario,
+          observaciones,
+        ]
+      );
 
       return { success: true };
     } catch (error) {

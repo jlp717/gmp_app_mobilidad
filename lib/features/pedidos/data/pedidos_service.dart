@@ -198,10 +198,42 @@ class Product {
   }
 
   /// True if this product should show dual-field entry (cajas + unidades linked).
-  /// Standard products with U/C > 1 that are NOT weight products.
+  /// Standard products with U/C > 1 that can be fractioned (U/F < U/C).
   bool get isDualFieldProduct {
     if (isWeightProduct) return false;
-    return unitsPerBox > 1;
+    return unitsPerBox > 1 && unitsFraction > 0 && unitsFraction < unitsPerBox;
+  }
+
+  /// The unit label to display under the CANTIDAD input field for single-field products.
+  /// Matches legacy logic derived from UNIDADESRETRACTIL and description text.
+  String get displayUnit {
+    if (isWeightProduct) return _normalizedUnit;
+    
+    // Explicit UM from DB (rare but takes precedence)
+    final um = unitMeasure.toUpperCase().trim();
+    if (um.isNotEmpty && um != 'KILO' && um != 'KILOGRAMOS' && um != 'KG' && um != 'KILOS' &&
+        um != 'LITRO' && um != 'LITROS' && um != 'LT' && um != 'CAJA' && um != 'CAJAS') {
+      return um;
+    }
+
+    if (unitsRetractil > 0 && unitsPerBox == 1) {
+      final n = name.toUpperCase();
+      if (n.contains('BANDEJA')) return 'BANDEJAS';
+      if (n.contains('ESTUCHE')) return 'ESTUCHES';
+      if (n.contains('PIEZA')) return 'PIEZAS';
+      return 'PIEZAS'; // Default fallback for U/R > 0 if not specified
+    }
+
+    return 'CAJAS';
+  }
+
+  /// The price to show exactly as "Neto U/R" in the UI.
+  /// If product has U/R > 0 and U/C == 1, it calculates price/U/R.
+  double get netoURPrice {
+    if (unitsRetractil > 0 && unitsPerBox == 1 && !isWeightProduct) {
+      return bestPrice / unitsRetractil;
+    }
+    return 0; // Means do not show Neto U/R
   }
 
   /// Kg per box for weight products. For KILO products UC = kg per box.
@@ -237,6 +269,12 @@ class Product {
       if (unitsPerBox > 0) return '${_fmtNum(unitsPerBox)} L';
       return '';
     }
+    
+    // For single-field box-only products
+    if (!isDualFieldProduct && unitsPerBox > 1) {
+      return '${_fmtNum(unitsPerBox)} uds';
+    }
+    
     if (norm == 'CAJAS') {
       if (unitsPerBox > 1) return '${_fmtNum(unitsPerBox)} uds';
       return '';
@@ -301,7 +339,18 @@ class Product {
     if (norm == 'LITROS') {
       return '${priceForUnit('LITROS').toStringAsFixed(decimals)} €/L';
     }
-    if (unitsPerBox > 1) {
+    
+    // Legacy display: If U/R > 0 and U/C = 1, show Neto U/R logic
+    if (netoURPrice > 0) {
+      final dUnit = displayUnit;
+      String shortLabel = 'ud';
+      if (dUnit == 'BANDEJAS') shortLabel = 'bandeja';
+      else if (dUnit == 'ESTUCHES') shortLabel = 'estuche';
+      else if (dUnit == 'PIEZAS') shortLabel = 'pieza';
+      return 'Neto U/R: ${netoURPrice.toStringAsFixed(decimals)} €/$shortLabel';
+    }
+
+    if (unitsPerBox > 1 && isDualFieldProduct) {
       return '${priceForUnit('UNIDADES').toStringAsFixed(decimals)} €/ud';
     }
     return '${bestPrice.toStringAsFixed(decimals)} €/cj';
@@ -346,7 +395,7 @@ class Product {
 
   /// Available unit types for this product.
   /// Weight products: CAJAS + KILOGRAMOS (with CANTIDAD selector)
-  /// Standard with U/C>1: CAJAS + UNIDADES (dual-field)
+  /// Standard with fraction checking: CAJAS + UNIDADES (dual-field)
   /// Simple boxes: CAJAS only
   List<String> get availableUnits {
     final norm = _normalizedUnit;
@@ -356,13 +405,15 @@ class Product {
     if (norm == 'LITROS') {
       return ['CAJAS', 'LITROS'];
     }
-    if (norm == 'CAJAS') {
-      final units = <String>['CAJAS'];
-      if (unitsPerBox > 1) units.add('UNIDADES');
-      return units;
+    
+    final dUnit = displayUnit;
+    
+    if (isDualFieldProduct) {
+      return ['CAJAS', 'UNIDADES'];
     }
-    // Other specialized units (ESTUCHES, BANDEJAS, etc.)
-    return ['CAJAS', norm];
+    
+    // For single-field non-weight items (e.g. PIEZAS, BANDEJAS, CAJAS)
+    return [dUnit];
   }
 
   /// Format a numeric value for display (remove trailing zeros)
@@ -549,6 +600,7 @@ class OrderLine {
   double importeMargen;
   double porcentajeMargen;
   double ivaRate; // e.g. 0.21, 0.10, 0.04, 0.0
+  double unidadesFraccion; // Support for dual-field unit logic
 
   OrderLine({
     this.id,
@@ -568,6 +620,7 @@ class OrderLine {
     this.importeMargen = 0,
     this.porcentajeMargen = 0,
     this.ivaRate = 0.21,
+    this.unidadesFraccion = 0,
   });
 
   factory OrderLine.fromJson(Map<String, dynamic> json) {
@@ -601,6 +654,7 @@ class OrderLine {
           _toDouble(json['porcentajeMargen'] ?? json['PORCENTAJEMARGEN']),
       ivaRate: _toDouble(json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'],
           fallback: 0.21),
+      unidadesFraccion: _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
     );
   }
 
@@ -611,6 +665,7 @@ class OrderLine {
         'cantidadUnidades': cantidadUnidades,
         'unidadMedida': unidadMedida,
         'unidadesCaja': unidadesCaja,
+        'unidadesFraccion': unidadesFraccion,
         'precioVenta': precioVenta,
         'precioCosto': precioCosto,
         'precioTarifa': precioTarifa,

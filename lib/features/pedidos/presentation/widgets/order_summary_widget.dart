@@ -533,7 +533,9 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
   void _showEditLineDialog(BuildContext context, PedidosProvider provider,
       OrderLine line, int index) {
       
-    final isDual = line.unidadMedida == 'CAJAS' && line.unidadesCaja > 1;
+    // Determines if this line was sold using the dual-field (cajas+unidades) system
+    // We check if it has both envases and unidades, OR if U/F > 0 && U/F < U/C
+    final isDual = line.unidadesCaja > 1 && line.unidadesFraccion > 0 && line.unidadesFraccion < line.unidadesCaja;
     String formatQty(double v) => v.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '').replaceAll(RegExp(r'\.$'), '').replaceAll(RegExp(r'0$'), '').replaceAll(RegExp(r'\.$'), '');
 
     final qtyController = TextEditingController(
@@ -656,7 +658,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                             const TextInputType.numberWithOptions(decimal: true),
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
-                          labelText: 'Cantidad',
+                          labelText: 'Cantidad (${Product.unitLabel(line.unidadMedida)})',
                           labelStyle: const TextStyle(color: Colors.white70),
                           filled: true,
                           fillColor: AppTheme.darkCard,

@@ -434,6 +434,13 @@ class _MainShellState extends State<MainShell> {
     ));
 
     items.add(_NavItem(
+      icon: Icons.payments_outlined,
+      selectedIcon: Icons.payments,
+      label: 'Cobros',
+      color: Colors.blueAccent,
+    ));
+
+    items.add(_NavItem(
       icon: Icons.smart_toy_outlined,
       selectedIcon: Icons.smart_toy,
       label: 'Chat IA',
@@ -1378,6 +1385,8 @@ class _MainShellState extends State<MainShell> {
         case 7:
           return KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
         case 8:
+          return CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
+        case 9:
           return const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
             subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
@@ -1414,6 +1423,8 @@ class _MainShellState extends State<MainShell> {
         );
       case 'Glacius':
         return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
+      case 'Cobros':
+        return CobrosPage(employeeCode: empCode, isJefeVentas: false);
       case 'Chat IA':
         return const ComingSoonPlaceholder(
           title: 'Nexus AI — Asistente Comercial',

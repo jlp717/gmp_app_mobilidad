@@ -36,6 +36,9 @@ import repartidorRoutes from './routes/repartidor.routes';
 // Cron Jobs
 import { iniciarJobsCobros } from './cron/transferencias.job';
 
+// Initialization
+import { initializeDatabaseSchema } from './services/init.service';
+
 // Cache
 import { queryCache } from './utils/query-cache';
 
@@ -211,6 +214,9 @@ async function startServer(): Promise<void> {
     logger.info('Inicializando conexión a base de datos...');
     await initDatabase();
     logger.info('Base de datos conectada correctamente');
+
+    // Inicializar esquema (tablas de auditoría, etc.)
+    await initializeDatabaseSchema();
 
     // Inicializar cache Redis (non-blocking, funciona sin Redis)
     queryCache.init().then(() => {

@@ -7,14 +7,17 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
-import '../../providers/cobros_provider.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/optimized_list.dart';
+import '../../../../core/widgets/modern_loading.dart';
 import '../../data/models/cobros_models.dart';
+import '../../providers/cobros_provider.dart';
 import '../widgets/albaran_card.dart';
 import '../widgets/cobros_summary_card.dart';
 import '../widgets/entrega_detail_sheet.dart';
 import '../widgets/cobros_filters.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../../../core/widgets/optimized_list.dart';
+import '../../../clients/data/clients_service.dart';
+import 'cobro_detail_screen.dart';
 
 class CobrosPage extends StatefulWidget {
   final String employeeCode;
@@ -32,7 +35,13 @@ class CobrosPage extends StatefulWidget {
 
 class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late CobrosProvider _cobrosProvider;  final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+  late CobrosProvider _cobrosProvider;
+  final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+
+  List<Map<String, dynamic>> _foundClients = [];
+  bool _isSearchingClients = false;
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -40,9 +49,40 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
     _tabController = TabController(length: 2, vsync: this);
     _cobrosProvider = CobrosProvider(
       employeeCode: widget.employeeCode,
-      isRepartidor: !widget.isJefeVentas,
+      isRepartidor: false, // For this module's use case
     );
     _cobrosProvider.cargarAlbaranesPendientes();
+    _loadInitialClients();
+  }
+
+  void _loadInitialClients() async {
+    setState(() => _isSearchingClients = true);
+    try {
+      final results = await ClientsService.getClientsList(
+        vendedorCodes: widget.employeeCode,
+      );
+      setState(() => _foundClients = results);
+    } catch (_) {}
+    setState(() => _isSearchingClients = false);
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+      if (query.isEmpty) {
+        _loadInitialClients();
+        return;
+      }
+      setState(() => _isSearchingClients = true);
+      try {
+        final results = await ClientsService.getClientsList(
+          vendedorCodes: widget.employeeCode,
+          search: query,
+        );
+        setState(() => _foundClients = results);
+      } catch (_) {}
+      setState(() => _isSearchingClients = false);
+    });
   }
 
   @override
@@ -408,70 +448,103 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
   }
 
   Widget _buildCobrosTab() {
-    return Consumer<CobrosProvider>(
-      builder: (context, provider, _) {
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonPurple.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.payments,
-                  size: 64,
-                  color: AppTheme.neonPurple,
-                ),
+    return Column(
+      children: [
+        // Buscador superior
+        Container(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            decoration: InputDecoration(
+              hintText: 'Buscar cliente para cobrar...',
+              prefixIcon: const Icon(Icons.search, color: AppTheme.neonBlue),
+              filled: true,
+              fillColor: AppTheme.surfaceColor,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Gestión de Cobros',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Selecciona un cliente para ver sus cobros pendientes',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.textSecondary.withOpacity(0.7),
-                ),
-              ),
-              const SizedBox(height: 32),
-              // Buscador de cliente
-              Container(
-                width: Responsive.clampWidth(context, 400),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: TextField(
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar cliente por código o nombre...',
-                    hintStyle: TextStyle(color: AppTheme.textSecondary),
-                    prefixIcon: Icon(Icons.search, color: AppTheme.textSecondary),
-                    border: InputBorder.none,
-                  ),
-                  style: const TextStyle(color: AppTheme.textPrimary),
-                  onSubmitted: (value) {
-                    if (value.isNotEmpty) {
-                      provider.cargarCobrosPendientes(value);
-                    }
+              suffixIcon: _isSearchingClients 
+                  ? const SizedBox(width: 20, height: 20, child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)))
+                  : null,
+            ),
+          ),
+        ),
+        
+        Expanded(
+          child: _foundClients.isEmpty && !_isSearchingClients
+              ? _buildNoClientsState()
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _foundClients.length,
+                  itemBuilder: (context, index) {
+                    final client = _foundClients[index];
+                    return _buildClientCobroCard(client);
                   },
                 ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNoClientsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.person_search, size: 64, color: AppTheme.textSecondary.withOpacity(0.2)),
+          const SizedBox(height: 16),
+          const Text('No se han encontrado clientes', style: TextStyle(color: AppTheme.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClientCobroCard(Map<String, dynamic> client) {
+    final name = client['name'] ?? 'Cliente';
+    final code = client['code'] ?? '';
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: AppTheme.surfaceColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CobroDetailScreen(
+                codigoCliente: code,
+                nombreCliente: name,
               ),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
+                child: Text(name[0].toUpperCase(), style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text('Código: $code', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, size: 16, color: AppTheme.textSecondary),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 

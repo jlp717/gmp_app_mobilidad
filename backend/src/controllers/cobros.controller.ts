@@ -44,7 +44,10 @@ export const obtenerResumenCobros = asyncHandler(async (req: Request, res: Respo
  */
 export const registrarCobro = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const { codigoCliente } = req.params;
-  const { referencia, importe, formaPago, observaciones } = req.body;
+  const { 
+    referencia, importe, formaPago, observaciones,
+    tipoVenta, tipoModo, tipoUsuario, codigoUsuario
+  } = req.body;
 
   const resultado = await cobrosService.registrarCobro({
     codigoCliente,
@@ -52,6 +55,10 @@ export const registrarCobro = asyncHandler(async (req: Request, res: Response): 
     importe,
     formaPago,
     observaciones,
+    tipoVenta,
+    tipoModo,
+    tipoUsuario,
+    codigoUsuario,
   });
 
   if (!resultado.success) {
