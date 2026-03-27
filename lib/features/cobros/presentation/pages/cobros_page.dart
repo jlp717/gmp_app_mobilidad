@@ -1,6 +1,4 @@
-/// COBROS PAGE - PÁGINA PRINCIPAL
-/// Pestaña de cobros y entregas profesional
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -87,7 +85,9 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    _searchController.dispose();
     _tabController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
