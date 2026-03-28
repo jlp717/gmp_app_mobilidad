@@ -33,7 +33,8 @@ const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
-  userActionsRoutes, facturasRoutes, warehouseRoutes, productsRoutes, kpiModule;
+  userActionsRoutes, facturasRoutes, warehouseRoutes, productsRoutes, 
+  pedidosRoutes, cobrosRoutes, kpiModule;
 
 if (USE_TS_ROUTES) {
   // ==================== COMPILED TYPESCRIPT ROUTES ====================
@@ -93,6 +94,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   warehouseRoutes = require('./routes/warehouse');
   productsRoutes = require('./routes/products');
   pedidosRoutes = require('./routes/pedidos');
+  cobrosRoutes = require('./routes/cobros');
   // Módulo KPI Glacius (DB2/ODBC + Redis)
   try {
     kpiModule = require('./kpi');
