@@ -223,12 +223,11 @@ class _CobrosPageState extends State<CobrosPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () {
-          final prov = context.read<CobrosProvider>();
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => ChangeNotifierProvider.value(
-                value: prov,
+                value: _cobrosProvider,
                 child: CobroDetailScreen(
                   codigoCliente: code,
                   nombreCliente: name,
