@@ -320,21 +320,43 @@ class PedidosProvider with ChangeNotifier {
     final unit = unidadMedida.trim().isEmpty
         ? 'CAJAS'
         : unidadMedida.trim().toUpperCase();
-    final requestQty = unit == 'CAJAS' ? cantidadEnvases : cantidadUnidades;
-    final availableQty =
-        unit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(unit);
+        
+    double requestQty = unit == 'CAJAS' ? cantidadEnvases : cantidadUnidades;
+    
+    final existingIdx = _lines.indexWhere((l) => l.codigoArticulo == product.code);
+    final currentQtyInCart = existingIdx >= 0
+        ? (unit == 'CAJAS' ? _lines[existingIdx].cantidadEnvases : _lines[existingIdx].cantidadUnidades)
+        : 0.0;
+        
+    final maxQty = unit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(unit);
+    final remainingAvailable = maxQty - currentQtyInCart;
 
-    if (requestQty > availableQty) {
+    if (remainingAvailable <= 0 && requestQty > 0) {
       final msg = unit == 'CAJAS'
           ? 'Stock insuficiente: Disponible ${product.stockEnvases.toInt()} cajas.'
-          : 'Stock insuficiente: Disponible ${availableQty.toStringAsFixed(2)} ${Product.unitLabel(unit)}.';
+          : 'Stock insuficiente: Disponible ${maxQty.toStringAsFixed(2)} ${Product.unitLabel(unit)}.';
       _error = msg;
       notifyListeners();
       return msg;
     }
 
-    final existingIdx =
-        _lines.indexWhere((l) => l.codigoArticulo == product.code);
+    bool isPartial = false;
+    double missingQty = 0;
+
+    if (requestQty > remainingAvailable) {
+      isPartial = true;
+      missingQty = requestQty - remainingAvailable;
+      requestQty = remainingAvailable;
+      
+      if (unit == 'CAJAS') {
+        cantidadEnvases = requestQty;
+        if (!product.isDualFieldProduct) cantidadUnidades = 0;
+      } else {
+        cantidadUnidades = requestQty;
+        if (!product.isDualFieldProduct) cantidadEnvases = 0;
+      }
+    }
+
     if (existingIdx >= 0) {
       final line = _lines[existingIdx];
       final lineUnit = line.unidadMedida.trim().toUpperCase();
@@ -353,18 +375,6 @@ class PedidosProvider with ChangeNotifier {
       final currentQty =
           lineUnit == 'CAJAS' ? line.cantidadEnvases : line.cantidadUnidades;
       final newQty = currentQty + requestQty;
-      final maxQty = lineUnit == 'CAJAS'
-          ? product.stockEnvases
-          : product.stockForUnit(lineUnit);
-
-      if (newQty > maxQty) {
-        final msg = lineUnit == 'CAJAS'
-            ? 'Stock insuficiente: Disponible ${product.stockEnvases.toInt()} cajas, ya tienes ${line.cantidadEnvases.toInt()} en el carrito.'
-            : 'Stock insuficiente: Disponible ${maxQty.toStringAsFixed(2)} ${Product.unitLabel(lineUnit)}.';
-        _error = msg;
-        notifyListeners();
-        return msg;
-      }
 
       if (product.isDualFieldProduct) {
         line.cantidadEnvases += cantidadEnvases;
@@ -421,7 +431,7 @@ class PedidosProvider with ChangeNotifier {
 
     _error = null;
     notifyListeners();
-    return null;
+    return isPartial ? 'PARCIAL:$missingQty|${product.name}' : null;
   }
 
   String? updateLine(int index,

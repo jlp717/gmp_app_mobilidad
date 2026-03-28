@@ -1,19 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../../../core/widgets/optimized_list.dart';
-import '../../../../core/widgets/modern_loading.dart';
-import '../../data/models/cobros_models.dart';
+import '../../../../core/widgets/global_vendor_selector.dart';
+import '../../../../core/providers/filter_provider.dart';
 import '../../providers/cobros_provider.dart';
-import '../widgets/albaran_card.dart';
-import '../widgets/cobros_summary_card.dart';
-import '../widgets/entrega_detail_sheet.dart';
-import '../widgets/cobros_filters.dart';
 import '../../../clients/data/clients_service.dart';
 import 'cobro_detail_screen.dart';
 
@@ -31,10 +24,8 @@ class CobrosPage extends StatefulWidget {
   State<CobrosPage> createState() => _CobrosPageState();
 }
 
-class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _CobrosPageState extends State<CobrosPage> {
   late CobrosProvider _cobrosProvider;
-  final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
 
   List<Map<String, dynamic>> _foundClients = [];
   bool _isSearchingClients = false;
@@ -44,49 +35,47 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _cobrosProvider = CobrosProvider(
       employeeCode: widget.employeeCode,
-      isRepartidor: false, // For this module's use case
+      isRepartidor: false,
     );
-    _cobrosProvider.cargarAlbaranesPendientes();
-    _loadInitialClients();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadClients();
+    });
   }
 
-  void _loadInitialClients() async {
+  void _loadClients([String query = '']) async {
+    if (!mounted) return;
     setState(() => _isSearchingClients = true);
     try {
+      final currentFilterVendor = context.read<FilterProvider>().selectedVendor;
+      final queryCode = currentFilterVendor ?? widget.employeeCode;
+      
       final results = await ClientsService.getClientsList(
-        vendedorCodes: widget.employeeCode,
+        vendedorCodes: queryCode,
+        search: query.isEmpty ? null : query,
       );
-      setState(() => _foundClients = results);
+      if (mounted) {
+        setState(() => _foundClients = results);
+      }
     } catch (_) {}
-    setState(() => _isSearchingClients = false);
+    if (mounted) setState(() => _isSearchingClients = false);
   }
 
   void _onSearchChanged(String query) {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
-      if (query.isEmpty) {
-        _loadInitialClients();
-        return;
-      }
-      setState(() => _isSearchingClients = true);
-      try {
-        final results = await ClientsService.getClientsList(
-          vendedorCodes: widget.employeeCode,
-          search: query,
-        );
-        setState(() => _foundClients = results);
-      } catch (_) {}
-      setState(() => _isSearchingClients = false);
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _loadClients(query);
     });
+  }
+
+  void _onVendorChanged() {
+    _loadClients(_searchController.text);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _tabController.dispose();
     _debounceTimer?.cancel();
     super.dispose();
   }
@@ -99,21 +88,22 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
         backgroundColor: AppTheme.darkBase,
         body: Column(
           children: [
-            // Header con gradiente premium
             _buildHeader(),
-            
-            // Tabs
-            _buildTabBar(),
-            
-            // Contenido
+            GlobalVendorSelector(
+              isJefeVentas: widget.isJefeVentas,
+              onChanged: _onVendorChanged,
+            ),
+            _buildSearchArea(),
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildEntregasTab(),
-                  _buildCobrosTab(),
-                ],
-              ),
+              child: _foundClients.isEmpty && !_isSearchingClients
+                  ? _buildNoClientsState()
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _foundClients.length,
+                      itemBuilder: (context, index) {
+                        return _buildClientCobroCard(_foundClients[index]);
+                      },
+                    ),
             ),
           ],
         ),
@@ -122,369 +112,91 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
   }
 
   Widget _buildHeader() {
-    return Consumer<CobrosProvider>(
-      builder: (context, provider, _) {
-        return Container(
-          // Responsive header padding
-          padding: EdgeInsets.fromLTRB(
-            Responsive.padding(context, small: 12, large: 24),
-            Responsive.padding(context, small: 12, large: 20),
-            Responsive.padding(context, small: 12, large: 24),
-            Responsive.padding(context, small: 10, large: 16),
-          ),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppTheme.surfaceColor,
-                AppTheme.surfaceColor.withOpacity(0.8),
-              ],
-            ),
-            border: Border(
-              bottom: BorderSide(
-                color: AppTheme.neonBlue.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  // Título con icono
-                  Container(
-                    padding: EdgeInsets.all(Responsive.value(context, phone: 8, desktop: 12)),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppTheme.neonBlue.withOpacity(0.2),
-                          AppTheme.neonPurple.withOpacity(0.2),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.neonBlue.withOpacity(0.2),
-                          blurRadius: 12,
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.receipt_long,
-                      color: AppTheme.neonBlue,
-                      size: Responsive.iconSize(context, phone: 22, desktop: 28),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Cobros & Entregas',
-                          style: TextStyle(
-                            fontSize: Responsive.fontSize(context, small: 18, large: 24),
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          DateFormat('EEEE, d MMMM yyyy', 'es').format(DateTime.now()),
-                          style: TextStyle(
-                            fontSize: Responsive.fontSize(context, small: 11, large: 13),
-                            color: AppTheme.textSecondary.withOpacity(0.8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Responsive: stats wrap on small screens
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildQuickStat(
-                      icon: Icons.local_shipping,
-                      label: 'Pendientes',
-                      value: '${provider.totalEntregasPendientes}',
-                      color: Colors.orange,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildQuickStat(
-                      icon: Icons.check_circle,
-                      label: 'Completadas',
-                      value: '${provider.totalEntregasCompletadas}',
-                      color: Colors.green,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildQuickStat(
-                      icon: Icons.warning_amber,
-                      label: 'CTR',
-                      value: '${provider.totalCTRPendientes}',
-                      color: Colors.red,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildQuickStat(
-                      icon: Icons.euro,
-                      label: 'Total Pendiente',
-                      value: _currencyFormat.format(provider.totalImportePendiente),
-                      color: AppTheme.neonBlue,
-                      isLarge: true,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildQuickStat({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-    bool isLarge = false,
-  }) {
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: isLarge ? 20 : 16,
-        vertical: 12,
+      padding: EdgeInsets.fromLTRB(
+        Responsive.padding(context, small: 12, large: 24),
+        Responsive.padding(context, small: 12, large: 20),
+        Responsive.padding(context, small: 12, large: 24),
+        Responsive.padding(context, small: 10, large: 16),
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: color.withOpacity(0.3),
-          width: 1,
+        color: AppTheme.surfaceColor,
+        border: Border(
+          bottom: BorderSide(
+            color: AppTheme.neonBlue.withOpacity(0.2),
+            width: 1,
+          ),
         ),
       ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: isLarge ? 24 : 20),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: color.withOpacity(0.8),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: isLarge ? 18 : 16,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabBar() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.05),
-        ),
-      ),
-      child: TabBar(
-        controller: _tabController,
-        indicator: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppTheme.neonBlue, AppTheme.neonPurple],
-          ),
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.neonBlue.withOpacity(0.3),
-              blurRadius: 8,
-            ),
-          ],
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        labelColor: Colors.white,
-        unselectedLabelColor: AppTheme.textSecondary,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-        dividerHeight: 0,
-        tabs: const [
-          Tab(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.local_shipping, size: 20),
-                SizedBox(width: 8),
-                Text('Entregas'),
-              ],
-            ),
-          ),
-          Tab(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.payments, size: 20),
-                SizedBox(width: 8),
-                Text('Cobros'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEntregasTab() {
-    return Consumer<CobrosProvider>(
-      builder: (context, provider, _) {
-        if (provider.isLoading) {
-          return const SkeletonList(itemCount: 5, itemHeight: 100);
-        }
-
-        if (provider.error != null) {
-          return _buildErrorState(provider.error!);
-        }
-
-        final albaranes = provider.albaranesFiltrados;
-
-        // Responsive: side-by-side on tablets, stacked on phones
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 700;
-
-            final filtersWidget = Column(
-              children: [
-                CobrosFilters(
-                  onEstadoChanged: provider.setFiltroEstado,
-                  onClienteChanged: provider.setFiltroCliente,
-                  estadoActual: provider.filtroEstado,
-                ),
-                const SizedBox(height: 16),
-                CobrosSummaryCard(
-                  totalPendientes: provider.totalEntregasPendientes,
-                  totalCompletadas: provider.totalEntregasCompletadas,
-                  totalCTR: provider.totalCTRPendientes,
-                  importeTotal: provider.totalImportePendiente,
-                ),
-              ],
-            );
-
-            final listWidget = albaranes.isEmpty
-                ? _buildEmptyState()
-                : OptimizedListView(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: albaranes.length,
-                    itemBuilder: (context, index) {
-                      final albaran = albaranes[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: AlbaranCard(
-                          albaran: albaran,
-                          onTap: () => _showEntregaDetail(albaran),
-                          onQuickComplete: () => _completarEntrega(albaran),
-                        ),
-                      );
-                    },
-                  );
-
-            if (isWide) {
-              // Tablet: side-by-side layout (original)
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: Responsive.value(context, phone: 220, desktop: 280),
-                    margin: const EdgeInsets.all(16),
-                    child: filtersWidget,
-                  ),
-                  Expanded(child: listWidget),
+          Container(
+            padding: EdgeInsets.all(Responsive.value(context, phone: 8, desktop: 12)),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.neonBlue.withOpacity(0.2),
+                  AppTheme.neonPurple.withOpacity(0.2),
                 ],
-              );
-            }
-
-            // Phone: filters collapsible at top, list below
-            return Column(
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.payments,
+              color: AppTheme.neonBlue,
+              size: Responsive.iconSize(context, phone: 22, desktop: 28),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Collapsible filters
-                ExpansionTile(
-                  title: const Text(
-                    'Filtros y Resumen',
-                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                Text(
+                  'Cobros Pendientes',
+                  style: TextStyle(
+                    fontSize: Responsive.fontSize(context, small: 18, large: 24),
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
                   ),
-                  iconColor: AppTheme.neonBlue,
-                  collapsedIconColor: AppTheme.textSecondary,
-                  initiallyExpanded: false,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: filtersWidget,
-                    ),
-                  ],
                 ),
-                Expanded(child: listWidget),
+                Text(
+                  'Selecciona un cliente para comenzar',
+                  style: TextStyle(
+                    fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                    color: AppTheme.textSecondary.withOpacity(0.8),
+                  ),
+                ),
               ],
-            );
-          },
-        );
-      },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildCobrosTab() {
-    return Column(
-      children: [
-        // Buscador superior
-        Container(
-          padding: const EdgeInsets.all(16),
-          child: TextField(
-            controller: _searchController,
-            onChanged: _onSearchChanged,
-            decoration: InputDecoration(
-              hintText: 'Buscar cliente para cobrar...',
-              prefixIcon: const Icon(Icons.search, color: AppTheme.neonBlue),
-              filled: true,
-              fillColor: AppTheme.surfaceColor,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              suffixIcon: _isSearchingClients 
-                  ? const SizedBox(width: 20, height: 20, child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)))
-                  : null,
-            ),
+  Widget _buildSearchArea() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: 'Buscar cliente para cobrar...',
+          hintStyle: const TextStyle(color: AppTheme.textSecondary),
+          prefixIcon: const Icon(Icons.search, color: AppTheme.neonBlue),
+          filled: true,
+          fillColor: AppTheme.surfaceColor,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
           ),
+          suffixIcon: _isSearchingClients 
+              ? const SizedBox(width: 48, child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
+              : null,
         ),
-        
-        Expanded(
-          child: _foundClients.isEmpty && !_isSearchingClients
-              ? _buildNoClientsState()
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _foundClients.length,
-                  itemBuilder: (context, index) {
-                    final client = _foundClients[index];
-                    return _buildClientCobroCard(client);
-                  },
-                ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -528,7 +240,7 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
             children: [
               CircleAvatar(
                 backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
-                child: Text(name[0].toUpperCase(), style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
+                child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -546,106 +258,5 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
         ),
       ),
     );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.check_circle_outline,
-              size: 64,
-              color: Colors.green,
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            '¡Todo entregado!',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'No hay entregas pendientes para hoy',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppTheme.textSecondary.withOpacity(0.7),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState(String error) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, size: 64, color: AppTheme.error),
-          const SizedBox(height: 16),
-          Text(
-            error,
-            style: const TextStyle(color: AppTheme.textSecondary),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () => _cobrosProvider.cargarAlbaranesPendientes(),
-            icon: const Icon(Icons.refresh),
-            label: const Text('Reintentar'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEntregaDetail(Albaran albaran) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => EntregaDetailSheet(
-        albaran: albaran,
-        onComplete: () {
-          Navigator.pop(context);
-          _completarEntrega(albaran);
-        },
-      ),
-    );
-  }
-
-  Future<void> _completarEntrega(Albaran albaran) async {
-    final success = await _cobrosProvider.completarEntrega(albaran.id);
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              Text('Entrega ${albaran.numeroAlbaran} completada'),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    }
   }
 }

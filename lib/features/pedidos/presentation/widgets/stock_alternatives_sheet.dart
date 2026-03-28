@@ -16,6 +16,7 @@ Future<void> showStockAlternativesSheet({
   required BuildContext context,
   required Product outOfStockProduct,
   required PedidosProvider provider,
+  double? remainingQty,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -24,6 +25,7 @@ Future<void> showStockAlternativesSheet({
     builder: (ctx) => _StockAlternativesSheet(
       product: outOfStockProduct,
       provider: provider,
+      remainingQty: remainingQty,
     ),
   );
 }
@@ -31,10 +33,12 @@ Future<void> showStockAlternativesSheet({
 class _StockAlternativesSheet extends StatefulWidget {
   final Product product;
   final PedidosProvider provider;
+  final double? remainingQty;
 
   const _StockAlternativesSheet({
     required this.product,
     required this.provider,
+    this.remainingQty,
   });
 
   @override
@@ -184,9 +188,11 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   widget.product.hasStock ? 'Stock Insuficiente' : 'Sin Stock Disponible',
                   style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
                 ),
-                const Text(
-                  'Te sugerimos productos similares',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                Text(
+                  widget.remainingQty != null 
+                    ? 'Por favor, añade ${widget.remainingQty!.toStringAsFixed(widget.remainingQty!.truncateToDouble() == widget.remainingQty! ? 0 : 2)} más de estas alternativas:'
+                    : 'Te sugerimos productos similares:',
+                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ],
             ),
@@ -415,13 +421,15 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.add_shopping_cart, color: AppTheme.neonGreen, size: 16),
-                    SizedBox(width: 6),
-                    Text('Añadir',
-                        style: TextStyle(
+                    const Icon(Icons.add_shopping_cart, color: AppTheme.neonGreen, size: 16),
+                    const SizedBox(width: 6),
+                    Text(widget.remainingQty != null 
+                        ? 'Añadir ${widget.remainingQty!.toStringAsFixed(widget.remainingQty!.truncateToDouble() == widget.remainingQty! ? 0 : 2)}' 
+                        : 'Añadir',
+                        style: const TextStyle(
                             color: AppTheme.neonGreen,
                             fontSize: 12,
                             fontWeight: FontWeight.w600)),
@@ -448,9 +456,11 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
       precioTarifa1: (alt['precio'] as num?)?.toDouble() ?? 0,
     );
 
+    final qtyToAdd = widget.remainingQty ?? 1.0;
+
     final error = widget.provider.addLine(
       altProduct,
-      1, // 1 caja por defecto
+      qtyToAdd, // Add remaining or 1 caja por defecto
       0,
       'CAJAS',
       altProduct.bestPrice,

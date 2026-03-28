@@ -1032,7 +1032,25 @@ class _PedidosPageState extends State<PedidosPage>
                                         price,
                                       );
                                       if (errorFromAdd != null) {
-                                        if (errorFromAdd.contains('Stock insuficiente')) {
+                                        if (errorFromAdd.startsWith('PARCIAL:')) {
+                                          final parts = errorFromAdd.substring(8).split('|');
+                                          final missingQty = double.tryParse(parts[0]) ?? 0.0;
+                                          final pName = parts.length > 1 ? parts[1] : '';
+                                          Navigator.pop(ctx);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Se ha añadido el stock disponible. Faltan ${missingQty.toStringAsFixed(missingQty.truncateToDouble() == missingQty ? 0 : 2)} de $pName', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                              backgroundColor: AppTheme.warning,
+                                              duration: const Duration(seconds: 4),
+                                            ),
+                                          );
+                                          showStockAlternativesSheet(
+                                            context: context,
+                                            outOfStockProduct: product,
+                                            provider: provider,
+                                            remainingQty: missingQty,
+                                          );
+                                        } else if (errorFromAdd.contains('Stock insuficiente')) {
                                           Navigator.pop(ctx);
                                           showStockAlternativesSheet(
                                             context: context,
@@ -1078,8 +1096,25 @@ class _PedidosPageState extends State<PedidosPage>
                                     envases, unidades, selectedUnit, price);
 
                                 if (errorFromAdd != null) {
-                                  // If stock error, offer alternatives
-                                  if (errorFromAdd.contains('Stock insuficiente')) {
+                                  if (errorFromAdd.startsWith('PARCIAL:')) {
+                                    final parts = errorFromAdd.substring(8).split('|');
+                                    final missingQty = double.tryParse(parts[0]) ?? 0.0;
+                                    final pName = parts.length > 1 ? parts[1] : '';
+                                    Navigator.pop(ctx);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Se ha añadido el stock disponible. Faltan ${missingQty.toStringAsFixed(missingQty.truncateToDouble() == missingQty ? 0 : 2)} de $pName', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                        backgroundColor: AppTheme.warning,
+                                        duration: const Duration(seconds: 4),
+                                      ),
+                                    );
+                                    showStockAlternativesSheet(
+                                      context: context,
+                                      outOfStockProduct: product,
+                                      provider: provider,
+                                      remainingQty: missingQty,
+                                    );
+                                  } else if (errorFromAdd.contains('Stock insuficiente')) {
                                     Navigator.pop(ctx);
                                     showStockAlternativesSheet(
                                       context: context,
