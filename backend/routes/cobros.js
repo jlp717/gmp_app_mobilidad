@@ -67,7 +67,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
           AND CVC.EJERCICIODOCUMENTO = CAC.EJERCICIOALBARAN
           AND CVC.SERIEDOCUMENTO = CAC.SERIEFACTURA
           AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
-        WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = ?
+        WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${codigoCliente}'
           AND COALESCE(CVC.IMPORTEPENDIENTE, CAC.IMPORTETOTAL) > 0
           -- Excluir los que ya hemos cobrado localmente
           AND NOT EXISTS (
@@ -81,7 +81,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC, CAC.DIADOCUMENTO DESC
         FETCH FIRST 100 ROWS ONLY`;
 
-        const resultado = await query(sql, [codigoCliente]);
+        const resultado = await query(sql, []);
 
         const ahora = new Date();
         const mesActual = ahora.getMonth() + 1;
