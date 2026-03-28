@@ -1032,21 +1032,30 @@ class _PedidosPageState extends State<PedidosPage>
                                         price,
                                       );
                                       if (errorFromAdd != null) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              errorFromAdd,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
+                                        if (errorFromAdd.contains('Stock insuficiente')) {
+                                          Navigator.pop(ctx);
+                                          showStockAlternativesSheet(
+                                            context: context,
+                                            outOfStockProduct: product,
+                                            provider: provider,
+                                          );
+                                        } else {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                errorFromAdd,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
+                                              backgroundColor: AppTheme.error,
+                                              duration:
+                                                  const Duration(seconds: 3),
                                             ),
-                                            backgroundColor: AppTheme.error,
-                                            duration:
-                                                const Duration(seconds: 3),
-                                          ),
-                                        );
+                                          );
+                                        }
                                         return;
                                       }
                                       Navigator.pop(ctx);
@@ -1070,7 +1079,7 @@ class _PedidosPageState extends State<PedidosPage>
 
                                 if (errorFromAdd != null) {
                                   // If stock error, offer alternatives
-                                  if (errorFromAdd.contains('Stock insuficiente') && !product.hasStock) {
+                                  if (errorFromAdd.contains('Stock insuficiente')) {
                                     Navigator.pop(ctx);
                                     showStockAlternativesSheet(
                                       context: context,

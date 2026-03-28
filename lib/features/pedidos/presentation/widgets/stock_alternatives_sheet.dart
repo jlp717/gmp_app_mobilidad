@@ -176,15 +176,15 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
             child: const Icon(Icons.inventory_2_outlined, color: AppTheme.error, size: 24),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Sin Stock Disponible',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+                  widget.product.hasStock ? 'Stock Insuficiente' : 'Sin Stock Disponible',
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
                 ),
-                Text(
+                const Text(
                   'Te sugerimos productos similares',
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                 ),
@@ -253,13 +253,13 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
               color: AppTheme.error.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.block, color: AppTheme.error, size: 12),
-                SizedBox(width: 4),
-                Text('SIN STOCK',
-                    style: TextStyle(
+                const Icon(Icons.block, color: AppTheme.error, size: 12),
+                const SizedBox(width: 4),
+                Text(widget.product.hasStock ? 'INSUFICIENTE' : 'SIN STOCK',
+                    style: const TextStyle(
                         color: AppTheme.error,
                         fontSize: 10,
                         fontWeight: FontWeight.w700,

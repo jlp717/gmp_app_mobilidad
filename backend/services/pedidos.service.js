@@ -1074,16 +1074,13 @@ async function confirmOrder(orderId, saleType, options = {}) {
         throw new Error(`No se pudo completar la reserva de stock. El pedido no ha sido confirmado. Error: ${resErr.message}`);
     }
 
-    // P4-A: Invalidate stock cache for reserved products
-    for (const line of lines) {
-        const code = (line.CODIGOARTICULO || '').trim();
-        if (!code) continue;
-        try {
-            const cacheKey = `pedidos:stock:${code}:1`;
-            if (redisCache && typeof redisCache.del === 'function') {
-                await redisCache.del(cacheKey);
-            }
-        } catch (e) { /* silent */ }
+    // P4-A: Invalidate stock and product cache to ensure real-time updates for all sales reps
+    try {
+        if (redisCache && typeof redisCache.invalidatePattern === 'function') {
+            await redisCache.invalidatePattern('pedidos:*');
+        }
+    } catch (e) {
+        logger.warn(`[PEDIDOS] Failed to invalidate cache: ${e.message}`);
     }
 
     const order = await getOrderDetail(id);
@@ -1136,14 +1133,13 @@ async function cancelOrder(orderId, options = {}) {
         logger.warn(`[PEDIDOS] Stock reservation release error: ${e.message}`);
     }
 
-    // P4-A: Invalidate stock cache for released products
-    for (const code of releasedCodes) {
-        try {
-            const cacheKey = `pedidos:stock:${code}:1`;
-            if (redisCache && typeof redisCache.del === 'function') {
-                await redisCache.del(cacheKey);
-            }
-        } catch (e) { /* silent */ }
+    // P4-A: Invalidate stock and product cache for released products
+    try {
+        if (redisCache && typeof redisCache.invalidatePattern === 'function') {
+            await redisCache.invalidatePattern('pedidos:*');
+        }
+    } catch (e) {
+        logger.warn(`[PEDIDOS] Failed to invalidate cache: ${e.message}`);
     }
 
     // AUD: Audit log for cancellation
