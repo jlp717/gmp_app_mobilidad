@@ -24,6 +24,28 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
         logger.info(`[COBROS] Obteniendo pendientes para cliente: ${codigoCliente}`);
 
+        // Ensure table exists before querying it
+        try {
+            await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
+        } catch(e) {
+            await query(`
+                CREATE TABLE JAVIER.COBROS (
+                    ID VARCHAR(64) PRIMARY KEY,
+                    CODIGO_CLIENTE VARCHAR(20),
+                    REFERENCIA VARCHAR(100),
+                    IMPORTE DECIMAL(10,2),
+                    FORMA_PAGO VARCHAR(50),
+                    TIPO_VENTA VARCHAR(20),
+                    TIPO_MODO VARCHAR(20),
+                    TIPO_USUARIO VARCHAR(20),
+                    CODIGO_USUARIO VARCHAR(20),
+                    OBSERVACIONES VARCHAR(500),
+                    FECHA TIMESTAMP DEFAULT CURRENT TIMESTAMP
+                )
+            `);
+            logger.info('[COBROS] Tabla JAVIER.COBROS creada correctamente en el GET');
+        }
+
         const sql = `
         SELECT
           CAC.SUBEMPRESAALBARAN,
