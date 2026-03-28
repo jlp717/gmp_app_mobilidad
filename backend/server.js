@@ -191,6 +191,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/warehouse', warehouseRoutes);
   app.use('/api/products', productsRoutes);
   app.use('/api/pedidos', pedidosRoutes);
+  app.use('/api/cobros', cobrosRoutes);
   // KPI Glacius module (DB2/ODBC-backed alerts)
   if (kpiModule) {
     app.use('/api/kpi', kpiModule.kpiRoutes);
