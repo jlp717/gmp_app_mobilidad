@@ -224,15 +224,17 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
                   color: const Color(0xFFE5E5E5), // Gray background matching the photo
                   child: provider.isLoading 
                     ? const Center(child: CircularProgressIndicator())
-                    : pendientes.isEmpty
-                        ? const Center(child: Text('No hay documentos pendientes', style: TextStyle(color: Colors.black54)))
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(8),
-                            itemCount: pendientes.length,
-                            itemBuilder: (context, index) {
-                              return _buildCobroItemCard(pendientes[index]);
-                            },
-                          ),
+                    : provider.error != null
+                        ? Center(child: Text(provider.error!, style: const TextStyle(color: Colors.red)))
+                        : pendientes.isEmpty
+                            ? const Center(child: Text('No hay documentos pendientes', style: TextStyle(color: Colors.black54)))
+                            : ListView.builder(
+                                padding: const EdgeInsets.all(8),
+                                itemCount: pendientes.length,
+                                itemBuilder: (context, index) {
+                                  return _buildCobroItemCard(pendientes[index]);
+                                },
+                              ),
                 ),
               ),
 
