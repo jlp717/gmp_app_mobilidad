@@ -89,7 +89,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
 
         const format2 = (n) => String(n).padStart(2, '0');
         
-        const cobros = Math.floor(resultado.length > 0 ? resultado : []).map(row => {
+        const cobros = (resultado && resultado.length > 0 ? resultado : []).map(row => {
             const mes = Number(row.MESDOCUMENTO);
             const ano = Number(row.ANODOCUMENTO);
             const esFactura = Number(row.NUMEROFACTURA) > 0;
