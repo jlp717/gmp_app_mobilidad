@@ -22,6 +22,7 @@ import '../../../../core/widgets/whatsapp_form_modal.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
+import '../../../../core/widgets/smart_product_image.dart';
 
 /// Validate Spanish DNI/NIE format with check letter
 bool _isValidDniNie(String value) {
@@ -1383,30 +1384,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           width: 48,
           height: 48,
           color: AppTheme.darkBase,
-          child: Image.network(
-            url,
+          child: SmartProductImage(
+            imageUrl: url,
+            productCode: linea.codigoArticulo,
+            productName: linea.descripcion,
             width: 48,
             height: 48,
             fit: BoxFit.cover,
             headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
-            loadingBuilder: (ctx, child, progress) {
-              if (progress == null) return child;
-              return const Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppTheme.neonBlue,
-                  ),
-                ),
-              );
-            },
-            errorBuilder: (ctx, err, stack) => const Icon(
-              Icons.image_not_supported_outlined,
-              color: Colors.white24,
-              size: 24,
-            ),
+            showCodeOnFallback: false,
           ),
         ),
       ),
@@ -1482,39 +1468,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 5.0,
-                child: Image.network(
-                  imageUrl,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: '',
+                  productName: name,
                   fit: BoxFit.contain,
                   headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
-                  loadingBuilder: (ctx, child, progress) {
-                    if (progress == null) return child;
-                    final percent =
-                        progress.expectedTotalBytes != null
-                            ? progress.cumulativeBytesLoaded /
-                                progress.expectedTotalBytes!
-                            : null;
-                    return Center(
-                      child: CircularProgressIndicator(
-                        value: percent,
-                        color: AppTheme.neonBlue,
-                      ),
-                    );
-                  },
-                  errorBuilder: (ctx, err, stack) => const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.broken_image_outlined,
-                        color: Colors.white38,
-                        size: 64,
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        'No se pudo cargar la imagen',
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    ],
-                  ),
+                  showCodeOnFallback: true,
                 ),
               ),
             ),

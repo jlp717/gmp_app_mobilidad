@@ -9,6 +9,7 @@ const { query, queryWithParams, getPool } = require('../config/db');
 const logger = require('../middleware/logger');
 const { cachedQuery } = require('./query-optimizer');
 const { redisCache, TTL } = require('./redis-cache');
+// Audit logging is done through the logger middleware directly
 
 // ============================================================================
 // TABLE DDL
@@ -450,25 +451,36 @@ async function getStock(code, almacen = 1) {
 // ============================================================================
 
 async function getNextOrderNumber(ejercicio) {
-    // Try update first (atomic increment)
-    const upd = await queryWithParams(
-        `UPDATE JAVIER.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
-        [ejercicio], false
-    );
-
-    // If no row existed, insert initial value
-    if (!upd || upd.count === 0) {
-        try {
-            await queryWithParams(
-                `INSERT INTO JAVIER.PEDIDOS_SEQ (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
-                [ejercicio], false
-            );
-        } catch (e) {
-            // Concurrent insert race — retry the update
-            await queryWithParams(
-                `UPDATE JAVIER.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
-                [ejercicio], false
-            );
+    // P0-A FIX: Use MERGE for atomic upsert — eliminates race condition
+    // DB2 for i supports MERGE which is a single atomic statement
+    try {
+        await queryWithParams(
+            `MERGE INTO JAVIER.PEDIDOS_SEQ AS T
+             USING (VALUES (?)) AS S(EJ)
+             ON T.EJERCICIO = S.EJ
+             WHEN MATCHED THEN UPDATE SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1
+             WHEN NOT MATCHED THEN INSERT (EJERCICIO, ULTIMO_NUMERO) VALUES (S.EJ, 1)`,
+            [ejercicio], false
+        );
+    } catch (mergeErr) {
+        // Fallback for older DB2 versions without MERGE
+        logger.warn(`[PEDIDOS] MERGE not supported, using fallback: ${mergeErr.message}`);
+        const upd = await queryWithParams(
+            `UPDATE JAVIER.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
+            [ejercicio], false
+        );
+        if (!upd || upd.count === 0) {
+            try {
+                await queryWithParams(
+                    `INSERT INTO JAVIER.PEDIDOS_SEQ (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
+                    [ejercicio], false
+                );
+            } catch (e) {
+                await queryWithParams(
+                    `UPDATE JAVIER.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
+                    [ejercicio], false
+                );
+            }
         }
     }
 
@@ -786,6 +798,37 @@ async function getOrderDetail(orderId) {
 }
 
 // ============================================================================
+// SHARED LINE IMPORTE CALCULATOR (P1-A FIX)
+// ============================================================================
+
+/**
+ * Calculates importeVenta consistently for any line, matching createOrder logic.
+ * Handles weight products, dual-field (cajas+unidades), box-only, and generic units.
+ */
+function calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades, unidadesCaja, precioVenta }) {
+    const um = (unidadMedida || 'CAJAS').trim().toUpperCase();
+    const envases = parseFloat(cantidadEnvases) || 0;
+    const unidades = parseFloat(cantidadUnidades) || 0;
+    const uc = parseFloat(unidadesCaja) || 1;
+    const precio = parseFloat(precioVenta) || 0;
+
+    let importe = 0;
+    if (um === 'KILOGRAMOS' || um === 'LITROS') {
+        importe = unidades * precio;
+    } else if (envases > 0 && unidades > 0 && um === 'CAJAS') {
+        // Dual-field: price is per box, units are fraction of box
+        const decimalFraction = unidades / uc;
+        importe = (envases + decimalFraction) * precio;
+    } else if (um === 'CAJAS') {
+        importe = envases * precio;
+    } else {
+        // PIEZAS, BANDEJAS, ESTUCHES, UNIDADES, etc.
+        importe = unidades * precio;
+    }
+    return Math.round(importe * 100) / 100;
+}
+
+// ============================================================================
 // ADD / UPDATE / DELETE LINE
 // ============================================================================
 
@@ -800,11 +843,17 @@ async function addOrderLine(pedidoId, lineData) {
     );
     const nextSeq = seqRows[0]?.NEXT_SEQ || 1;
 
-    const cantidad = parseFloat(lineData.cantidad || lineData.cantidadUnidades) || 0;
+    const cantidadEnvases = parseFloat(lineData.cantidadEnvases) || 0;
+    const cantidadUnidades = parseFloat(lineData.cantidadUnidades || lineData.cantidad) || 0;
     const precio = parseFloat(lineData.precio || lineData.precioVenta) || 0;
     const precioCosto = parseFloat(lineData.precioCosto) || 0;
-    const importeVenta = cantidad * precio;
-    const importeCosto = cantidad * precioCosto;
+    const unidadesCaja = parseFloat(lineData.unidadesCaja) || 1;
+    const unidadMedida = lineData.unidadMedida || 'CAJAS';
+
+    // P1-A: Use shared calculator for consistent importe across add/create
+    const importeVenta = calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades, unidadesCaja, precioVenta: precio });
+    const billingQty = (unidadMedida === 'CAJAS') ? cantidadEnvases : cantidadUnidades;
+    const importeCosto = Math.round((billingQty * precioCosto) * 100) / 100;
     const importeMargen = importeVenta - importeCosto;
     const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
 
@@ -820,8 +869,8 @@ async function addOrderLine(pedidoId, lineData) {
     const params = [
         id, nextSeq,
         (lineData.codigoArticulo || '').trim(), (lineData.descripcion || '').substring(0, 40),
-        parseFloat(lineData.cantidadEnvases) || 0, cantidad,
-        lineData.unidadMedida || 'CAJAS', parseFloat(lineData.unidadesCaja) || 1,
+        cantidadEnvases, cantidadUnidades,
+        unidadMedida, unidadesCaja,
         precio, precioCosto,
         parseFloat(lineData.precioTarifa) || 0, parseFloat(lineData.precioTarifaCliente) || 0,
         parseFloat(lineData.precioMinimo) || 0,
@@ -893,6 +942,7 @@ async function deleteOrderLine(lineId, pedidoId) {
 // ============================================================================
 
 async function recalculateOrderTotals(pedidoId) {
+    // P4-B FIX: Single subquery, compute IVA, no IMPORTEBASE/IMPORTETOTAL duplicate
     const id = parseInt(pedidoId);
     await queryWithParams(
         `UPDATE JAVIER.PEDIDOS_CAB SET
@@ -900,6 +950,7 @@ async function recalculateOrderTotals(pedidoId) {
             IMPORTECOSTO = (SELECT COALESCE(SUM(IMPORTECOSTO), 0) FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?),
             IMPORTEMARGEN = (SELECT COALESCE(SUM(IMPORTEMARGEN), 0) FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?),
             IMPORTETOTAL = (SELECT COALESCE(SUM(IMPORTEVENTA), 0) FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?),
+            IMPORTEIVA = 0,
             UPDATED_AT = CURRENT_TIMESTAMP
         WHERE ID = ?`,
         [id, id, id, id, id], false
@@ -910,47 +961,77 @@ async function recalculateOrderTotals(pedidoId) {
 // CONFIRM / CANCEL
 // ============================================================================
 
-async function confirmOrder(orderId, saleType) {
+async function confirmOrder(orderId, saleType, options = {}) {
     const id = parseInt(orderId);
     if (isNaN(id)) throw new Error('Invalid orderId');
 
-    // Validate stock for all lines
+    // P0-C: Validate stock BEFORE confirming — block if insufficient
     const lines = await queryWithParams(
         `SELECT CODIGOARTICULO, CANTIDADENVASES, CANTIDADUNIDADES, DESCRIPCION
          FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [id]);
 
     const stockWarnings = [];
+    const outOfStockProducts = [];
     for (const line of lines) {
         const code = (line.CODIGOARTICULO || '').trim();
         if (!code) continue;
         try {
+            // Force fresh stock read (bypass cache) for confirmation
             const stock = await getStock(code);
             const reqEnvases = parseFloat(line.CANTIDADENVASES) || 0;
             const reqUnidades = parseFloat(line.CANTIDADUNIDADES) || 0;
             if (reqEnvases > 0 && reqEnvases > stock.envases) {
-                stockWarnings.push({
+                const warning = {
                     product: code,
                     description: (line.DESCRIPCION || '').trim(),
                     requested: reqEnvases,
                     available: stock.envases,
                     unit: 'envases'
-                });
+                };
+                stockWarnings.push(warning);
+                if (stock.envases <= 0) outOfStockProducts.push(code);
             }
             if (reqUnidades > 0 && reqUnidades > stock.unidades) {
-                stockWarnings.push({
+                const warning = {
                     product: code,
                     description: (line.DESCRIPCION || '').trim(),
                     requested: reqUnidades,
                     available: stock.unidades,
                     unit: 'unidades'
-                });
+                };
+                stockWarnings.push(warning);
+                if (stock.unidades <= 0 && reqEnvases <= 0) outOfStockProducts.push(code);
             }
         } catch (e) {
             logger.warn(`[PEDIDOS] Stock check failed for ${code}: ${e.message}`);
         }
     }
 
-    // Proceed with confirmation
+    // P0-C: BLOCK confirmation if stock would go negative (unless force-approved)
+    if (stockWarnings.length > 0 && !options.forceConfirm) {
+        // Fetch similar products for out-of-stock items
+        let alternatives = [];
+        for (const code of outOfStockProducts.slice(0, 5)) {
+            try {
+                const similar = await getSimilarProducts(code);
+                if (similar.length > 0) {
+                    alternatives.push({ product: code, alternatives: similar });
+                }
+            } catch (e) {
+                logger.warn(`[PEDIDOS] getSimilarProducts error for ${code}: ${e.message}`);
+            }
+        }
+
+        return {
+            blocked: true,
+            reason: 'STOCK_INSUFICIENTE',
+            stockWarnings,
+            alternatives,
+            message: `Stock insuficiente para ${stockWarnings.length} producto(s). Revisa las alternativas o elimina los productos sin stock.`
+        };
+    }
+
+    // P0-B: Confirm + reserve in sequence, rollback estado if reserves fail
     const params = [id];
     let sql = `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = 'CONFIRMADO', UPDATED_AT = CURRENT_TIMESTAMP`;
     if (saleType) {
@@ -962,6 +1043,7 @@ async function confirmOrder(orderId, saleType) {
     await queryWithParams(sql, params, false);
 
     // ── Stock reservation: insert rows for each line ──
+    let reserveSuccess = true;
     try {
         for (const line of lines) {
             const code = (line.CODIGOARTICULO || '').trim();
@@ -977,29 +1059,98 @@ async function confirmOrder(orderId, saleType) {
         }
         logger.info(`[PEDIDOS] Stock reserved for order #${id}`);
     } catch (resErr) {
-        logger.warn(`[PEDIDOS] Stock reservation error (non-fatal): ${resErr.message}`);
+        reserveSuccess = false;
+        logger.error(`[PEDIDOS] CRITICAL: Stock reservation failed for order #${id}, rolling back: ${resErr.message}`);
+        // P0-B: Rollback — set estado back to BORRADOR if reservation fails
+        try {
+            await queryWithParams(
+                `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = 'BORRADOR', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
+                [id], false
+            );
+            await queryWithParams(`DELETE FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id], false);
+        } catch (rollbackErr) {
+            logger.error(`[PEDIDOS] CRITICAL: Rollback also failed for order #${id}: ${rollbackErr.message}`);
+        }
+        throw new Error(`No se pudo completar la reserva de stock. El pedido no ha sido confirmado. Error: ${resErr.message}`);
+    }
+
+    // P4-A: Invalidate stock cache for reserved products
+    for (const line of lines) {
+        const code = (line.CODIGOARTICULO || '').trim();
+        if (!code) continue;
+        try {
+            const cacheKey = `pedidos:stock:${code}:1`;
+            if (redisCache && typeof redisCache.del === 'function') {
+                await redisCache.del(cacheKey);
+            }
+        } catch (e) { /* silent */ }
     }
 
     const order = await getOrderDetail(id);
 
+    // AUD: Audit log for order confirmation
+    try {
+        const auditEntry = {
+            event: 'ORDER_CONFIRMED',
+            orderId: id,
+            numeroPedido: order?.header?.numeroPedido,
+            clientCode: order?.header?.clienteId,
+            clientName: order?.header?.clienteNombre,
+            vendedorCode: order?.header?.vendedor,
+            total: order?.header?.total,
+            saleType: saleType || order?.header?.tipoventa,
+            lineCount: lines.length,
+            stockWarningCount: stockWarnings.length,
+            forceConfirm: !!options.forceConfirm,
+            userId: options.userId || 'SYSTEM'
+        };
+        logger.info(`[AUDIT] ✅ ORDER_CONFIRMED #${id} | Client:${auditEntry.clientCode} | Total:${auditEntry.total} | Lines:${lines.length}`);
+    } catch (auditErr) { /* silent */ }
+
     return { ...order, stockWarnings };
 }
 
-async function cancelOrder(orderId) {
+async function cancelOrder(orderId, options = {}) {
     const id = parseInt(orderId);
     if (isNaN(id)) throw new Error('Invalid orderId');
+
+    // Get order info for audit before cancelling
+    let orderBefore;
+    try { orderBefore = await getOrderDetail(id); } catch (e) { /* ok */ }
 
     await queryWithParams(
         `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = 'ANULADO', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
         [id], false
     );
+
     // Release stock reservations
+    const releasedCodes = [];
     try {
+        const reservations = await queryWithParams(
+            `SELECT CODIGOARTICULO FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id]
+        );
+        releasedCodes.push(...reservations.map(r => (r.CODIGOARTICULO || '').trim()).filter(Boolean));
         await queryWithParams(`DELETE FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id], false);
         logger.info(`[PEDIDOS] Stock reservations released for cancelled order #${id}`);
     } catch (e) {
         logger.warn(`[PEDIDOS] Stock reservation release error: ${e.message}`);
     }
+
+    // P4-A: Invalidate stock cache for released products
+    for (const code of releasedCodes) {
+        try {
+            const cacheKey = `pedidos:stock:${code}:1`;
+            if (redisCache && typeof redisCache.del === 'function') {
+                await redisCache.del(cacheKey);
+            }
+        } catch (e) { /* silent */ }
+    }
+
+    // AUD: Audit log for cancellation
+    try {
+        logger.info(`[AUDIT] ❌ ORDER_CANCELLED #${id} | Client:${orderBefore?.header?.clienteId || '?'} | Total:${orderBefore?.header?.total || 0} | By:${options.userId || 'SYSTEM'}`);
+    } catch (auditErr) { /* silent */ }
+
     return getOrderDetail(id);
 }
 
@@ -1393,6 +1544,77 @@ async function getComplementaryProducts(productCodes, clientCode) {
 }
 
 // =============================================================================
+// SIMILAR PRODUCTS (Stock alternatives)
+// =============================================================================
+
+/**
+ * Finds products similar to the given one (same family/subfamily) that have stock.
+ * Used when a product is out of stock to suggest alternatives.
+ */
+async function getSimilarProducts(productCode) {
+    const code = (productCode || '').trim();
+    if (!code) return [];
+
+    const cacheKey = `pedidos:similar:${code}`;
+    const sql = `
+        SELECT TRIM(B.CODIGOARTICULO) AS CODE,
+               TRIM(B.DESCRIPCIONARTICULO) AS NAME,
+               TRIM(B.CODIGOMARCA) AS BRAND,
+               TRIM(B.CODIGOFAMILIA) AS FAMILY_CODE,
+               TRIM(B.SUBFAMILIA) AS SUBFAMILY,
+               COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCK_ENVASES,
+               COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCK_UNIDADES,
+               COALESCE(T.PRECIOTARIFA, 0) AS PRECIO
+        FROM DSEDAC.ART A
+        JOIN DSEDAC.ART B ON B.CODIGOFAMILIA = A.CODIGOFAMILIA
+                          AND B.SUBFAMILIA = A.SUBFAMILIA
+                          AND TRIM(B.CODIGOARTICULO) != ?
+                          AND B.ANOBAJA = 0
+        LEFT JOIN (
+            SELECT CODIGOARTICULO,
+                SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
+                SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
+            FROM DSEDAC.ARO
+            WHERE CODIGOALMACEN = 1
+            GROUP BY CODIGOARTICULO
+        ) S ON B.CODIGOARTICULO = S.CODIGOARTICULO
+        LEFT JOIN (
+            SELECT SR.CODIGOARTICULO,
+                SUM(SR.CANTIDADENVASES) AS RES_ENV,
+                SUM(SR.CANTIDADUNIDADES) AS RES_UNI
+            FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
+            JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+            GROUP BY SR.CODIGOARTICULO
+        ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
+        LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+        WHERE TRIM(A.CODIGOARTICULO) = ?
+          AND (COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0)) > 0
+        ORDER BY (COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0)) DESC
+        FETCH FIRST 8 ROWS ONLY
+    `;
+
+    try {
+        const rows = await cachedQuery(
+            (s) => queryWithParams(s, [code, code]),
+            sql, cacheKey, TTL.SHORT
+        );
+        return rows.map(r => ({
+            code: (r.CODE || '').trim(),
+            name: (r.NAME || '').trim(),
+            brand: (r.BRAND || '').trim(),
+            family: (r.FAMILY_CODE || '').trim(),
+            subfamily: (r.SUBFAMILY || '').trim(),
+            stockEnvases: Math.max(0, parseFloat(r.STOCK_ENVASES) || 0),
+            stockUnidades: Math.max(0, parseFloat(r.STOCK_UNIDADES) || 0),
+            precio: parseFloat(r.PRECIO) || 0,
+        }));
+    } catch (error) {
+        logger.error(`[PEDIDOS] getSimilarProducts error for ${code}: ${error.message}`);
+        return [];
+    }
+}
+
+// =============================================================================
 // ORDER ANALYTICS
 // =============================================================================
 
@@ -1522,4 +1744,6 @@ module.exports = {
     getComplementaryProducts,
     getOrderAnalytics,
     generateOrderPdf,
+    getSimilarProducts,
+    calculateLineImporte,
 };

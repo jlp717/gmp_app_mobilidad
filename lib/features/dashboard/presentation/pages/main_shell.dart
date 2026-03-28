@@ -35,6 +35,7 @@ import '../../../warehouse/presentation/pages/load_history_page.dart';
 import '../../../warehouse/presentation/pages/personnel_page.dart';
 import '../../../../core/models/user_model.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/widgets/lazy_indexed_stack.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -1216,7 +1217,6 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildCurrentPage(List<String> vendedorCodes, bool isJefeVentas) {
-    // Obtener el rol del usuario
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
 
@@ -1224,35 +1224,27 @@ class _MainShellState extends State<MainShell> {
     // ALMACÉN MODE
     // ===============================================
     if (_isAlmacenEffective) {
-      switch (_currentIndex) {
-        case 0:
-          return const WarehouseDashboardPage();
-        case 1:
-          return const VehiclesPage();
-        case 2:
-          return const ArticlesPage();
-        case 3:
-          return const LoadHistoryPage();
-        case 4:
-          return const PersonnelPage();
-        default:
-          return const Center(child: Text('Página no encontrada'));
-      }
+      return LazyIndexedStack(
+        index: _currentIndex,
+        children: const [
+          WarehouseDashboardPage(),
+          VehiclesPage(),
+          ArticlesPage(),
+          LoadHistoryPage(),
+          PersonnelPage(),
+        ],
+      );
     }
 
     final isRepartidor = _isRepartidorEffective; 
     
     // ===============================================
-    // REPARTIDOR: Dynamic indices
-    // Real rep:  0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA  (NO Panel)
-    // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
+    // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
-      // Determine effective repartidor ID
-      String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); // Default for real repartidor
+      String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); 
       final isJefe = user?.isJefeVentas == true;
       
-      // If Jefe, override with selection
       if (isJefeVentas) {
           if (_selectedRepartidor == null || _selectedRepartidor == 'ALL') {
              if (_repartidoresOptions.isNotEmpty) {
@@ -1265,14 +1257,11 @@ class _MainShellState extends State<MainShell> {
           }
       }
 
-      // Build repartidor names map for child widgets
       final Map<String, String> repNamesMap = {
         for (var r in _repartidoresOptions)
           (r['code']?.toString() ?? ''): (r['name']?.toString() ?? ''),
       };
 
-      // Map tab indices dynamically using nav item labels to stay in sync.
-      // This avoids hardcoded indices that break when optional tabs are hidden.
       final navItems = _getNavItems(isJefeVentas, vendedorCodes);
 
       int? _navIndexOf(String label) {
@@ -1283,7 +1272,6 @@ class _MainShellState extends State<MainShell> {
       }
 
       Widget pageForIndex(int idx) {
-        // Resolve which page this index corresponds to by nav label
         final label = idx < navItems.length ? navItems[idx].label : '';
 
         if (label == 'Panel') {
@@ -1318,11 +1306,11 @@ class _MainShellState extends State<MainShell> {
           );
         }
         if (label == 'Histórico') {
-          final cId = _pendingClientId;
-          final cName = _pendingClientName;
-          _pendingClientId = null;
-          _pendingClientName = null;
-          return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
+          return RepartidorHistoricoPage(
+            repartidorId: effectiveRepartidorId, 
+            initialClientId: _pendingClientId, 
+            initialClientName: _pendingClientName
+          );
         }
         if (label == 'Chat IA') {
           return const ComingSoonPlaceholder(
@@ -1335,13 +1323,16 @@ class _MainShellState extends State<MainShell> {
         return const Center(child: Text('Página no encontrada'));
       }
 
-      // Use KeyedSubtree to force complete widget tree rebuild when ID or client changes
-      final content = KeyedSubtree(
-        key: ValueKey('rutero_view_${effectiveRepartidorId}_${_currentIndex}_${_pendingClientId ?? ""}'),
-        child: Builder(builder: (_) => pageForIndex(_currentIndex)),
+      final content = LazyIndexedStack(
+        index: _currentIndex,
+        children: List.generate(navItems.length, (idx) {
+          return KeyedSubtree(
+            key: ValueKey('rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}'),
+            child: pageForIndex(idx),
+          );
+        }),
       );
 
-      // Wrap in Column with Header only if Jefe
       if (isJefeVentas) {
          return Column(
            children: [
@@ -1354,39 +1345,62 @@ class _MainShellState extends State<MainShell> {
     }
     
     // ===============================================
-    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Facturas, 6=Pedidos, 7=Glacius, 8=Chat
+    // JEFE MODE
     // ===============================================
     if (isJefeVentas) {
-      switch (_currentIndex) {
-        case 0:
-          // Panel de Control (Dashboard)
-          if (_dashboardProvider == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return ChangeNotifierProvider.value(
-            value: _dashboardProvider!,
-            child: const DashboardContent(),
-          );
-        case 1:
-          return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 2:
-          return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 3:
-          return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 4:
-          return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 5:
+      return LazyIndexedStack(
+        index: _currentIndex,
+        children: [
+          _dashboardProvider == null 
+              ? const Center(child: CircularProgressIndicator()) 
+              : ChangeNotifierProvider.value(value: _dashboardProvider!, child: const DashboardContent()),
+          SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          const FacturasPage(),
+          ChangeNotifierProvider(create: (_) => PedidosProvider(), child: PedidosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true)),
+          KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          const ComingSoonPlaceholder(
+            title: 'Nexus AI — Asistente Comercial',
+            subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          ),
+        ],
+      );
+    }
+
+    // ===============================================
+    // COMERCIAL MODE
+    // ===============================================
+    final empCode = vendedorCodes.join(',');
+    final comercialNav = _getNavItems(false, vendedorCodes);
+
+    Widget comercialPageForIndex(int idx) {
+      final label = idx < comercialNav.length ? comercialNav[idx].label : '';
+      switch (label) {
+        case 'Clientes':
+          return SimpleClientListPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Ruta':
+          return RuteroPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Objetivos':
+          return ObjectivesPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Comisiones':
+          return CommissionsPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Facturas':
           return const FacturasPage();
-        case 6:
+        case 'Pedidos':
           return ChangeNotifierProvider(
             create: (_) => PedidosProvider(),
-            child: PedidosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+            child: PedidosPage(employeeCode: empCode, isJefeVentas: false),
           );
-        case 7:
-          return KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 8:
-          return CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 9:
+        case 'Glacius':
+          return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Cobros':
+          return CobrosPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Chat IA':
           return const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
             subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
@@ -1398,43 +1412,10 @@ class _MainShellState extends State<MainShell> {
       }
     }
 
-    // ===============================================
-    // COMERCIAL: dynamic indices — Comisiones may be hidden
-    // ===============================================
-    final comercialNav = _getNavItems(false, vendedorCodes);
-    final comercialLabel = _currentIndex < comercialNav.length
-        ? comercialNav[_currentIndex].label : '';
-    final empCode = vendedorCodes.join(',');
-    switch (comercialLabel) {
-      case 'Clientes':
-        return SimpleClientListPage(employeeCode: empCode, isJefeVentas: false);
-      case 'Ruta':
-        return RuteroPage(employeeCode: empCode, isJefeVentas: false);
-      case 'Objetivos':
-        return ObjectivesPage(employeeCode: empCode, isJefeVentas: false);
-      case 'Comisiones':
-        return CommissionsPage(employeeCode: empCode, isJefeVentas: false);
-      case 'Facturas':
-        return const FacturasPage();
-      case 'Pedidos':
-        return ChangeNotifierProvider(
-          create: (_) => PedidosProvider(),
-          child: PedidosPage(employeeCode: empCode, isJefeVentas: false),
-        );
-      case 'Glacius':
-        return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
-      case 'Cobros':
-        return CobrosPage(employeeCode: empCode, isJefeVentas: false);
-      case 'Chat IA':
-        return const ComingSoonPlaceholder(
-          title: 'Nexus AI — Asistente Comercial',
-          subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
-          icon: Icons.smart_toy,
-          accentColor: AppTheme.neonPink,
-        );
-      default:
-        return const Center(child: Text('Página no encontrada'));
-    }
+    return LazyIndexedStack(
+      index: _currentIndex,
+      children: List.generate(comercialNav.length, (idx) => comercialPageForIndex(idx)),
+    );
   }
 }
 

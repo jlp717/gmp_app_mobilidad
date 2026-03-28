@@ -14,6 +14,7 @@ import '../widgets/sales_summary_header.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/widgets/error_state_widget.dart';
 import '../../domain/product_history_item.dart';
+import '../../../../core/widgets/smart_product_image.dart';
 
 class ProductHistoryPage extends StatefulWidget {
   final String? initialClientCode;
@@ -491,27 +492,15 @@ class _ProductThumbnail extends StatelessWidget {
           width: size,
           height: size,
           color: AppColors.surfaceColor,
-          child: Image.network(
-            imageUrl,
+          child: SmartProductImage(
+            imageUrl: imageUrl,
+            productCode: '',
+            productName: productName,
             width: size,
             height: size,
             fit: BoxFit.cover,
             headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
-            loadingBuilder: (ctx, child, progress) {
-              if (progress == null) return child;
-              return Center(
-                child: SizedBox(
-                  width: size * 0.4,
-                  height: size * 0.4,
-                  child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                ),
-              );
-            },
-            errorBuilder: (ctx, err, stack) => Icon(
-              Icons.image_not_supported_outlined,
-              color: Colors.white24,
-              size: size * 0.5,
-            ),
+            showCodeOnFallback: false,
           ),
         ),
       ),
@@ -568,27 +557,13 @@ class _FullscreenImageViewer extends StatelessWidget {
         child: InteractiveViewer(
           minScale: 0.5,
           maxScale: 5.0,
-          child: Image.network(
-            imageUrl,
+          child: SmartProductImage(
+            imageUrl: imageUrl,
+            productCode: '',
+            productName: productName,
             fit: BoxFit.contain,
             headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
-            loadingBuilder: (ctx, child, progress) {
-              if (progress == null) return child;
-              final percent = progress.expectedTotalBytes != null
-                  ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
-                  : null;
-              return Center(
-                child: CircularProgressIndicator(value: percent, color: AppColors.primary),
-              );
-            },
-            errorBuilder: (ctx, err, stack) => const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.broken_image_outlined, color: Colors.white38, size: 64),
-                SizedBox(height: 12),
-                Text('No se pudo cargar la imagen', style: TextStyle(color: Colors.white54)),
-              ],
-            ),
+            showCodeOnFallback: true,
           ),
         ),
       ),

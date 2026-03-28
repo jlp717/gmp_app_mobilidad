@@ -9,6 +9,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
 import '../utils/pedidos_formatters.dart';
+import '../../../../core/widgets/smart_product_image.dart';
 
 class OrderLineTile extends StatelessWidget {
   final OrderLine line;
@@ -96,14 +97,14 @@ class OrderLineTile extends StatelessWidget {
                   child: SizedBox(
                     width: 40,
                     height: 40,
-                    child: Image.network(
-                      '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(line.codigoArticulo.trim())}/image',
+                    child: SmartProductImage(
+                      imageUrl: '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(line.codigoArticulo.trim())}/image',
+                      productCode: line.codigoArticulo,
+                      productName: line.descripcion,
                       headers: ApiClient.authHeaders,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: AppTheme.darkCard,
-                        child: const Icon(Icons.image_not_supported_outlined, color: Colors.white24, size: 18),
-                      ),
+                      borderRadius: BorderRadius.circular(6),
+                      showCodeOnFallback: false,
                     ),
                   ),
                 ),

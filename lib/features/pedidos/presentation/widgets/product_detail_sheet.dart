@@ -14,6 +14,7 @@ import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
 import 'product_history_sheet.dart';
 import '../utils/pedidos_formatters.dart';
+import '../../../../core/widgets/smart_product_image.dart';
 
 class ProductDetailSheet extends StatefulWidget {
   final String productCode;
@@ -416,39 +417,13 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               width: double.infinity,
               height: 200,
               color: AppTheme.darkCard,
-              child: Image.network(
-                imageUrl,
+              child: SmartProductImage(
+                imageUrl: imageUrl,
+                productCode: code,
                 headers: ApiClient.authHeaders,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.image_not_supported_outlined,
-                        color: Colors.white24,
-                        size: 48,
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Imagen no disponible',
-                        style: TextStyle(
-                          color: Colors.white38,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                loadingBuilder: (_, child, progress) {
-                  if (progress == null) return child;
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      color: AppTheme.neonBlue,
-                      strokeWidth: 2,
-                    ),
-                  );
-                },
+                borderRadius: BorderRadius.circular(8),
+                showCodeOnFallback: true,
               ),
             ),
           ),

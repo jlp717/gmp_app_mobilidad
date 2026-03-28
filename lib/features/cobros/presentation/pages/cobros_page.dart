@@ -502,8 +502,8 @@ class _CobrosPageState extends State<CobrosPage> with SingleTickerProviderStateM
   }
 
   Widget _buildClientCobroCard(Map<String, dynamic> client) {
-    final name = client['name'] ?? 'Cliente';
-    final code = client['code'] ?? '';
+    final String name = (client['name'] ?? 'Cliente').toString();
+    final String code = (client['code'] ?? '').toString();
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12),

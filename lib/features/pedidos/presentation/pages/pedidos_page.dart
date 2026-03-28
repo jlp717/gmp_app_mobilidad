@@ -27,12 +27,14 @@ import '../widgets/client_balance_badge.dart';
 import '../widgets/complementary_products.dart';
 import '../widgets/order_pdf_generator.dart';
 import '../widgets/product_detail_sheet.dart';
+import '../widgets/stock_alternatives_sheet.dart';
 import '../utils/pedidos_formatters.dart';
 import '../dialogs/client_search_dialog.dart';
 import '../../data/pedidos_offline_service.dart';
 import '../../data/pedidos_favorites_service.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
+import '../../../../core/widgets/smart_product_image.dart';
 import 'promotions_list_page.dart';
 
 class PedidosPage extends StatefulWidget {
@@ -357,24 +359,14 @@ class _PedidosPageState extends State<PedidosPage>
                             context, product.code, product.name),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
-                            '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(product.code.trim())}/image',
+                          child: SmartProductImage(
+                            imageUrl: '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(product.code.trim())}/image',
+                            productCode: product.code,
+                            productName: product.name,
                             headers: ApiClient.authHeaders,
                             height: 80,
                             fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => Container(
-                              height: 80,
-                              width: 80,
-                              decoration: BoxDecoration(
-                                color: AppTheme.darkCard,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.image_not_supported_outlined,
-                                color: Colors.white24,
-                                size: 32,
-                              ),
-                            ),
+                            showCodeOnFallback: false,
                           ),
                         ),
                       ),
@@ -1077,16 +1069,26 @@ class _PedidosPageState extends State<PedidosPage>
                                     envases, unidades, selectedUnit, price);
 
                                 if (errorFromAdd != null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(errorFromAdd,
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold)),
-                                      backgroundColor: AppTheme.error,
-                                      duration: const Duration(seconds: 3),
-                                    ),
-                                  );
+                                  // If stock error, offer alternatives
+                                  if (errorFromAdd.contains('Stock insuficiente') && !product.hasStock) {
+                                    Navigator.pop(ctx);
+                                    showStockAlternativesSheet(
+                                      context: context,
+                                      outOfStockProduct: product,
+                                      provider: provider,
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(errorFromAdd,
+                                            style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold)),
+                                        backgroundColor: AppTheme.error,
+                                        duration: const Duration(seconds: 3),
+                                      ),
+                                    );
+                                  }
                                   return;
                                 }
 
@@ -1155,20 +1157,13 @@ class _PedidosPageState extends State<PedidosPage>
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 5.0,
-                child: Image.network(
-                  imageUrl,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: code,
+                  productName: name,
                   fit: BoxFit.contain,
                   headers: ApiClient.authHeaders,
-                  errorBuilder: (ctx, err, stack) => const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.broken_image_outlined,
-                          color: Colors.white38, size: 64),
-                      SizedBox(height: 12),
-                      Text('No se pudo cargar la imagen',
-                          style: TextStyle(color: Colors.white54)),
-                    ],
-                  ),
+                  showCodeOnFallback: true,
                 ),
               ),
             ),

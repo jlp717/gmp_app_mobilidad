@@ -9,6 +9,7 @@ import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/widgets/smart_product_image.dart';
 
 class ProductHistorySheet extends StatefulWidget {
   final String productCode;
@@ -264,14 +265,14 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               child: Container(
                 width: 56, height: 56,
                 color: AppTheme.darkCard,
-                child: Image.network(
-                  imageUrl,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: widget.productCode,
+                  productName: widget.productName,
                   headers: ApiClient.authHeaders,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.image_not_supported_outlined,
-                    color: Colors.white24, size: 28,
-                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  showCodeOnFallback: true,
                 ),
               ),
             ),

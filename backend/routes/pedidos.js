@@ -622,18 +622,35 @@ router.put('/:id/confirm', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
 
-        const { saleType } = req.body;
+        const { saleType, forceConfirm } = req.body;
         if (!saleType || !['CC', 'VC', 'NV'].includes(saleType)) {
             return res.status(400).json({ success: false, error: 'saleType must be CC, VC, or NV' });
         }
 
-        const order = await pedidosService.confirmOrder(id, saleType);
+        const options = {
+            forceConfirm: forceConfirm === true,
+            userId: req.user?.code || 'SYSTEM'
+        };
+        const order = await pedidosService.confirmOrder(id, saleType, options);
+
+        // P0-C: If stock validation blocked the order, return 409 with alternatives
+        if (order.blocked) {
+            return res.status(409).json({
+                success: false,
+                blocked: true,
+                reason: order.reason,
+                message: order.message,
+                stockWarnings: order.stockWarnings,
+                alternatives: order.alternatives
+            });
+        }
 
         res.json({ success: true, order });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/confirm: ${error.message}`);
         const status = error.message.includes('not found') ? 404
             : error.message.includes('BORRADOR') ? 409
+            : error.message.includes('reserva de stock') ? 500
             : 500;
         res.status(status).json({ success: false, error: error.message });
     }
@@ -686,13 +703,35 @@ router.put('/:id/cancel', async (req, res) => {
         if (id === null) {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
-        await pedidosService.cancelOrder(id);
+        await pedidosService.cancelOrder(id, { userId: req.user?.code || 'SYSTEM' });
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/cancel: ${error.message}`);
         const status = error.message.includes('not found') ? 404
             : error.message.includes('ENVIADO') ? 409 : 500;
         res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// SIMILAR PRODUCTS (stock alternatives)
+// =============================================================================
+
+/**
+ * GET /api/pedidos/similar-products/:code
+ * Find alternative products from the same family/subfamily with stock available
+ */
+router.get('/similar-products/:code', async (req, res) => {
+    try {
+        const code = req.params.code;
+        if (!code) {
+            return res.status(400).json({ success: false, error: 'Product code is required' });
+        }
+        const alternatives = await pedidosService.getSimilarProducts(code.trim());
+        res.json({ success: true, product: code.trim(), alternatives });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in GET /similar-products/${req.params.code}: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 

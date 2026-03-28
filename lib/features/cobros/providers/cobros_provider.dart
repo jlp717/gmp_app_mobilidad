@@ -2,6 +2,7 @@
 /// Estado global para el módulo de cobros y entregas
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../data/models/cobros_models.dart';
 import '../../../core/api/api_client.dart';
 
@@ -127,8 +128,10 @@ class CobrosProvider extends ChangeNotifier {
       }
     } catch (e) {
       _error = 'Error de conexión: $e';
-      // Cargar datos de ejemplo para desarrollo
-      _cargarDatosEjemplo();
+      // M4 FIX: Only load example data in debug mode, never in production
+      if (kDebugMode) {
+        _cargarDatosEjemplo();
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -233,21 +236,27 @@ class CobrosProvider extends ChangeNotifier {
       orElse: () => throw Exception('Albarán no encontrado'),
     );
 
-    // Marcar todos los items como entregados
+    // P1-C FIX: Track success per item, don't mark complete if any fail
+    bool allSucceeded = true;
     for (final item in albaran.items) {
       if (item.estado != EstadoEntrega.entregado) {
-        await actualizarEstadoEntrega(
+        final ok = await actualizarEstadoEntrega(
           itemId: item.itemId,
           estado: EstadoEntrega.entregado,
           cantidadEntregada: item.cantidadPedida,
           observaciones: observaciones,
         );
+        if (!ok) allSucceeded = false;
       }
     }
 
-    albaran.estado = EstadoEntrega.entregado;
+    if (allSucceeded) {
+      albaran.estado = EstadoEntrega.entregado;
+    } else {
+      _error = 'No se pudieron completar todos los ítems de la entrega';
+    }
     notifyListeners();
-    return true;
+    return allSucceeded;
   }
 
   // ============================================
@@ -325,6 +334,8 @@ class CobrosProvider extends ChangeNotifier {
       return false;
     } catch (e) {
       _error = 'Error registrando cobro: $e';
+      // P3-C FIX: Notify listeners so the UI shows the error
+      notifyListeners();
       return false;
     }
   }

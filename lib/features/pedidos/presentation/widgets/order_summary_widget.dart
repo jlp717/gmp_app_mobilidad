@@ -9,6 +9,8 @@ import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
 import '../../providers/pedidos_provider.dart';
 import 'order_line_tile.dart';
+import 'order_preview_sheet.dart';
+import 'stock_alternatives_sheet.dart';
 import '../dialogs/delete_line_dialog.dart';
 import '../utils/pedidos_formatters.dart';
 
@@ -811,7 +813,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
     }
   }
 
-  // E1 — Preview dialog before confirm
+  // E1 — Preview sheet before confirm (Amazon-style DraggableScrollableSheet)
   void _showOrderPreview(BuildContext context, PedidosProvider provider) {
     if (!provider.hasClient) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -822,150 +824,29 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
       return;
     }
 
-    final lines = provider.lines;
-    final margin = provider.porcentajeMargen;
-    final marginColor = margin >= 15
-        ? AppTheme.neonGreen
-        : margin >= 5
-            ? Colors.orange
-            : AppTheme.error;
-    final hasDiscount = provider.globalDiscountPct > 0;
-
-    showDialog<void>(
+    showOrderPreviewSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.receipt_outlined, color: AppTheme.neonBlue, size: 22),
-            SizedBox(width: 8),
-            Text('Resumen del pedido',
-                style: TextStyle(color: Colors.white, fontSize: 16)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Client
-            Row(
-              children: [
-                const Icon(Icons.storefront_outlined,
-                    color: AppTheme.neonBlue, size: 16),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    '${provider.clientName} (${provider.clientCode})',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Divider(color: AppTheme.borderColor, height: 1),
-            const SizedBox(height: 8),
-            // First 3 lines
-            ...lines.take(3).map((l) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          l.descripcion,
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 12),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        '${l.cantidadEnvases > 0 ? PedidosFormatters.number(l.cantidadEnvases) : PedidosFormatters.number(l.cantidadUnidades, decimals: 2)} x ${PedidosFormatters.money((hasDiscount ? (l.precioVenta * (1 - provider.globalDiscountPct / 100)) : l.precioVenta), decimals: 3)}',
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                )),
-            if (lines.length > 3)
-              Text(
-                '... y ${lines.length - 3} lineas mas',
-                style: const TextStyle(color: Colors.white38, fontSize: 11),
-              ),
-            const SizedBox(height: 8),
-            const Divider(color: AppTheme.borderColor, height: 1),
-            const SizedBox(height: 8),
-            // Totals
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('${provider.lineCount} lineas',
-                    style:
-                        const TextStyle(color: Colors.white54, fontSize: 12)),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (hasDiscount) ...[
-                      Text(
-                        'Dto. ${provider.globalDiscountPct.toStringAsFixed(1)}%: -${PedidosFormatters.money(provider.totalDescuento)}',
-                        style: const TextStyle(
-                            color: AppTheme.error, fontSize: 11),
-                      ),
-                      Text(
-                        'Total: ${PedidosFormatters.money(provider.totalConDescuento)}',
-                        style: const TextStyle(
-                            color: AppTheme.neonGreen,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15),
-                      ),
-                    ] else
-                      Text(
-                        'Total: ${PedidosFormatters.money(provider.totalImporte)}',
-                        style: const TextStyle(
-                            color: AppTheme.neonGreen,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15),
-                      ),
-                    Text(
-                      'Margen: ${margin.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                          color: marginColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child:
-                const Text('Revisar', style: TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _onConfirm(context, provider);
-            },
-            icon: const Icon(Icons.check_circle, size: 18),
-            label: const Text('Definitivo',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(
+      provider: provider,
+      vendedorCode: widget.vendedorCode,
+      onConfirm: (observaciones) async {
+        final result = await provider.confirmOrder(
+          widget.vendedorCode,
+          observaciones: observaciones.isNotEmpty ? observaciones : _obsCtrl.text.trim(),
+        );
+        if (result != null && context.mounted) {
+          _obsCtrl.clear();
+          _discountCtrl.clear();
+          await provider.loadPromotions();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Pedido #${result['numeroPedido'] ?? ''} creado correctamente'),
               backgroundColor: AppTheme.neonGreen,
-              foregroundColor: AppTheme.darkBase,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
             ),
-          ),
-        ],
-      ),
+          );
+        }
+        return result;
+      },
     );
   }
 }

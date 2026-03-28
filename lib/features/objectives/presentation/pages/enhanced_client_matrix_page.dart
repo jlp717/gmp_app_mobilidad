@@ -14,6 +14,7 @@ import '../../../../core/api/api_config.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../features/sales_history/presentation/widgets/sales_summary_header.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import '../../../../core/widgets/smart_product_image.dart';
 
 /// Enhanced Client Matrix Page v6 - Professional design, no overflow
 class EnhancedClientMatrixPage extends StatefulWidget {
@@ -1411,17 +1412,15 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     width: 44,
                     height: 44,
                     color: AppTheme.darkBase,
-                    child: Image.network(
-                      imageUrl,
+                    child: SmartProductImage(
+                      imageUrl: imageUrl,
+                      productCode: code,
+                      productName: name,
                       width: 44,
                       height: 44,
                       fit: BoxFit.cover,
                       headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
-                      loadingBuilder: (ctx, child, progress) {
-                        if (progress == null) return child;
-                        return const Center(child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)));
-                      },
-                      errorBuilder: (ctx, err, stack) => const Icon(Icons.image_not_supported_outlined, color: Colors.white24, size: 20),
+                      showCodeOnFallback: false,
                     ),
                   ),
                 ),
@@ -1791,17 +1790,15 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     width: 48,
                     height: 48,
                     color: AppTheme.darkBase,
-                    child: Image.network(
-                      imageUrl,
+                    child: SmartProductImage(
+                      imageUrl: imageUrl,
+                      productCode: code,
+                      productName: name,
                       width: 48,
                       height: 48,
                       fit: BoxFit.cover,
                       headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
-                      loadingBuilder: (ctx, child, progress) {
-                        if (progress == null) return child;
-                        return const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)));
-                      },
-                      errorBuilder: (ctx, err, stack) => const Icon(Icons.image_not_supported_outlined, color: Colors.white24, size: 22),
+                      showCodeOnFallback: false,
                     ),
                   ),
                 ),
@@ -2084,23 +2081,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 5.0,
-                child: Image.network(
-                  imageUrl,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: '',
+                  productName: productName,
                   fit: BoxFit.contain,
                   headers: {'Accept': 'image/*', if (ApiClient.dio.options.headers['Authorization'] != null) 'Authorization': ApiClient.dio.options.headers['Authorization'] as String},
-                  loadingBuilder: (ctx2, child, progress) {
-                    if (progress == null) return child;
-                    final pct = progress.expectedTotalBytes != null ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes! : null;
-                    return Center(child: CircularProgressIndicator(value: pct, color: AppTheme.neonBlue));
-                  },
-                  errorBuilder: (ctx2, err, stack) => const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.broken_image_outlined, color: Colors.white38, size: 64),
-                      SizedBox(height: 12),
-                      Text('No se pudo cargar la imagen', style: TextStyle(color: Colors.white54)),
-                    ],
-                  ),
+                  showCodeOnFallback: true,
                 ),
               ),
             ),

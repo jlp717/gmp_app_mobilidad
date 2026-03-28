@@ -47,8 +47,8 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
     super.dispose();
   }
 
-  double get _totalSeleccionado {
-    final provider = context.read<CobrosProvider>();
+  // P1-D FIX: Take provider as param instead of using context.read in a getter
+  double _calcularTotalSeleccionado(CobrosProvider provider) {
     return provider.cobrosPendientes
         .where((doc) => _selectedDocs.contains(doc.id))
         .fold(0.0, (sum, doc) => sum + doc.importePendiente);
@@ -78,51 +78,88 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          return Row(
-            children: [
-              // Left: Mode selection & Inputs
-              Expanded(
-                flex: 2,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSectionTitle('MODO DE PAGO', Icons.settings_suggest),
-                      const SizedBox(height: 16),
-                      _buildToggles(),
-                      
-                      const SizedBox(height: 32),
-                      _buildSectionTitle('IMPORTE A COBRAR', Icons.euro),
-                      const SizedBox(height: 16),
-                      _buildAmountInput(),
-                      
-                      const SizedBox(height: 32),
-                      _buildSectionTitle('OBSERVACIONES', Icons.edit_note),
-                      const SizedBox(height: 16),
-                      _buildObservationsInput(),
-                    ],
-                  ),
-                ),
-              ),
-              
-              // Right: Documents & Summary
-              Expanded(
-                flex: 3,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor.withOpacity(0.5),
-                    border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
-                  ),
-                  child: Column(
-                    children: [
-                      Expanded(child: _buildDocumentsList(provider)),
-                      _buildSummaryFooter(),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          // P3-A: Responsive layout — two columns on tablet, stacked on phone
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth >= 700) {
+                return Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildSectionTitle('MODO DE PAGO', Icons.settings_suggest),
+                            const SizedBox(height: 16),
+                            _buildToggles(),
+                            const SizedBox(height: 32),
+                            _buildSectionTitle('IMPORTE A COBRAR', Icons.euro),
+                            const SizedBox(height: 16),
+                            _buildAmountInput(),
+                            const SizedBox(height: 32),
+                            _buildSectionTitle('OBSERVACIONES', Icons.edit_note),
+                            const SizedBox(height: 16),
+                            _buildObservationsInput(),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceColor.withOpacity(0.5),
+                          border: Border(left: BorderSide(color: Colors.white.withOpacity(0.05))),
+                        ),
+                        child: Column(
+                          children: [
+                            Expanded(child: _buildDocumentsList(provider)),
+                            _buildSummaryFooter(provider),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              } else {
+                // Phone: stacked layout
+                return Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildSectionTitle('MODO DE PAGO', Icons.settings_suggest),
+                            const SizedBox(height: 12),
+                            _buildToggles(),
+                            const SizedBox(height: 24),
+                            _buildSectionTitle('IMPORTE A COBRAR', Icons.euro),
+                            const SizedBox(height: 12),
+                            _buildAmountInput(),
+                            const SizedBox(height: 24),
+                            _buildSectionTitle('OBSERVACIONES', Icons.edit_note),
+                            const SizedBox(height: 12),
+                            _buildObservationsInput(),
+                            const SizedBox(height: 24),
+                            _buildSectionTitle('DOCUMENTOS PENDIENTES', Icons.description_outlined),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: 200,
+                              child: _buildDocumentsList(provider),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    _buildSummaryFooter(provider),
+                  ],
+                );
+              }
+            },
           );
         },
       ),
@@ -278,7 +315,7 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
             icon: const Icon(Icons.calculate, color: AppTheme.neonBlue),
             onPressed: () {
                setState(() {
-                 _amountController.text = _totalSeleccionado.toStringAsFixed(2);
+                 _amountController.text = _calcularTotalSeleccionado(context.read<CobrosProvider>()).toStringAsFixed(2);
                });
             },
           ),
@@ -402,7 +439,7 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
     );
   }
 
-  Widget _buildSummaryFooter() {
+  Widget _buildSummaryFooter(CobrosProvider provider) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -417,7 +454,7 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Total Seleccionado:', style: TextStyle(color: AppTheme.textSecondary)),
-                Text(_currencyFormat.format(_totalSeleccionado), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Text(_currencyFormat.format(_calcularTotalSeleccionado(provider)), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               ],
             ),
             const SizedBox(height: 20),
@@ -445,6 +482,13 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
     final amount = double.tryParse(_amountController.text) ?? 0;
     if (amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor, indica un importe válido')));
+      return;
+    }
+    // P3-B: Guard empty documents in normal mode
+    if (_tipoModo == TipoModoCobro.normal && _selectedDocs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona al menos un documento pendiente')),
+      );
       return;
     }
 

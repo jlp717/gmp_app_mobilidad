@@ -9,6 +9,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
 import '../utils/pedidos_formatters.dart';
+import '../../../../core/widgets/smart_product_image.dart';
 
 class ProductCard extends StatelessWidget {
   final Product product;
@@ -249,38 +250,16 @@ class ProductCard extends StatelessWidget {
   Widget _buildThumbnail(String code) {
     final url = '${ApiConfig.baseUrl}/products/'
         '${Uri.encodeComponent(code.trim())}/image';
-    return ClipRRect(
+    return SmartProductImage(
+      imageUrl: url,
+      productCode: code,
+      productName: product.name,
+      width: 48,
+      height: 48,
+      fit: BoxFit.cover,
+      headers: ApiClient.authHeaders,
       borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 48,
-        height: 48,
-        color: AppTheme.darkCard,
-        child: Image.network(
-          url,
-          headers: ApiClient.authHeaders,
-          fit: BoxFit.cover,
-          width: 48,
-          height: 48,
-          errorBuilder: (_, __, ___) => const Icon(
-            Icons.image_not_supported_outlined,
-            color: Colors.white24,
-            size: 24,
-          ),
-          loadingBuilder: (_, child, progress) {
-            if (progress == null) return child;
-            return const Center(
-              child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  color: AppTheme.neonBlue,
-                  strokeWidth: 1.5,
-                ),
-              ),
-            );
-          },
-        ),
-      ),
+      showCodeOnFallback: true,
     );
   }
 
@@ -312,33 +291,13 @@ class ProductCard extends StatelessWidget {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 5.0,
-                child: Image.network(
-                  imageUrl,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: code,
+                  productName: name,
                   fit: BoxFit.contain,
                   headers: ApiClient.authHeaders,
-                  loadingBuilder: (ctx, child, progress) {
-                    if (progress == null) return child;
-                    final percent = progress.expectedTotalBytes != null
-                        ? progress.cumulativeBytesLoaded /
-                            progress.expectedTotalBytes!
-                        : null;
-                    return Center(
-                      child: CircularProgressIndicator(
-                        value: percent,
-                        color: AppTheme.neonBlue,
-                      ),
-                    );
-                  },
-                  errorBuilder: (ctx, err, stack) => const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.broken_image_outlined,
-                          color: Colors.white38, size: 64),
-                      SizedBox(height: 12),
-                      Text('No se pudo cargar la imagen',
-                          style: TextStyle(color: Colors.white54)),
-                    ],
-                  ),
+                  showCodeOnFallback: true,
                 ),
               ),
             ),
