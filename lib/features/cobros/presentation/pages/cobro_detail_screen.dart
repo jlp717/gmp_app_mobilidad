@@ -3,8 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../providers/cobros_provider.dart';
-import '../models/cobros_models.dart';
+import '../../providers/cobros_provider.dart';
+import '../../data/models/cobros_models.dart';
 
 class CobroDetailScreen extends StatefulWidget {
   final String codigoCliente;
@@ -90,12 +90,12 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
         importe: importe,
         formaPago: _formaPago,
         tipoVenta: TipoVenta.values.firstWhere(
-          (e) => e.label.toUpperCase() == _tipoVenta,
-          orElse: () => TipoVenta.normal,
+          (e) => e.label.toUpperCase() == _formaPago,
+          orElse: () => TipoVenta.contado,
         ),
         tipoModo: TipoModoCobro.values.firstWhere(
-          (e) => e.name.toUpperCase() == _formaPago,
-          orElse: () => TipoModoCobro.contado,
+          (e) => e.label.toUpperCase() == _tipoVenta,
+          orElse: () => TipoModoCobro.normal,
         ),
       );
 
