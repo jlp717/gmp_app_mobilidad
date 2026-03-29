@@ -4,9 +4,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../data/pedidos_service.dart';
+import '../../providers/pedidos_provider.dart';
 import 'order_pdf_generator.dart';
 import '../utils/pedidos_formatters.dart';
 
@@ -55,6 +57,7 @@ class _OrderDetailBodyState extends State<_OrderDetailBody> {
   bool _isLoading = true;
   String? _error;
   bool _isCancelling = false;
+  bool _isConfirming = false;
 
   @override
   void initState() {
@@ -118,11 +121,66 @@ class _OrderDetailBodyState extends State<_OrderDetailBody> {
 
     setState(() => _isCancelling = true);
     try {
-      await PedidosService.cancelOrder(widget.orderId);
+      await Provider.of<PedidosProvider>(context, listen: false)
+          .cancelExistingOrder(widget.orderId);
       if (mounted) Navigator.pop(context, 'cancelled');
     } catch (e) {
       if (mounted) {
         setState(() => _isCancelling = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmOrder() async {
+    final header = _detail?.header;
+    if (header == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: AppTheme.neonGreen, size: 22),
+            SizedBox(width: 8),
+            Text('Confirmar pedido', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Text(
+          '¿Deseas confirmar el pedido #${header.numeroPedido} para el cliente ${header.clienteName}?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
+              foregroundColor: AppTheme.neonGreen,
+            ),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isConfirming = true);
+    try {
+      await Provider.of<PedidosProvider>(context, listen: false)
+          .confirmExistingOrder(widget.orderId, header.tipoVenta);
+      if (mounted) Navigator.pop(context, 'confirmed');
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isConfirming = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
         );
@@ -546,6 +604,31 @@ class _OrderDetailBodyState extends State<_OrderDetailBody> {
             tooltip: 'Clonar pedido',
           ),
           const Spacer(),
+          // Confirm button
+          if (header.estado == 'BORRADOR') ...[
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _isConfirming ? null : _confirmOrder,
+                icon: _isConfirming
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check_circle_outline),
+                label: Text(_isConfirming ? 'Confirmando...' : 'Confirmar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.neonGreen,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           // Cancel button
           if (header.estado == 'BORRADOR' || header.estado == 'CONFIRMADO')
             Expanded(

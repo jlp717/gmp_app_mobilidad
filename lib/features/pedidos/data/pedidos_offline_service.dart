@@ -23,15 +23,16 @@ class PedidosOfflineService {
   // ── Draft Orders ──
 
   /// Save current cart as a draft
-  static Future<void> saveDraft({
+  static Future<String> saveDraft({
     required String clientCode,
     required String clientName,
     required String saleType,
     required String vendedorCode,
     required List<OrderLine> lines,
+    String? draftKey,
   }) async {
     final box = _draftsBox ?? await Hive.openBox(_draftsBoxName);
-    final key = 'draft_${clientCode}_${DateTime.now().millisecondsSinceEpoch}';
+    final key = draftKey ?? 'draft_${clientCode}_${DateTime.now().millisecondsSinceEpoch}';
     final data = {
       'clientCode': clientCode,
       'clientName': clientName,
@@ -42,6 +43,25 @@ class PedidosOfflineService {
     };
     await box.put(key, jsonEncode(data));
     debugPrint('[PedidosOffline] Draft saved: $key');
+    return key;
+  }
+
+  /// Auto-save: Overwrites a single draft per client
+  static Future<void> saveAutoDraft({
+    required String clientCode,
+    required String clientName,
+    required String saleType,
+    required String vendedorCode,
+    required List<OrderLine> lines,
+  }) async {
+    await saveDraft(
+      draftKey: 'draft_auto_$clientCode',
+      clientCode: clientCode,
+      clientName: clientName,
+      saleType: saleType,
+      vendedorCode: vendedorCode,
+      lines: lines,
+    );
   }
 
   /// Load all saved drafts

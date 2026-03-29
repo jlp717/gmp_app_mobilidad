@@ -45,6 +45,10 @@ class PedidosProvider with ChangeNotifier {
   // ── Favorites (Hive-based, local) ──
   final Set<String> _favoriteProductCodes = {};
 
+  // ── Auto-save ──
+  DateTime? _lastAutoSaved;
+  bool _isDirty = false;
+
   // ── Stock Filter ──
   bool _onlyWithStock = false;
 
@@ -93,8 +97,12 @@ class PedidosProvider with ChangeNotifier {
   bool get isSaving => _isSaving;
   String? get error => _error;
   Map<String, dynamic> get clientBalance => _clientBalance;
-  double get clientSaldoPendiente =>
-      (_clientBalance['saldoPendiente'] as num?)?.toDouble() ?? 0;
+  double get clientSaldoPendiente {
+    final saldo = _clientBalance['saldoPendiente'];
+    if (saldo is num) return saldo.toDouble();
+    if (saldo is String) return double.tryParse(saldo) ?? 0;
+    return 0; // Defensive: Map or unexpected type -> 0
+  }
   Set<String> get favoriteProductCodes => _favoriteProductCodes;
   List<Map<String, dynamic>> get complementaryProducts =>
       _complementaryProducts;
@@ -103,6 +111,8 @@ class PedidosProvider with ChangeNotifier {
       List.unmodifiable(_activePromotionsList);
   Map<String, dynamic> get analytics => _analytics;
   bool get isLoadingAnalytics => _isLoadingAnalytics;
+  DateTime? get lastAutoSaved => _lastAutoSaved;
+  bool get isDirty => _isDirty;
 
   bool get onlyWithStock => _onlyWithStock;
   double lastQtyForProduct(String code, {String? clientCode}) {
@@ -430,6 +440,7 @@ class PedidosProvider with ChangeNotifier {
     }
 
     _error = null;
+    _isDirty = true;
     notifyListeners();
     return isPartial ? 'PARCIAL:$missingQty|${product.name}' : null;
   }
@@ -502,7 +513,8 @@ class PedidosProvider with ChangeNotifier {
     }
     line.recalculate();
     _lastQtyByProduct[_qtyKey(line.codigoArticulo)] = nextQty;
-    _lastUnitByProduct[_qtyKey(line.codigoArticulo)] = line.unidadMedida;
+    _lastUnitByProduct[_qtyKey(line.codigoArticulo, _clientCode)] = line.unidadMedida;
+    _isDirty = true;
     notifyListeners();
     return null;
   }
@@ -514,6 +526,7 @@ class PedidosProvider with ChangeNotifier {
       _globalDiscountPct = 0;
       _complementaryProducts = [];
     }
+    _isDirty = true;
     notifyListeners();
   }
 
@@ -523,6 +536,8 @@ class PedidosProvider with ChangeNotifier {
     _clientName = null;
     _saleType = 'CC';
     _globalDiscountPct = 0;
+    _isDirty = false;
+    _lastAutoSaved = null;
     _complementaryProducts = [];
     _clientBalance = {};
     _error = null;
@@ -555,6 +570,14 @@ class PedidosProvider with ChangeNotifier {
       copy.recalculate();
       return copy;
     }).toList();
+  }
+
+  // ── Active Promotions ──
+
+  void markAsSaved() {
+    _isDirty = false;
+    _lastAutoSaved = DateTime.now();
+    notifyListeners();
   }
 
   // ── Order Persistence ──
@@ -632,6 +655,84 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
+  Future<void> confirmExistingOrder(int orderId, String saleType, {bool forceConfirm = false}) async {
+    final result = await PedidosService.confirmOrder(
+      orderId: orderId.toString(),
+      saleType: saleType,
+      forceConfirm: forceConfirm,
+    );
+
+    // If confirmation succeeds (no block), update local state instantly
+    if (result['success'] == true) {
+      final idx = _orders.indexWhere((o) => o.id == orderId);
+      if (idx != -1) {
+        final o = _orders[idx];
+        _orders[idx] = OrderSummary(
+          id: o.id,
+          numeroPedido: o.numeroPedido,
+          clienteCode: o.clienteCode,
+          clienteName: o.clienteName,
+          vendedorCode: o.vendedorCode,
+          fecha: o.fecha,
+          estado: 'CONFIRMADO',
+          tipoVenta: saleType,
+          total: o.total,
+          margen: o.margen,
+          lineCount: o.lineCount,
+        );
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> cancelExistingOrder(int orderId) async {
+    await PedidosService.cancelOrder(orderId);
+    
+    // Update local state instantly
+    final idx = _orders.indexWhere((o) => o.id == orderId);
+    if (idx != -1) {
+      final o = _orders[idx];
+      _orders[idx] = OrderSummary(
+        id: o.id,
+        numeroPedido: o.numeroPedido,
+        clienteCode: o.clienteCode,
+        clienteName: o.clienteName,
+        vendedorCode: o.vendedorCode,
+        fecha: o.fecha,
+        estado: 'ANULADO',
+        tipoVenta: o.tipoVenta,
+        total: o.total,
+        margen: o.margen,
+        lineCount: o.lineCount,
+      );
+      notifyListeners();
+    }
+  }
+
+  Future<void> confirmExistingOrder(int orderId, String saleType) async {
+    await PedidosService.confirmOrder(orderId, saleType);
+    
+    // Update local state instantly
+    final idx = _orders.indexWhere((o) => o.id == orderId);
+    if (idx != -1) {
+      final o = _orders[idx];
+      _orders[idx] = OrderSummary(
+        id: o.id,
+        numeroPedido: o.numeroPedido,
+        clienteCode: o.clienteCode,
+        clienteName: o.clienteName,
+        vendedorCode: o.vendedorCode,
+        fecha: o.fecha,
+        estado: 'CONFIRMADO',
+        tipoVenta: saleType,
+        total: o.total,
+        margen: o.margen,
+        lineCount: o.lineCount,
+      );
+      notifyListeners();
+    }
+  }
+
   // ── Recommendations ──
 
   Future<void> loadRecommendations(
@@ -651,16 +752,31 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Offline Support ──
 
-  Future<void> saveDraft(String vendedorCode) async {
-    if (!hasClient || !hasLines) return;
+  Future<void> saveDraft(String vendedorCode, {bool isAutoSave = false}) async {
+    if (!hasClient || (!hasLines && !isAutoSave)) return;
     try {
-      await PedidosOfflineService.saveDraft(
-        clientCode: _clientCode!,
-        clientName: _clientName ?? '',
-        saleType: _saleType,
-        vendedorCode: vendedorCode,
-        lines: _lines,
-      );
+      if (isAutoSave && hasLines) {
+        await PedidosOfflineService.saveAutoDraft(
+          clientCode: _clientCode!,
+          clientName: _clientName ?? '',
+          saleType: _saleType,
+          vendedorCode: vendedorCode,
+          lines: _lines,
+        );
+        _lastAutoSaved = DateTime.now();
+        _isDirty = false;
+      } else if (!isAutoSave) {
+        await PedidosOfflineService.saveDraft(
+          draftKey: 'draft_manual_${_clientCode}_${DateTime.now().millisecondsSinceEpoch}',
+          clientCode: _clientCode!,
+          clientName: _clientName ?? '',
+          saleType: _saleType,
+          vendedorCode: vendedorCode,
+          lines: _lines,
+        );
+        _isDirty = false;
+        _lastAutoSaved = DateTime.now();
+      }
       notifyListeners();
     } catch (e) {
       debugPrint('[PedidosProvider] saveDraft error: $e');

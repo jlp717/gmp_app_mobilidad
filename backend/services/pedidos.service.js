@@ -1551,59 +1551,113 @@ async function getSimilarProducts(productCode) {
     const code = (productCode || '').trim();
     if (!code) return [];
 
-    const cacheKey = `pedidos:similar:${code}`;
-    const sql = `
-        SELECT TRIM(B.CODIGOARTICULO) AS CODE,
-               TRIM(B.DESCRIPCIONARTICULO) AS NAME,
-               TRIM(B.CODIGOMARCA) AS BRAND,
-               TRIM(B.CODIGOFAMILIA) AS FAMILY_CODE,
-               TRIM(B.CODIGOSUBFAMILIA) AS SUBFAMILY,
-               COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCK_ENVASES,
-               COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCK_UNIDADES,
-               COALESCE(T.PRECIOTARIFA, 0) AS PRECIO
-        FROM DSEDAC.ART A
-        JOIN DSEDAC.ART B ON B.CODIGOFAMILIA = A.CODIGOFAMILIA
-                          AND B.CODIGOSUBFAMILIA = A.CODIGOSUBFAMILIA
-                          AND TRIM(B.CODIGOARTICULO) != ?
-                          AND B.ANOBAJA = 0
-        LEFT JOIN (
-            SELECT CODIGOARTICULO,
-                SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
-                SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
-            FROM DSEDAC.ARO
-            WHERE CODIGOALMACEN = 1
-            GROUP BY CODIGOARTICULO
-        ) S ON B.CODIGOARTICULO = S.CODIGOARTICULO
-        LEFT JOIN (
-            SELECT SR.CODIGOARTICULO,
-                SUM(SR.CANTIDADENVASES) AS RES_ENV,
-                SUM(SR.CANTIDADUNIDADES) AS RES_UNI
-            FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
-            JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
-            GROUP BY SR.CODIGOARTICULO
-        ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
-        LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
-        WHERE TRIM(A.CODIGOARTICULO) = ?
-          AND (COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0)) > 0
-        ORDER BY (COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0)) DESC
-        FETCH FIRST 8 ROWS ONLY
-    `;
-
+    const cacheKey = `pedidos:similar_v2:${code}`;
+    
     try {
+        // 1. Get original product attributes
+        const sqlOriginal = `
+            SELECT TRIM(CODIGOFAMILIA) AS FAMILIA,
+                   TRIM(CODIGOSUBFAMILIA) AS SUBFAMILIA,
+                   TRIM(CODIGOMARCA) AS MARCA,
+                   TRIM(CODIGOGRUPOGENERAL) AS GRUPO,
+                   TRIM(FORMATO) AS FORMATO,
+                   TRIM(PRESENTACION) AS PRESENTACION,
+                   TRIM(TIPOPRODUCTO) AS TIPO
+            FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
+        `;
+        const origRows = await queryWithParams(sqlOriginal, [code]);
+        if (!origRows || origRows.length === 0) return [];
+        const orig = origRows[0];
+        
+        // 2. Fetch candidates from the SAME FAMILY that have stock
+        const sqlCandidates = `
+            SELECT TRIM(B.CODIGOARTICULO) AS CODE,
+                   TRIM(B.DESCRIPCIONARTICULO) AS NAME,
+                   TRIM(B.CODIGOMARCA) AS MARCA,
+                   TRIM(B.CODIGOFAMILIA) AS FAMILIA,
+                   TRIM(B.CODIGOSUBFAMILIA) AS SUBFAMILIA,
+                   TRIM(B.CODIGOGRUPOGENERAL) AS GRUPO,
+                   TRIM(B.FORMATO) AS FORMATO,
+                   TRIM(B.PRESENTACION) AS PRESENTACION,
+                   TRIM(B.TIPOPRODUCTO) AS TIPO,
+                   COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCK_ENVASES,
+                   COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCK_UNIDADES,
+                   COALESCE(T.PRECIOTARIFA, 0) AS PRECIO
+            FROM DSEDAC.ART B
+            LEFT JOIN (
+                SELECT CODIGOARTICULO,
+                    SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
+                    SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
+                FROM DSEDAC.ARO
+                WHERE CODIGOALMACEN = 1
+                GROUP BY CODIGOARTICULO
+            ) S ON B.CODIGOARTICULO = S.CODIGOARTICULO
+            LEFT JOIN (
+                SELECT SR.CODIGOARTICULO,
+                    SUM(SR.CANTIDADENVASES) AS RES_ENV,
+                    SUM(SR.CANTIDADUNIDADES) AS RES_UNI
+                FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
+                JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+                GROUP BY SR.CODIGOARTICULO
+            ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
+            LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            WHERE TRIM(B.CODIGOFAMILIA) = ?
+              AND TRIM(B.CODIGOARTICULO) != ?
+              AND B.ANOBAJA = 0
+              AND (COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0)) > 0
+        `;
         const rows = await cachedQuery(
-            (s) => queryWithParams(s, [code, code]),
-            sql, cacheKey, TTL.SHORT
+            (s) => queryWithParams(s, [orig.FAMILIA, code]),
+            sqlCandidates, cacheKey, TTL.SHORT
         );
-        return rows.map(r => ({
-            code: (r.CODE || '').trim(),
-            name: (r.NAME || '').trim(),
-            brand: (r.BRAND || '').trim(),
-            family: (r.FAMILY_CODE || '').trim(),
-            subfamily: (r.SUBFAMILY || '').trim(),
-            stockEnvases: Math.max(0, parseFloat(r.STOCK_ENVASES) || 0),
-            stockUnidades: Math.max(0, parseFloat(r.STOCK_UNIDADES) || 0),
-            precio: parseFloat(r.PRECIO) || 0,
-        }));
+        
+        // 3. Scoring (Semantic Similarity)
+        const scored = rows.map(r => {
+            let score = 25; // Base score for same family (guaranteed by WHERE clause)
+            const reasons = ['Misma familia'];
+            
+            if (r.SUBFAMILIA && orig.SUBFAMILIA && r.SUBFAMILIA === orig.SUBFAMILIA) {
+                score += 40;
+                reasons.push('Misma subfamilia');
+            }
+            if (r.GRUPO && orig.GRUPO && r.GRUPO === orig.GRUPO) {
+                score += 15;
+                reasons.push('Mismo grupo general');
+            }
+            if (r.MARCA && orig.MARCA && r.MARCA === orig.MARCA) {
+                score += 10;
+                reasons.push('Misma marca');
+            }
+            if (r.FORMATO && orig.FORMATO && r.FORMATO === orig.FORMATO) {
+                score += 5;
+                reasons.push('Mismo formato');
+            }
+            if (r.PRESENTACION && orig.PRESENTACION && r.PRESENTACION === orig.PRESENTACION) {
+                score += 5;
+                reasons.push('Misma presentacion');
+            }
+            if (r.TIPO && orig.TIPO && r.TIPO === orig.TIPO) {
+                score += 5;
+                reasons.push('Mismo tipo producto');
+            }
+            
+            return {
+                code: (r.CODE || '').trim(),
+                name: (r.NAME || '').trim(),
+                brand: (r.MARCA || '').trim(),
+                family: (r.FAMILIA || '').trim(),
+                subfamily: (r.SUBFAMILIA || '').trim(),
+                stockEnvases: Math.max(0, parseFloat(r.STOCK_ENVASES) || 0),
+                stockUnidades: Math.max(0, parseFloat(r.STOCK_UNIDADES) || 0),
+                precio: parseFloat(r.PRECIO) || 0,
+                similarityScore: score,
+                matchReasons: reasons
+            };
+        });
+        
+        // 4. Sort and limit to top 8
+        scored.sort((a, b) => b.similarityScore - a.similarityScore || b.stockEnvases - a.stockEnvases);
+        return scored.slice(0, 8);
     } catch (error) {
         logger.error(`[PEDIDOS] getSimilarProducts error for ${code}: ${error.message}`);
         return [];

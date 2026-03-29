@@ -56,6 +56,7 @@ class _PedidosPageState extends State<PedidosPage>
   late TabController _tabController;
   final ScrollController _catalogScrollController = ScrollController();
   Timer? _stockRefreshTimer;
+  Timer? _autoSaveTimer;
 
   // Mejora 10 â€” Mis Pedidos search & date filter
   String _orderSearch = '';
@@ -75,6 +76,7 @@ class _PedidosPageState extends State<PedidosPage>
       if (widget.isJefeVentas) {
         context.read<FilterProvider>().addListener(_onVendorFilterChanged);
       }
+      context.read<PedidosProvider>().addListener(_onProviderChange);
     });
 
     _catalogScrollController.addListener(_onCatalogScroll);
@@ -90,9 +92,24 @@ class _PedidosPageState extends State<PedidosPage>
     );
   }
 
+  void _onProviderChange() {
+    if (!mounted) return;
+    final prov = context.read<PedidosProvider>();
+    if (prov.isDirty) {
+      if (_autoSaveTimer == null || !_autoSaveTimer!.isActive) {
+        _autoSaveTimer = Timer(const Duration(seconds: 5), () {
+          if (mounted && prov.isDirty) {
+            prov.saveDraft(_vendedorCodes, isAutoSave: true);
+          }
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _stockRefreshTimer?.cancel();
+    _autoSaveTimer?.cancel();
     _tabController.dispose();
     _catalogScrollController.dispose();
     if (widget.isJefeVentas) {
@@ -100,6 +117,9 @@ class _PedidosPageState extends State<PedidosPage>
         context.read<FilterProvider>().removeListener(_onVendorFilterChanged);
       } catch (_) {}
     }
+    try {
+      context.read<PedidosProvider>().removeListener(_onProviderChange);
+    } catch (_) {}
     super.dispose();
   }
 
@@ -1530,25 +1550,43 @@ class _PedidosPageState extends State<PedidosPage>
               );
             },
           ),
-          // Save draft button
+          // Save draft button & Auto-save status
           Consumer<PedidosProvider>(
             builder: (ctx, prov, _) {
               if (!prov.hasLines) return const SizedBox.shrink();
-              return IconButton(
-                icon: const Icon(Icons.save_outlined, color: Colors.white70),
-                tooltip: 'Guardar borrador',
-                onPressed: () async {
-                  await prov.saveDraft(widget.employeeCode);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Borrador guardado'),
-                        backgroundColor: AppTheme.neonBlue,
-                        duration: Duration(seconds: 2),
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (prov.lastAutoSaved != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4.0),
+                      child: Text(
+                        prov.isDirty 
+                            ? 'Borrador modificado...' 
+                            : '💾 ${prov.lastAutoSaved!.hour.toString().padLeft(2, '0')}:${prov.lastAutoSaved!.minute.toString().padLeft(2, '0')}',
+                        style: TextStyle(
+                            color: prov.isDirty ? Colors.orange : AppTheme.neonGreen, 
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600),
                       ),
-                    );
-                  }
-                },
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.save_outlined, color: Colors.white70),
+                    tooltip: 'Guardar como borrador manual',
+                    onPressed: () async {
+                      await prov.saveDraft(widget.employeeCode, isAutoSave: false);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Borrador manual guardado'),
+                            backgroundColor: AppTheme.neonBlue,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ],
               );
             },
           ),
@@ -2173,6 +2211,10 @@ class _PedidosPageState extends State<PedidosPage>
               isLoading: provider.isLoadingAnalytics,
             ),
           ),
+          // Premium Summary KPIs (Mirroring Facturas)
+          SliverToBoxAdapter(
+            child: _buildSummaryCards(displayOrders),
+          ),
           // Divider
           const SliverToBoxAdapter(
             child: Padding(
@@ -2391,140 +2433,186 @@ class _PedidosPageState extends State<PedidosPage>
       await provider.deleteDraft(draftKey);
     }
 
-    return Card(
-      color: AppTheme.darkCard,
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.orange.withOpacity(0.35)),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: Colors.orange.withOpacity(0.2),
+        ),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: restoreDraft,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.drafts_outlined,
-                      color: Colors.orange, size: 18),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      clientName.isNotEmpty ? clientName : clientCode,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize:
-                            Responsive.fontSize(context, small: 14, large: 16),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.18),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'BORRADOR',
-                      style: TextStyle(
-                        color: Colors.orange,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+      child: Stack(
+        children: [
+          // Color accent bar on the left
+          Positioned(
+            left: 0,
+            top: 20,
+            bottom: 20,
+            child: Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(4),
+                  bottomRight: Radius.circular(4),
+                ),
+                boxShadow: [
+                  BoxShadow(color: Colors.orange.withOpacity(0.5), blurRadius: 4),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                clientCode,
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: Responsive.fontSize(context, small: 11, large: 13),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(Icons.shopping_bag_outlined,
-                      color: Colors.white38, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${lines.length} lineas',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize:
-                          Responsive.fontSize(context, small: 11, large: 13),
+            ),
+          ),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: restoreDraft,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Icon Box
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.orange.withOpacity(0.5),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.edit_note_rounded,
+                            color: Colors.orange,
+                            size: 26,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        
+                        // Info
+                        Expanded(
+                          flex: 4,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                clientName.isNotEmpty ? clientName : clientCode,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: Responsive.isSmall(context) ? 16 : 18,
+                                  color: const Color(0xFF90CAF9),
+                                  letterSpacing: 0.3,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                                    ),
+                                    child: const Text(
+                                      'BORRADOR',
+                                      style: TextStyle(
+                                        color: Colors.orange,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  if (dateLabel.isNotEmpty)
+                                    Text(
+                                      dateLabel,
+                                      style: const TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        const SizedBox(width: 8),
+
+                        // Amount
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  PedidosFormatters.money(total),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900, 
+                                    fontSize: Responsive.isSmall(context) ? 18 : 20, 
+                                    color: AppTheme.neonGreen,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                              Text(
+                                '${lines.length} líneas',
+                                style: const TextStyle(color: Colors.white38, fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  if (dateLabel.isNotEmpty) ...[
-                    const SizedBox(width: 12),
-                    Icon(Icons.schedule_outlined,
-                        color: Colors.white38, size: 14),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        dateLabel,
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 11),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    
+                    const SizedBox(height: 16),
+                    Divider(height: 1, color: Colors.white.withOpacity(0.05)),
+                    const SizedBox(height: 12),
+                    
+                    // Actions
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _buildActionButton(
+                          icon: Icons.restore,
+                          label: 'Cargar',
+                          onTap: restoreDraft,
+                          isPrimary: false, 
+                        ),
+                        const SizedBox(width: 8),
+                        _buildActionButton(
+                          icon: Icons.delete_outline,
+                          label: 'Eliminar',
+                          onTap: deleteDraft,
+                          isPrimary: false,
+                          colorOverride: AppTheme.error,
+                        ),
+                      ],
                     ),
                   ],
-                  const SizedBox(width: 8),
-                  Text(
-                    PedidosFormatters.money(total),
-                    style: TextStyle(
-                      color: AppTheme.neonGreen,
-                      fontWeight: FontWeight.bold,
-                      fontSize:
-                          Responsive.fontSize(context, small: 14, large: 16),
-                    ),
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: restoreDraft,
-                    icon: const Icon(Icons.restore, size: 14),
-                    label: const Text('Cargar'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.neonBlue,
-                      side:
-                          BorderSide(color: AppTheme.neonBlue.withOpacity(0.5)),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: deleteDraft,
-                    icon: const Icon(Icons.delete_outline, size: 14),
-                    label: const Text('Eliminar'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.error,
-                      side: BorderSide(color: AppTheme.error.withOpacity(0.5)),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -2543,269 +2631,359 @@ class _PedidosPageState extends State<PedidosPage>
             ? Colors.orange
             : AppTheme.error;
 
-    return Card(
-      color: AppTheme.darkCard,
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: color.withOpacity(0.3)),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: color.withOpacity(0.2),
+        ),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          final result =
-              await OrderDetailSheet.show(context, orderId: order.id);
-          if (result == 'cancelled' && mounted) {
-            context.read<PedidosProvider>().loadOrders(
-                  vendedorCodes: _vendedorCodes,
-                  forceRefresh: true,
-                );
-          } else if (result != null && result.startsWith('clone:') && mounted) {
-            final cloneId = int.tryParse(result.substring(6));
-            if (cloneId != null) {
-              final prov = context.read<PedidosProvider>();
-              await prov.cloneOrderIntoCart(cloneId);
-              _tabController.animateTo(0);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        'Pedido #${order.numeroPedido} clonado al carrito'),
-                    backgroundColor: AppTheme.neonBlue,
-                  ),
-                );
-              }
-            }
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  // Order number
-                  Text(
-                    '#${order.numeroPedido}',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize:
-                          Responsive.fontSize(context, small: 15, large: 17),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Status badge
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: color.withOpacity(0.5)),
-                    ),
-                    child: Text(
-                      order.estado,
-                      style: TextStyle(
-                        color: color,
-                        fontSize:
-                            Responsive.fontSize(context, small: 10, large: 12),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    order.fecha,
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize:
-                          Responsive.fontSize(context, small: 11, large: 13),
-                    ),
-                  ),
+      child: Stack(
+        children: [
+          // Color accent bar on the left
+          Positioned(
+            left: 0,
+            top: 20,
+            bottom: 20,
+            child: Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(4),
+                  bottomRight: Radius.circular(4),
+                ),
+                boxShadow: [
+                  BoxShadow(color: color.withOpacity(0.5), blurRadius: 4),
                 ],
               ),
-              const SizedBox(height: 8),
-              // Client
-              Text(
-                '${order.clienteName} (${order.clienteCode})',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: Responsive.fontSize(context, small: 13, large: 15),
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              // Bottom row: lines, actions, total
-              Row(
-                children: [
-                  Icon(Icons.shopping_bag_outlined,
-                      color: Colors.white38, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${order.lineCount} lineas',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize:
-                          Responsive.fontSize(context, small: 11, large: 13),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Clone order button
-                  InkWell(
-                    onTap: () async {
-                      HapticFeedback.mediumImpact();
-                      final prov = context.read<PedidosProvider>();
-                      await prov.cloneOrderIntoCart(order.id);
-                      if (mounted) {
-                        _tabController.animateTo(0);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                                'Pedido #${order.numeroPedido} clonado al carrito'),
-                            backgroundColor: AppTheme.neonBlue,
+            ),
+          ),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () async {
+                final result = await OrderDetailSheet.show(context, orderId: order.id);
+                if (result == 'cancelled' && mounted) {
+                  context.read<PedidosProvider>().loadOrders(
+                        vendedorCodes: _vendedorCodes,
+                        forceRefresh: true,
+                      );
+                } else if (result != null && result.startsWith('clone:') && mounted) {
+                  final cloneId = int.tryParse(result.substring(6));
+                  if (cloneId != null) {
+                    final prov = context.read<PedidosProvider>();
+                    await prov.cloneOrderIntoCart(cloneId);
+                    _tabController.animateTo(0);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Pedido #${order.numeroPedido} clonado al carrito'),
+                          backgroundColor: AppTheme.neonBlue,
+                        ),
+                      );
+                    }
+                  }
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Icon Box
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: color.withOpacity(0.5),
+                            ),
                           ),
-                        );
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonPurple.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: AppTheme.neonPurple.withOpacity(0.3)),
-                      ),
+                          child: Icon(
+                            Icons.receipt_long_rounded,
+                            color: color == Colors.orange ? Colors.orange : (color == AppTheme.error ? AppTheme.error : const Color(0xFF1976D2)),
+                            size: 26,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        
+                        // Info
+                        Expanded(
+                          flex: 4,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                order.clienteName,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: Responsive.isSmall(context) ? 16 : 18,
+                                  color: const Color(0xFF90CAF9),
+                                  letterSpacing: 0.3,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: color.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: color.withOpacity(0.3)),
+                                    ),
+                                    child: Text(
+                                      '#${order.numeroPedido}',
+                                      style: TextStyle(
+                                        color: color,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    order.fecha.length > 10 ? order.fecha.substring(0, 10) : order.fecha,
+                                    style: const TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        const SizedBox(width: 8),
+
+                        // Amount
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  PedidosFormatters.money(order.total),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900, 
+                                    fontSize: Responsive.isSmall(context) ? 18 : 22, 
+                                    color: AppTheme.neonGreen,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: marginColor.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${order.margen.toStringAsFixed(1)}%',
+                                  style: TextStyle(color: marginColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 16),
+                    Divider(height: 1, color: Colors.white.withOpacity(0.05)),
+                    const SizedBox(height: 12),
+                    
+                    // Actions
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
                       child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Icon(Icons.copy,
-                              color: AppTheme.neonPurple, size: 12),
-                          const SizedBox(width: 3),
-                          Text('Clonar',
-                              style: TextStyle(
-                                  color: AppTheme.neonPurple,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600)),
+                          _buildActionButton(
+                            icon: Icons.visibility_outlined,
+                            label: 'Ver',
+                            onTap: () async => await OrderDetailSheet.show(context, orderId: order.id),
+                            isPrimary: false, 
+                          ),
+                          _buildActionButton(
+                            icon: Icons.copy,
+                            label: 'Clonar',
+                            onTap: () async {
+                              final prov = context.read<PedidosProvider>();
+                              await prov.cloneOrderIntoCart(order.id);
+                              _tabController.animateTo(0);
+                            },
+                            isPrimary: false,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildActionButton(
+                            icon: Icons.picture_as_pdf_outlined,
+                            label: 'PDF',
+                            onTap: () async {
+                              final detail = await PedidosService.getOrderDetail(order.id);
+                              await OrderPdfGenerator.generateAndShare(context, detail);
+                            },
+                            isPrimary: true,
+                          ),
                         ],
                       ),
                     ),
-                  ),
-                  // PDF button
-                  const SizedBox(width: 6),
-                  InkWell(
-                    onTap: () async {
-                      HapticFeedback.lightImpact();
-                      try {
-                        final detail =
-                            await PedidosService.getOrderDetail(order.id);
-                        if (mounted) {
-                          await OrderPdfGenerator.generateAndShare(
-                              context, detail);
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content: Text('Error generando PDF: $e'),
-                                backgroundColor: AppTheme.error),
-                          );
-                        }
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonGreen.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(Icons.picture_as_pdf,
-                          color: AppTheme.neonGreen, size: 16),
-                    ),
-                  ),
-                  // WhatsApp button
-                  const SizedBox(width: 6),
-                  InkWell(
-                    onTap: () async {
-                      final text =
-                          'Pedido #${order.numeroPedido} - ${order.clienteName}\n'
-                          'Fecha: ${order.fecha.length >= 10 ? order.fecha.substring(0, 10) : order.fecha}\n'
-                          'Estado: ${order.estado}\n'
-                          'Total: ${PedidosFormatters.money(order.total)}\n'
-                          '${order.lineCount} lineas';
-                      final uri = Uri.parse(
-                          'https://wa.me/?text=${Uri.encodeComponent(text)}');
-                      try {
-                        final launched = await launchUrl(
-                          uri,
-                          mode: LaunchMode.externalApplication,
-                        );
-                        if (!launched && mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('No se pudo abrir WhatsApp'),
-                              backgroundColor: AppTheme.error,
-                            ),
-                          );
-                        }
-                      } catch (_) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('No se pudo abrir WhatsApp'),
-                              backgroundColor: AppTheme.error,
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF25D366).withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(Icons.chat,
-                          color: Color(0xFF25D366), size: 16),
-                    ),
-                  ),
-                  const Spacer(),
-                  // Mejora 10 \u2014 Margin display
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: marginColor.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '${order.margen.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        color: marginColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    PedidosFormatters.money(order.total),
-                    style: TextStyle(
-                      color: AppTheme.neonGreen,
-                      fontWeight: FontWeight.bold,
-                      fontSize:
-                          Responsive.fontSize(context, small: 15, large: 17),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCards(List<OrderSummary> orders) {
+    final totalOrders = orders.length;
+    final totalAmount = orders.fold(0.0, (sum, o) => sum + o.total);
+    final avgMargin = orders.isEmpty ? 0.0 : orders.fold(0.0, (sum, o) => sum + o.margen) / orders.length;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth < 400 ? 2 : 3;
+          final itemWidth = (constraints.maxWidth - (columns - 1) * 8) / columns;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildSummaryItem(
+                icon: Icons.receipt_long,
+                label: 'Pedidos',
+                value: '$totalOrders',
+                color: AppTheme.neonBlue,
+                width: itemWidth,
+              ),
+              _buildSummaryItem(
+                icon: Icons.euro,
+                label: 'Total Periodo',
+                value: PedidosFormatters.money(totalAmount),
+                color: AppTheme.neonGreen,
+                width: itemWidth,
+              ),
+              _buildSummaryItem(
+                icon: Icons.analytics_outlined,
+                label: 'Margen Medio',
+                value: '${avgMargin.toStringAsFixed(1)}%',
+                color: Colors.orange,
+                width: itemWidth,
               ),
             ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    double? width,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2746),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
           ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required bool isPrimary,
+    Color? colorOverride,
+  }) {
+    final color = colorOverride ?? (isPrimary ? AppTheme.neonBlue : Colors.white70);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isPrimary ? color.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isPrimary ? color.withOpacity(0.4) : Colors.white.withOpacity(0.1),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
         ),
       ),
     );

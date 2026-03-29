@@ -437,9 +437,7 @@ class TariffEntry {
 
   factory TariffEntry.fromJson(Map<String, dynamic> json) {
     return TariffEntry(
-      code: json['code'] is int
-          ? json['code'] as int
-          : int.tryParse(json['code']?.toString() ?? '0') ?? 0,
+      code: _toInt(json['code']),
       description: (json['description'] ?? '').toString().trim(),
       price: _toDouble(json['price']),
     );
@@ -463,8 +461,7 @@ class StockEntry {
     final code = json['almacenCode'] ?? json['almacen'];
     final name = json['almacenName'] ?? json['almacenDesc'] ?? '';
     return StockEntry(
-      almacenCode:
-          code is int ? code : int.tryParse(code?.toString() ?? '0') ?? 0,
+      almacenCode: _toInt(code),
       almacenName: name.toString().trim(),
       envases: _toDouble(json['envases']),
       unidades: _toDouble(json['unidades']),
@@ -625,9 +622,7 @@ class OrderLine {
 
   factory OrderLine.fromJson(Map<String, dynamic> json) {
     return OrderLine(
-      id: json['id'] is int
-          ? json['id'] as int
-          : int.tryParse(json['id']?.toString() ?? ''),
+      id: json['id'] != null ? _toInt(json['id']) : null,
       codigoArticulo: (json['codigoArticulo'] ?? json['CODIGOARTICULO'] ?? '')
           .toString()
           .trim(),
@@ -739,12 +734,8 @@ class OrderSummary {
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
     return OrderSummary(
-      id: json['id'] is int
-          ? json['id'] as int
-          : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
-      numeroPedido: json['numeroPedido'] is int
-          ? json['numeroPedido'] as int
-          : int.tryParse(json['numeroPedido']?.toString() ?? '0') ?? 0,
+      id: _toInt(json['id']),
+      numeroPedido: _toInt(json['numeroPedido']),
       clienteCode: (json['clienteCode'] ?? '').toString().trim(),
       clienteName: (json['clienteName'] ?? '').toString().trim(),
       vendedorCode: (json['vendedorCode'] ?? '').toString().trim(),
@@ -753,9 +744,7 @@ class OrderSummary {
       tipoVenta: (json['tipoVenta'] ?? 'CC').toString().trim(),
       total: _toDouble(json['total']),
       margen: _toDouble(json['margen']),
-      lineCount: json['lineCount'] is int
-          ? json['lineCount'] as int
-          : int.tryParse(json['lineCount']?.toString() ?? '0') ?? 0,
+      lineCount: _toInt(json['lineCount']),
     );
   }
 }
@@ -1169,4 +1158,16 @@ double _toDouble(dynamic value, {double fallback = 0}) {
   if (value == null) return fallback;
   if (value is num) return value.toDouble();
   return double.tryParse(value.toString()) ?? fallback;
+}
+
+/// Safe int parser — handles null, int, String, num, Map (crash-proof).
+/// If the API returns a Map or other unexpected type where an int is
+/// expected, this returns [fallback] instead of throwing a type error.
+int _toInt(dynamic value, {int fallback = 0}) {
+  if (value == null) return fallback;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  // Map / List / any other unexpected type → fallback (prevents crashes)
+  return fallback;
 }

@@ -339,6 +339,21 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
     final brand = (alt['brand'] ?? '').toString().trim();
     final stockEnv = (alt['stockEnvases'] as num?)?.toDouble() ?? 0;
     final precio = (alt['precio'] as num?)?.toDouble() ?? 0;
+    final score = (alt['similarityScore'] as num?)?.toInt() ?? 0;
+    final reasons = (alt['matchReasons'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+
+    Color scoreColor = AppTheme.textTertiary;
+    String scoreLabel = '';
+    if (score >= 65) {
+      scoreColor = AppTheme.neonBlue;
+      scoreLabel = '⭐ Excelente match';
+    } else if (score >= 40) {
+      scoreColor = AppTheme.neonGreen;
+      scoreLabel = '🟢 Buen match';
+    } else if (score > 0) {
+      scoreColor = Colors.orange;
+      scoreLabel = '🟡 Match aceptable';
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -348,96 +363,140 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppTheme.neonGreen.withOpacity(0.15)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Stock badge
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppTheme.neonGreen.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '${stockEnv.toInt()}',
-                  style: const TextStyle(
-                      color: AppTheme.neonGreen,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700),
-                ),
-                const Text('cajas',
-                    style: TextStyle(
-                        color: AppTheme.neonGreen, fontSize: 8)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Product info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                      color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '$code${brand.isNotEmpty ? ' · $brand' : ''}',
-                  style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
-                ),
-                if (precio > 0)
-                  Text(
-                    PedidosFormatters.money(precio, decimals: 3),
-                    style: const TextStyle(
-                        color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.w500),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Add to cart button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => _addToCart(alt),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Stock badge
+              Container(
+                width: 50,
+                height: 50,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.neonGreen.withOpacity(0.15),
-                      AppTheme.neonGreen.withOpacity(0.05),
-                    ],
-                  ),
+                  color: AppTheme.neonGreen.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
                 ),
-                child: Row(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.add_shopping_cart, color: AppTheme.neonGreen, size: 16),
-                    const SizedBox(width: 6),
-                    Text(widget.remainingQty != null 
-                        ? 'Añadir ${widget.remainingQty!.toStringAsFixed(widget.remainingQty!.truncateToDouble() == widget.remainingQty! ? 0 : 2)}' 
-                        : 'Añadir',
-                        style: const TextStyle(
-                            color: AppTheme.neonGreen,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600)),
+                    Text(
+                      '${stockEnv.toInt()}',
+                      style: const TextStyle(
+                          color: AppTheme.neonGreen,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800),
+                    ),
+                    const Text('cajas',
+                        style: TextStyle(
+                            color: AppTheme.neonGreen, fontSize: 9)),
                   ],
                 ),
               ),
-            ),
+              const SizedBox(width: 12),
+              // Product info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$code${brand.isNotEmpty ? ' · $brand' : ''}',
+                      style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+                    ),
+                    if (precio > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          PedidosFormatters.money(precio, decimals: 3),
+                          style: const TextStyle(
+                              color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Add to cart button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _addToCart(alt),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.neonGreen.withOpacity(0.2),
+                          AppTheme.neonGreen.withOpacity(0.05),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.neonGreen.withOpacity(0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.add_shopping_cart, color: AppTheme.neonGreen, size: 18),
+                        const SizedBox(width: 6),
+                        Text(widget.remainingQty != null 
+                            ? 'Añadir ${widget.remainingQty!.toStringAsFixed(widget.remainingQty!.truncateToDouble() == widget.remainingQty! ? 0 : 2)}' 
+                            : 'Añadir',
+                            style: const TextStyle(
+                                color: AppTheme.neonGreen,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
+          
+          if (score > 0) ...[
+            const SizedBox(height: 12),
+            const Divider(color: AppTheme.borderColor, height: 1),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  scoreLabel,
+                  style: TextStyle(color: scoreColor, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                if (reasons.isNotEmpty)
+                  Expanded(
+                    flex: 2,
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: reasons.map((r) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.darkBase,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AppTheme.borderColor),
+                        ),
+                        child: Text(r, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+                      )).toList(),
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
