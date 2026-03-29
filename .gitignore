@@ -116,3 +116,9 @@ backend/deprecated/
 .swarm/*.db
 .swarm/*.db-wal
 .swarm/*.db-shm
+
+# OpenClaw and Schemas (Sensitive)
+.openclaw/
+config_patch.json
+full_schema.json
+schema.json
