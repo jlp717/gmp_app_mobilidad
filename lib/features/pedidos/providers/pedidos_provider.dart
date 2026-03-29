@@ -655,36 +655,6 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  Future<void> confirmExistingOrder(int orderId, String saleType, {bool forceConfirm = false}) async {
-    final result = await PedidosService.confirmOrder(
-      orderId: orderId.toString(),
-      saleType: saleType,
-      forceConfirm: forceConfirm,
-    );
-
-    // If confirmation succeeds (no block), update local state instantly
-    if (result['success'] == true) {
-      final idx = _orders.indexWhere((o) => o.id == orderId);
-      if (idx != -1) {
-        final o = _orders[idx];
-        _orders[idx] = OrderSummary(
-          id: o.id,
-          numeroPedido: o.numeroPedido,
-          clienteCode: o.clienteCode,
-          clienteName: o.clienteName,
-          vendedorCode: o.vendedorCode,
-          fecha: o.fecha,
-          estado: 'CONFIRMADO',
-          tipoVenta: saleType,
-          total: o.total,
-          margen: o.margen,
-          lineCount: o.lineCount,
-        );
-        notifyListeners();
-      }
-    }
-  }
-
   Future<void> cancelExistingOrder(int orderId) async {
     await PedidosService.cancelOrder(orderId);
     
