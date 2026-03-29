@@ -208,11 +208,19 @@ class Product {
   /// Matches legacy logic derived from UNIDADESRETRACTIL and description text.
   String get displayUnit {
     if (isWeightProduct) return _normalizedUnit;
-    
+
     // Explicit UM from DB (rare but takes precedence)
     final um = unitMeasure.toUpperCase().trim();
-    if (um.isNotEmpty && um != 'KILO' && um != 'KILOGRAMOS' && um != 'KG' && um != 'KILOS' &&
-        um != 'LITRO' && um != 'LITROS' && um != 'LT' && um != 'CAJA' && um != 'CAJAS') {
+    if (um.isNotEmpty &&
+        um != 'KILO' &&
+        um != 'KILOGRAMOS' &&
+        um != 'KG' &&
+        um != 'KILOS' &&
+        um != 'LITRO' &&
+        um != 'LITROS' &&
+        um != 'LT' &&
+        um != 'CAJA' &&
+        um != 'CAJAS') {
       return um;
     }
 
@@ -269,12 +277,12 @@ class Product {
       if (unitsPerBox > 0) return '${_fmtNum(unitsPerBox)} L';
       return '';
     }
-    
+
     // For single-field box-only products
     if (!isDualFieldProduct && unitsPerBox > 1) {
       return '${_fmtNum(unitsPerBox)} uds';
     }
-    
+
     if (norm == 'CAJAS') {
       if (unitsPerBox > 1) return '${_fmtNum(unitsPerBox)} uds';
       return '';
@@ -339,13 +347,15 @@ class Product {
     if (norm == 'LITROS') {
       return '${priceForUnit('LITROS').toStringAsFixed(decimals)} €/L';
     }
-    
+
     // Legacy display: If U/R > 0 and U/C = 1, show Neto U/R logic
     if (netoURPrice > 0) {
       final dUnit = displayUnit;
       String shortLabel = 'ud';
-      if (dUnit == 'BANDEJAS') shortLabel = 'bandeja';
-      else if (dUnit == 'ESTUCHES') shortLabel = 'estuche';
+      if (dUnit == 'BANDEJAS')
+        shortLabel = 'bandeja';
+      else if (dUnit == 'ESTUCHES')
+        shortLabel = 'estuche';
       else if (dUnit == 'PIEZAS') shortLabel = 'pieza';
       return 'Neto U/R: ${netoURPrice.toStringAsFixed(decimals)} €/$shortLabel';
     }
@@ -405,13 +415,13 @@ class Product {
     if (norm == 'LITROS') {
       return ['CAJAS', 'LITROS'];
     }
-    
+
     final dUnit = displayUnit;
-    
+
     if (isDualFieldProduct) {
       return ['CAJAS', 'UNIDADES'];
     }
-    
+
     // For single-field non-weight items (e.g. PIEZAS, BANDEJAS, CAJAS)
     return [dUnit];
   }
@@ -649,7 +659,8 @@ class OrderLine {
           _toDouble(json['porcentajeMargen'] ?? json['PORCENTAJEMARGEN']),
       ivaRate: _toDouble(json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'],
           fallback: 0.21),
-      unidadesFraccion: _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
+      unidadesFraccion:
+          _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
     );
   }
 
@@ -679,14 +690,14 @@ class OrderLine {
     if (unit == 'CAJAS' || unit.isEmpty) {
       // Selling by boxes → compute total units
       if (cantidadEnvases > 0 && unidadesCaja > 0) {
-        cantidadUnidades = double.parse(
-            (cantidadEnvases * unidadesCaja).toStringAsFixed(5));
+        cantidadUnidades =
+            double.parse((cantidadEnvases * unidadesCaja).toStringAsFixed(5));
       }
     } else {
       // Selling by kg/litros/units → compute box equivalent
       if (cantidadUnidades > 0 && unidadesCaja > 0) {
-        cantidadEnvases = double.parse(
-            (cantidadUnidades / unidadesCaja).toStringAsFixed(2));
+        cantidadEnvases =
+            double.parse((cantidadUnidades / unidadesCaja).toStringAsFixed(2));
       }
     }
 
@@ -1055,6 +1066,20 @@ class PedidosService {
       CacheService.invalidateByPrefix('pedidos:orders:');
     } catch (e) {
       debugPrint('[PedidosService] Error cancelOrder: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateOrderStatus(
+      int orderId, String status) async {
+    try {
+      final response = await ApiClient.put('$_base/$orderId/status',
+          data: {'status': status});
+      CacheService.invalidate('pedidos:order:$orderId');
+      CacheService.invalidateByPrefix('pedidos:orders:');
+      return response;
+    } catch (e) {
+      debugPrint('[PedidosService] Error updateOrderStatus: $e');
       rethrow;
     }
   }

@@ -1,7 +1,3 @@
-/// Order PDF Generator
-/// ===================
-/// Generates and shares order PDFs using the pdf package
-
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -9,6 +5,14 @@ import 'package:printing/printing.dart';
 import '../../data/pedidos_service.dart';
 
 class OrderPdfGenerator {
+  static const _primaryColor = '#003d7a';
+  static const _secondaryColor = '#1a5490';
+  static const _accentColor = '#28a745';
+  static const _darkGray = '#2c3e50';
+  static const _mediumGray = '#6c757d';
+  static const _lightGray = '#E8E8E8';
+  static const _ultraLight = '#f8f9fa';
+
   static Future<void> generateAndShare(
       BuildContext context, OrderDetail order) async {
     final pdf = pw.Document();
@@ -20,11 +24,7 @@ class OrderPdfGenerator {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
         header: (ctx) => _buildPdfHeader(header),
-        footer: (ctx) => pw.Container(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text('Pagina ${ctx.pageNumber}/${ctx.pagesCount}',
-              style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
-        ),
+        footer: (ctx) => _buildFooter(ctx),
         build: (ctx) => [
           _buildClientInfo(header),
           pw.SizedBox(height: 16),
@@ -46,53 +46,113 @@ class OrderPdfGenerator {
     );
   }
 
-  static pw.Widget _buildPdfHeader(OrderSummary header) {
+  static pw.Widget _buildFooter(pw.Context ctx) {
     return pw.Container(
-      padding: const pw.EdgeInsets.only(bottom: 12),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(
-            bottom: pw.BorderSide(color: PdfColors.grey300, width: 1)),
-      ),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      alignment: pw.Alignment.center,
+      child: pw.Column(
         children: [
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('MARI PEPA',
-                  style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColor.fromHex('#003d7a'))),
-              pw.Text('Food & Frozen',
-                  style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
-            ],
-          ),
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
-            children: [
-              pw.Text('PEDIDO #${header.numeroPedido}',
-                  style: pw.TextStyle(
-                      fontSize: 16, fontWeight: pw.FontWeight.bold)),
-              pw.Text('Fecha: ${header.fecha}',
-                  style: const pw.TextStyle(fontSize: 10)),
-              pw.Container(
-                padding:
-                    const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: pw.BoxDecoration(
-                  color: _statusColor(header.estado),
-                  borderRadius: pw.BorderRadius.circular(4),
-                ),
-                child: pw.Text(header.estado,
-                    style: pw.TextStyle(
-                        fontSize: 9,
-                        color: PdfColors.white,
-                        fontWeight: pw.FontWeight.bold)),
-              ),
-            ],
-          ),
+          pw.Divider(color: PdfColor.fromHex(_lightGray)),
+          pw.SizedBox(height: 4),
+          pw.Text('MARI PEPA - Food & Frozen',
+              style: pw.TextStyle(
+                  fontSize: 7, color: PdfColor.fromHex(_mediumGray))),
+          pw.Text('Congelados y refrigerados para hostelería',
+              style: pw.TextStyle(
+                  fontSize: 6, color: PdfColor.fromHex(_mediumGray))),
+          pw.SizedBox(height: 2),
+          pw.Text('Página ${ctx.pageNumber} de ${ctx.pagesCount}',
+              style: pw.TextStyle(
+                  fontSize: 7, color: PdfColor.fromHex(_mediumGray))),
         ],
       ),
+    );
+  }
+
+  static pw.Widget _buildPdfHeader(OrderSummary header) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Container(
+          width: double.infinity,
+          height: 4,
+          color: PdfColor.fromHex(_secondaryColor),
+        ),
+        pw.SizedBox(height: 8),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('MARI PEPA',
+                    style: pw.TextStyle(
+                        fontSize: 28,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColor.fromHex(_primaryColor))),
+                pw.SizedBox(height: 2),
+                pw.Text('Food & Frozen',
+                    style: pw.TextStyle(
+                        fontSize: 12,
+                        color: PdfColor.fromHex(_darkGray),
+                        fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 2),
+                pw.Text('Congelados y refrigerados para hostelería',
+                    style: pw.TextStyle(
+                        fontSize: 8, color: PdfColor.fromHex(_mediumGray))),
+              ],
+            ),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColor.fromHex(_secondaryColor),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Text('PEDIDO',
+                      style: pw.TextStyle(
+                          fontSize: 10,
+                          color: PdfColors.white,
+                          fontWeight: pw.FontWeight.bold)),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text('#${header.numeroPedido}',
+                    style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColor.fromHex(_darkGray))),
+              ],
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 12),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Fecha: ${header.fecha}',
+                style: pw.TextStyle(
+                    fontSize: 10, color: PdfColor.fromHex(_mediumGray))),
+            pw.Container(
+              padding:
+                  const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: pw.BoxDecoration(
+                color: _statusColor(header.estado),
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Text(_statusLabel(header.estado),
+                  style: pw.TextStyle(
+                      fontSize: 10,
+                      color: PdfColors.white,
+                      fontWeight: pw.FontWeight.bold)),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 12),
+        pw.Divider(color: PdfColor.fromHex(_lightGray), thickness: 1),
+      ],
     );
   }
 
@@ -231,6 +291,21 @@ class OrderPdfGenerator {
         return PdfColor.fromHex('#F44336');
       default:
         return PdfColors.grey;
+    }
+  }
+
+  static String _statusLabel(String status) {
+    switch (status.toUpperCase()) {
+      case 'BORRADOR':
+        return 'BORRADOR';
+      case 'CONFIRMADO':
+        return 'CONFIRMADO';
+      case 'ENVIADO':
+        return 'ENVIADO';
+      case 'ANULADO':
+        return 'ANULADO';
+      default:
+        return status;
     }
   }
 

@@ -713,6 +713,30 @@ router.put('/:id/cancel', async (req, res) => {
     }
 });
 
+/**
+ * PUT /api/pedidos/:id/status
+ * Update order status (for Pendiente aprobación, Enviar, etc.)
+ */
+router.put('/:id/status', async (req, res) => {
+    try {
+        const id = parseIntSafe(req.params.id, null);
+        if (id === null) {
+            return res.status(400).json({ success: false, error: 'Invalid order id' });
+        }
+        const { status } = req.body;
+        if (!status) {
+            return res.status(400).json({ success: false, error: 'Status is required' });
+        }
+        const result = await pedidosService.updateOrderStatus(id, status, { userId: req.user?.code || 'SYSTEM' });
+        res.json({ success: true, order: result });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/status: ${error.message}`);
+        const status = error.message.includes('not found') ? 404
+            : error.message.includes('no válido') ? 400 : 500;
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
 // =============================================================================
 // SIMILAR PRODUCTS (stock alternatives)
 // =============================================================================
@@ -731,6 +755,28 @@ router.get('/similar-products/:code', async (req, res) => {
         res.json({ success: true, product: code.trim(), alternatives });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /similar-products/${req.params.code}: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/pedidos/search-products
+ * Search products with available stock (for fallback search in stock alternatives modal)
+ * Query params: q (search term), limit (default 20)
+ */
+router.get('/search-products', async (req, res) => {
+    try {
+        const searchTerm = (req.query.q || '').trim();
+        const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+        
+        if (searchTerm.length < 2) {
+            return res.json({ success: true, products: [] });
+        }
+        
+        const products = await pedidosService.searchProductsWithStock(searchTerm, limit);
+        res.json({ success: true, products });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in GET /search-products: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });

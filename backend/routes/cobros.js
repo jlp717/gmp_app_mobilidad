@@ -18,13 +18,14 @@ function sanitizeCode(val) {
 
 /**
  * GET /api/cobros/:codigoCliente/pendientes
+ * Solo devuelve pedidos creados desde la app (ORIGEN = 'A')
  */
 router.get('/:codigoCliente/pendientes', async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
         logger.info(`[COBROS] Obteniendo pendientes para cliente: ${codigoCliente}`);
 
-        // Ensure table exists before querying it
+        // Ensure COBROS table exists for tracking payments
         try {
             await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
         } catch(e) {
@@ -46,39 +47,32 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
             logger.info('[COBROS] Tabla JAVIER.COBROS creada correctamente en el GET');
         }
 
+        // Query only APP-CREATED orders (ORIGEN = 'A') from PEDIDOS_CAB
         const sql = `
         SELECT
-          CAC.SUBEMPRESAALBARAN,
-          CAC.EJERCICIOALBARAN,
-          CAC.SERIEALBARAN,
-          CAC.TERMINALALBARAN,
-          CAC.NUMEROALBARAN,
-          CAC.NUMEROFACTURA,
-          CAC.SERIEFACTURA,
-          CAC.ANODOCUMENTO,
-          CAC.MESDOCUMENTO,
-          CAC.DIADOCUMENTO,
-          CAC.IMPORTETOTAL,
-          COALESCE(CVC.IMPORTEPENDIENTE, CAC.IMPORTETOTAL) as IMPORTE_PENDIENTE,
-          CAC.CODIGOTIPOALBARAN
-        FROM DSEDAC.CAC
-        LEFT JOIN DSEDAC.CVC 
-          ON CVC.SUBEMPRESADOCUMENTO = CAC.SUBEMPRESAALBARAN
-          AND CVC.EJERCICIODOCUMENTO = CAC.EJERCICIOALBARAN
-          AND CVC.SERIEDOCUMENTO = CAC.SERIEFACTURA
-          AND CVC.NUMERODOCUMENTO = CAC.NUMEROFACTURA
-        WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${codigoCliente}'
-          AND COALESCE(CVC.IMPORTEPENDIENTE, CAC.IMPORTETOTAL) > 0
+            PC.ID,
+            PC.EJERCICIO,
+            PC.NUMEROPEDIDO,
+            PC.SERIEPEDIDO,
+            PC.DIADOCUMENTO,
+            PC.MESDOCUMENTO,
+            PC.ANODOCUMENTO,
+            PC.IMPORTETOTAL,
+            PC.TIPOVENTA,
+            PC.ESTADO,
+            PC.ORIGEN
+        FROM JAVIER.PEDIDOS_CAB PC
+        WHERE TRIM(PC.CODIGOCLIENTE) = '${codigoCliente}'
+          AND PC.ORIGEN = 'A'
+          AND PC.ESTADO = 'CONFIRMADO'
+          AND PC.IMPORTETOTAL > 0
           -- Excluir los que ya hemos cobrado localmente
           AND NOT EXISTS (
             SELECT 1 FROM JAVIER.COBROS JC 
-            WHERE JC.CODIGO_CLIENTE = CAC.CODIGOCLIENTEFACTURA 
-              AND JC.REFERENCIA LIKE '%' || 
-                (CASE WHEN CAC.NUMEROFACTURA > 0 
-                      THEN TRIM(CAC.SERIEFACTURA) || '-' || CAST(CAC.NUMEROALBARAN AS VARCHAR(20))
-                      ELSE CAST(CAC.NUMEROALBARAN AS VARCHAR(20)) END) || '%'
+            WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE) 
+              AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
           )
-        ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC, CAC.DIADOCUMENTO DESC
+        ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC
         FETCH FIRST 100 ROWS ONLY`;
 
         const resultado = await query(sql, []);
@@ -92,15 +86,9 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         const cobros = (resultado && resultado.length > 0 ? resultado : []).map(row => {
             const mes = Number(row.MESDOCUMENTO);
             const ano = Number(row.ANODOCUMENTO);
-            const esFactura = Number(row.NUMEROFACTURA) > 0;
             const esDelMesActual = ano === anoActual && mes === mesActual;
 
-            let tipo = 'normal';
-            if (esFactura) tipo = esDelMesActual ? 'albaran' : 'factura';
-
-            const referencia = esFactura
-                ? `${row.SERIEFACTURA}-${row.NUMEROFACTURA}`
-                : `ALB-${row.NUMEROALBARAN}`;
+            const referencia = `${row.SERIEPEDIDO}-${row.NUMEROPEDIDO}`;
 
             const dia = format2(row.DIADOCUMENTO);
             const mm = format2(row.MESDOCUMENTO);
@@ -108,33 +96,20 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
 
             return {
                 id: uuidv4(),
-                tipo,
+                tipo: 'pedido_app',
                 referencia,
                 fecha: fechaStr,
                 importeTotal: parseFloat(row.IMPORTETOTAL) || 0,
-                importePendiente: parseFloat(row.IMPORTE_PENDIENTE) || 0,
-                descripcion: esFactura
-                    ? `Factura ${row.SERIEFACTURA}-${row.NUMEROFACTURA}`
-                    : `Albarán ${row.NUMEROALBARAN}`
+                importePendiente: parseFloat(row.IMPORTETOTAL) || 0,
+                descripcion: `Pedido ${row.SERIEPEDIDO}-${row.NUMEROPEDIDO}`
             };
         });
 
         // Sum up total
         let total = 0;
-        let cantAlbaranes = 0;
-        let totalAlbaranes = 0;
-        let cantFacturas = 0;
-        let totalFacturas = 0;
         
         cobros.forEach(c => {
             total += c.importePendiente;
-            if (c.tipo === 'albaran') {
-                cantAlbaranes++;
-                totalAlbaranes += c.importePendiente;
-            } else if (c.tipo === 'factura') {
-                cantFacturas++;
-                totalFacturas += c.importePendiente;
-            }
         });
 
         res.json({
@@ -142,8 +117,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
             cobros,
             resumen: {
                 totalPendiente: total,
-                albaranes: { cantidad: cantAlbaranes, total: totalAlbaranes },
-                facturas: { cantidad: cantFacturas, total: totalFacturas }
+                pedidos: { cantidad: cobros.length, total: total }
             }
         });
 

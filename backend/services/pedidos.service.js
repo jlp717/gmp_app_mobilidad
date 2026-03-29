@@ -41,6 +41,7 @@ CREATE TABLE JAVIER.PEDIDOS_CAB (
     IMPORTECOSTO NUMERIC(11,2) DEFAULT 0,
     IMPORTEMARGEN NUMERIC(11,2) DEFAULT 0,
     OBSERVACIONES VARCHAR(200) DEFAULT '',
+    ORIGEN CHAR(1) DEFAULT 'A',
     CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UPDATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )`;
@@ -495,7 +496,7 @@ async function getNextOrderNumber(ejercicio) {
 // CREATE ORDER
 // ============================================================================
 
-async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = 'CC', almacen = 1, tarifa = 1, formaPago = '02', observaciones = '', lines = [] }) {
+async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = 'CC', almacen = 1, tarifa = 1, formaPago = '02', observaciones = '', lines = [], origen = 'A' }) {
     if (!clientCode || !vendedorCode) {
         throw new Error('clientCode and vendedorCode are required');
     }
@@ -517,13 +518,13 @@ async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = '
         INSERT INTO JAVIER.PEDIDOS_CAB (
             EJERCICIO, NUMEROPEDIDO, DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
             CODIGOCLIENTE, NOMBRECLIENTE, CODIGOVENDEDOR, CODIGOFORMAPAGO,
-            CODIGOTARIFA, CODIGOALMACEN, TIPOVENTA, OBSERVACIONES
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            CODIGOTARIFA, CODIGOALMACEN, TIPOVENTA, OBSERVACIONES, ORIGEN
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
     const cabParams = [
         ejercicio, numeroPedido, dia, mes, ano, hora,
         clientCode.trim(), (clientName || '').substring(0, 60), (vendedorCode || '').split(',')[0].trim().substring(0, 2),
-        formaPago, tarifa, almacen, tipoventa, (observaciones || '').substring(0, 200)
+        formaPago, tarifa, almacen, tipoventa, (observaciones || '').substring(0, 200), origen
     ];
 
     await queryWithParams(cabSql, cabParams, false);
@@ -1151,6 +1152,47 @@ async function cancelOrder(orderId, options = {}) {
 }
 
 // ============================================================================
+// ORDER STATUS UPDATE (for Pendiente Aprobación)
+// ============================================================================
+
+async function updateOrderStatus(orderId, newStatus, options = {}) {
+    const id = parseInt(orderId);
+    if (isNaN(id)) throw new Error('Invalid orderId');
+    
+    const allowedStatuses = ['BORRADOR', 'PENDIENTE', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
+    const status = (newStatus || '').toUpperCase().trim();
+    
+    if (!allowedStatuses.includes(status)) {
+        throw new Error(`Estado no válido: ${status}. Estados permitidos: ${allowedStatuses.join(', ')}`);
+    }
+
+    // Get order info for audit before updating
+    let orderBefore;
+    try { orderBefore = await getOrderDetail(id); } catch (e) { /* ok */ }
+
+    await queryWithParams(
+        `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
+        [status, id], false
+    );
+
+    // Invalidate cache
+    try {
+        if (redisCache && typeof redisCache.invalidatePattern === 'function') {
+            await redisCache.invalidatePattern('pedidos:*');
+        }
+    } catch (e) {
+        logger.warn(`[PEDIDOS] Failed to invalidate cache: ${e.message}`);
+    }
+
+    // AUD: Audit log
+    try {
+        logger.info(`[AUDIT] 📝 ORDER_STATUS_CHANGED #${id} | ${orderBefore?.header?.estado || '?'} -> ${status} | By:${options.userId || 'SYSTEM'}`);
+    } catch (auditErr) { /* silent */ }
+
+    return getOrderDetail(id);
+}
+
+// ============================================================================
 // RECOMMENDATIONS
 // ============================================================================
 
@@ -1540,18 +1582,337 @@ async function getComplementaryProducts(productCodes, clientCode) {
 }
 
 // =============================================================================
-// SIMILAR PRODUCTS (Stock alternatives)
+// INTELLIGENT SIMILAR PRODUCTS (3-Level Algorithm - Production Ready)
 // =============================================================================
 
 /**
- * Finds products similar to the given one (same family/subfamily) that have stock.
- * Used when a product is out of stock to suggest alternatives.
+ * Intelligent product analysis - extracts the "essence" of a product
+ * Returns: { category, isProcessed, format, mainIngredient, qualifiers }
+ */
+function analyzeProductEssence(name) {
+    const text = (name || '').toLowerCase().trim();
+    const words = text.split(/\s+/).filter(w => w.length > 2);
+    
+    // ========================================
+    // CATEGORY DETECTION (what type of product)
+    // ========================================
+    const categoryPatterns = {
+        'carne': ['pollo', 'cerdo', 'vacuno', 'ternera', 'cordero', 'cabrito', 'lacón', 'paleta', 'jamón', 'panceta', 'tocino', 'chuleta', 'costilla', 'filete', 'solomillo', 'pechuga', 'muslo', 'pierna', 'brazo', 'hamburguesa', 'butifarra', 'morcilla', 'chorizo', 'salami', 'salchicha', 'bacon', 'lomo', 'presunto', 'cecina', 'fuet', 'sobrasada'],
+        'pescado': ['pescado', 'salmón', 'salmon', 'merluza', 'bacalao', 'atún', 'atun', 'bonito', 'sardina', 'caballa', 'bacoreta', 'dorada', 'lubina', 'rape', 'rodaballo', ' lenguado', 'trucha', 'carpa', 'tenca', 'anguila', 'palometa', 'chicharro', 'jurel', 'estornino', 'melva', 'alitún', 'coco', 'marrajo', 'cazón', 'marrajo', 'tiburón', 'congrio', 'anchoa', 'boquerón', 'caballa'],
+        'marisco': ['marisco', 'gamba', 'langostino', 'camarón', 'camaron', 'bogavante', 'langosta', 'cangrejo', 'centollo', 'nécora', 'mejillón', 'mejillon', 'almeja', 'berberecho', 'ostión', 'ostra', 'caracol', 'calamar', 'pulpo', 'sepia', 'chipirón', 'potón', 'volande', 'bufé', 'burga', 'chocho'],
+        'verdura': ['verdura', 'hortaliza', 'lechuga', 'tomate', 'patata', 'pimiento', 'cebolla', 'ajo', 'zanahoria', 'calabacín', 'calabacin', 'berenjena', 'alcachofa', 'espárrago', 'esparragos', 'guisante', 'judía', ' judia', 'habichuela', 'brócoli', 'brocoli', 'coliflor', 'col', 'repollo', 'acelga', 'espinaca', 'berro', 'canón', 'canon', 'rucula', 'rúcula', 'endibia', 'escarola', 'apio', 'nabo', 'rábano', 'rabano', 'remolacha', 'batata', 'boniato'],
+        'fruta': ['fruta', 'manzana', 'pera', 'naranja', 'plátano', 'platano', 'limón', 'limon', 'pomelo', 'mandarina', 'kiwi', 'uva', 'sandía', 'sandia', 'melón', 'melon', 'fresa', 'frambuesa', 'mora', 'arándano', 'arandano', 'cereza', 'ciruela', 'melocotón', 'melocoton', 'albaricoque', 'nectarina', 'higo', 'granada', 'mango', 'papaya', 'piña', 'pina', 'aguacate', 'coco', 'calabaza', 'calabaza'],
+        'lácteo': ['leche', 'queso', 'yogur', 'yogurt', 'mantequilla', 'nata', 'crema', 'cuajada', 'requesón', 'requeson', 'ricotta', 'mascarpone', 'parmesano', 'gruyere', 'emmental', 'cheddar', 'brie', 'camembert', 'roquefort', 'cabrales', 'gorgonzola', 'manchego', 'tierno', 'semicurado', 'curado', 'viejo', 'fresco'],
+        'huevo': ['huevo', 'huevos', 'clara', 'yema', 'yemas'],
+        'panadería': ['pan', 'baguette', 'brioche', 'croissant', 'croasán', 'ensaïmada', 'mollete', 'chapata', 'pita', 'naan', 'tortilla', 'panecillo', 'bollo'],
+        'precocinado': ['precocinado', 'pre-cocinado', 'cocido', 'hervido', 'asado', 'horneado', 'caliente'],
+        'congelado': ['congelado', 'ultracongelado', 'congelad', 'frozen', 'ice'],
+    };
+    
+    // ========================================
+    // FORMAT DETECTION (how it's presented)
+    // ========================================
+    const formatPatterns = {
+        'entero': ['entero', 'entera', 'enters', 'enteras', 'completo', 'completa', 'sin partir', 'sin cortar', 'integro'],
+        'mitad': ['mitad', 'medio', 'media', 'half', 'mitades'],
+        'cuarto': ['cuarto', 'cuartos', 'quarter', 'quarters', '4 partes'],
+        'dados': ['dado', 'dados', 'cubos', 'cubo', 'dice', 'dices', 'cuadritos', 'cuadrado'],
+        'rodajas': ['rodaja', 'rodajas', 'slice', 'slices', 'tira', 'tiras', 'bandeja'],
+        'lonchas': ['loncha', 'lonchas', 'lamina', 'láminas', 'laminas', 'flete', 'fletes'],
+        'filetes': ['filete', 'filetes', 'filet', 'steak', 'steaks', 'bistec', 'bistecs'],
+        'trozos': ['trozo', 'trozos', 'pedazo', 'pedazos', 'porción', 'porciones', 'portion', 'portions', 'troceado', 'trocead', 'picado', 'picad'],
+        'deshuesado': ['deshuesado', 'deshuesad', 'sin hueso', 'deshuesar', 'hueso', 'bone', 'boneless'],
+        'pelado': ['pelado', 'pelad', 'sin piel', 'pelar', 'skin', 'skinned', 'mondado'],
+        'vacío': ['vacio', 'vacío', 'blanco', 'vaciar', 'vacío'],
+        'vivo': ['vivo', 'viva', 'vivoa', 'vivas'],
+        'fresco': ['fresco', 'fresca', 'refrigerado', 'refrigerad', 'nevera', 'cold'],
+        'envasado': ['envasado', 'pack', 'paquete', 'bolsa', 'bandeja', 'caja', 'tarro', 'bote'],
+    };
+    
+    // ========================================
+    // PROCESSED/RAW DETECTION
+    // ========================================
+    const processedPatterns = [
+        'empanadilla', 'empanada', 'empanad', 'cocido', 'hervido', 'asado', 'horneado',
+        'albóndiga', 'albondiga', 'nugget', 'nuggets', 'croqueta', 'croquetas',
+        'fileteado', 'filetead', 'rebanado', 'rebanad', 'preparado', 'preparad', 
+        'receta', 'listo', 'cocinar', 'gourmet', 'cocinado', 'procesad',
+        'salami', 'chorizo', 'ibérico', 'iberico', 'jamón', 'jamon', 'paleta',
+        'lacón', 'lacon', 'panceta', 'cecina', 'fuet', 'sobrasada', 'mortadela',
+        'paté', 'pate', 'foie', 'butifarra', 'morcilla', 'longaniza', 'cheddar',
+        'manchego', 'queso', 'hamburguesa', 'salchicha', 'guiso', 'estofado',
+        'carneada', 'cecina', 'beicon', 'tocino', 'salazón', 'salazon'
+    ];
+    
+    // ========================================
+    // MAIN INGREDIENT DETECTION (what's the base)
+    // ========================================
+    const ingredientPatterns = {
+        'pollo': ['pollo', 'gallina', 'capón', 'capon', 'pavo', 'codorniz'],
+        'cerdo': ['cerdo', 'porcino', 'cochino', 'gorrino', 'ibérico', 'iberico'],
+        'vacuno': ['vacuno', 'ternera', 'res', 'buey', 'vaca', 'buey'],
+        'cordero': ['cordero', 'cabra', 'c羊肉'],
+        'pescado_blanco': ['merluza', 'bacalao', 'lubina', 'dorada', 'rape', 'lenguado', 'rodaballo', 'pescada'],
+        'pescado_azul': ['salmón', 'salmon', 'atún', 'atun', 'bonito', 'sardina', 'caballa', 'jurel', 'chicharro'],
+        'marisco': ['gamba', 'langostino', 'camarón', 'camaron', 'bogavante', 'langosta', 'cangrejo', 'mejilla', 'mejillon', 'almeja', 'pulpo', 'calamar', 'sepia'],
+        'verdura': ['verdura', 'hortaliza', 'lechuga', 'tomate', 'patata', 'cebolla', 'ajo', 'zanahoria', 'pimiento', 'berenjena', 'calabacín', 'calabacin', 'alcachofa', 'espárrago', 'esparragos', 'guisante', 'judía', 'judia', 'habichuela', 'brócoli', 'brocoli'],
+        'fruta': ['fruta', 'manzana', 'pera', 'naranja', 'plátano', 'platano', 'limón', 'limon', 'kiwi', 'uva', 'sandía', 'sandia', 'melón', 'melon', 'fresa'],
+        'aguacate': ['aguacate', 'palta'],
+    };
+    
+    // ========================================
+    // EXECUTE DETECTION
+    // ========================================
+    let detectedCategory = 'otro';
+    let detectedFormat = 'formato_estandar';
+    let isProcessed = false;
+    let mainIngredient = null;
+    const textLower = text;
+    
+    // Detect category
+    for (const [cat, keywords] of Object.entries(categoryPatterns)) {
+        if (keywords.some(kw => textLower.includes(kw))) {
+            detectedCategory = cat;
+            break;
+        }
+    }
+    
+    // Detect format
+    for (const [fmt, keywords] of Object.entries(formatPatterns)) {
+        if (keywords.some(kw => textLower.includes(kw))) {
+            detectedFormat = fmt;
+            break;
+        }
+    }
+    
+    // Detect if processed
+    if (processedPatterns.some(kw => textLower.includes(kw))) {
+        isProcessed = true;
+    }
+    
+    // Also check for raw indicators (if has these, likely NOT processed)
+    const rawIndicators = ['fresco', 'entero', 'crudo', 'natural', 'vivo', 'sin elaborar'];
+    const hasRawIndicator = rawIndicators.some(ind => textLower.includes(ind));
+    if (hasRawIndicator && !isProcessed) {
+        isProcessed = false;
+    } else if (hasRawIndicator && processedPatterns.some(kw => textLower.includes(kw))) {
+        // If has BOTH processed AND raw indicators, check context
+        // "Pollo fresco" = raw, "Empanadillas de pollo" = processed
+        const rawIndex = rawIndicators.findIndex(ind => textLower.includes(ind));
+        const processedIndex = processedPatterns.findIndex(kw => textLower.includes(kw));
+        // If raw comes first, likely raw product
+        if (rawIndex < processedIndex && rawIndex >= 0) {
+            isProcessed = false;
+        }
+    }
+    
+    // Detect main ingredient (useful for detecting "pollo" in "empanadillas de pollo")
+    for (const [ing, keywords] of Object.entries(ingredientPatterns)) {
+        if (keywords.some(kw => textLower.includes(kw))) {
+            mainIngredient = ing;
+            break;
+        }
+    }
+    
+    return {
+        category: detectedCategory,
+        format: detectedFormat,
+        isProcessed: isProcessed,
+        mainIngredient: mainIngredient,
+        originalText: name,
+        words: words
+    };
+}
+
+/**
+ * Calculates semantic compatibility score between two products
+ * Uses intelligent matching based on product essence
+ */
+function calculateSemanticScore(origProduct, candidate) {
+    let score = 0;
+    const reasons = [];
+
+    const origName = (origProduct.NAME || '').trim();
+    const candName = (candidate.NAME || '').trim();
+    
+    // Analyze product essences
+    const origEssence = analyzeProductEssence(origName);
+    const candEssence = analyzeProductEssence(candName);
+
+    // ========================================
+    // LEVEL 3: ADVANCED - Semantic Incompatibility Check
+    // ========================================
+    
+    // Check if candidate's main ingredient appears in original (for "empanadilla de pollo" case)
+    // If original is processed (like empanadilla) and contains an ingredient that matches 
+    // candidate's main ingredient, this could be incompatible
+    const origHasCandidateIngredient = origEssence.mainIngredient && 
+        origEssence.isProcessed && 
+        candEssence.mainIngredient === origEssence.mainIngredient;
+    
+    if (origHasCandidateIngredient) {
+        // Original is something "made of" candidate's ingredient
+        // Example: "Empanadilla de pollo" vs "Pollo entero" -> INCOMPATIBLE
+        score -= 80;
+        reasons.push(`⚠️ Producto diferente (el original contiene ${candEssence.mainIngredient})`);
+        return { score, reasons, level: 'advanced', compatible: false };
+    }
+    
+    // Check category incompatibility
+    if (origEssence.category !== 'otro' && candEssence.category !== 'otro' && 
+        origEssence.category !== candEssence.category) {
+        
+        // If both have categories but they're different, heavy penalty
+        // But allow some category crossovers
+        const allowedCrossovers = [
+            ['carne', 'precocinado'],
+            ['pescado', 'precocinado'],
+            ['marisco', 'precocinado'],
+            ['verdura', 'congelado'],
+            ['fruta', 'congelado'],
+        ];
+        
+        const isAllowed = allowedCrossovers.some(([a, b]) => 
+            (origEssence.category === a && candEssence.category === b) ||
+            (origEssence.category === b && candEssence.category === a)
+        );
+        
+        if (!isAllowed) {
+            score -= 60;
+            reasons.push(`⚠️ Categoría diferente: ${candEssence.category}`);
+            // Don't return immediately - give chance for same family match
+        }
+    }
+    
+    // Raw vs Processed conflict (most important!)
+    // If looking for RAW but candidate is PROCESSED -> MAJOR INCOMPATIBILITY
+    if (!origEssence.isProcessed && candEssence.isProcessed) {
+        // User wants a raw product but candidate is processed
+        score -= 50;
+        reasons.push('⚠️ Producto elaborado (buscabas producto fresco/crudo)');
+    }
+    
+    // If looking for PROCESSED but candidate is very RAW (like "pollo vivo")
+    if (origEssence.isProcessed && candEssence.isProcessed === false && 
+        candEssence.format === 'vivo') {
+        score -= 40;
+        reasons.push('⚠️ Producto vivo (no está procesado)');
+    }
+
+    // ========================================
+    // LEVEL 2: FORMAT COMPATIBILITY
+    // ========================================
+    if (origEssence.format === candEssence.format) {
+        score += 30;
+        reasons.push(`Mismo formato: ${origEssence.format}`);
+    } else if (origEssence.format !== 'formato_estandar' && candEssence.format !== 'formato_estandar') {
+        // Different but both have specific formats
+        // Check if formats are compatible
+        const compatibleFormats = [
+            ['entero', 'mitad'],
+            ['entero', 'cuarto'],
+            ['mitad', 'cuarto'],
+            ['dados', 'trozos'],
+            ['filetes', 'trozos'],
+            ['rodajas', 'lonchas'],
+        ];
+        
+        const isCompatible = compatibleFormats.some(([a, b]) => 
+            (origEssence.format === a && candEssence.format === b) ||
+            (origEssence.format === b && candEssence.format === a)
+        );
+        
+        if (isCompatible) {
+            score += 15;
+            reasons.push(`Formato compatible: ${origEssence.format} → ${candEssence.format}`);
+        } else {
+            score -= 5;
+            reasons.push(`Formato diferente: ${origEssence.format} vs ${candEssence.format}`);
+        }
+    }
+    
+    // ========================================
+    // LEVEL 1: FAMILY HIERARCHY
+    // ========================================
+    if (candidate.FAMILIA === origProduct.FAMILIA) {
+        score += 25;
+        reasons.push('Misma familia');
+    }
+
+    if (candidate.SUBFAMILIA && origProduct.SUBFAMILIA && 
+        candidate.SUBFAMILIA === origProduct.SUBFAMILIA) {
+        score += 40;
+        reasons.push('Misma subfamilia');
+    }
+
+    if (candidate.GRUPO && origProduct.GRUPO && 
+        candidate.GRUPO === origProduct.GRUPO) {
+        score += 15;
+        reasons.push('Mismo grupo');
+    }
+
+    if (candidate.MARCA && origProduct.MARCA && 
+        candidate.MARCA === origProduct.MARCA) {
+        score += 10;
+        reasons.push('Misma marca');
+    }
+    
+    // ========================================
+    // LEVEL 2: Technical fields matching
+    // ========================================
+    if (candidate.TIPO && origProduct.TIPO && 
+        candidate.TIPO === origProduct.TIPO) {
+        score += 12;
+        reasons.push('Mismo tipo');
+    }
+
+    if (candidate.FORMATO && origProduct.FORMATO && 
+        candidate.FORMATO === origProduct.FORMATO) {
+        score += 8;
+    }
+
+    if (candidate.PRESENTACION && origProduct.PRESENTACION && 
+        candidate.PRESENTACION === origProduct.PRESENTACION) {
+        score += 5;
+    }
+
+    // ========================================
+    // BONUS: Same main ingredient
+    // ========================================
+    if (origEssence.mainIngredient && candEssence.mainIngredient &&
+        origEssence.mainIngredient === candEssence.mainIngredient &&
+        !origHasCandidateIngredient) {
+        score += 20;
+        reasons.push(`Mismo ingrediente base: ${candEssence.mainIngredient}`);
+    }
+    
+    // ========================================
+    // BONUS: Product type compatibility
+    // ========================================
+    if (origEssence.isProcessed === candEssence.isProcessed) {
+        score += 10;
+        if (origEssence.isProcessed) {
+            reasons.push('Ambos son productos elaborados');
+        } else {
+            reasons.push('Ambos son productos frescos/crudos');
+        }
+    }
+
+    const compatible = score > -30;
+    return { score, reasons, level: 'advanced', compatible };
+}
+
+/**
+ * Finds products similar to the given one using intelligent 3-level matching.
+ * Level 1 (Basic): Family and Subfamily priority
+ * Level 2 (Intermediate): Compare Attributes and Format
+ * Level 3 (Advanced): Understand semantic intent (raw vs elaborated)
  */
 async function getSimilarProducts(productCode) {
     const code = (productCode || '').trim();
     if (!code) return [];
 
-    const cacheKey = `pedidos:similar_v2:${code}`;
+    const cacheKey = `pedidos:similar_v3:${code}`;
     
     try {
         // 1. Get original product attributes
@@ -1562,13 +1923,14 @@ async function getSimilarProducts(productCode) {
                    TRIM(CODIGOGRUPOGENERAL) AS GRUPO,
                    TRIM(FORMATO) AS FORMATO,
                    TRIM(PRESENTACION) AS PRESENTACION,
-                   TRIM(TIPOPRODUCTO) AS TIPO
+                   TRIM(TIPOPRODUCTO) AS TIPO,
+                   TRIM(DESCRIPCIONARTICULO) AS DESCRIPTION
             FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
         `;
         const origRows = await queryWithParams(sqlOriginal, [code]);
         if (!origRows || origRows.length === 0) return [];
         const orig = origRows[0];
-        
+
         // 2. Fetch candidates from the SAME FAMILY that have stock
         const sqlCandidates = `
             SELECT TRIM(B.CODIGOARTICULO) AS CODE,
@@ -1611,53 +1973,55 @@ async function getSimilarProducts(productCode) {
             sqlCandidates, cacheKey, TTL.SHORT
         );
         
-        // 3. Scoring (Semantic Similarity)
-        const scored = rows.map(r => {
-            let score = 25; // Base score for same family (guaranteed by WHERE clause)
-            const reasons = ['Misma familia'];
-            
-            if (r.SUBFAMILIA && orig.SUBFAMILIA && r.SUBFAMILIA === orig.SUBFAMILIA) {
-                score += 40;
-                reasons.push('Misma subfamilia');
-            }
-            if (r.GRUPO && orig.GRUPO && r.GRUPO === orig.GRUPO) {
-                score += 15;
-                reasons.push('Mismo grupo general');
-            }
-            if (r.MARCA && orig.MARCA && r.MARCA === orig.MARCA) {
-                score += 10;
-                reasons.push('Misma marca');
-            }
-            if (r.FORMATO && orig.FORMATO && r.FORMATO === orig.FORMATO) {
-                score += 5;
-                reasons.push('Mismo formato');
-            }
-            if (r.PRESENTACION && orig.PRESENTACION && r.PRESENTACION === orig.PRESENTACION) {
-                score += 5;
-                reasons.push('Misma presentacion');
-            }
-            if (r.TIPO && orig.TIPO && r.TIPO === orig.TIPO) {
-                score += 5;
-                reasons.push('Mismo tipo producto');
-            }
-            
-            return {
-                code: (r.CODE || '').trim(),
-                name: (r.NAME || '').trim(),
-                brand: (r.MARCA || '').trim(),
-                family: (r.FAMILIA || '').trim(),
-                subfamily: (r.SUBFAMILIA || '').trim(),
-                stockEnvases: Math.max(0, parseFloat(r.STOCK_ENVASES) || 0),
-                stockUnidades: Math.max(0, parseFloat(r.STOCK_UNIDADES) || 0),
-                precio: parseFloat(r.PRECIO) || 0,
-                similarityScore: score,
-                matchReasons: reasons
-            };
-        });
+        // 3. Apply intelligent 3-level scoring
+        const scored = [];
         
-        // 4. Sort and limit to top 8
+        for (const r of rows) {
+            const candidate = {
+                NAME: r.NAME,
+                DESCRIPTION: r.NAME, // Use name as description for keyword analysis
+                FAMILIA: r.FAMILIA,
+                SUBFAMILIA: r.SUBFAMILIA,
+                GRUPO: r.GRUPO,
+                MARCA: r.MARCA,
+                FORMATO: r.FORMATO,
+                PRESENTACION: r.PRESENTACION,
+                TIPO: r.TIPO
+            };
+            
+            const origProduct = {
+                NAME: orig.DESCRIPTION,
+                DESCRIPTION: orig.DESCRIPTION,
+                FAMILIA: orig.FAMILIA,
+                SUBFAMILIA: orig.SUBFAMILIA,
+                GRUPO: orig.GRUPO,
+                MARCA: orig.MARCA,
+                FORMATO: orig.FORMATO,
+                PRESENTACION: orig.PRESENTACION,
+                TIPO: orig.TIPO
+            };
+            
+            const { score, reasons, compatible } = calculateSemanticScore(origProduct, candidate);
+            
+            if (compatible || score > -50) {
+                scored.push({
+                    code: (r.CODE || '').trim(),
+                    name: (r.NAME || '').trim(),
+                    brand: (r.MARCA || '').trim(),
+                    family: (r.FAMILIA || '').trim(),
+                    subfamily: (r.SUBFAMILIA || '').trim(),
+                    stockEnvases: Math.max(0, parseFloat(r.STOCK_ENVASES) || 0),
+                    stockUnidades: Math.max(0, parseFloat(r.STOCK_UNIDADES) || 0),
+                    precio: parseFloat(r.PRECIO) || 0,
+                    similarityScore: Math.max(0, score),
+                    matchReasons: reasons.length > 0 ? reasons : ['Misma familia']
+                });
+            }
+        }
+        
+        // 4. Sort and limit to top 10
         scored.sort((a, b) => b.similarityScore - a.similarityScore || b.stockEnvases - a.stockEnvases);
-        return scored.slice(0, 8);
+        return scored.slice(0, 10);
     } catch (error) {
         logger.error(`[PEDIDOS] getSimilarProducts error for ${code}: ${error.message}`);
         return [];
@@ -1767,6 +2131,90 @@ async function generateOrderPdf(orderId) {
     return detail; // Return data, PDF rendering happens in route
 }
 
+// =============================================================================
+// SEARCH PRODUCTS WITH STOCK (for stock alternatives fallback)
+// =============================================================================
+
+/**
+ * Search products with available stock by name/code/family
+ * Used as fallback in stock alternatives modal when no similar products found
+ */
+async function searchProductsWithStock(searchTerm, limit = 20) {
+    const term = (searchTerm || '').trim().toUpperCase();
+    if (!term || term.length < 2) return [];
+    
+    const cacheKey = `pedidos:search_stock:${term}:${limit}`;
+    
+    try {
+        const sql = `
+            SELECT TRIM(A.CODIGOARTICULO) AS CODE,
+                   TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+                   TRIM(A.CODIGOMARCA) AS MARCA,
+                   TRIM(A.CODIGOFAMILIA) AS FAMILIA,
+                   TRIM(A.CODIGOSUBFAMILIA) AS SUBFAMILIA,
+                   COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCK_ENVASES,
+                   COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCK_UNIDADES,
+                   COALESCE(T.PRECIOTARIFA, 0) AS PRECIO
+            FROM DSEDAC.ART A
+            LEFT JOIN (
+                SELECT CODIGOARTICULO,
+                    SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
+                    SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
+                FROM DSEDAC.ARO
+                WHERE CODIGOALMACEN = 1
+                GROUP BY CODIGOARTICULO
+            ) S ON A.CODIGOARTICULO = S.CODIGOARTICULO
+            LEFT JOIN (
+                SELECT SR.CODIGOARTICULO,
+                    SUM(SR.CANTIDADENVASES) AS RES_ENV,
+                    SUM(SR.CANTIDADUNIDADES) AS RES_UNI
+                FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
+                JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+                GROUP BY SR.CODIGOARTICULO
+            ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
+            LEFT JOIN DSEDAC.ARA T ON A.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            WHERE A.ANOBAJA = 0
+              AND (COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0)) > 0
+              AND (
+                  UPPER(TRIM(A.DESCRIPCIONARTICULO)) LIKE ?
+                  OR UPPER(TRIM(A.CODIGOARTICULO)) LIKE ?
+                  OR UPPER(TRIM(A.CODIGOFAMILIA)) LIKE ?
+                  OR UPPER(TRIM(A.CODIGOSUBFAMILIA)) LIKE ?
+              )
+            ORDER BY 
+                CASE 
+                    WHEN UPPER(TRIM(A.CODIGOARTICULO)) LIKE ? THEN 1
+                    WHEN UPPER(TRIM(A.DESCRIPCIONARTICULO)) LIKE ? THEN 2
+                    ELSE 3
+                END,
+                S.ENVASES_DISP DESC
+            FETCH FIRST ? ROWS ONLY
+        `;
+        
+        const likeTerm = `%${term}%`;
+        const rows = await cachedQuery(
+            (s) => queryWithParams(s, [likeTerm, likeTerm, likeTerm, likeTerm, likeTerm, likeTerm, limit]),
+            sql, cacheKey, TTL.SHORT
+        );
+        
+        return rows.map(r => ({
+            code: (r.CODE || '').trim(),
+            name: (r.NAME || '').trim(),
+            brand: (r.MARCA || '').trim(),
+            family: (r.FAMILIA || '').trim(),
+            subfamily: (r.SUBFAMILIA || '').trim(),
+            stockEnvases: Math.max(0, parseFloat(r.STOCK_ENVASES) || 0),
+            stockUnidades: Math.max(0, parseFloat(r.STOCK_UNIDADES) || 0),
+            precio: parseFloat(r.PRECIO) || 0,
+            similarityScore: 0,
+            matchReasons: ['Búsqueda manual']
+        }));
+    } catch (error) {
+        logger.error(`[PEDIDOS] searchProductsWithStock error: ${error.message}`);
+        return [];
+    }
+}
+
 module.exports = {
     initPedidosTables,
     getProducts,
@@ -1783,6 +2231,7 @@ module.exports = {
     deleteOrderLine: deleteOrderLineRoute,
     confirmOrder,
     cancelOrder,
+    updateOrderStatus,
     getRecommendations,
     getFamilies,
     getBrands,
@@ -1795,5 +2244,6 @@ module.exports = {
     getOrderAnalytics,
     generateOrderPdf,
     getSimilarProducts,
+    searchProductsWithStock,
     calculateLineImporte,
 };

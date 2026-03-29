@@ -103,6 +103,7 @@ class PedidosProvider with ChangeNotifier {
     if (saldo is String) return double.tryParse(saldo) ?? 0;
     return 0; // Defensive: Map or unexpected type -> 0
   }
+
   Set<String> get favoriteProductCodes => _favoriteProductCodes;
   List<Map<String, dynamic>> get complementaryProducts =>
       _complementaryProducts;
@@ -330,15 +331,19 @@ class PedidosProvider with ChangeNotifier {
     final unit = unidadMedida.trim().isEmpty
         ? 'CAJAS'
         : unidadMedida.trim().toUpperCase();
-        
+
     double requestQty = unit == 'CAJAS' ? cantidadEnvases : cantidadUnidades;
-    
-    final existingIdx = _lines.indexWhere((l) => l.codigoArticulo == product.code);
+
+    final existingIdx =
+        _lines.indexWhere((l) => l.codigoArticulo == product.code);
     final currentQtyInCart = existingIdx >= 0
-        ? (unit == 'CAJAS' ? _lines[existingIdx].cantidadEnvases : _lines[existingIdx].cantidadUnidades)
+        ? (unit == 'CAJAS'
+            ? _lines[existingIdx].cantidadEnvases
+            : _lines[existingIdx].cantidadUnidades)
         : 0.0;
-        
-    final maxQty = unit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(unit);
+
+    final maxQty =
+        unit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(unit);
     final remainingAvailable = maxQty - currentQtyInCart;
 
     if (remainingAvailable <= 0 && requestQty > 0) {
@@ -357,7 +362,7 @@ class PedidosProvider with ChangeNotifier {
       isPartial = true;
       missingQty = requestQty - remainingAvailable;
       requestQty = remainingAvailable;
-      
+
       if (unit == 'CAJAS') {
         cantidadEnvases = requestQty;
         if (!product.isDualFieldProduct) cantidadUnidades = 0;
@@ -419,8 +424,12 @@ class PedidosProvider with ChangeNotifier {
       final line = OrderLine(
         codigoArticulo: product.code,
         descripcion: product.name,
-        cantidadEnvases: product.isDualFieldProduct ? cantidadEnvases : (unit == 'CAJAS' ? requestQty : 0),
-        cantidadUnidades: product.isDualFieldProduct ? cantidadUnidades : (unit == 'CAJAS' ? 0 : requestQty),
+        cantidadEnvases: product.isDualFieldProduct
+            ? cantidadEnvases
+            : (unit == 'CAJAS' ? requestQty : 0),
+        cantidadUnidades: product.isDualFieldProduct
+            ? cantidadUnidades
+            : (unit == 'CAJAS' ? 0 : requestQty),
         unidadMedida: unit,
         unidadesCaja: product.quantityPerBoxForUnit(unit),
         unidadesFraccion: product.unitsFraction,
@@ -506,14 +515,15 @@ class PedidosProvider with ChangeNotifier {
         line.cantidadUnidades = nextQty;
       }
     }
-    
+
     if (precioVenta != null) line.precioVenta = precioVenta;
     if (pIdx >= 0) {
       line.unidadesCaja = _products[pIdx].quantityPerBoxForUnit(nextUnit);
     }
     line.recalculate();
     _lastQtyByProduct[_qtyKey(line.codigoArticulo)] = nextQty;
-    _lastUnitByProduct[_qtyKey(line.codigoArticulo, _clientCode)] = line.unidadMedida;
+    _lastUnitByProduct[_qtyKey(line.codigoArticulo, _clientCode)] =
+        line.unidadMedida;
     _isDirty = true;
     notifyListeners();
     return null;
@@ -603,7 +613,8 @@ class PedidosProvider with ChangeNotifier {
       final fullObservaciones =
           [discountTag, obs].where((s) => s.isNotEmpty).join(' ').trim();
 
-      final result = await PedidosService.createOrder(
+      // Step 1: Create the order
+      final createResult = await PedidosService.createOrder(
         clientCode: _clientCode!,
         clientName: _clientName ?? '',
         vendedorCode: vendedorCode,
@@ -611,6 +622,17 @@ class PedidosProvider with ChangeNotifier {
         lines: linesForSubmit,
         observaciones: fullObservaciones,
       );
+
+      if (createResult == null || createResult['id'] == null) {
+        _error = 'Error al crear el pedido';
+        return null;
+      }
+
+      // Step 2: Immediately confirm the order (set to CONFIRMADO)
+      final orderId = createResult['id'] as int;
+      final confirmedResult =
+          await PedidosService.confirmOrder(orderId, _saleType);
+
       // Clear cart after successful creation
       _lines.clear();
       _clientCode = null;
@@ -619,7 +641,12 @@ class PedidosProvider with ChangeNotifier {
       _globalDiscountPct = 0;
       _complementaryProducts = [];
       _clientBalance = {};
-      return result;
+
+      // Return the confirmed order result
+      if (confirmedResult != null && confirmedResult['header'] != null) {
+        return confirmedResult['header'] as Map<String, dynamic>;
+      }
+      return createResult as Map<String, dynamic>;
     } catch (e) {
       _error = e.toString();
       return null;
@@ -657,7 +684,7 @@ class PedidosProvider with ChangeNotifier {
 
   Future<void> cancelExistingOrder(int orderId) async {
     await PedidosService.cancelOrder(orderId);
-    
+
     // Update local state instantly
     final idx = _orders.indexWhere((o) => o.id == orderId);
     if (idx != -1) {
@@ -681,7 +708,7 @@ class PedidosProvider with ChangeNotifier {
 
   Future<void> confirmExistingOrder(int orderId, String saleType) async {
     await PedidosService.confirmOrder(orderId, saleType);
-    
+
     // Update local state instantly
     final idx = _orders.indexWhere((o) => o.id == orderId);
     if (idx != -1) {
@@ -695,6 +722,52 @@ class PedidosProvider with ChangeNotifier {
         fecha: o.fecha,
         estado: 'CONFIRMADO',
         tipoVenta: saleType,
+        total: o.total,
+        margen: o.margen,
+        lineCount: o.lineCount,
+      );
+      notifyListeners();
+    }
+  }
+
+  Future<void> setOrderPendingApproval(int orderId) async {
+    await PedidosService.updateOrderStatus(orderId, 'PENDIENTE');
+
+    final idx = _orders.indexWhere((o) => o.id == orderId);
+    if (idx != -1) {
+      final o = _orders[idx];
+      _orders[idx] = OrderSummary(
+        id: o.id,
+        numeroPedido: o.numeroPedido,
+        clienteCode: o.clienteCode,
+        clienteName: o.clienteName,
+        vendedorCode: o.vendedorCode,
+        fecha: o.fecha,
+        estado: 'PENDIENTE',
+        tipoVenta: o.tipoVenta,
+        total: o.total,
+        margen: o.margen,
+        lineCount: o.lineCount,
+      );
+      notifyListeners();
+    }
+  }
+
+  Future<void> sendOrder(int orderId) async {
+    await PedidosService.updateOrderStatus(orderId, 'ENVIADO');
+
+    final idx = _orders.indexWhere((o) => o.id == orderId);
+    if (idx != -1) {
+      final o = _orders[idx];
+      _orders[idx] = OrderSummary(
+        id: o.id,
+        numeroPedido: o.numeroPedido,
+        clienteCode: o.clienteCode,
+        clienteName: o.clienteName,
+        vendedorCode: o.vendedorCode,
+        fecha: o.fecha,
+        estado: 'ENVIADO',
+        tipoVenta: o.tipoVenta,
         total: o.total,
         margen: o.margen,
         lineCount: o.lineCount,
@@ -737,7 +810,8 @@ class PedidosProvider with ChangeNotifier {
         _isDirty = false;
       } else if (!isAutoSave) {
         await PedidosOfflineService.saveDraft(
-          draftKey: 'draft_manual_${_clientCode}_${DateTime.now().millisecondsSinceEpoch}',
+          draftKey:
+              'draft_manual_${_clientCode}_${DateTime.now().millisecondsSinceEpoch}',
           clientCode: _clientCode!,
           clientName: _clientName ?? '',
           saleType: _saleType,
