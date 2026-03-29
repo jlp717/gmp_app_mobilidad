@@ -18,7 +18,7 @@ function sanitizeCode(val) {
 
 /**
  * GET /api/cobros/:codigoCliente/pendientes
- * Solo devuelve pedidos creados desde la app (ORIGEN = 'A')
+ * Solo devuelve pedidos confirmados pendientes de cobro
  */
 router.get('/:codigoCliente/pendientes', async (req, res) => {
     try {
@@ -26,54 +26,80 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         logger.info(`[COBROS] Obteniendo pendientes para cliente: ${codigoCliente}`);
 
         // Ensure COBROS table exists for tracking payments
+        let cobrosTableExists = false;
         try {
             await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
+            cobrosTableExists = true;
         } catch(e) {
-            await query(`
-                CREATE TABLE JAVIER.COBROS (
-                    ID VARCHAR(64) PRIMARY KEY,
-                    CODIGO_CLIENTE VARCHAR(20),
-                    REFERENCIA VARCHAR(100),
-                    IMPORTE DECIMAL(10,2),
-                    FORMA_PAGO VARCHAR(50),
-                    TIPO_VENTA VARCHAR(20),
-                    TIPO_MODO VARCHAR(20),
-                    TIPO_USUARIO VARCHAR(20),
-                    CODIGO_USUARIO VARCHAR(20),
-                    OBSERVACIONES VARCHAR(500),
-                    FECHA TIMESTAMP DEFAULT CURRENT TIMESTAMP
-                )
-            `);
-            logger.info('[COBROS] Tabla JAVIER.COBROS creada correctamente en el GET');
+            try {
+                await query(`
+                    CREATE TABLE JAVIER.COBROS (
+                        ID VARCHAR(64) PRIMARY KEY,
+                        CODIGO_CLIENTE VARCHAR(20),
+                        REFERENCIA VARCHAR(100),
+                        IMPORTE DECIMAL(10,2),
+                        FORMA_PAGO VARCHAR(50),
+                        TIPO_VENTA VARCHAR(20),
+                        TIPO_MODO VARCHAR(20),
+                        TIPO_USUARIO VARCHAR(20),
+                        CODIGO_USUARIO VARCHAR(20),
+                        OBSERVACIONES VARCHAR(500),
+                        FECHA TIMESTAMP DEFAULT CURRENT TIMESTAMP
+                    )
+                `);
+                cobrosTableExists = true;
+                logger.info('[COBROS] Tabla JAVIER.COBROS creada correctamente');
+            } catch(createErr) {
+                logger.error('[COBROS] Error creando tabla: ' + createErr.message);
+            }
         }
 
-        // Query only APP-CREATED orders (ORIGEN = 'A') from PEDIDOS_CAB
-        const sql = `
-        SELECT
-            PC.ID,
-            PC.EJERCICIO,
-            PC.NUMEROPEDIDO,
-            PC.SERIEPEDIDO,
-            PC.DIADOCUMENTO,
-            PC.MESDOCUMENTO,
-            PC.ANODOCUMENTO,
-            PC.IMPORTETOTAL,
-            PC.TIPOVENTA,
-            PC.ESTADO,
-            PC.ORIGEN
-        FROM JAVIER.PEDIDOS_CAB PC
-        WHERE TRIM(PC.CODIGOCLIENTE) = '${codigoCliente}'
-          AND PC.ORIGEN = 'A'
-          AND PC.ESTADO = 'CONFIRMADO'
-          AND PC.IMPORTETOTAL > 0
-          -- Excluir los que ya hemos cobrado localmente
-          AND NOT EXISTS (
-            SELECT 1 FROM JAVIER.COBROS JC 
-            WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE) 
-              AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
-          )
-        ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC
-        FETCH FIRST 100 ROWS ONLY`;
+        // Check if ORIGEN column exists in PEDIDOS_CAB
+        let origenExists = false;
+        try {
+            await query(`SELECT ORIGEN FROM JAVIER.PEDIDOS_CAB FETCH FIRST 1 ROW ONLY`);
+            origenExists = true;
+        } catch(e) {
+            logger.warn('[COBROS] Columna ORIGEN no existe en PEDIDOS_CAB, usando todos los pedidos');
+        }
+
+        // Build query based on whether ORIGEN column exists
+        let sql;
+        if (origenExists) {
+            // Query only APP-CREATED orders (ORIGEN = 'A')
+            sql = `
+            SELECT
+                PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
+                PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
+                PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
+            FROM JAVIER.PEDIDOS_CAB PC
+            WHERE TRIM(PC.CODIGOCLIENTE) = '${codigoCliente}'
+              AND PC.ORIGEN = 'A'
+              AND PC.ESTADO = 'CONFIRMADO'
+              AND PC.IMPORTETOTAL > 0`;
+        } else {
+            // Query all confirmed orders
+            sql = `
+            SELECT
+                PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
+                PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
+                PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
+            FROM JAVIER.PEDIDOS_CAB PC
+            WHERE TRIM(PC.CODIGOCLIENTE) = '${codigoCliente}'
+              AND PC.ESTADO = 'CONFIRMADO'
+              AND PC.IMPORTETOTAL > 0`;
+        }
+
+        // Exclude already paid orders
+        if (cobrosTableExists) {
+            sql += ` AND NOT EXISTS (
+                SELECT 1 FROM JAVIER.COBROS JC 
+                WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE) 
+                  AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
+            )`;
+        }
+
+        sql += ` ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC FETCH FIRST 100 ROWS ONLY`;
 
         const resultado = await query(sql, []);
 
