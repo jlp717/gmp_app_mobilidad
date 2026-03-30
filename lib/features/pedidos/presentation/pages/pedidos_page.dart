@@ -28,6 +28,7 @@ import '../widgets/complementary_products.dart';
 import '../widgets/order_pdf_generator.dart';
 import '../widgets/product_detail_sheet.dart';
 import '../widgets/stock_alternatives_sheet.dart';
+import '../widgets/unit_selector_modal.dart';
 import '../utils/pedidos_formatters.dart';
 import '../dialogs/client_search_dialog.dart';
 import '../../data/pedidos_offline_service.dart';
@@ -61,6 +62,9 @@ class _PedidosPageState extends State<PedidosPage>
   // Mejora 10 â€” Mis Pedidos search & date filter
   String _orderSearch = '';
   String _orderDateFilter = 'Todo';
+  int? _orderFilterYear;
+  int? _orderFilterMonth;
+  DateTimeRange? _orderCustomRange;
 
   @override
   void initState() {
@@ -2086,31 +2090,87 @@ class _PedidosPageState extends State<PedidosPage>
           cartQtySuffix: cartQtySuffix,
           onQuickAdd: (lineInCart != null && lineInCart.cantidadEnvases <= 0)
               ? null
-              : () {
-                  // Mejora 2 â€” Quick add 1 caja
+              : () async {
                   HapticFeedback.lightImpact();
                   final messenger = ScaffoldMessenger.of(context);
                   messenger.hideCurrentSnackBar();
-                  final err = provider.addLine(
-                      product, 1.0, 0.0, 'CAJAS', product.bestPrice);
-                  if (err != null) {
-                    messenger.showSnackBar(
-                      SnackBar(
+
+                  // Simple product (only CAJAS, not dual) — quick add 1 caja
+                  if (product.availableUnits.length <= 1 &&
+                      !product.isDualFieldProduct) {
+                    final err = provider.addLine(
+                        product, 1.0, 0.0, 'CAJAS', product.bestPrice);
+                    if (err != null) {
+                      messenger.showSnackBar(SnackBar(
                           content: Text(err,
                               style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold)),
                           backgroundColor: AppTheme.error,
-                          duration: const Duration(seconds: 2)),
-                    );
-                  } else {
-                    provider.loadComplementaryProducts();
-                    messenger.showSnackBar(
-                      SnackBar(
+                          duration: const Duration(seconds: 2)));
+                    } else {
+                      provider.loadComplementaryProducts();
+                      messenger.showSnackBar(SnackBar(
                           content: Text('+1 caja de ${product.name}'),
                           backgroundColor: AppTheme.neonGreen,
-                          duration: const Duration(seconds: 1)),
-                    );
+                          duration: const Duration(seconds: 1)));
+                    }
+                    return;
+                  }
+
+                  // Multi-unit or dual product — open UnitSelectorModal
+                  final result = await UnitSelectorModal.show(
+                    context,
+                    product: product,
+                    initialUnit: product.availableUnits.first,
+                    initialQuantity: 1,
+                  );
+                  if (result == null || result['cleared'] == true) return;
+                  final unit = result['unit'] as String;
+                  final qty = (result['quantity'] as double?) ?? 0;
+                  if (qty <= 0) return;
+
+                  double envases = 0, unidades = 0;
+                  if (unit == 'CAJAS') {
+                    envases = qty;
+                    unidades = qty * product.unitsPerBox;
+                  } else if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
+                    envases = qty;
+                    unidades = qty;
+                  } else {
+                    unidades = qty;
+                    envases =
+                        product.unitsPerBox > 0 ? qty / product.unitsPerBox : 0;
+                  }
+                  final price = product.priceForUnit(unit);
+                  final err =
+                      provider.addLine(product, envases, unidades, unit, price);
+                  if (err != null) {
+                    if (err.contains('Stock insuficiente')) {
+                      showStockAlternativesSheet(
+                        context: context,
+                        outOfStockProduct: product,
+                        provider: provider,
+                      );
+                    } else {
+                      messenger.showSnackBar(SnackBar(
+                          content: Text(err,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                          backgroundColor: AppTheme.error,
+                          duration: const Duration(seconds: 2)));
+                    }
+                  } else {
+                    provider.loadComplementaryProducts();
+                    final unitLabel = Product.unitLabel(unit);
+                    final fmtQty = qty == qty.truncateToDouble()
+                        ? qty.toStringAsFixed(0)
+                        : qty.toStringAsFixed(2);
+                    messenger.showSnackBar(SnackBar(
+                        content: Text('+$fmtQty $unitLabel de ${product.name}'),
+                        backgroundColor: AppTheme.neonGreen,
+                        duration: const Duration(seconds: 1)));
                   }
                 },
           onToggleFavorite: () {
@@ -2171,34 +2231,197 @@ class _PedidosPageState extends State<PedidosPage>
                 ),
               ),
               const SizedBox(height: 6),
+              // Date filter chips
               SizedBox(
                 height: 32,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
-                  children: ['Todo', 'Hoy', 'Semana', 'Mes'].map((label) {
-                    final selected = _orderDateFilter == label;
-                    return Padding(
+                  children: [
+                    ...['Todo', 'Hoy', 'Semana', 'Mes'].map((label) {
+                      final selected = _orderDateFilter == label &&
+                          _orderCustomRange == null;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: FilterChip(
+                          label: Text(label),
+                          selected: selected,
+                          selectedColor: AppTheme.neonBlue.withOpacity(0.2),
+                          backgroundColor: AppTheme.darkCard,
+                          labelStyle: TextStyle(
+                            color:
+                                selected ? AppTheme.neonBlue : Colors.white70,
+                            fontSize: 11,
+                          ),
+                          side: BorderSide(
+                              color: selected
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.borderColor),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                          onSelected: (_) => setState(() {
+                            _orderDateFilter = label;
+                            _orderCustomRange = null;
+                            _orderFilterYear = null;
+                            _orderFilterMonth = null;
+                          }),
+                        ),
+                      );
+                    }),
+                    // Custom range chip
+                    Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: FilterChip(
-                        label: Text(label),
-                        selected: selected,
-                        selectedColor: AppTheme.neonBlue.withOpacity(0.2),
+                        avatar: const Icon(Icons.date_range,
+                            size: 14, color: AppTheme.neonPurple),
+                        label: Text(_orderCustomRange != null
+                            ? '${_orderCustomRange!.start.day}/${_orderCustomRange!.start.month} - ${_orderCustomRange!.end.day}/${_orderCustomRange!.end.month}'
+                            : 'Rango'),
+                        selected: _orderCustomRange != null,
+                        selectedColor: AppTheme.neonPurple.withOpacity(0.2),
                         backgroundColor: AppTheme.darkCard,
                         labelStyle: TextStyle(
-                          color: selected ? AppTheme.neonBlue : Colors.white70,
+                          color: _orderCustomRange != null
+                              ? AppTheme.neonPurple
+                              : Colors.white70,
                           fontSize: 11,
                         ),
                         side: BorderSide(
-                            color: selected
-                                ? AppTheme.neonBlue
+                            color: _orderCustomRange != null
+                                ? AppTheme.neonPurple
                                 : AppTheme.borderColor),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
-                        onSelected: (_) =>
-                            setState(() => _orderDateFilter = label),
+                        onSelected: (_) async {
+                          final range = await showDateRangePicker(
+                            context: context,
+                            firstDate: DateTime(2024),
+                            lastDate: DateTime.now(),
+                            initialDateRange: _orderCustomRange,
+                            builder: (ctx, child) {
+                              return Theme(
+                                data: ThemeData.dark().copyWith(
+                                  colorScheme: const ColorScheme.dark(
+                                    primary: AppTheme.neonBlue,
+                                    surface: AppTheme.darkSurface,
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (range != null) {
+                            setState(() {
+                              _orderCustomRange = range;
+                              _orderDateFilter = 'Rango';
+                              _orderFilterYear = null;
+                              _orderFilterMonth = null;
+                            });
+                          }
+                        },
                       ),
-                    );
-                  }).toList(),
+                    ),
+                    // Year selector
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: PopupMenuButton<int>(
+                        onSelected: (year) => setState(() {
+                          _orderFilterYear = year;
+                          _orderDateFilter = 'Ano';
+                          _orderCustomRange = null;
+                        }),
+                        itemBuilder: (_) {
+                          final now = DateTime.now().year;
+                          return [now, now - 1, now - 2]
+                              .map((y) => PopupMenuItem(
+                                    value: y,
+                                    child: Text('$y'),
+                                  ))
+                              .toList();
+                        },
+                        child: Chip(
+                          label: Text(
+                            _orderFilterYear != null
+                                ? '$_orderFilterYear'
+                                : 'Año',
+                            style: TextStyle(
+                              color: _orderFilterYear != null
+                                  ? AppTheme.neonGreen
+                                  : Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                          side: BorderSide(
+                              color: _orderFilterYear != null
+                                  ? AppTheme.neonGreen
+                                  : AppTheme.borderColor),
+                          backgroundColor: _orderFilterYear != null
+                              ? AppTheme.neonGreen.withOpacity(0.1)
+                              : AppTheme.darkCard,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                    // Month selector
+                    if (_orderFilterYear != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: PopupMenuButton<int>(
+                          onSelected: (m) => setState(() {
+                            _orderFilterMonth = m;
+                            _orderDateFilter = 'Ano';
+                            _orderCustomRange = null;
+                          }),
+                          itemBuilder: (_) {
+                            const names = [
+                              'Ene',
+                              'Feb',
+                              'Mar',
+                              'Abr',
+                              'May',
+                              'Jun',
+                              'Jul',
+                              'Ago',
+                              'Sep',
+                              'Oct',
+                              'Nov',
+                              'Dic'
+                            ];
+                            return List.generate(
+                                12,
+                                (i) => PopupMenuItem(
+                                      value: i + 1,
+                                      child: Text(names[i]),
+                                    ));
+                          },
+                          child: Chip(
+                            label: Text(
+                              _orderFilterMonth != null
+                                  ? _monthName(_orderFilterMonth!)
+                                  : 'Mes',
+                              style: TextStyle(
+                                color: _orderFilterMonth != null
+                                    ? AppTheme.neonGreen
+                                    : Colors.white70,
+                                fontSize: 11,
+                              ),
+                            ),
+                            side: BorderSide(
+                                color: _orderFilterMonth != null
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.borderColor),
+                            backgroundColor: _orderFilterMonth != null
+                                ? AppTheme.neonGreen.withOpacity(0.1)
+                                : AppTheme.darkCard,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -2233,6 +2456,18 @@ class _PedidosPageState extends State<PedidosPage>
           final dateStr =
               o.fecha.length >= 10 ? o.fecha.substring(0, 10) : o.fecha;
           final d = DateTime.parse(dateStr);
+          if (_orderDateFilter == 'Rango' && _orderCustomRange != null) {
+            return !d.isBefore(_orderCustomRange!.start) &&
+                !d.isAfter(_orderCustomRange!.end.add(const Duration(days: 1)));
+          }
+          if (_orderDateFilter == 'Ano') {
+            if (_orderFilterYear != null && d.year != _orderFilterYear) {
+              return false;
+            }
+            if (_orderFilterMonth != null && d.month != _orderFilterMonth)
+              return false;
+            return true;
+          }
           final days = now.difference(d).inDays;
           if (_orderDateFilter == 'Hoy') {
             return d.year == now.year &&
@@ -3366,5 +3601,23 @@ class _PedidosPageState extends State<PedidosPage>
         ),
       ),
     );
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic'
+    ];
+    return months[month - 1];
   }
 }

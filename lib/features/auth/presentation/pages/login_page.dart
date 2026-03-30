@@ -23,13 +23,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _passwordController = TextEditingController();
   final _usernameFocus = FocusNode();
   final _passwordFocus = FocusNode();
-  
+
   bool _obscurePassword = true;
   bool _hasError = false;
   String? _errorMessage;
   bool _isUsernameFocused = false;
   bool _isPasswordFocused = false;
-  
+
   late AnimationController _bgController;
   late AnimationController _logoController;
 
@@ -40,20 +40,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(seconds: 8),
     )..repeat();
-    
+
     // Attempt Auto-Login
     WidgetsBinding.instance.addPostFrameCallback((_) {
-       _tryAutoLogin();
+      _tryAutoLogin();
     });
 
-    
     _logoController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
-    
-    _usernameFocus.addListener(() => setState(() => _isUsernameFocused = _usernameFocus.hasFocus));
-    _passwordFocus.addListener(() => setState(() => _isPasswordFocused = _passwordFocus.hasFocus));
+
+    _usernameFocus.addListener(
+        () => setState(() => _isUsernameFocused = _usernameFocus.hasFocus));
+    _passwordFocus.addListener(
+        () => setState(() => _isPasswordFocused = _passwordFocus.hasFocus));
   }
 
   @override
@@ -75,17 +76,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   void _clearError() {
-    if (_hasError) setState(() { _hasError = false; _errorMessage = null; });
+    if (_hasError)
+      setState(() {
+        _hasError = false;
+        _errorMessage = null;
+      });
   }
 
   Future<void> _handleLogin() async {
     _clearError();
-    
+
     if (!_formKey.currentState!.validate()) return;
-    
+
     final auth = context.read<AuthProvider>();
     debugPrint('[LoginPage] Attempting login for: ${_usernameController.text}');
-    
+
     final success = await auth.login(
       _usernameController.text.trim(),
       _passwordController.text,
@@ -95,46 +100,48 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     if (success) {
       final user = auth.currentUser;
-      debugPrint('[LoginPage] Login Success. Role: ${user?.role}, IsJefe: ${user?.isJefeVentas}');
-      
+      debugPrint(
+          '[LoginPage] Login Success. Role: ${user?.role}, IsJefe: ${user?.isJefeVentas}');
+
       // Robust check for Jefe role
-      final isJefe = user?.isJefeVentas == true || 
-                     user?.role == 'JEFE_VENTAS' || 
-                     user?.role == 'JEFE';
-                     
+      final isJefe = user?.isJefeVentas == true ||
+          user?.role == 'JEFE_VENTAS' ||
+          user?.role == 'JEFE';
+
       if (isJefe) {
-         debugPrint('[LoginPage] User detected as Jefe. Triggering Role Selection Dialog...');
-         
-         if (!mounted) return;
-         
-         // Use Future.microtask to ensure we are out of the current frame/event loop if needed
-         Future.microtask(() async {
-           if (!mounted) return;
-           await showDialog(
-             context: context, 
-             barrierDismissible: false,
-             builder: (ctx) => const RoleSelectionDialog()
-           );
-         });
-         
+        debugPrint(
+            '[LoginPage] User detected as Jefe. Triggering Role Selection Dialog...');
+
+        if (!mounted) return;
+
+        // Use Future.microtask to ensure we are out of the current frame/event loop if needed
+        Future.microtask(() async {
+          if (!mounted) return;
+          await showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => const RoleSelectionDialog());
+        });
       } else {
-         debugPrint('[LoginPage] Regular user. Navigating to Dashboard...');
-         context.go('/dashboard');
+        debugPrint('[LoginPage] Regular user. Navigating to Dashboard...');
+        context.go('/dashboard');
       }
     } else {
       setState(() {
         _hasError = true;
         _errorMessage = auth.error ?? 'Credenciales incorrectas';
       });
-      
-      debugPrint('[LoginPage] Login Failed. Showing Dialog. Error: $_errorMessage');
-      
+
+      debugPrint(
+          '[LoginPage] Login Failed. Showing Dialog. Error: $_errorMessage');
+
       // Force ensure dialog shows
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
           backgroundColor: AppTheme.darkCard,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
               Icon(Icons.error_outline, color: AppTheme.error),
@@ -143,13 +150,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ],
           ),
           content: Text(
-            _errorMessage ?? 'Credenciales incorrectas. Por favor, inténtalo de nuevo.', 
+            _errorMessage ??
+                'Credenciales incorrectas. Por favor, inténtalo de nuevo.',
             style: const TextStyle(color: Colors.white),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Entendido', style: TextStyle(color: AppTheme.neonBlue)),
+              child: const Text('Entendido',
+                  style: TextStyle(color: AppTheme.neonBlue)),
             ),
           ],
         ),
@@ -161,16 +170,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isWide = size.width > 900;
-    
+
     return Scaffold(
       body: Stack(
         children: [
           // Animated background
           _buildAnimatedBackground(),
-          
+
           // Floating orbs
           _buildFloatingOrbs(),
-          
+
           // Main content
           SafeArea(
             child: Center(
@@ -197,7 +206,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment(math.cos(angle) * 0.5, math.sin(angle) * 0.5),
-              end: Alignment(math.cos(angle + math.pi) * 0.5, math.sin(angle + math.pi) * 0.5),
+              end: Alignment(math.cos(angle + math.pi) * 0.5,
+                  math.sin(angle + math.pi) * 0.5),
               colors: const [
                 Color(0xFF0D0D1A),
                 Color(0xFF1A1A2E),
@@ -259,12 +269,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       children: [
         // Left: Branding
         Expanded(
-          child: _buildBranding().animate().fadeIn(duration: 800.ms).slideX(begin: -0.2),
+          child: _buildBranding()
+              .animate()
+              .fadeIn(duration: 800.ms)
+              .slideX(begin: -0.2),
         ),
         // Responsive gap between branding and login card
         SizedBox(width: Responsive.value(context, phone: 32, desktop: 80)),
         // Right: Login card
-        _buildLoginCard().animate().fadeIn(delay: 200.ms, duration: 800.ms).slideY(begin: 0.1),
+        _buildLoginCard()
+            .animate()
+            .fadeIn(delay: 200.ms, duration: 800.ms)
+            .slideY(begin: 0.1),
       ],
     );
   }
@@ -275,7 +291,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       children: [
         _buildCompactBranding().animate().fadeIn(duration: 600.ms),
         const SizedBox(height: 48),
-        _buildLoginCard().animate().fadeIn(delay: 300.ms, duration: 600.ms).slideY(begin: 0.15),
+        _buildLoginCard()
+            .animate()
+            .fadeIn(delay: 300.ms, duration: 600.ms)
+            .slideY(begin: 0.15),
       ],
     );
   }
@@ -377,7 +396,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00D9FF).withOpacity(0.3 + _logoController.value * 0.2),
+                color: const Color(0xFF00D9FF)
+                    .withOpacity(0.3 + _logoController.value * 0.2),
                 blurRadius: 30 + _logoController.value * 15,
                 spreadRadius: 2,
               ),
@@ -406,7 +426,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         children: [
           Icon(icon, size: 16, color: AppTheme.neonBlue),
           const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.7))),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13, color: Colors.white.withOpacity(0.7))),
         ],
       ),
     );
@@ -417,17 +439,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       width: Responsive.clampWidth(context, 400),
       padding: EdgeInsets.all(Responsive.isSmall(context) ? 24 : 36),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(32),
         color: Colors.white.withOpacity(0.03),
         border: Border.all(
-          color: _hasError 
-              ? AppTheme.error.withOpacity(0.5) 
+          color: _hasError
+              ? AppTheme.error.withOpacity(0.5)
               : Colors.white.withOpacity(0.08),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: _hasError 
+            color: _hasError
                 ? AppTheme.error.withOpacity(0.1)
                 : Colors.black.withOpacity(0.4),
             blurRadius: 50,
@@ -459,16 +481,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 color: Colors.white.withOpacity(0.5),
               ),
             ),
-            
+
             const SizedBox(height: 36),
-            
+
             // Error banner (inline, not modal)
             if (_hasError)
               Container(
                 margin: const EdgeInsets.only(bottom: 20),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(18),
                   color: AppTheme.error.withOpacity(0.1),
                   border: Border.all(color: AppTheme.error.withOpacity(0.3)),
                 ),
@@ -477,10 +499,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                      shape: BoxShape.circle,
+                        shape: BoxShape.circle,
                         color: AppTheme.error.withOpacity(0.2),
                       ),
-                      child: const Icon(Icons.error_outline, color: AppTheme.error, size: 20),
+                      child: const Icon(Icons.error_outline,
+                          color: AppTheme.error, size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -507,7 +530,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close, size: 18, color: AppTheme.error),
+                      icon: const Icon(Icons.close,
+                          size: 18, color: AppTheme.error),
                       onPressed: _clearError,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -515,7 +539,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   ],
                 ),
               ).animate().shake(duration: 400.ms).fadeIn(),
-            
+
             // Username field
             _buildInputField(
               controller: _usernameController,
@@ -526,11 +550,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               icon: Icons.person_rounded,
               textInputAction: TextInputAction.next,
               onChanged: (_) => _clearError(),
-              validator: (v) => v?.trim().isEmpty == true ? 'Ingresa tu usuario' : null,
+              validator: (v) =>
+                  v?.trim().isEmpty == true ? 'Ingresa tu usuario' : null,
             ),
-            
+
             const SizedBox(height: 18),
-            
+
             // Password field
             _buildInputField(
               controller: _passwordController,
@@ -543,19 +568,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               textInputAction: TextInputAction.done,
               onChanged: (_) => _clearError(),
               onSubmit: (_) => _handleLogin(),
-              validator: (v) => v?.isEmpty == true ? 'Ingresa tu contraseña' : null,
+              validator: (v) =>
+                  v?.isEmpty == true ? 'Ingresa tu contraseña' : null,
               suffix: IconButton(
                 icon: Icon(
-                  _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                  _obscurePassword
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
                   size: 20,
                   color: Colors.white.withOpacity(0.4),
                 ),
-                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
               ),
             ),
-            
+
             const SizedBox(height: 32),
-            
+
             // Login button
             Consumer<AuthProvider>(
               builder: (context, auth, _) {
@@ -565,18 +594,30 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     duration: const Duration(milliseconds: 200),
                     height: 56,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      gradient: auth.isLoading ? null : const LinearGradient(
-                        colors: [Color(0xFF00D9FF), Color(0xFF7B61FF)],
-                      ),
-                      color: auth.isLoading ? Colors.white.withOpacity(0.1) : null,
-                      boxShadow: auth.isLoading ? [] : [
-                        BoxShadow(
-                          color: const Color(0xFF00D9FF).withOpacity(0.35),
-                          blurRadius: 25,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
+                      borderRadius: BorderRadius.circular(20),
+                      gradient: auth.isLoading
+                          ? null
+                          : const LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Color(0xFF00D9FF),
+                                Color(0xFF7B61FF),
+                                Color(0xFFFF6B9D)
+                              ],
+                            ),
+                      color:
+                          auth.isLoading ? Colors.white.withOpacity(0.1) : null,
+                      boxShadow: auth.isLoading
+                          ? []
+                          : [
+                              BoxShadow(
+                                color:
+                                    const Color(0xFF00D9FF).withOpacity(0.35),
+                                blurRadius: 25,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
                     ),
                     child: Center(
                       child: auth.isLoading
@@ -585,7 +626,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               height: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation(Colors.white.withOpacity(0.8)),
+                                valueColor: AlwaysStoppedAnimation(
+                                    Colors.white.withOpacity(0.8)),
                               ),
                             )
                           : const Row(
@@ -601,7 +643,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                   ),
                                 ),
                                 SizedBox(width: 10),
-                                Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 20),
+                                Icon(Icons.arrow_forward_rounded,
+                                    color: Colors.white, size: 20),
                               ],
                             ),
                     ),
@@ -609,9 +652,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 );
               },
             ),
-            
+
             const SizedBox(height: 28),
-            
+
             // Footer
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -663,7 +706,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: isFocused ? AppTheme.neonBlue : Colors.white.withOpacity(0.5),
+            color:
+                isFocused ? AppTheme.neonBlue : Colors.white.withOpacity(0.5),
             letterSpacing: 0.3,
           ),
         ),
@@ -671,21 +715,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: isFocused 
-                  ? AppTheme.neonBlue 
-                  : Colors.white.withOpacity(0.1),
+              color:
+                  isFocused ? AppTheme.neonBlue : Colors.white.withOpacity(0.1),
               width: isFocused ? 1.5 : 1,
             ),
             color: Colors.white.withOpacity(isFocused ? 0.08 : 0.04),
-            boxShadow: isFocused ? [
-              BoxShadow(
-                color: AppTheme.neonBlue.withOpacity(0.1),
-                blurRadius: 15,
-                spreadRadius: 0,
-              ),
-            ] : [],
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: AppTheme.neonBlue.withOpacity(0.1),
+                      blurRadius: 15,
+                      spreadRadius: 0,
+                    ),
+                  ]
+                : [],
           ),
           child: TextFormField(
             controller: controller,
@@ -699,10 +744,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: TextStyle(color: Colors.white.withOpacity(0.25)),
-              prefixIcon: Icon(icon, size: 20, color: isFocused ? AppTheme.neonBlue : Colors.white.withOpacity(0.4)),
+              prefixIcon: Icon(icon,
+                  size: 20,
+                  color: isFocused
+                      ? AppTheme.neonBlue
+                      : Colors.white.withOpacity(0.4)),
               suffixIcon: suffix,
               filled: false,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               border: InputBorder.none,
               errorStyle: const TextStyle(fontSize: 11, height: 0.8),
             ),
