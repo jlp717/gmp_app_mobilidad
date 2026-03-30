@@ -812,6 +812,114 @@ router.post('/rutero/reload-cache', async (req, res) => {
 });
 
 // =============================================================================
+// RUTERO DAY - DIRECT DB QUERY (NO CACHE) - For refresh button
+// =============================================================================
+router.get('/rutero/day-direct/:day', async (req, res) => {
+    try {
+        const { day } = req.params;
+        const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query;
+        
+        logger.info(`[RUTERO DAY DIRECT] Query without cache for ${vendedorCodes} on ${day}`);
+        
+        // First, reload the cache to ensure we have latest data
+        await loadLaclaeCache();
+        await reloadRuteroConfig();
+        
+        // Now use the fresh cache
+        const shouldIgnoreOverrides = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
+        let dayClientCodes = getClientsForDayService(vendedorCodes, day, role || 'comercial', shouldIgnoreOverrides);
+
+        if (!dayClientCodes || dayClientCodes.length === 0) {
+            return res.json({ clients: [], count: 0, day, cacheStatus: 'fresh' });
+        }
+
+        const batchSize = 200;
+        const clientBatch = dayClientCodes.slice(0, batchSize);
+        const safeClientFilter = clientBatch.map(c => `'${sanitizeForSQL(c)}'`).join(',');
+
+        // Query directly without cache
+        const clientDetailsSql = `
+            SELECT 
+                CODIGOCLIENTE as CODE,
+                COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
+                DIRECCION as ADDRESS,
+                POBLACION as CITY,
+                TELEFONO1 as PHONE,
+                TELEFONO2 as PHONE2
+            FROM DSEDAC.CLI
+            WHERE CODIGOCLIENTE IN (${safeClientFilter})
+              AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
+        `;
+        const clientDetails = await query(clientDetailsSql, false, false);
+
+        // Get RUTERO_CONFIG order for sorting
+        const configSql = `
+            SELECT TRIM(CLIENTE) as CLIENTE, ORDEN
+            FROM JAVIER.RUTERO_CONFIG
+            WHERE VENDEDOR = '${vendedorCodes}' AND DIA = '${day.toLowerCase()}' AND ORDEN >= 0
+        `;
+        const configRows = await query(configSql, false, false);
+        
+        const configOrder = {};
+        configRows.forEach(r => { configOrder[r.CLIENTE?.trim()] = r.ORDEN; });
+
+        // Build client list with order
+        const clients = clientDetails.map(c => ({
+            code: c.CODE?.trim(),
+            name: c.NAME?.trim(),
+            address: c.ADDRESS?.trim(),
+            city: c.CITY?.trim(),
+            phone: c.PHONE?.trim(),
+            phone2: c.PHONE2?.trim(),
+            ruteroOrder: configOrder[c.CODE?.trim()] ?? 99999
+        }));
+
+        // Sort by rutero order
+        if (!shouldIgnoreOverrides) {
+            clients.sort((a, b) => a.ruteroOrder - b.ruteroOrder);
+        }
+
+        logger.info(`[RUTERO DAY DIRECT] Returning ${clients.length} clients (fresh from DB)`);
+        
+        res.json({
+            clients,
+            count: clients.length,
+            day,
+            cacheStatus: 'fresh'
+        });
+
+    } catch (error) {
+        logger.error(`Rutero day direct error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo rutero', details: error.message });
+    }
+});
+
+// =============================================================================
+// RUTERO FULL CACHE RELOAD (CDVI + LACLAE + RUTERO_CONFIG)
+// =============================================================================
+router.post('/rutero/reload-cache-old', async (req, res) => {
+    try {
+        logger.info(`[CACHE RELOAD] Full cache reload requested by ${req.user ? req.user.codigovendedor : 'unknown'}`);
+        const start = Date.now();
+        await loadLaclaeCache();
+        // Also invalidate Redis query caches so clients/rutero queries use fresh data
+        try {
+            await deleteCachePattern('clients:*');
+            await deleteCachePattern('rutero:*');
+            logger.info('[CACHE RELOAD] Redis query caches invalidated (clients + rutero)');
+        } catch (redisErr) {
+            logger.warn(`[CACHE RELOAD] Redis invalidation failed (non-blocking): ${redisErr.message}`);
+        }
+        const duration = Date.now() - start;
+        logger.info(`[CACHE RELOAD] Complete in ${duration}ms`);
+        res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG + Redis recargada' });
+    } catch (error) {
+        logger.error(`[CACHE RELOAD] Failed: ${error.message}`);
+        res.status(500).json({ error: 'Error recargando caché', details: error.message });
+    }
+});
+
+// =============================================================================
 // RUTERO DAY (OPTIMIZED WITH CACHING) - Hotfix Update Check
 // =============================================================================
 router.get('/rutero/day/:day', async (req, res) => {
