@@ -100,41 +100,46 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       '${Uri.encodeComponent(code.trim())}/image';
 
   Future<void> _openFichaTecnica(BuildContext ctx) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(ctx);
     final navigator = Navigator.of(ctx);
     final code = widget.productCode.trim();
-    final url = '${ApiConfig.baseUrl}/products/'
-        '${Uri.encodeComponent(code)}/ficha';
+    final url =
+        '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(code)}/ficha';
+    final filePath =
+        '${(await getTemporaryDirectory()).path}/${code}_ficha.pdf';
 
-    scaffoldMessenger.showSnackBar(
-      const SnackBar(
+    showDialog<void>(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
         content: Row(
           children: [
-            SizedBox(
-              width: 20,
-              height: 20,
+            const SizedBox(
+              width: 24,
+              height: 24,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white),
+                strokeWidth: 2,
+                color: AppTheme.neonBlue,
+              ),
             ),
-            SizedBox(width: 12),
-            Text('Descargando ficha tecnica...'),
+            const SizedBox(width: 16),
+            Text(
+              'Descargando ficha técnica...',
+              style: TextStyle(color: Colors.grey[300]),
+            ),
           ],
         ),
-        duration: Duration(seconds: 10),
       ),
     );
 
     try {
-      final dir = await getTemporaryDirectory();
-      final filePath = '${dir.path}/${code}_ficha.pdf';
       await ApiClient.dio.download(url, filePath);
-      scaffoldMessenger.hideCurrentSnackBar();
+
+      if (navigator.canPop()) navigator.pop();
 
       if (!File(filePath).existsSync()) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('No se encontro la ficha tecnica para este producto'),
-          ),
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          const SnackBar(content: Text('No se encontró la ficha técnica')),
         );
         return;
       }
@@ -142,15 +147,15 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       navigator.push(MaterialPageRoute<void>(
         builder: (_) => _PdfViewerPage(
           filePath: filePath,
-          title: 'Ficha Tecnica - $code',
+          title: 'Ficha Técnica - $code',
         ),
       ));
     } catch (e) {
-      scaffoldMessenger.hideCurrentSnackBar();
+      if (navigator.canPop()) navigator.pop();
       final msg = e.toString().contains('404')
-          ? 'No hay ficha tecnica para este producto'
+          ? 'No hay ficha técnica para este producto'
           : 'Error al descargar: $e';
-      scaffoldMessenger.showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 

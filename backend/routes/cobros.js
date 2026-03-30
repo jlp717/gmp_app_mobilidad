@@ -57,8 +57,17 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         // Check if ORIGEN column exists in PEDIDOS_CAB
         let origenExists = false;
         try {
-            await query(`SELECT ORIGEN FROM JAVIER.PEDIDOS_CAB FETCH FIRST 1 ROW ONLY`);
-            origenExists = true;
+            const colCheck = await query(`
+                SELECT COLNAME FROM SYSCAT.COLUMNS 
+                WHERE TABNAME = 'PEDIDOS_CAB' 
+                  AND COLNAME = 'ORIGEN' 
+                  AND COLSCHEMA = 'JAVIER'
+                FETCH FIRST 1 ROW ONLY
+            `);
+            origenExists = colCheck && colCheck.length > 0;
+            if (!origenExists) {
+                logger.warn('[COBROS] Columna ORIGEN no existe en PEDIDOS_CAB, usando todos los pedidos');
+            }
         } catch(e) {
             logger.warn('[COBROS] Columna ORIGEN no existe en PEDIDOS_CAB, usando todos los pedidos');
         }

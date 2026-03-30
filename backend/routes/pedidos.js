@@ -781,4 +781,93 @@ router.get('/search-products', async (req, res) => {
     }
 });
 
+// =============================================================================
+// DEBUG ENDPOINTS (for testing only)
+// =============================================================================
+
+/**
+ * GET /api/pedidos/debug/estados
+ * Documentación de estados de pedidos
+ */
+router.get('/debug/estados', (req, res) => {
+    res.json({
+        estados: {
+            BORRADOR: 'Estado inicial. Pedido creado en la app pero sin confirmar.',
+            CONFIRMADO: 'Pedido confirmado por el comercial. Listo para proceso de almacén.',
+            ENVIADO: 'Pedido enviado/entregado. Se marca externamente (CPC/albarán generado).',
+            ANULADO: 'Pedido anulado/cancelado.'
+        },
+        transiciones: {
+            'BORRADOR -> CONFIRMADO': 'Usuario confirma en detalle del pedido (botón)',
+            'CONFIRMADO -> ENVIADO': 'Se marcaexternamente cuando se genera albarán',
+            'BORRADOR/CONFIRMADO -> ANULADO': 'Usuario cancela el pedido'
+        },
+        valoresPermitidos: ['BORRADOR', 'CONFIRMADO', 'ENVIADO', 'ANULADO']
+    });
+});
+
+/**
+ * POST /api/pedidos/debug/set-estado
+ * Cambiar estado de un pedido (para pruebas)
+ * Body: { orderId, estado }
+ */
+router.post('/debug/set-estado', async (req, res) => {
+    try {
+        const { orderId, estado } = req.body;
+        const estadosValidos = ['BORRADOR', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
+        
+        if (!orderId) {
+            return res.status(400).json({ success: false, error: 'Falta orderId' });
+        }
+        if (!estado || !estadosValidos.includes(estado)) {
+            return res.status(400).json({ 
+                success: false, 
+                error: `Estado inválido. Valores: ${estadosValidos.join(', ')}` 
+            });
+        }
+        
+        await queryWithParams(
+            `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
+            [estado, orderId],
+            false
+        );
+        
+        logger.info(`[DEBUG] Pedido #${orderId} -> ESTADO = ${estado}`);
+        res.json({ success: true, orderId, estado });
+    } catch (error) {
+        logger.error(`[DEBUG] Error set-estado: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/pedidos/debug/list-estados
+ * Listar pedidos con sus estados actuales
+ * Query: vendedorCode (optional), limit (default 50)
+ */
+router.get('/debug/list-estados', async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        const vendedorCode = (req.query.vendedorCode || '').trim();
+        
+        let sql = `
+            SELECT ID, NUMEROPEDIDO, SERIE, CODIGOCLIENTE, ESTADO, IMPORTETOTAL, 
+                   DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
+            FROM JAVIER.PEDIDOS_CAB
+        `;
+        
+        if (vendedorCode) {
+            sql += ` WHERE TRIM(CODIGOVENDEDOR) = '${vendedorCode}'`;
+        }
+        
+        sql += ` ORDER BY ID DESC FETCH FIRST ${limit} ROWS ONLY`;
+        
+        const rows = await queryWithParams(sql, [], false);
+        res.json({ success: true, pedidos: rows });
+    } catch (error) {
+        logger.error(`[DEBUG] Error list-estados: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 module.exports = router;

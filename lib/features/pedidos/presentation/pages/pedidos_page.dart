@@ -1814,7 +1814,7 @@ class _PedidosPageState extends State<PedidosPage>
             right: 16,
             child: FloatingActionButton.extended(
               heroTag: 'cart_fab',
-              onPressed: () => _showCartSheet(),
+              onPressed: () => _showCartSheet(provider),
               backgroundColor: AppTheme.neonBlue,
               foregroundColor: AppTheme.darkBase,
               icon: const Icon(Icons.shopping_cart),
@@ -1828,7 +1828,7 @@ class _PedidosPageState extends State<PedidosPage>
     );
   }
 
-  void _showCartSheet() {
+  void _showCartSheet(PedidosProvider provider) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1836,14 +1836,17 @@ class _PedidosPageState extends State<PedidosPage>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (_, scrollCtrl) => OrderSummaryWidget(
-          vendedorCode: widget.employeeCode,
-          scrollController: scrollCtrl,
+      builder: (_) => Provider<PedidosProvider>.value(
+        value: provider,
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, scrollCtrl) => OrderSummaryWidget(
+            vendedorCode: widget.employeeCode,
+            scrollController: scrollCtrl,
+          ),
         ),
       ),
     );
