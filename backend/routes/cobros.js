@@ -219,4 +219,84 @@ router.post('/:codigoCliente/registrar', async (req, res) => {
     }
 });
 
+/**
+ * GET /api/cobros/pending-summary/:vendedorCode
+ * Returns total pending amounts grouped by client for a given vendor
+ */
+router.get('/pending-summary/:vendedorCode', async (req, res) => {
+    try {
+        const vendedorCode = sanitizeCode(req.params.vendedorCode);
+        logger.info(`[COBROS] Pending summary for vendor: ${vendedorCode}`);
+
+        // Check if COBROS table exists
+        let cobrosTableExists = false;
+        try {
+            await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
+            cobrosTableExists = true;
+        } catch(e) { /* table doesn't exist yet */ }
+
+        // Check ORIGEN column
+        let origenExists = false;
+        try {
+            const colCheck = await query(`
+                SELECT COLNAME FROM SYSCAT.COLUMNS
+                WHERE TABNAME = 'PEDIDOS_CAB'
+                  AND COLNAME = 'ORIGEN'
+                  AND COLSCHEMA = 'JAVIER'
+                FETCH FIRST 1 ROW ONLY
+            `);
+            origenExists = colCheck && colCheck.length > 0;
+        } catch(e) { /* column doesn't exist */ }
+
+        // Build vendor filter
+        const isAll = vendedorCode.toUpperCase() === 'ALL';
+        let vendorFilter = isAll ? '' : `AND TRIM(PC.CODIGOVENDEDOR) = '${vendedorCode}'`;
+
+        let sql = `
+            SELECT
+                TRIM(PC.CODIGOCLIENTE) AS CLIENTE,
+                SUM(PC.IMPORTETOTAL) AS TOTAL_PENDIENTE,
+                COUNT(*) AS NUM_PEDIDOS
+            FROM JAVIER.PEDIDOS_CAB PC
+            WHERE PC.ESTADO = 'CONFIRMADO'
+              AND PC.IMPORTETOTAL > 0
+              ${vendorFilter}
+              ${origenExists ? "AND PC.ORIGEN = 'A'" : ''}`;
+
+        // Exclude already paid
+        if (cobrosTableExists) {
+            sql += ` AND NOT EXISTS (
+                SELECT 1 FROM JAVIER.COBROS JC
+                WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE)
+                  AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
+            )`;
+        }
+
+        sql += ` GROUP BY TRIM(PC.CODIGOCLIENTE) ORDER BY TOTAL_PENDIENTE DESC`;
+
+        const rows = await query(sql, []);
+
+        const summary = {};
+        let grandTotal = 0;
+        (rows || []).forEach(r => {
+            const code = (r.CLIENTE || '').trim();
+            const total = parseFloat(r.TOTAL_PENDIENTE) || 0;
+            const count = parseInt(r.NUM_PEDIDOS) || 0;
+            summary[code] = { total, count };
+            grandTotal += total;
+        });
+
+        res.json({
+            success: true,
+            summary,
+            grandTotal,
+            clientCount: Object.keys(summary).length,
+        });
+
+    } catch (error) {
+        logger.error('[COBROS] Error pending-summary: ' + error.message);
+        res.status(500).json({ success: false, error: 'Error obteniendo resumen' });
+    }
+});
+
 module.exports = router;

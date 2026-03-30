@@ -210,6 +210,18 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                 ],
               ),
               const SizedBox(height: 6),
+              if (isGift && first.minQty > 0)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    'Compra ${first.minQty.toInt()}, lleva ${(first.minQty + first.giftQty).toInt()}${first.cumulative ? ' (acumulable)' : ''}',
+                    style: const TextStyle(
+                      color: AppTheme.neonPurple,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               if (!isGift)
                 Wrap(
                   spacing: 8,
@@ -313,8 +325,11 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     final grouped = <String, List<PromotionItem>>{};
 
     for (final p in promos) {
-      final key =
-          '${p.promoType}|${p.promoDesc}|${p.promoPrice}|${p.regularPrice}|${p.dateFrom}|${p.dateTo}';
+      // Group GIFT promos by promoCode (one promo = one group)
+      // Group PRICE promos by desc+price combo
+      final key = p.promoCode.isNotEmpty
+          ? '${p.promoType}|${p.promoCode}'
+          : '${p.promoType}|${p.promoDesc}|${p.promoPrice}|${p.regularPrice}|${p.dateFrom}|${p.dateTo}';
       grouped.putIfAbsent(key, () => []).add(p);
     }
 

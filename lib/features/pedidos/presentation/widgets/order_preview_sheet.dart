@@ -11,17 +11,16 @@ import '../../data/pedidos_service.dart';
 import '../../providers/pedidos_provider.dart';
 import '../utils/pedidos_formatters.dart';
 
-/// Shows the order preview bottom sheet. Returns true if confirmed.
+/// Shows the order preview as a centered dialog. Returns true if confirmed.
 Future<bool?> showOrderPreviewSheet({
   required BuildContext context,
   required PedidosProvider provider,
   required String vendedorCode,
   required Future<Map<String, dynamic>?> Function(String observaciones) onConfirm,
 }) {
-  return showModalBottomSheet<bool>(
+  return showDialog<bool>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black87,
     builder: (ctx) => _OrderPreviewSheet(
       provider: provider,
       vendedorCode: vendedorCode,
@@ -73,79 +72,45 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     final margin = provider.porcentajeMargen;
     final total = hasDiscount ? provider.totalConDescuento : provider.totalImporte;
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppTheme.darkBase,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x6600D4FF),
-                blurRadius: 30,
-                offset: Offset(0, -8),
+    return Dialog(
+      backgroundColor: AppTheme.darkBase,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.88,
+          maxWidth: 520,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Header ──
+            _buildHeader(provider),
+
+            // ── Scrollable Content ──
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                children: [
+                  _buildClientCard(provider),
+                  const SizedBox(height: 16),
+                  _buildSectionLabel('PRODUCTOS (${lines.length})'),
+                  const SizedBox(height: 8),
+                  ...lines.asMap().entries.map((entry) =>
+                      _buildLineItem(entry.key, entry.value, hasDiscount, provider)),
+                  const SizedBox(height: 16),
+                  _buildTotalsCard(provider, hasDiscount, total, margin),
+                  const SizedBox(height: 16),
+                  if (provider.ivaBreakdown.isNotEmpty)
+                    _buildIvaBreakdown(provider),
+                  const SizedBox(height: 24),
+                ],
               ),
-            ],
-          ),
-          child: Column(
-            children: [
-              // ── Handle ──
-              _buildHandle(),
+            ),
 
-              // ── Header ──
-              _buildHeader(provider),
-
-              // ── Scrollable Content ──
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  children: [
-                    // Client card
-                    _buildClientCard(provider),
-                    const SizedBox(height: 16),
-
-                    // Line items
-                    _buildSectionLabel('PRODUCTOS (${lines.length})'),
-                    const SizedBox(height: 8),
-                    ...lines.asMap().entries.map((entry) =>
-                        _buildLineItem(entry.key, entry.value, hasDiscount, provider)),
-                    const SizedBox(height: 16),
-
-                    // Totals breakdown
-                    _buildTotalsCard(provider, hasDiscount, total, margin),
-                    const SizedBox(height: 16),
-
-                    // IVA breakdown
-                    if (provider.ivaBreakdown.isNotEmpty)
-                      _buildIvaBreakdown(provider),
-
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-
-              // ── Confirm Footer ──
-              _buildConfirmFooter(total, margin),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildHandle() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 4),
-      child: Container(
-        width: 48,
-        height: 4,
-        decoration: BoxDecoration(
-          color: AppTheme.neonBlue.withOpacity(0.4),
-          borderRadius: BorderRadius.circular(2),
+            // ── Confirm Footer ──
+            _buildConfirmFooter(total, margin),
+          ],
         ),
       ),
     );
@@ -153,48 +118,88 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
 
   Widget _buildHeader(PedidosProvider provider) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: AppTheme.neonBlue.withOpacity(0.15),
+          ),
+        ),
+      ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withOpacity(0.2), AppTheme.neonPurple.withOpacity(0.1)],
+                colors: [
+                  AppTheme.neonBlue.withOpacity(0.2),
+                  AppTheme.neonPurple.withOpacity(0.1),
+                ],
               ),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.receipt_long, color: AppTheme.neonBlue, size: 24),
+            child: const Icon(
+              Icons.receipt_long,
+              color: AppTheme.neonBlue,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Resumen del Pedido',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                Text(
-                  'Revisa los detalles antes de confirmar',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    const Text(
+                      'Revisa antes de confirmar',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neonBlue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppTheme.neonBlue.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Text(
+                        provider.saleTypeLabel,
+                        style: const TextStyle(
+                          color: AppTheme.neonBlue,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          // Sale type badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
-            ),
-            child: Text(
-              provider.saleTypeLabel,
-              style: const TextStyle(
-                  color: AppTheme.neonBlue, fontSize: 11, fontWeight: FontWeight.w600),
-            ),
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close, color: Colors.white54),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
         ],
       ),

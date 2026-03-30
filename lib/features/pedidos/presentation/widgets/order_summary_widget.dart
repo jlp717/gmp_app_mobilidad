@@ -462,7 +462,38 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 ],
               ),
             ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
+          // Auto-save indicator
+          if (provider.lastAutoSaved != null || provider.isDirty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    provider.isDirty
+                        ? Icons.edit_outlined
+                        : Icons.check_circle_outline,
+                    color: provider.isDirty
+                        ? Colors.white38
+                        : AppTheme.neonGreen,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    provider.isDirty
+                        ? 'Sin guardar...'
+                        : 'Guardado ${_formatTime(provider.lastAutoSaved!)}',
+                    style: TextStyle(
+                      color: provider.isDirty
+                          ? Colors.white38
+                          : AppTheme.neonGreen.withOpacity(0.7),
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // E1 — Preview before confirm
           SizedBox(
             width: double.infinity,
@@ -532,183 +563,414 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
     );
   }
 
+  String _formatTime(DateTime dt) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
   void _showEditLineDialog(BuildContext context, PedidosProvider provider,
       OrderLine line, int index) {
-      
-    // Determines if this line was sold using the dual-field (cajas+unidades) system
-    // We check if it has both envases and unidades, OR if U/F > 0 && U/F < U/C
-    final isDual = line.unidadesCaja > 1 && line.unidadesFraccion > 0 && line.unidadesFraccion < line.unidadesCaja;
-    String formatQty(double v) => v.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '').replaceAll(RegExp(r'\.$'), '').replaceAll(RegExp(r'0$'), '').replaceAll(RegExp(r'\.$'), '');
+
+    final isDual = line.unidadesCaja > 1 &&
+        line.unidadesFraccion > 0 &&
+        line.unidadesFraccion < line.unidadesCaja;
+    String formatQty(double v) => v
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'\.00$'), '')
+        .replaceAll(RegExp(r'0$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
 
     final qtyController = TextEditingController(
-      text: formatQty(line.cantidadEnvases > 0 ? line.cantidadEnvases : line.cantidadUnidades),
+      text: formatQty(line.cantidadEnvases > 0
+          ? line.cantidadEnvases
+          : line.cantidadUnidades),
     );
     final cajasController = TextEditingController(
-      text: line.cantidadEnvases > 0 ? formatQty(line.cantidadEnvases) : '',
+      text: line.cantidadEnvases > 0
+          ? formatQty(line.cantidadEnvases)
+          : '',
     );
     final unidadesController = TextEditingController(
-      text: line.cantidadUnidades > 0 ? formatQty(line.cantidadUnidades) : '',
+      text: line.cantidadUnidades > 0
+          ? formatQty(line.cantidadUnidades)
+          : '',
     );
-    final priceController =
-        TextEditingController(text: line.precioVenta.toStringAsFixed(3));
+    final priceController = TextEditingController(
+        text: line.precioVenta.toStringAsFixed(3));
 
-    showModalBottomSheet<void>(
+    final unitLabel = Product.unitLabel(line.unidadMedida);
+    final equivText = line.unidadesCaja > 1
+        ? '1 cj = ${formatQty(line.unidadesCaja)} uds'
+        : null;
+
+    showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.darkSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      barrierColor: Colors.black54,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                line.descripcion,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: Responsive.fontSize(context, small: 16, large: 18),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                line.codigoArticulo,
-                style: TextStyle(
-                  color: AppTheme.neonBlue,
-                  fontSize: Responsive.fontSize(context, small: 12, large: 14),
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (isDual) ...[
+        return Dialog(
+          backgroundColor: AppTheme.darkSurface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24, vertical: 40),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with close
                 Row(
                   children: [
+                    const Icon(Icons.edit_outlined,
+                        color: AppTheme.neonBlue, size: 20),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: TextField(
-                        controller: cajasController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: 'Cajas',
-                          labelStyle: const TextStyle(color: Colors.white70),
-                          filled: true,
-                          fillColor: AppTheme.darkCard,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonGreen)),
+                      child: Text(
+                        'Editar linea',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: Responsive.fontSize(context,
+                              small: 15, large: 17),
                         ),
-                        onChanged: (val) {
-                          final cur = double.tryParse(val.replaceAll(',', '.')) ?? 0;
-                          unidadesController.text = formatQty(cur * line.unidadesCaja);
-                        },
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: unidadesController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: 'Unid. (${formatQty(line.unidadesCaja)} U/C)',
-                          labelStyle: const TextStyle(color: Colors.white70),
-                          filled: true,
-                          fillColor: AppTheme.darkCard,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
-                        ),
-                        onChanged: (val) {
-                          final cur = double.tryParse(val.replaceAll(',', '.')) ?? 0;
-                          cajasController.text = formatQty(cur / line.unidadesCaja);
-                        },
-                      ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close,
+                          color: Colors.white54, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: priceController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Precio',
-                    suffixText: ' €',
-                    labelStyle: const TextStyle(color: Colors.white70),
-                    filled: true,
-                    fillColor: AppTheme.darkCard,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.borderColor)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
+                const SizedBox(height: 8),
+                // Product name + code
+                Text(
+                  line.descripcion,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: Responsive.fontSize(context,
+                        small: 14, large: 16),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  line.codigoArticulo,
+                  style: TextStyle(
+                    color: AppTheme.neonBlue,
+                    fontSize: Responsive.fontSize(context,
+                        small: 11, large: 13),
                   ),
                 ),
-              ] else ...[
+                // Equivalence info
+                if (equivText != null) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonBlue.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '$equivText  ·  $unitLabel',
+                      style: const TextStyle(
+                        color: AppTheme.neonBlue,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                if (isDual) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: cajasController,
+                          keyboardType:
+                              const TextInputType.numberWithOptions(
+                                  decimal: true),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 18,
+                              fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                          decoration: InputDecoration(
+                            labelText: 'Cajas',
+                            labelStyle:
+                                const TextStyle(color: Colors.white70),
+                            filled: true,
+                            fillColor: AppTheme.darkCard,
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.borderColor)),
+                            enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.borderColor)),
+                            focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.neonGreen)),
+                          ),
+                          onChanged: (val) {
+                            final cur = double.tryParse(
+                                    val.replaceAll(',', '.')) ??
+                                0;
+                            unidadesController.text =
+                                formatQty(cur * line.unidadesCaja);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: unidadesController,
+                          keyboardType:
+                              const TextInputType.numberWithOptions(
+                                  decimal: true),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 18,
+                              fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                          decoration: InputDecoration(
+                            labelText:
+                                'Uds (${formatQty(line.unidadesCaja)} U/C)',
+                            labelStyle:
+                                const TextStyle(color: Colors.white70),
+                            filled: true,
+                            fillColor: AppTheme.darkCard,
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.borderColor)),
+                            enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.borderColor)),
+                            focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.neonBlue)),
+                          ),
+                          onChanged: (val) {
+                            final cur = double.tryParse(
+                                    val.replaceAll(',', '.')) ??
+                                0;
+                            cajasController.text =
+                                formatQty(cur / line.unidadesCaja);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: priceController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(
+                            decimal: true),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Precio',
+                      suffixText: ' \u20AC',
+                      labelStyle:
+                          const TextStyle(color: Colors.white70),
+                      filled: true,
+                      fillColor: AppTheme.darkCard,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: AppTheme.borderColor)),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: AppTheme.borderColor)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: AppTheme.neonBlue)),
+                    ),
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: qtyController,
+                          keyboardType:
+                              const TextInputType.numberWithOptions(
+                                  decimal: true),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 18,
+                              fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                          decoration: InputDecoration(
+                            labelText: 'Cantidad ($unitLabel)',
+                            labelStyle:
+                                const TextStyle(color: Colors.white70),
+                            filled: true,
+                            fillColor: AppTheme.darkCard,
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.borderColor)),
+                            enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.borderColor)),
+                            focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.neonBlue)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: priceController,
+                          keyboardType:
+                              const TextInputType.numberWithOptions(
+                                  decimal: true),
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Precio',
+                            suffixText: ' \u20AC',
+                            labelStyle:
+                                const TextStyle(color: Colors.white70),
+                            filled: true,
+                            fillColor: AppTheme.darkCard,
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.borderColor)),
+                            enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.borderColor)),
+                            focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                    color: AppTheme.neonBlue)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (line.precioMinimo > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Precio minimo: ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: Responsive.fontSize(context,
+                            small: 10, large: 12),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 18),
+                // Action buttons
                 Row(
                   children: [
+                    // Delete line
                     Expanded(
-                      child: TextField(
-                        controller: qtyController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: 'Cantidad (${Product.unitLabel(line.unidadMedida)})',
-                          labelStyle: const TextStyle(color: Colors.white70),
-                          filled: true,
-                          fillColor: AppTheme.darkCard,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppTheme.borderColor),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppTheme.borderColor),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppTheme.neonBlue),
+                      child: SizedBox(
+                        height: 46,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            provider.removeLine(index);
+                            Navigator.pop(ctx);
+                          },
+                          icon: const Icon(Icons.delete_outline,
+                              size: 16),
+                          label: const Text('ELIMINAR',
+                              style: TextStyle(fontSize: 13)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.error,
+                            side:
+                                const BorderSide(color: AppTheme.error),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
+                    // Save
                     Expanded(
-                      child: TextField(
-                        controller: priceController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: 'Precio',
-                          suffixText: ' €',
-                          labelStyle: const TextStyle(color: Colors.white70),
-                          filled: true,
-                          fillColor: AppTheme.darkCard,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppTheme.borderColor),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppTheme.borderColor),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppTheme.neonBlue),
+                      flex: 2,
+                      child: SizedBox(
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            final price = double.tryParse(
+                                    priceController.text
+                                        .replaceAll(',', '.')) ??
+                                0;
+
+                            if (isDual) {
+                              final c = double.tryParse(
+                                      cajasController.text
+                                          .replaceAll(',', '.')) ??
+                                  0;
+                              final u = double.tryParse(
+                                      unidadesController.text
+                                          .replaceAll(',', '.')) ??
+                                  0;
+                              if (c <= 0 && u <= 0) return;
+                              provider.updateLine(
+                                index,
+                                cantidadEnvases: c,
+                                cantidadUnidades: u,
+                                precioVenta: price,
+                              );
+                            } else {
+                              final qty = double.tryParse(
+                                      qtyController.text
+                                          .replaceAll(',', '.')) ??
+                                  0;
+                              if (qty <= 0) return;
+                              final isBoxes =
+                                  line.cantidadEnvases > 0;
+                              provider.updateLine(
+                                index,
+                                cantidadEnvases:
+                                    isBoxes ? qty : null,
+                                cantidadUnidades:
+                                    isBoxes ? null : qty,
+                                precioVenta: price,
+                              );
+                            }
+                            Navigator.pop(ctx);
+                          },
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('GUARDAR',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.neonBlue,
+                            foregroundColor: AppTheme.darkBase,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         ),
                       ),
@@ -716,69 +978,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                   ],
                 ),
               ],
-              if (line.precioMinimo > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    'Precio minimo: ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize:
-                          Responsive.fontSize(context, small: 10, large: 12),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    final price = double.tryParse(
-                            priceController.text.replaceAll(',', '.')) ??
-                        0;
-
-                    if (isDual) {
-                      final c = double.tryParse(cajasController.text.replaceAll(',', '.')) ?? 0;
-                      final u = double.tryParse(unidadesController.text.replaceAll(',', '.')) ?? 0;
-                      if (c <= 0 && u <= 0) return;
-                      
-                      provider.updateLine(
-                        index,
-                        cantidadEnvases: c,
-                        cantidadUnidades: u,
-                        precioVenta: price,
-                      );
-                    } else {
-                      final qty = double.tryParse(
-                              qtyController.text.replaceAll(',', '.')) ??
-                          0;
-                      if (qty <= 0) return;
-
-                      final isBoxes = line.cantidadEnvases > 0;
-
-                      provider.updateLine(
-                        index,
-                        cantidadEnvases: isBoxes ? qty : null,
-                        cantidadUnidades: isBoxes ? null : qty,
-                        precioVenta: price,
-                      );
-                    }
-                    Navigator.pop(ctx);
-                  },
-                  icon: const Icon(Icons.save),
-                  label: const Text('Guardar cambios'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonBlue,
-                    foregroundColor: AppTheme.darkBase,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    textStyle: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },

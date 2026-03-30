@@ -211,12 +211,40 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                     ),
                   ),
                 ),
+                if (promo.cumulative) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'ACUM.',
+                      style: TextStyle(
+                        color: AppTheme.neonBlue,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
                 const Spacer(),
                 if (promo.dateTo.isNotEmpty)
                   Text(
                     'hasta ${promo.dateTo}',
                     style: TextStyle(
                       color: Colors.white38,
+                      fontSize:
+                          Responsive.fontSize(context, small: 9, large: 10),
+                    ),
+                  )
+                else if (promo.hasStock)
+                  Text(
+                    '${promo.stockEnvases.toInt()} cj',
+                    style: TextStyle(
+                      color: AppTheme.neonGreen.withValues(alpha: 0.7),
                       fontSize:
                           Responsive.fontSize(context, small: 9, large: 10),
                     ),
@@ -260,15 +288,30 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         const Icon(Icons.card_giftcard, color: AppTheme.neonPurple, size: 16),
         const SizedBox(width: 6),
         Expanded(
-          child: Text(
-            promo.promoDesc.isNotEmpty ? promo.promoDesc : 'Promocion regalo',
-            style: TextStyle(
-              color: AppTheme.neonPurple,
-              fontWeight: FontWeight.bold,
-              fontSize: Responsive.fontSize(context, small: 11, large: 13),
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                promo.giftLabel,
+                style: TextStyle(
+                  color: AppTheme.neonPurple,
+                  fontWeight: FontWeight.bold,
+                  fontSize: Responsive.fontSize(
+                      context, small: 11, large: 13),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (promo.minQty > 0)
+                Text(
+                  'Compra ${promo.minQty.toInt()}, lleva ${(promo.minQty + promo.giftQty).toInt()}',
+                  style: TextStyle(
+                    color: AppTheme.neonPurple.withOpacity(0.7),
+                    fontSize: Responsive.fontSize(
+                        context, small: 9, large: 10),
+                  ),
+                ),
+            ],
           ),
         ),
       ],

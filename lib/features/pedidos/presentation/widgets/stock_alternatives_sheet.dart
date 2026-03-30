@@ -62,6 +62,9 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
   Timer? _searchDebounce;
   bool _showSearch = false;
 
+  // Quantity selection per product code
+  final Map<String, double> _selectedQty = {};
+
   @override
   void initState() {
     super.initState();
@@ -697,74 +700,122 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              if (hasStock)
+            ],
+          ),
+          if (hasStock) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.darkBase,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildQtyButton(Icons.remove,
+                          _getQty(code, stockEnv) <= 1,
+                          () => _changeQty(code, -1, stockEnv)),
+                      Container(
+                        width: 40,
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(
+                          _getQty(code, stockEnv) == _getQty(code, stockEnv).truncateToDouble()
+                              ? _getQty(code, stockEnv).toInt().toString()
+                              : _getQty(code, stockEnv).toStringAsFixed(1),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      _buildQtyButton(Icons.add,
+                          _getQty(code, stockEnv) >= stockEnv,
+                          () => _changeQty(code, 1, stockEnv)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => _addToCart(result),
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => _addToCart(result, _getQty(code, stockEnv)),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
                             AppTheme.neonBlue.withOpacity(0.2),
                             AppTheme.neonBlue.withOpacity(0.05),
                           ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
                         ),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                             color: AppTheme.neonBlue.withOpacity(0.4)),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.add_shopping_cart,
-                              color: AppTheme.neonBlue, size: 18),
-                          const SizedBox(width: 6),
-                          Text(
-                              widget.remainingQty != null
-                                  ? 'Añadir ${widget.remainingQty!.toStringAsFixed(widget.remainingQty!.truncateToDouble() == widget.remainingQty! ? 0 : 2)}'
-                                  : 'Añadir',
-                              style: const TextStyle(
+                          Icon(Icons.add_shopping_cart,
+                              color: AppTheme.neonBlue, size: 16),
+                          SizedBox(width: 4),
+                          Text('Añadir',
+                              style: TextStyle(
                                   color: AppTheme.neonBlue,
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
                   ),
-                )
-              else
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.warning.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.block, color: AppTheme.warning, size: 14),
-                      SizedBox(width: 4),
-                      Text('Sin stock',
-                          style: TextStyle(
-                              color: AppTheme.warning,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600)),
-                    ],
-                  ),
                 ),
-            ],
-          ),
+              ],
+            ),
+          ] else ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.block, color: AppTheme.warning, size: 14),
+                    SizedBox(width: 4),
+                    Text('Sin stock',
+                        style: TextStyle(
+                            color: AppTheme.warning,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  double _getQty(String code, double stock) {
+    return _selectedQty[code] ?? (widget.remainingQty ?? 1.0).clamp(1.0, stock);
+  }
+
+  void _changeQty(String code, double delta, double stock) {
+    final current = _getQty(code, stock);
+    final next = (current + delta).clamp(1.0, stock);
+    setState(() => _selectedQty[code] = next);
   }
 
   Widget _buildAlternativeCard(Map<String, dynamic> alt) {
@@ -779,17 +830,29 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
             .toList() ??
         [];
 
+    final qty = _getQty(code, stockEnv);
+
     Color scoreColor = AppTheme.textTertiary;
     String scoreLabel = '';
     if (score >= 65) {
       scoreColor = AppTheme.neonBlue;
-      scoreLabel = '⭐ Excelente match';
+      scoreLabel = 'Excelente match';
     } else if (score >= 40) {
       scoreColor = AppTheme.neonGreen;
-      scoreLabel = '🟢 Buen match';
+      scoreLabel = 'Buen match';
     } else if (score > 0) {
       scoreColor = Colors.orange;
-      scoreLabel = '🟡 Match aceptable';
+      scoreLabel = 'Match aceptable';
+    }
+
+    // Stock semaphore color
+    Color stockColor;
+    if (stockEnv >= 10) {
+      stockColor = AppTheme.neonGreen;
+    } else if (stockEnv >= 3) {
+      stockColor = Colors.orange;
+    } else {
+      stockColor = AppTheme.error;
     }
 
     return Container(
@@ -806,13 +869,13 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Stock badge
+              // Stock badge with semaphore color
               Container(
                 width: 50,
                 height: 50,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: AppTheme.neonGreen.withOpacity(0.1),
+                  color: stockColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -820,14 +883,13 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                   children: [
                     Text(
                       '${stockEnv.toInt()}',
-                      style: const TextStyle(
-                          color: AppTheme.neonGreen,
+                      style: TextStyle(
+                          color: stockColor,
                           fontSize: 16,
                           fontWeight: FontWeight.w800),
                     ),
-                    const Text('cajas',
-                        style:
-                            TextStyle(color: AppTheme.neonGreen, fontSize: 9)),
+                    Text('cajas',
+                        style: TextStyle(color: stockColor, fontSize: 9)),
                   ],
                 ),
               ),
@@ -855,53 +917,110 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     if (precio > 0)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          PedidosFormatters.money(precio, decimals: 3),
-                          style: const TextStyle(
-                              color: AppTheme.neonBlue,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600),
+                        child: Row(
+                          children: [
+                            Text(
+                              PedidosFormatters.money(precio, decimals: 3),
+                              style: const TextStyle(
+                                  color: AppTheme.neonBlue,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                            if (precio > 0 && qty > 0) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                '= ${PedidosFormatters.money(precio * qty, decimals: 2)}',
+                                style: TextStyle(
+                                    color: AppTheme.neonBlue.withOpacity(0.6),
+                                    fontSize: 11),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              // Add to cart button
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Quantity selector row + add button
+          Row(
+            children: [
+              // Match score badge
+              if (score > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: scoreColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    scoreLabel,
+                    style: TextStyle(
+                        color: scoreColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              const Spacer(),
+              // Quantity selector
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.darkBase,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.borderColor),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildQtyButton(Icons.remove, qty <= 1, () => _changeQty(code, -1, stockEnv)),
+                    Container(
+                      width: 40,
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Text(
+                        qty == qty.truncateToDouble()
+                            ? qty.toInt().toString()
+                            : qty.toStringAsFixed(1),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    _buildQtyButton(Icons.add, qty >= stockEnv, () => _changeQty(code, 1, stockEnv)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Add to cart
               Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => _addToCart(alt),
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _addToCart(alt, qty),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
                           AppTheme.neonGreen.withOpacity(0.2),
                           AppTheme.neonGreen.withOpacity(0.05),
                         ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
                       ),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: AppTheme.neonGreen.withOpacity(0.4)),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.neonGreen.withOpacity(0.4)),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.add_shopping_cart,
-                            color: AppTheme.neonGreen, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                            widget.remainingQty != null
-                                ? 'Añadir ${widget.remainingQty!.toStringAsFixed(widget.remainingQty!.truncateToDouble() == widget.remainingQty! ? 0 : 2)}'
-                                : 'Añadir',
-                            style: const TextStyle(
+                        Icon(Icons.add_shopping_cart, color: AppTheme.neonGreen, size: 16),
+                        SizedBox(width: 4),
+                        Text('Añadir',
+                            style: TextStyle(
                                 color: AppTheme.neonGreen,
-                                fontSize: 13,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold)),
                       ],
                     ),
@@ -910,46 +1029,26 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
               ),
             ],
           ),
-          if (score > 0) ...[
-            const SizedBox(height: 12),
-            const Divider(color: AppTheme.borderColor, height: 1),
+          // Match reasons chips
+          if (reasons.isNotEmpty && score > 0) ...[
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Text(
-                  scoreLabel,
-                  style: TextStyle(
-                      color: scoreColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                if (reasons.isNotEmpty)
-                  Expanded(
-                    flex: 2,
-                    child: Wrap(
-                      alignment: WrapAlignment.end,
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: reasons
-                          .map((r) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.darkBase,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: AppTheme.borderColor),
-                                ),
-                                child: Text(r,
-                                    style: const TextStyle(
-                                        color: AppTheme.textSecondary,
-                                        fontSize: 9)),
-                              ))
-                          .toList(),
-                    ),
-                  ),
-              ],
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: reasons
+                  .take(3)
+                  .map((r) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.darkBase,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AppTheme.borderColor),
+                        ),
+                        child: Text(r,
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 9)),
+                      ))
+                  .toList(),
             ),
           ],
         ],
@@ -957,7 +1056,25 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
     );
   }
 
-  void _addToCart(Map<String, dynamic> alt) {
+  Widget _buildQtyButton(IconData icon, bool disabled, VoidCallback onTap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: disabled ? null : () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, size: 18,
+              color: disabled ? AppTheme.textTertiary : AppTheme.neonGreen),
+        ),
+      ),
+    );
+  }
+
+  void _addToCart(Map<String, dynamic> alt, [double? qty]) {
     HapticFeedback.mediumImpact();
     // Create a minimal Product from the alternative data to add to cart
     final altProduct = Product(
@@ -970,11 +1087,11 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
       precioTarifa1: (alt['precio'] as num?)?.toDouble() ?? 0,
     );
 
-    final qtyToAdd = widget.remainingQty ?? 1.0;
+    final qtyToAdd = qty ?? widget.remainingQty ?? 1.0;
 
     final error = widget.provider.addLine(
       altProduct,
-      qtyToAdd, // Add remaining or 1 caja por defecto
+      qtyToAdd,
       0,
       'CAJAS',
       altProduct.bestPrice,

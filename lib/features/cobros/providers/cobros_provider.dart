@@ -22,6 +22,10 @@ class CobrosProvider extends ChangeNotifier {
   List<CobroPendiente> _cobrosPendientes = [];
   ResumenCobros? _resumenCobros;
   EstadoCliente? _estadoClienteActual;
+
+  // Pending summary per client (code -> {total, count})
+  Map<String, Map<String, dynamic>> _pendingSummary = {};
+  double _grandTotal = 0;
   
   // Filtros
   String _filtroEstado = 'todos';
@@ -46,6 +50,8 @@ class CobrosProvider extends ChangeNotifier {
   EstadoCliente? get estadoClienteActual => _estadoClienteActual;
   String get filtroEstado => _filtroEstado;
   String get filtroCliente => _filtroCliente;
+  Map<String, Map<String, dynamic>> get pendingSummary => _pendingSummary;
+  double get grandTotal => _grandTotal;
 
   // Estadísticas calculadas
   int get totalEntregasPendientes => _albaranesPendientes
@@ -262,6 +268,24 @@ class CobrosProvider extends ChangeNotifier {
   // ============================================
   // API - COMERCIAL
   // ============================================
+
+  /// Carga resumen de pendientes por cliente para un vendedor
+  Future<void> cargarPendingSummary(String vendedorCode) async {
+    try {
+      final response = await ApiClient.get('/cobros/pending-summary/$vendedorCode');
+      if (response['success'] == true) {
+        final raw = response['summary'] as Map<String, dynamic>? ?? {};
+        _pendingSummary = raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
+        _grandTotal = (response['grandTotal'] as num?)?.toDouble() ?? 0;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  double pendingForClient(String code) {
+    final entry = _pendingSummary[code.trim()];
+    return (entry?['total'] as num?)?.toDouble() ?? 0;
+  }
 
   /// Carga cobros pendientes de un cliente
   Future<void> cargarCobrosPendientes(String codigoCliente) async {

@@ -41,6 +41,7 @@ class _CobrosPageState extends State<CobrosPage> {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadClients();
+      _loadPendingSummary();
     });
   }
 
@@ -62,6 +63,12 @@ class _CobrosPageState extends State<CobrosPage> {
     if (mounted) setState(() => _isSearchingClients = false);
   }
 
+  void _loadPendingSummary() {
+    final currentFilterVendor = context.read<FilterProvider>().selectedVendor;
+    final vendorCode = currentFilterVendor ?? widget.employeeCode;
+    _cobrosProvider.cargarPendingSummary(vendorCode);
+  }
+
   void _onSearchChanged(String query) {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 500), () {
@@ -71,6 +78,7 @@ class _CobrosPageState extends State<CobrosPage> {
 
   void _onVendorChanged() {
     _loadClients(_searchController.text);
+    _loadPendingSummary();
   }
 
   @override
@@ -167,6 +175,18 @@ class _CobrosPageState extends State<CobrosPage> {
                     color: AppTheme.textSecondary.withOpacity(0.8),
                   ),
                 ),
+                if (_cobrosProvider.grandTotal > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Total pendiente: ${_cobrosProvider.grandTotal.toStringAsFixed(2)} €',
+                      style: TextStyle(
+                        fontSize: Responsive.fontSize(context, small: 12, large: 14),
+                        color: AppTheme.warning,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -216,11 +236,17 @@ class _CobrosPageState extends State<CobrosPage> {
   Widget _buildClientCobroCard(Map<String, dynamic> client) {
     final String name = (client['name'] ?? 'Cliente').toString();
     final String code = (client['code'] ?? '').toString();
-    
+    final pending = _cobrosProvider.pendingForClient(code);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       color: AppTheme.surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: pending > 0
+            ? BorderSide(color: AppTheme.warning.withOpacity(0.4))
+            : BorderSide.none,
+      ),
       child: InkWell(
         onTap: () {
           Navigator.push(
@@ -243,19 +269,78 @@ class _CobrosPageState extends State<CobrosPage> {
             children: [
               CircleAvatar(
                 backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
-                child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    color: AppTheme.neonBlue,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text('Código: $code', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'Código: $code',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios, size: 16, color: AppTheme.textSecondary),
+              if (pending > 0) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warning.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppTheme.warning.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Pendiente',
+                        style: TextStyle(
+                          color: AppTheme.warning,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '${pending.toStringAsFixed(2)} €',
+                        style: const TextStyle(
+                          color: AppTheme.warning,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: AppTheme.textSecondary,
+              ),
             ],
           ),
         ),

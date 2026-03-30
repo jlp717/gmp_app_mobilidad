@@ -191,6 +191,18 @@ class ProductCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // Neto U/R when retractil units available
+                  if (product.unitsRetractil > 0 && product.bestPrice > 0) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'U/R: ${(product.bestPrice / product.unitsRetractil).toStringAsFixed(3)}€',
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: Responsive.fontSize(context,
+                            small: 9, large: 10),
+                      ),
+                    ),
+                  ],
                 ],
               ),
               // Quick add button (Mejora 2)

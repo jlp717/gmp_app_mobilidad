@@ -485,30 +485,42 @@ class PromotionItem {
   final String name;
   final String promoDesc;
   final String promoType;
+  final String promoCode;
   final double promoPrice;
   final double regularPrice;
   final String dateFrom;
   final String dateTo;
   final double stockEnvases;
   final double stockUnidades;
+  final double minQty;
+  final double giftQty;
+  final bool cumulative;
 
   PromotionItem({
     required this.code,
     required this.name,
     required this.promoDesc,
     this.promoType = '',
+    this.promoCode = '',
     this.promoPrice = 0,
     this.regularPrice = 0,
     this.dateFrom = '',
     this.dateTo = '',
     this.stockEnvases = 0,
     this.stockUnidades = 0,
+    this.minQty = 0,
+    this.giftQty = 0,
+    this.cumulative = false,
   });
 
   bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
   double get savingPct =>
       regularPrice > 0 ? ((regularPrice - promoPrice) / regularPrice * 100) : 0;
   bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
+  bool get isGift => promoType == 'GIFT';
+  String get giftLabel => minQty > 0 && giftQty > 0
+      ? '${minQty.toInt()}+${giftQty.toInt()} gratis'
+      : promoDesc;
 
   factory PromotionItem.fromJson(Map<String, dynamic> json) {
     String dateFrom = (json['dateFrom'] ?? '').toString().trim();
@@ -537,12 +549,16 @@ class PromotionItem {
       promoDesc:
           (json['promoDesc'] ?? json['description'] ?? '').toString().trim(),
       promoType: (json['promoType'] ?? '').toString().trim(),
+      promoCode: (json['promoCode'] ?? '').toString().trim(),
       promoPrice: _toDouble(json['promoPrice'] ?? json['price']),
       regularPrice: _toDouble(json['regularPrice']),
       dateFrom: dateFrom,
       dateTo: dateTo,
       stockEnvases: _toDouble(json['stockEnvases']),
       stockUnidades: _toDouble(json['stockUnidades']),
+      minQty: _toDouble(json['minQty']),
+      giftQty: _toDouble(json['giftQty']),
+      cumulative: json['cumulative'] == true,
     );
   }
 }

@@ -143,6 +143,20 @@ async function initPedidosTables() {
                 }
             }
         }
+
+        // Ensure ORIGEN column exists in PEDIDOS_CAB (may be missing in older installs)
+        try {
+            await conn.query(`SELECT ORIGEN FROM JAVIER.PEDIDOS_CAB FETCH FIRST 1 ROW ONLY`);
+        } catch (colErr) {
+            try {
+                try { await conn.close(); } catch (_) { /* ignore */ }
+                conn = await pool.connect();
+                await conn.query(`ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN ORIGEN CHAR(1) DEFAULT 'A'`);
+                logger.info(`[PEDIDOS] Added missing ORIGEN column to PEDIDOS_CAB`);
+            } catch (alterErr) {
+                logger.warn(`[PEDIDOS] Could not add ORIGEN column: ${alterErr.message}`);
+            }
+        }
     } catch (err) {
         logger.error(`[PEDIDOS] Table init error: ${err.message}`);
     } finally {
@@ -452,44 +466,47 @@ async function getStock(code, almacen = 1) {
 // ============================================================================
 
 async function getNextOrderNumber(ejercicio) {
-    // P0-A FIX: Use MERGE for atomic upsert — eliminates race condition
-    // DB2 for i supports MERGE which is a single atomic statement
+    // Atomic UPDATE+INSERT pattern (no MERGE — not supported on all DB2/i versions)
+    // Step 1: Try UPDATE existing row
     try {
         await queryWithParams(
-            `MERGE INTO JAVIER.PEDIDOS_SEQ AS T
-             USING (VALUES (?)) AS S(EJ)
-             ON T.EJERCICIO = S.EJ
-             WHEN MATCHED THEN UPDATE SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1
-             WHEN NOT MATCHED THEN INSERT (EJERCICIO, ULTIMO_NUMERO) VALUES (S.EJ, 1)`,
-            [ejercicio], false
-        );
-    } catch (mergeErr) {
-        // Fallback for older DB2 versions without MERGE
-        logger.warn(`[PEDIDOS] MERGE not supported, using fallback: ${mergeErr.message}`);
-        const upd = await queryWithParams(
             `UPDATE JAVIER.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
             [ejercicio], false
         );
-        if (!upd || upd.count === 0) {
-            try {
-                await queryWithParams(
-                    `INSERT INTO JAVIER.PEDIDOS_SEQ (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
-                    [ejercicio], false
-                );
-            } catch (e) {
-                await queryWithParams(
-                    `UPDATE JAVIER.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
-                    [ejercicio], false
-                );
-            }
-        }
+    } catch (updErr) {
+        logger.warn(`[PEDIDOS] SEQ UPDATE failed: ${updErr.message}`);
     }
 
-    const rows = await queryWithParams(
+    // Step 2: Check if row exists after UPDATE
+    const checkRows = await queryWithParams(
         `SELECT ULTIMO_NUMERO FROM JAVIER.PEDIDOS_SEQ WHERE EJERCICIO = ?`,
         [ejercicio], false
     );
-    return rows[0]?.ULTIMO_NUMERO || 1;
+
+    if (checkRows && checkRows.length > 0) {
+        return checkRows[0].ULTIMO_NUMERO;
+    }
+
+    // Step 3: Row doesn't exist — INSERT new year
+    try {
+        await queryWithParams(
+            `INSERT INTO JAVIER.PEDIDOS_SEQ (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
+            [ejercicio], false
+        );
+        return 1;
+    } catch (insErr) {
+        // Concurrent INSERT race — another process created it first, just UPDATE+SELECT
+        logger.warn(`[PEDIDOS] SEQ INSERT race: ${insErr.message}`);
+        await queryWithParams(
+            `UPDATE JAVIER.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
+            [ejercicio], false
+        );
+        const retryRows = await queryWithParams(
+            `SELECT ULTIMO_NUMERO FROM JAVIER.PEDIDOS_SEQ WHERE EJERCICIO = ?`,
+            [ejercicio], false
+        );
+        return retryRows[0]?.ULTIMO_NUMERO || 1;
+    }
 }
 
 // ============================================================================
@@ -513,21 +530,43 @@ async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = '
 
     const numeroPedido = await getNextOrderNumber(ejercicio);
 
-    // Insert header
-    const cabSql = `
-        INSERT INTO JAVIER.PEDIDOS_CAB (
-            EJERCICIO, NUMEROPEDIDO, DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
-            CODIGOCLIENTE, NOMBRECLIENTE, CODIGOVENDEDOR, CODIGOFORMAPAGO,
-            CODIGOTARIFA, CODIGOALMACEN, TIPOVENTA, OBSERVACIONES, ORIGEN
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
-    const cabParams = [
-        ejercicio, numeroPedido, dia, mes, ano, hora,
-        clientCode.trim(), (clientName || '').substring(0, 60), (vendedorCode || '').split(',')[0].trim().substring(0, 2),
-        formaPago, tarifa, almacen, tipoventa, (observaciones || '').substring(0, 200), origen
-    ];
-
-    await queryWithParams(cabSql, cabParams, false);
+    // Insert header — ORIGEN column may not exist in older installs
+    let cabSql, cabParams;
+    try {
+        // Try with ORIGEN first (normal case)
+        cabSql = `
+            INSERT INTO JAVIER.PEDIDOS_CAB (
+                EJERCICIO, NUMEROPEDIDO, DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
+                CODIGOCLIENTE, NOMBRECLIENTE, CODIGOVENDEDOR, CODIGOFORMAPAGO,
+                CODIGOTARIFA, CODIGOALMACEN, TIPOVENTA, OBSERVACIONES, ORIGEN
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        cabParams = [
+            ejercicio, numeroPedido, dia, mes, ano, hora,
+            clientCode.trim(), (clientName || '').substring(0, 60), (vendedorCode || '').split(',')[0].trim().substring(0, 2),
+            formaPago, tarifa, almacen, tipoventa, (observaciones || '').substring(0, 200), origen
+        ];
+        await queryWithParams(cabSql, cabParams, false);
+    } catch (cabErr) {
+        // If column not found (42S22) — retry without ORIGEN
+        const states = (cabErr.odbcErrors || []).map(e => e.state);
+        if (states.includes('42S22') || (cabErr.message || '').includes('-205')) {
+            logger.warn(`[PEDIDOS] ORIGEN column missing, inserting without it`);
+            cabSql = `
+                INSERT INTO JAVIER.PEDIDOS_CAB (
+                    EJERCICIO, NUMEROPEDIDO, DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
+                    CODIGOCLIENTE, NOMBRECLIENTE, CODIGOVENDEDOR, CODIGOFORMAPAGO,
+                    CODIGOTARIFA, CODIGOALMACEN, TIPOVENTA, OBSERVACIONES
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            cabParams = [
+                ejercicio, numeroPedido, dia, mes, ano, hora,
+                clientCode.trim(), (clientName || '').substring(0, 60), (vendedorCode || '').split(',')[0].trim().substring(0, 2),
+                formaPago, tarifa, almacen, tipoventa, (observaciones || '').substring(0, 200)
+            ];
+            await queryWithParams(cabSql, cabParams, false);
+        } else {
+            throw cabErr;
+        }
+    }
 
     // Retrieve the generated ID
     const idRows = await queryWithParams(
@@ -1313,6 +1352,7 @@ async function getActivePromotions(clientCode) {
         const now = new Date();
         const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate(); // YYYYMMDD
 
+        // --- PRICE promotions from CPESL1 (client-specific special prices) ---
         const paramsCpes = [today, today];
         let sqlCpes = `
             SELECT 'PRICE' AS PROMOTYPE,
@@ -1323,18 +1363,21 @@ async function getActivePromotions(clientCode) {
                    COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCKENVASES,
                    COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCKUNIDADES,
                    P.C9INFC AS DATEFROM, P.C9FIFC AS DATETO,
-                   'Precio Especial' AS PROMODESC
+                   'Precio Especial' AS PROMODESC,
+                   '' AS PROMOCODE,
+                   0 AS CANTIDADMINIMA,
+                   0 AS CANTIDADREGALO,
+                   'N' AS ACUMULATIVA
             FROM DSEDAC.CPESL1 P
-            JOIN DSEDAC.ART A ON P.CODIGOARTICULO = A.CODIGOARTICULO
-            LEFT JOIN DSEDAC.ARA T ON P.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            JOIN DSEDAC.ART A ON TRIM(P.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
+            LEFT JOIN DSEDAC.ARA T ON TRIM(P.CODIGOARTICULO) = TRIM(T.CODIGOARTICULO) AND T.CODIGOTARIFA = 1
             LEFT JOIN (
                 SELECT CODIGOARTICULO,
                     SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
                     SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
-                FROM DSEDAC.ARO
-                WHERE CODIGOALMACEN = 1
+                FROM DSEDAC.ARO WHERE CODIGOALMACEN = 1
                 GROUP BY CODIGOARTICULO
-            ) S ON P.CODIGOARTICULO = S.CODIGOARTICULO
+            ) S ON TRIM(P.CODIGOARTICULO) = TRIM(S.CODIGOARTICULO)
             LEFT JOIN (
                 SELECT SR.CODIGOARTICULO,
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
@@ -1342,37 +1385,59 @@ async function getActivePromotions(clientCode) {
                 FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
                 JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
                 GROUP BY SR.CODIGOARTICULO
-            ) RES ON P.CODIGOARTICULO = RES.CODIGOARTICULO
-            WHERE P.C9INFC <= ? AND P.C9FIFC >= ?`;
+            ) RES ON TRIM(P.CODIGOARTICULO) = TRIM(RES.CODIGOARTICULO)
+            WHERE P.C9INFC <= ? AND (P.C9FIFC >= ? OR P.C9FIFC = 0)`;
 
         if (clientCode) {
             sqlCpes += ` AND TRIM(P.CODIGOCLIENTE) = ?`;
             paramsCpes.push(clientCode.trim());
         }
 
-        const paramsPmr = [today, today];
-        let sqlPmr = `
-            SELECT 'GIFT' AS PROMOTYPE,
+        // --- GIFT promotions from PMRL1 (header) + PMPL1 (product lines) ---
+        // PMRL1 has promo headers per client, PMPL1 has product lines per promo
+        // The JOIN key: PMRL1.CODIGOPROMOCIONREGALO may contain client-specific suffix
+        // Strategy: query PMRL1 headers separately, then match PMPL1 products
+        const paramsPmr = [today];
+        let sqlPmrHeaders = `
+            SELECT TRIM(H.CODIGOPROMOCIONREGALO) AS PROMOCODE,
+                   TRIM(H.NOMBREPROMOCIONREGALO) AS PROMONAME,
+                   TRIM(H.CODIGOCLIENTE) AS CLIENTCODE,
+                   H.P1INFC AS DATEFROM,
+                   H.P1FNFC AS DATETO,
+                   H.CANTIDADMINIMAPROMOCION AS CANTIDADMINIMA,
+                   H.CANTIDADMAXIMAREGALO AS CANTIDADREGALO,
+                   COALESCE(H.PROMOCIONACUMULATIVASN, 'N') AS ACUMULATIVA,
+                   COALESCE(H.CANTIDADMAXIMAPROMOCION, 0) AS CANTIDADMAXPROMO,
+                   COALESCE(H.CANTIDADMINIMAREGALO, 0) AS CANTIDADMINREGALO
+            FROM DSEDAC.PMRL1 H
+            WHERE (H.P1INFC <= ? OR H.P1INFC = 0)
+              AND (H.P1FNFC >= ? OR H.P1FNFC = 0)`;
+        paramsPmr.push(today);
+
+        if (clientCode) {
+            sqlPmrHeaders += ` AND TRIM(H.CODIGOCLIENTE) = ?`;
+            paramsPmr.push(clientCode.trim());
+        }
+
+        // PMPL1: Get ALL products for all active promos (we'll match in JS)
+        const sqlPmrProducts = `
+            SELECT TRIM(PL.CODIGOPROMOCION) AS PROMOCODE,
                    TRIM(PL.CODIGOARTICULO) AS CODE,
                    TRIM(A.DESCRIPCIONARTICULO) AS NAME,
-                   0 AS PROMOPRICE,
                    COALESCE(T.PRECIOTARIFA, 0) AS REGULARPRICE,
                    COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCKENVASES,
                    COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCKUNIDADES,
-                   H.P1INFC AS DATEFROM, H.P1FNFC AS DATETO,
-                   TRIM(H.NOMBREPROMOCIONREGALO) AS PROMODESC
-            FROM DSEDAC.PMRL1 H
-            JOIN DSEDAC.PMPL1 PL ON TRIM(H.CODIGOPROMOCIONREGALO) = TRIM(PL.CODIGOPROMOCION)
-            JOIN DSEDAC.ART A ON PL.CODIGOARTICULO = A.CODIGOARTICULO
-            LEFT JOIN DSEDAC.ARA T ON A.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+                   PL.ORDEN AS ORDEN
+            FROM DSEDAC.PMPL1 PL
+            JOIN DSEDAC.ART A ON TRIM(PL.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
+            LEFT JOIN DSEDAC.ARA T ON TRIM(PL.CODIGOARTICULO) = TRIM(T.CODIGOARTICULO) AND T.CODIGOTARIFA = 1
             LEFT JOIN (
                 SELECT CODIGOARTICULO,
                     SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
                     SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
-                FROM DSEDAC.ARO
-                WHERE CODIGOALMACEN = 1
+                FROM DSEDAC.ARO WHERE CODIGOALMACEN = 1
                 GROUP BY CODIGOARTICULO
-            ) S ON PL.CODIGOARTICULO = S.CODIGOARTICULO
+            ) S ON TRIM(PL.CODIGOARTICULO) = TRIM(S.CODIGOARTICULO)
             LEFT JOIN (
                 SELECT SR.CODIGOARTICULO,
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
@@ -1380,61 +1445,143 @@ async function getActivePromotions(clientCode) {
                 FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
                 JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
                 GROUP BY SR.CODIGOARTICULO
-            ) RES ON PL.CODIGOARTICULO = RES.CODIGOARTICULO
-            WHERE H.P1INFC <= ? AND H.P1FNFC >= ?`;
+            ) RES ON TRIM(PL.CODIGOARTICULO) = TRIM(RES.CODIGOARTICULO)
+            ORDER BY PL.CODIGOPROMOCION, PL.ORDEN`;
 
-        if (clientCode) {
-            sqlPmr += ` AND TRIM(H.CODIGOCLIENTE) = ?`;
-            paramsPmr.push(clientCode.trim());
-        }
-
-        // Run in parallel
-        const [cpesRows, pmrRows] = await Promise.all([
+        // Run all 3 queries in parallel
+        const [cpesRows, pmrHeaders, pmrProducts] = await Promise.all([
             queryWithParams(sqlCpes, paramsCpes).catch(e => { logger.warn(`[PEDIDOS] CPESL1 query err: ${e.message}`); return []; }),
-            queryWithParams(sqlPmr, paramsPmr).catch(e => { logger.warn(`[PEDIDOS] PMRL1 query err: ${e.message}`); return []; })
+            queryWithParams(sqlPmrHeaders, paramsPmr).catch(e => { logger.warn(`[PEDIDOS] PMRL1 headers err: ${e.message}`); return []; }),
+            query(sqlPmrProducts).catch(e => { logger.warn(`[PEDIDOS] PMPL1 products err: ${e.message}`); return []; })
         ]);
 
-        const formatRow = (r) => {
-            const regPrice = parseFloat(r.REGULARPRICE) || 0;
-            const promPrice = parseFloat(r.PROMOPRICE) || 0;
-            const stockEnvases = parseFloat(r.STOCKENVASES) || 0;
-            const stockUnidades = parseFloat(r.STOCKUNIDADES) || 0;
-            let discount = 0;
-            if (regPrice > 0 && promPrice > 0 && r.PROMOTYPE === 'PRICE') {
-                discount = ((regPrice - promPrice) / regPrice) * 100;
+        // Build product index by promo code from PMPL1
+        const productsByPromo = {};
+        for (const p of pmrProducts) {
+            const key = (p.PROMOCODE || '').trim();
+            if (!key) continue;
+            if (!productsByPromo[key]) productsByPromo[key] = [];
+            productsByPromo[key].push(p);
+        }
+
+        // Match PMRL1 headers to PMPL1 products
+        // PMRL1 codes are client-specific (e.g. "NST_9324"), PMPL1 codes are base (e.g. "NST 026")
+        // Strategy: Try exact match first, then prefix/contains match
+        const findProductsForPromo = (promoCode) => {
+            // Exact match
+            if (productsByPromo[promoCode]) return productsByPromo[promoCode];
+
+            // Extract base prefix (before underscore or first digits)
+            const prefix = promoCode.replace(/[_\s]\d+$/, '').trim();
+            for (const key of Object.keys(productsByPromo)) {
+                if (key.startsWith(prefix) || prefix.startsWith(key.replace(/\s+/g, ''))) {
+                    return productsByPromo[key];
+                }
             }
 
-            // Convert YYYYMMDD to DD/MM/YYYY parts
-            const dFrom = (r.DATEFROM || 0).toString();
-            const dTo = (r.DATETO || 0).toString();
-            const parseDate = (dStr) => {
-                if (dStr.length === 8) return { y: dStr.substring(0,4), m: dStr.substring(4,6), d: dStr.substring(6,8) };
-                return { y: 0, m: 0, d: 0 };
-            };
-            const pFrom = parseDate(dFrom);
-            const pTo = parseDate(dTo);
-            const dateFrom = pFrom.y ? `${pFrom.d}/${pFrom.m}/${pFrom.y}` : '';
-            const dateTo = pTo.y ? `${pTo.d}/${pTo.m}/${pTo.y}` : '';
-
-            return {
-                promoType: r.PROMOTYPE,
-                code: r.CODE || '',
-                name: r.NAME || '',
-                promoDesc: r.PROMODESC || '',
-                promoPrice: promPrice,
-                regularPrice: regPrice,
-                stockEnvases,
-                stockUnidades,
-                discountPct: discount,
-                dateFrom,
-                dateTo,
-                dayFrom: pFrom.d, monthFrom: pFrom.m, yearFrom: pFrom.y,
-                dayTo: pTo.d, monthTo: pTo.m, yearTo: pTo.y
-            };
+            // Fallback: return ALL PMPL1 products (promo applies to full catalog)
+            return [];
         };
 
-        const allPromos = [...cpesRows, ...pmrRows].map(formatRow);
-        return allPromos;
+        const parseDate = (dStr) => {
+            const s = String(dStr || 0);
+            if (s.length === 8 && s !== '0') return { y: s.substring(0,4), m: s.substring(4,6), d: s.substring(6,8) };
+            return { y: 0, m: 0, d: 0 };
+        };
+
+        const formatDateStr = (parsed) => parsed.y ? `${parsed.d}/${parsed.m}/${parsed.y}` : '';
+
+        // Format PRICE promos
+        const pricePromos = cpesRows.map(r => {
+            const regPrice = parseFloat(r.REGULARPRICE) || 0;
+            const promPrice = parseFloat(r.PROMOPRICE) || 0;
+            const pFrom = parseDate(r.DATEFROM);
+            const pTo = parseDate(r.DATETO);
+            return {
+                promoType: 'PRICE',
+                promoCode: (r.PROMOCODE || '').trim(),
+                code: (r.CODE || '').trim(),
+                name: (r.NAME || '').trim(),
+                promoDesc: 'Precio Especial',
+                promoPrice: promPrice,
+                regularPrice: regPrice,
+                stockEnvases: parseFloat(r.STOCKENVASES) || 0,
+                stockUnidades: parseFloat(r.STOCKUNIDADES) || 0,
+                discountPct: regPrice > 0 && promPrice > 0 ? ((regPrice - promPrice) / regPrice) * 100 : 0,
+                dateFrom: formatDateStr(pFrom),
+                dateTo: formatDateStr(pTo),
+                dayFrom: pFrom.d, monthFrom: pFrom.m, yearFrom: pFrom.y,
+                dayTo: pTo.d, monthTo: pTo.m, yearTo: pTo.y,
+                minQty: 0,
+                giftQty: 0,
+                cumulative: false,
+            };
+        });
+
+        // Format GIFT promos — one entry per product in the promo
+        const giftPromos = [];
+        for (const h of pmrHeaders) {
+            const promoCode = (h.PROMOCODE || '').trim();
+            const promoName = (h.PROMONAME || '').trim();
+            const minQty = parseFloat(h.CANTIDADMINIMA) || 0;
+            const giftQty = parseFloat(h.CANTIDADREGALO) || 0;
+            const pFrom = parseDate(h.DATEFROM);
+            const pTo = parseDate(h.DATETO);
+
+            // Build readable description: "3+1 PASTELERIA" or from name
+            let desc = promoName;
+            if (!desc && minQty > 0 && giftQty > 0) {
+                desc = `${Math.round(minQty)}+${Math.round(giftQty)} REGALO`;
+            }
+
+            const products = findProductsForPromo(promoCode);
+            if (products.length > 0) {
+                for (const p of products) {
+                    giftPromos.push({
+                        promoType: 'GIFT',
+                        promoCode,
+                        code: (p.CODE || '').trim(),
+                        name: (p.NAME || '').trim(),
+                        promoDesc: desc,
+                        promoPrice: 0,
+                        regularPrice: parseFloat(p.REGULARPRICE) || 0,
+                        stockEnvases: Math.max(0, parseFloat(p.STOCKENVASES) || 0),
+                        stockUnidades: Math.max(0, parseFloat(p.STOCKUNIDADES) || 0),
+                        discountPct: 0,
+                        dateFrom: formatDateStr(pFrom),
+                        dateTo: formatDateStr(pTo),
+                        dayFrom: pFrom.d, monthFrom: pFrom.m, yearFrom: pFrom.y,
+                        dayTo: pTo.d, monthTo: pTo.m, yearTo: pTo.y,
+                        minQty,
+                        giftQty,
+                        cumulative: (h.ACUMULATIVA || 'N').trim() === 'S',
+                    });
+                }
+            } else {
+                // No matching products but promo exists — return header-only entry
+                giftPromos.push({
+                    promoType: 'GIFT',
+                    promoCode,
+                    code: '',
+                    name: desc,
+                    promoDesc: desc,
+                    promoPrice: 0,
+                    regularPrice: 0,
+                    stockEnvases: 0,
+                    stockUnidades: 0,
+                    discountPct: 0,
+                    dateFrom: formatDateStr(pFrom),
+                    dateTo: formatDateStr(pTo),
+                    dayFrom: pFrom.d, monthFrom: pFrom.m, yearFrom: pFrom.y,
+                    dayTo: pTo.d, monthTo: pTo.m, yearTo: pTo.y,
+                    minQty,
+                    giftQty,
+                    cumulative: (h.ACUMULATIVA || 'N').trim() === 'S',
+                });
+            }
+        }
+
+        return [...pricePromos, ...giftPromos];
 
     } catch (error) {
         logger.warn(`[PEDIDOS] getActivePromotions error (returning []): ${error.message}`);
@@ -1920,10 +2067,10 @@ async function getSimilarProducts(productCode) {
             SELECT TRIM(CODIGOFAMILIA) AS FAMILIA,
                    TRIM(CODIGOSUBFAMILIA) AS SUBFAMILIA,
                    TRIM(CODIGOMARCA) AS MARCA,
-                   TRIM(CODIGOGRUPOGENERAL) AS GRUPO,
-                   TRIM(FORMATO) AS FORMATO,
-                   TRIM(PRESENTACION) AS PRESENTACION,
-                   TRIM(TIPOPRODUCTO) AS TIPO,
+                   TRIM(COALESCE(CODIGOGRUPO, '')) AS GRUPO,
+                   TRIM(COALESCE(FORMATO, '')) AS FORMATO,
+                   TRIM(COALESCE(CODIGOPRESENTACION, '')) AS PRESENTACION,
+                   TRIM(COALESCE(CODIGOTIPO, '')) AS TIPO,
                    TRIM(DESCRIPCIONARTICULO) AS DESCRIPTION
             FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
         `;
@@ -1938,10 +2085,10 @@ async function getSimilarProducts(productCode) {
                    TRIM(B.CODIGOMARCA) AS MARCA,
                    TRIM(B.CODIGOFAMILIA) AS FAMILIA,
                    TRIM(B.CODIGOSUBFAMILIA) AS SUBFAMILIA,
-                   TRIM(B.CODIGOGRUPOGENERAL) AS GRUPO,
-                   TRIM(B.FORMATO) AS FORMATO,
-                   TRIM(B.PRESENTACION) AS PRESENTACION,
-                   TRIM(B.TIPOPRODUCTO) AS TIPO,
+                   TRIM(COALESCE(B.CODIGOGRUPO, '')) AS GRUPO,
+                   TRIM(COALESCE(B.FORMATO, '')) AS FORMATO,
+                   TRIM(COALESCE(B.CODIGOPRESENTACION, '')) AS PRESENTACION,
+                   TRIM(COALESCE(B.CODIGOTIPO, '')) AS TIPO,
                    COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCK_ENVASES,
                    COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCK_UNIDADES,
                    COALESCE(T.PRECIOTARIFA, 0) AS PRECIO
@@ -1968,11 +2115,58 @@ async function getSimilarProducts(productCode) {
               AND B.ANOBAJA = 0
               AND (COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0)) > 0
         `;
-        const rows = await cachedQuery(
+        let rows = await cachedQuery(
             (s) => queryWithParams(s, [orig.FAMILIA, code]),
             sqlCandidates, cacheKey, TTL.SHORT
         );
-        
+
+        // 2b. FALLBACK: If no candidates in same family, expand to subfamilia across all families
+        if ((!rows || rows.length === 0) && orig.SUBFAMILIA) {
+            const sqlFallback = `
+            SELECT TRIM(B.CODIGOARTICULO) AS CODE,
+                   TRIM(B.DESCRIPCIONARTICULO) AS NAME,
+                   TRIM(B.CODIGOMARCA) AS MARCA,
+                   TRIM(B.CODIGOFAMILIA) AS FAMILIA,
+                   TRIM(B.CODIGOSUBFAMILIA) AS SUBFAMILIA,
+                   TRIM(COALESCE(B.CODIGOGRUPO, '')) AS GRUPO,
+                   TRIM(COALESCE(B.FORMATO, '')) AS FORMATO,
+                   TRIM(COALESCE(B.CODIGOPRESENTACION, '')) AS PRESENTACION,
+                   TRIM(COALESCE(B.CODIGOTIPO, '')) AS TIPO,
+                   COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCK_ENVASES,
+                   COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCK_UNIDADES,
+                   COALESCE(T.PRECIOTARIFA, 0) AS PRECIO
+            FROM DSEDAC.ART B
+            LEFT JOIN (
+                SELECT CODIGOARTICULO,
+                    SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
+                    SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
+                FROM DSEDAC.ARO
+                WHERE CODIGOALMACEN = 1
+                GROUP BY CODIGOARTICULO
+            ) S ON B.CODIGOARTICULO = S.CODIGOARTICULO
+            LEFT JOIN (
+                SELECT SR.CODIGOARTICULO,
+                    SUM(SR.CANTIDADENVASES) AS RES_ENV,
+                    SUM(SR.CANTIDADUNIDADES) AS RES_UNI
+                FROM JAVIER.PEDIDOS_STOCK_RESERVE SR
+                JOIN JAVIER.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND C.ESTADO = 'CONFIRMADO'
+                GROUP BY SR.CODIGOARTICULO
+            ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
+            LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            WHERE TRIM(B.CODIGOSUBFAMILIA) = ?
+              AND TRIM(B.CODIGOARTICULO) != ?
+              AND B.ANOBAJA = 0
+              AND (COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0)) > 0
+            FETCH FIRST 30 ROWS ONLY
+            `;
+            const fallbackKey = `pedidos:similar_v3_fallback:${code}`;
+            rows = await cachedQuery(
+                (s) => queryWithParams(s, [orig.SUBFAMILIA, code]),
+                sqlFallback, fallbackKey, TTL.SHORT
+            );
+            logger.info(`[PEDIDOS] getSimilarProducts fallback: subfamilia=${orig.SUBFAMILIA}, found ${(rows || []).length} candidates`);
+        }
+
         // 3. Apply intelligent 3-level scoring
         const scored = [];
         
