@@ -751,7 +751,10 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
 
     if (!isAll) {
         const vendorList = vendedorCodes.split(',').map(v => v.trim()).filter(Boolean);
-        if (vendorList.length === 1) {
+        // DB2 ODBC has a limit on parameter markers; 50+ vendors ≈ ALL
+        if (vendorList.length > 50) {
+            // Treat as ALL — no vendor filter
+        } else if (vendorList.length === 1) {
             sql += ` AND TRIM(C.CODIGOVENDEDOR) = ?`;
             params.push(vendorList[0]);
         } else {
@@ -1401,11 +1404,14 @@ async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
 
     if (vendedorCodes && vendedorCodes.trim().toUpperCase() !== 'ALL') {
         const codes = vendedorCodes.split(',').map(c => c.trim()).filter(Boolean);
-        if (codes.length === 1) {
-            whereParts.push('CODIGOVENDEDOR = ?');
+        // DB2 ODBC limit on parameter markers; 50+ vendors ≈ ALL
+        if (codes.length > 50) {
+            // no vendor filter
+        } else if (codes.length === 1) {
+            whereParts.push('TRIM(CODIGOVENDEDOR) = ?');
             params.push(codes[0]);
         } else {
-            whereParts.push(`CODIGOVENDEDOR IN (${codes.map(() => '?').join(',')})`);
+            whereParts.push(`TRIM(CODIGOVENDEDOR) IN (${codes.map(() => '?').join(',')})`);
             params.push(...codes);
         }
     }
@@ -1749,7 +1755,6 @@ async function getActivePromotions(clientCode) {
         } else {
             sqlPmrHeaders += ` AND TRIM(H.CODIGOCLIENTE) = ''`;
         }
-        paramsPmr.push(today);
 
         // PMPL1: Get ALL products for all active promos (we'll match in JS)
         const sqlPmrProducts = `

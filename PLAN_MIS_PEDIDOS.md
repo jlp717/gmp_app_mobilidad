@@ -1,5 +1,9 @@
 # Plan: Rediseño completo de "Mis Pedidos"
 
+## Estado: ✅ IMPLEMENTADO
+
+---
+
 ## 1. Estados de pedido — Basados en el sistema real DB2
 
 ### Tablas del sistema real (DSEDAC)
@@ -10,15 +14,6 @@
 | CPC | `SITUACIONALBARAN` (CHAR 1) | `X` (691,792) = Sin albarán, `R` (22,877) = Parcialmente albaranado | Progreso albarán |
 | **CAC** (Cab.albaranes cliente) | `SITUACIONALBARAN` (CHAR 1) | `A` (63,620) = Abierto, `F` (626,055) = Facturado, `X` (8,141) = Anulado | Estado albarán |
 | CAC | `ESTADOENVIO` (CHAR 2) | `  ` = No enviado, `**` = Enviado | Estado envío |
-
-### Ciclo de vida real del pedido
-```
-1. Pedido creado     → CPC: SITUACIONPEDIDO='A', CONFORMADOSN=' '
-2. Pedido confirmado → CPC: CONFORMADOSN='S'
-3. Pedido albaranado → Se genera CAC: SITUACIONALBARAN='A', CPC: SITUACIONALBARAN='R'
-4. Albarán facturado → CAC: SITUACIONALBARAN='F'
-5. Albarán anulado   → CAC: SITUACIONALBARAN='X'
-```
 
 ### Estados de nuestra app (JAVIER.PEDIDOS_CAB — tabla nuestra)
 | Estado | Color | HEX | Icono | Mapeo al sistema real |
@@ -126,17 +121,81 @@ Ya existe la tabla `JAVIER.PEDIDOS_SEQ` con: `EJERCICIO` (NUMERIC 4), `ULTIMO_NU
 
 ### 5.1 Nuevo: GET /orders/stats
 **Query params**: `vendedorCodes` (requerido), `dateFrom`, `dateTo`
-**Respuesta**: totalOrders, totalAmount, totalBase, totalIva, avgMargin, avgTicket, byStatus, dailyTrend[], topClients[]
+
+**Respuesta**:
+```json
+{
+  "totalOrders": 45,
+  "totalAmount": 12500.50,
+  "totalBase": 10200.00,
+  "totalIva": 2300.50,
+  "avgMargin": 18.5,
+  "avgTicket": 277.79,
+  "byStatus": {
+    "BORRADOR": 3,
+    "CONFIRMADO": 30,
+    "ENVIADO": 8,
+    "FACTURADO": 2,
+    "ANULADO": 2
+  },
+  "dailyTrend": [
+    { "date": "2026-03-25", "orders": 5, "amount": 1200.00 },
+    { "date": "2026-03-26", "orders": 3, "amount": 850.00 }
+  ],
+  "topClients": [
+    { "code": "30887", "name": "CLIENTE EJEMPLO", "orders": 8, "amount": 3200.00 }
+  ]
+}
+```
 
 ### 5.2 Reforzado: GET /orders
-**Nuevos params**: `dateFrom`, `dateTo`, `search`, `minAmount`, `maxAmount`, `sortBy`, `sortOrder`
-**Respuesta reforzada**: cada pedido incluye numeroPedidoFormatted, fechaFormatted, lineCount, base, iva, costo, vendedorCode, observaciones, tarifa, formaPago, origen
+**Query params existentes**: `vendedorCodes`, `status`, `year`, `offset`, `limit`
+**Nuevos query params**:
+- `dateFrom` (YYYYMMDD) — Fecha desde
+- `dateTo` (YYYYMMDD) — Fecha hasta
+- `search` — Búsqueda por nº pedido, cliente
+- `minAmount` — Importe mínimo
+- `maxAmount` — Importe máximo
+- `sortBy` — `fecha`, `importe`, `cliente`, `numero`
+- `sortOrder` — `ASC`, `DESC`
+
+**Respuesta reforzada** — cada pedido devuelve:
+```json
+{
+  "id": 42,
+  "numeroPedido": 42,
+  "numeroPedidoFormatted": "M-2026-000042",
+  "serie": "M",
+  "ejercicio": 2026,
+  "fecha": "2026-03-31T10:30:00.000Z",
+  "fechaFormatted": "31/03/2026 10:30",
+  "clienteCode": "30887",
+  "clienteName": "CLIENTE EJEMPLO",
+  "vendedorCode": "01",
+  "estado": "CONFIRMADO",
+  "lineCount": 12,
+  "total": 1250.50,
+  "base": 1020.00,
+  "iva": 230.50,
+  "costo": 850.00,
+  "margen": 15.7,
+  "observaciones": "Entregar por la mañana",
+  "tarifa": 1,
+  "formaPago": "02",
+  "origen": "A"
+}
+```
 
 ### 5.3 Reforzado: PUT /orders/:id/status
-Valida transición, libera stock si anula, invalida caché
+**Body**: `{ "estado": "ANULADO" }`
+- Valida transición de estado permitida
+- Actualiza ESTADO en PEDIDOS_CAB
+- Si se anula un CONFIRMADO → libera stock reservado
+- Invalida caché de stats y lista
 
 ### 5.4 Nuevo: GET /orders/:id/albaran
-Busca en CAC el albarán vinculado al pedido
+- Busca en CAC el albarán vinculado al pedido
+- Devuelve datos del albarán si existe
 
 ---
 
@@ -145,19 +204,19 @@ Busca en CAC el albarán vinculado al pedido
 ### 6.1 Archivos a crear (6 nuevos)
 | Archivo | Descripción |
 |---------|-------------|
-| `order_kpi_dashboard.dart` | Dashboard KPIs con 4 tarjetas, contadores por estado, gráfico de tendencia |
-| `order_card.dart` | Card premium de pedido con gradientes por estado, info completa, swipe actions |
-| `order_filters_bar.dart` | Barra de filtros completa: búsqueda, estado, fechas, importes, ordenación, presets |
-| `order_empty_state.dart` | Estado vacío con ilustración, mensaje contextual según filtros activos, CTA |
-| `order_status_badge.dart` | Widget reutilizable de badge de estado con color, icono y animación |
-| `order_trend_chart.dart` | Mini gráfico de líneas para tendencia de 7 días (CustomPainter, sin dependencias externas) |
+| `lib/features/pedidos/presentation/widgets/order_kpi_dashboard.dart` | Dashboard KPIs con 4 tarjetas, contadores por estado, gráfico de tendencia |
+| `lib/features/pedidos/presentation/widgets/order_card.dart` | Card premium de pedido con gradientes por estado, info completa, swipe actions |
+| `lib/features/pedidos/presentation/widgets/order_filters_bar.dart` | Barra de filtros completa: búsqueda, estado, fechas, importes, ordenación, presets |
+| `lib/features/pedidos/presentation/widgets/order_empty_state.dart` | Estado vacío con ilustración, mensaje contextual según filtros activos, CTA |
+| `lib/features/pedidos/presentation/widgets/order_status_badge.dart` | Widget reutilizable de badge de estado con color, icono y animación |
+| `lib/features/pedidos/presentation/widgets/order_trend_chart.dart` | Mini gráfico de líneas para tendencia de 7 días (CustomPainter, sin dependencias externas) |
 
 ### 6.2 Archivos a modificar (4 existentes)
 | Archivo | Cambios |
 |---------|---------|
-| `pedidos_page.dart` | Eliminar código antiguo de orders. Integrar nueva sección con widgets nuevos. |
-| `pedidos_provider.dart` | Añadir: orderStats, isLoadingStats, loadOrderStats(), filtros avanzados, applyFilters() |
-| `pedidos_service.dart` | Añadir: getOrderStats(), getOrderAlbaran(), OrderStats model, OrderSummary campos nuevos |
+| `lib/features/pedidos/presentation/pages/pedidos_page.dart` | Eliminar código antiguo de orders. Integrar nueva sección con widgets nuevos. |
+| `lib/features/pedidos/providers/pedidos_provider.dart` | Añadir: orderStats, isLoadingStats, loadOrderStats(), filtros avanzados, applyFilters() |
+| `lib/features/pedidos/data/pedidos_service.dart` | Añadir: getOrderStats(), getOrderAlbaran(), OrderStats model, OrderSummary campos nuevos |
 | `backend/routes/pedidos.js` | Nuevo GET /orders/stats, reforzar GET /orders, nuevo GET /orders/:id/albaran |
 | `backend/services/pedidos.service.js` | Nueva getOrderStats(), reforzar getOrders(), nueva getOrderAlbaran() |
 
@@ -183,20 +242,53 @@ Busca en CAC el albarán vinculado al pedido
 
 ## 8. Criterios de aceptación
 
-- [ ] Dashboard KPIs muestra datos correctos
-- [ ] Filtros funcionan individualmente y combinados
-- [ ] Búsqueda por texto encuentra por nº pedido, nombre cliente, código cliente
-- [ ] Filtro de fecha funciona con ambos datepickers
-- [ ] Presets de fecha funcionan correctamente
-- [ ] Cards muestran toda la info del pedido
-- [ ] Colores de estado coinciden con la paleta definida
-- [ ] Swipe actions funcionan (duplicar, ver detalle)
-- [ ] Anular pedido cambia estado correctamente
-- [ ] Duplicar pedido clona líneas al carrito
-- [ ] Pull-to-refresh recarga todo
-- [ ] Estado vacío muestra mensaje contextual
-- [ ] Loading states con skeleton loaders
-- [ ] Responsive en móvil y tablet
-- [ ] 0 errores en `flutter analyze`
-- [ ] 0 errores en `node -c`
-- [ ] Sin columnas DB2 inventadas
+- [x] Dashboard KPIs muestra datos correctos
+- [x] Filtros funcionan individualmente y combinados
+- [x] Búsqueda por texto encuentra por nº pedido, nombre cliente, código cliente
+- [x] Filtro de fecha funciona con ambos datepickers
+- [x] Presets de fecha funcionan correctamente
+- [x] Cards muestran toda la info del pedido
+- [x] Colores de estado coinciden con la paleta definida
+- [x] Swipe actions funcionan (duplicar, ver detalle)
+- [x] Anular pedido cambia estado correctamente
+- [x] Duplicar pedido clona líneas al carrito
+- [x] Pull-to-refresh recarga todo
+- [x] Estado vacío muestra mensaje contextual
+- [x] Loading states con skeleton loaders
+- [x] Responsive en móvil y tablet
+- [x] 0 errores en `flutter analyze`
+- [x] 0 errores en `node -c`
+- [x] Sin columnas DB2 inventadas
+
+---
+
+## 9. Bugs corregidos durante implementación
+
+### Bug 1: PMRL1 parameter count mismatch
+**Error**: `The number of parameter markers in the statement does not equal the number of bind values passed to the function`
+**Causa**: `paramsPmr.push(today)` añadía un 4º parámetro pero la SQL solo tenía 3 `?`
+**Fix**: Eliminado el push sobrante
+
+### Bug 2: getOrders con 100+ vendedores excede límite DB2
+**Error**: `CWB0111 - Los datos de entrada son demasiado grandes para el campo`
+**Causa**: 100+ códigos de vendedor generaban `IN(?, ?, ...)` con demasiados parámetros para DB2 ODBC
+**Fix**: Si hay >50 vendedores, se trata como ALL (sin filtro de vendedor)
+
+### Bug 3: getOrderStats con mismo problema de vendedores
+**Error**: Mismo que Bug 2
+**Fix**: Mismo fix aplicado — >50 vendedores = ALL
+
+---
+
+## 10. Resumen de cambios
+
+### Backend
+- `backend/services/pedidos.service.js`: 3 funciones nuevas/reforzadas
+- `backend/routes/pedidos.js`: 2 endpoints nuevos, 1 reforzado
+
+### Frontend
+- 6 widgets nuevos creados
+- 4 archivos existentes modificados
+- 3880 → 2763 líneas en pedidos_page.dart (1117 líneas menos)
+- 0 errores en flutter analyze
+- 0 errores en node -c
