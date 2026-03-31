@@ -66,7 +66,8 @@ class ProductCard extends StatelessWidget {
               Stack(
                 children: [
                   GestureDetector(
-                    onTap: () => _showFullscreenImage(context, product.code, product.name),
+                    onTap: () => _showFullscreenImage(
+                        context, product.code, product.name),
                     child: _buildThumbnail(product.code),
                   ),
                   if (inCart)
@@ -74,7 +75,8 @@ class ProductCard extends StatelessWidget {
                       top: 0,
                       right: 0,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 1),
                         decoration: BoxDecoration(
                           color: AppTheme.neonGreen,
                           borderRadius: BorderRadius.circular(6),
@@ -102,8 +104,8 @@ class ProductCard extends StatelessWidget {
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
-                        fontSize: Responsive.fontSize(context,
-                            small: 13, large: 15),
+                        fontSize:
+                            Responsive.fontSize(context, small: 13, large: 15),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -114,13 +116,19 @@ class ProductCard extends StatelessWidget {
                         if (promo != null)
                           Container(
                             margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 2),
                             decoration: BoxDecoration(
                               color: AppTheme.neonPurple.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: AppTheme.neonPurple.withOpacity(0.4)),
+                              border: Border.all(
+                                  color: AppTheme.neonPurple.withOpacity(0.4)),
                             ),
-                            child: Text(promo!.promoDesc, style: const TextStyle(color: AppTheme.neonPurple, fontSize: 9, fontWeight: FontWeight.bold)),
+                            child: Text(promo!.promoDesc,
+                                style: const TextStyle(
+                                    color: AppTheme.neonPurple,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold)),
                           ),
                         Text(
                           product.code,
@@ -163,12 +171,12 @@ class ProductCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    PedidosFormatters.money(product.bestPrice),
+                    product.unitPriceDesc(decimals: 3),
                     style: TextStyle(
                       color: AppTheme.neonGreen,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.fontSize(context,
-                          small: 15, large: 17),
+                      fontSize:
+                          Responsive.fontSize(context, small: 15, large: 17),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -178,15 +186,15 @@ class ProductCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppTheme.neonBlue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                          color: AppTheme.neonBlue.withOpacity(0.3)),
+                      border:
+                          Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
                     ),
                     child: Text(
-                      'U/C: ${product.unitsPerBox.toStringAsFixed(0)}',
+                      'U/C: ${_formatUc(product.unitsPerBox)}',
                       style: TextStyle(
                         color: AppTheme.neonBlue,
-                        fontSize: Responsive.fontSize(context,
-                            small: 10, large: 11),
+                        fontSize:
+                            Responsive.fontSize(context, small: 10, large: 11),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -198,8 +206,8 @@ class ProductCard extends StatelessWidget {
                       'U/R: ${(product.bestPrice / product.unitsRetractil).toStringAsFixed(3)}€',
                       style: TextStyle(
                         color: Colors.white54,
-                        fontSize: Responsive.fontSize(context,
-                            small: 9, large: 10),
+                        fontSize:
+                            Responsive.fontSize(context, small: 9, large: 10),
                       ),
                     ),
                   ],
@@ -216,9 +224,11 @@ class ProductCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppTheme.neonBlue.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.neonBlue.withOpacity(0.4)),
+                      border:
+                          Border.all(color: AppTheme.neonBlue.withOpacity(0.4)),
                     ),
-                    child: const Icon(Icons.add, color: AppTheme.neonBlue, size: 18),
+                    child: const Icon(Icons.add,
+                        color: AppTheme.neonBlue, size: 18),
                   ),
                 ),
               ],
@@ -227,7 +237,9 @@ class ProductCard extends StatelessWidget {
                 GestureDetector(
                   onTap: onToggleFavorite,
                   child: Icon(
-                    isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
+                    isFavorite
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
                     color: isFavorite ? Colors.amber : Colors.white24,
                     size: 22,
                   ),
@@ -320,5 +332,12 @@ class ProductCard extends StatelessWidget {
         },
       ),
     );
+  }
+
+  String _formatUc(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toInt().toString();
+    }
+    return value.toStringAsFixed(1);
   }
 }

@@ -46,6 +46,10 @@ router.get('/products', async (req, res) => {
             return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
         }
 
+        if (!clientCode) {
+            return res.status(400).json({ success: false, error: 'clientCode is required for product catalog access' });
+        }
+
         const search = req.query.search ? sanitizeForSQL(req.query.search) : undefined;
         const limit = parseIntSafe(req.query.limit, 50);
         const offset = parseIntSafe(req.query.offset, 0);
@@ -53,7 +57,7 @@ router.get('/products', async (req, res) => {
         const result = await pedidosService.searchProducts({
             vendedorCodes,
             search,
-            clientCode: clientCode ? String(clientCode).trim() : undefined,
+            clientCode: String(clientCode).trim(),
             family: family ? String(family).trim() : undefined,
             marca: marca ? String(marca).trim() : undefined,
             limit,
@@ -363,9 +367,11 @@ router.get('/promotions', async (req, res) => {
     try {
         const { clientCode } = req.query;
         const trimmedClient = clientCode ? String(clientCode).trim() : '';
+        
         if (!trimmedClient) {
-            return res.json({ success: true, promotions: [] });
+            return res.status(400).json({ success: false, error: 'clientCode is required for promotions' });
         }
+        
         const promotions = await pedidosService.getActivePromotions(trimmedClient);
         res.json({ success: true, promotions });
     } catch (error) {

@@ -134,8 +134,7 @@ class PedidosProvider with ChangeNotifier {
     return _lastUnitByProduct[code.trim()];
   }
 
-  double? lastPriceForProduct(String code) =>
-      _lastPriceByProduct[code.trim()];
+  double? lastPriceForProduct(String code) => _lastPriceByProduct[code.trim()];
 
   void setLastPriceForProduct(String code, double price) {
     _lastPriceByProduct[code.trim()] = price;
@@ -190,7 +189,21 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Client ──
 
-  void setClient(String code, String name) {
+  void setClient(String code, String name, {bool clearCart = false}) {
+    if (clearCart) {
+      _lines.clear();
+      _activePromotionsList.clear();
+      _activePromotions.clear();
+      _complementaryProducts.clear();
+      _clientHistory.clear();
+      _similarClients.clear();
+      _productOffset = 0;
+      _hasMoreProducts = true;
+      _products = [];
+      _productSearch = null;
+      _selectedFamily = null;
+      _selectedBrand = null;
+    }
     _clientCode = code;
     _clientName = name;
     notifyListeners();
@@ -199,6 +212,18 @@ class PedidosProvider with ChangeNotifier {
   void clearClient() {
     _clientCode = null;
     _clientName = null;
+    _lines.clear();
+    _activePromotionsList.clear();
+    _activePromotions.clear();
+    _complementaryProducts.clear();
+    _clientHistory.clear();
+    _similarClients.clear();
+    _products = [];
+    _productOffset = 0;
+    _hasMoreProducts = false;
+    _productSearch = null;
+    _selectedFamily = null;
+    _selectedBrand = null;
     notifyListeners();
   }
 
@@ -232,6 +257,14 @@ class PedidosProvider with ChangeNotifier {
     bool reset = false,
     bool forceRefresh = false,
   }) async {
+    if (_clientCode == null || _clientCode!.trim().isEmpty) {
+      _products = [];
+      _hasMoreProducts = false;
+      _productOffset = 0;
+      notifyListeners();
+      return;
+    }
+
     if (reset) {
       _productOffset = 0;
       _hasMoreProducts = true;

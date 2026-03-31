@@ -21,7 +21,7 @@ import '../widgets/sale_type_selector.dart';
 import '../widgets/recommendations_section.dart';
 import '../widgets/product_history_sheet.dart';
 import '../widgets/order_detail_sheet.dart';
-import '../widgets/promotions_banner.dart';
+// import '../widgets/promotions_banner.dart';
 import '../widgets/analytics_dashboard.dart';
 import '../widgets/client_balance_badge.dart';
 import '../widgets/complementary_products.dart';
@@ -194,7 +194,8 @@ class _PedidosPageState extends State<PedidosPage>
     final provider = context.read<PedidosProvider>();
     final codes = _vendedorCodes;
     if (provider.hasClient) {
-      provider.loadProducts(vendedorCodes: codes, reset: true, forceRefresh: true);
+      provider.loadProducts(
+          vendedorCodes: codes, reset: true, forceRefresh: true);
     }
     provider.loadFilters();
     provider.loadOrders(vendedorCodes: codes);
@@ -332,8 +333,8 @@ class _PedidosPageState extends State<PedidosPage>
     final err = provider.addLine(product, envases, unidades, unit, 0);
     if (err != null) return err;
 
-    final idx =
-        provider.lines.lastIndexWhere((line) => line.codigoArticulo == productCode);
+    final idx = provider.lines
+        .lastIndexWhere((line) => line.codigoArticulo == productCode);
     if (idx >= 0) {
       provider.updateLineClaseLinea(idx, 'SC');
     }
@@ -393,7 +394,8 @@ class _PedidosPageState extends State<PedidosPage>
       return product.priceForUnit(unit);
     }
 
-    final initialPrice = existingLine?.precioVenta ?? unitPriceForSelection(selectedUnit);
+    final initialPrice =
+        existingLine?.precioVenta ?? unitPriceForSelection(selectedUnit);
 
     final qtyController = TextEditingController(
       text: _formatQtyForInput(initQty, selectedUnit),
@@ -670,15 +672,15 @@ class _PedidosPageState extends State<PedidosPage>
                             if (selected != null) {
                               setModalState(() {
                                 selectedTariffUnitPrice = selected;
-                                priceController.text =
-                                    _formatPriceForInput(unitPriceForSelection(selectedUnit));
+                                priceController.text = _formatPriceForInput(
+                                    unitPriceForSelection(selectedUnit));
                                 selectedUnit = product.availableUnits
-                                    .contains(selectedUnit)
+                                        .contains(selectedUnit)
                                     ? selectedUnit
                                     : product.availableUnits.first;
                               });
-                              prov.setLastPriceForProduct(
-                                  product.code, unitPriceForSelection(selectedUnit));
+                              prov.setLastPriceForProduct(product.code,
+                                  unitPriceForSelection(selectedUnit));
                             }
                           },
                           icon: const Icon(Icons.euro_rounded, size: 16),
@@ -721,7 +723,10 @@ class _PedidosPageState extends State<PedidosPage>
                             final isSelected =
                                 (_parseInputNumber(priceController.text) -
                                             (selectedUnit == 'CAJAS'
-                                                ? tariffUnitPrice * (product.unitsPerBox > 0 ? product.unitsPerBox : 1)
+                                                ? tariffUnitPrice *
+                                                    (product.unitsPerBox > 0
+                                                        ? product.unitsPerBox
+                                                        : 1)
                                                 : tariffUnitPrice))
                                         .abs() <
                                     0.0005;
@@ -729,8 +734,8 @@ class _PedidosPageState extends State<PedidosPage>
                               onTap: () {
                                 setModalState(() {
                                   selectedTariffUnitPrice = tariffUnitPrice;
-                                  priceController.text =
-                                      _formatPriceForInput(unitPriceForSelection(selectedUnit));
+                                  priceController.text = _formatPriceForInput(
+                                      unitPriceForSelection(selectedUnit));
                                 });
                               },
                               child: Container(
@@ -864,7 +869,7 @@ class _PedidosPageState extends State<PedidosPage>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                    'Unidades (${product.unitsPerBox.toStringAsFixed(0)} U/C)',
+                                    'Unidades (${_formatUc(product.unitsPerBox)} U/C)',
                                     style: TextStyle(
                                         color: Colors.white70,
                                         fontSize: Responsive.fontSize(context,
@@ -920,8 +925,8 @@ class _PedidosPageState extends State<PedidosPage>
                                 onPressed: () {
                                   setModalState(() {
                                     selectedUnit = unit;
-                                    priceController.text =
-                                        _formatPriceForInput(unitPriceForSelection(unit));
+                                    priceController.text = _formatPriceForInput(
+                                        unitPriceForSelection(unit));
                                     final currentQty =
                                         _parseInputNumber(qtyController.text);
                                     qtyController.text = _formatQtyForInput(
@@ -1762,7 +1767,8 @@ class _PedidosPageState extends State<PedidosPage>
           Consumer<PedidosProvider>(
             builder: (ctx, prov, _) {
               final promos = prov.activePromotionsList;
-              if (!prov.hasClient || promos.isEmpty) return const SizedBox.shrink();
+              if (!prov.hasClient || promos.isEmpty)
+                return const SizedBox.shrink();
               return Stack(
                 children: [
                   IconButton(
@@ -2075,12 +2081,12 @@ class _PedidosPageState extends State<PedidosPage>
         ProductSearchWidget(
           vendedorCodes: _vendedorCodes,
         ),
-        // Promotions banner
-        PromotionsBanner(
-          promotions: provider.activePromotionsList,
-          onProductTap: (code, name) =>
-              _openProductByCode(code, fallbackName: name),
-        ),
+        // Promotions banner - commented per user request
+        // PromotionsBanner(
+        //   promotions: provider.activePromotionsList,
+        //   onProductTap: (code, name) =>
+        //       _openProductByCode(code, fallbackName: name),
+        // ),
         // Recommendations
         if (provider.hasClient &&
             (provider.clientHistory.isNotEmpty ||
@@ -2120,13 +2126,35 @@ class _PedidosPageState extends State<PedidosPage>
           Expanded(
             child: InkWell(
               onTap: () async {
+                final prov = context.read<PedidosProvider>();
+                if (prov.lines.isNotEmpty) {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Cambiar cliente'),
+                      content: const Text(
+                          'El carrito tiene productos. ¿Desea cambiar de cliente y vaciar el carrito?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancelar'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Cambiar'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm != true) return;
+                }
                 final result = await ClientSearchDialog.show(
                   context,
                   vendedorCodes: _vendedorCodes,
                 );
                 if (result != null && mounted) {
-                  final prov = context.read<PedidosProvider>();
-                  prov.setClient(result['code']!, result['name']!);
+                  prov.setClient(result['code']!, result['name']!,
+                      clearCart: prov.lines.isNotEmpty);
                   prov.loadProducts(
                     vendedorCodes: _vendedorCodes,
                     search: prov.productSearch,
@@ -3835,5 +3863,12 @@ class _PedidosPageState extends State<PedidosPage>
       'Dic'
     ];
     return months[month - 1];
+  }
+
+  String _formatUc(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toInt().toString();
+    }
+    return value.toStringAsFixed(1);
   }
 }

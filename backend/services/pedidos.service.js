@@ -345,11 +345,16 @@ async function getProductDetail(code, clientCode) {
         GROUP BY ARO.CODIGOALMACEN, ALM.DESCRIPCIONALMACEN`;
 
     try {
+        logger.info(`[PEDIDOS] getProductDetail code=${trimCode} clientCode=${clientCode || 'none'}`);
+        const t0 = Date.now();
+
         const [baseRows, tariffRows, stockRows] = await Promise.all([
             queryWithParams(baseSql, [trimCode]),
             queryWithParams(tariffSql, [trimCode]),
             queryWithParams(stockSql, [trimCode]),
         ]);
+
+        logger.info(`[PEDIDOS] getProductDetail base=${baseRows?.length || 0} tariffs=${tariffRows?.length || 0} stock=${stockRows?.length || 0} time=${Date.now() - t0}ms`);
 
         if (!baseRows || baseRows.length === 0) {
             throw new Error('Producto no encontrado');
@@ -393,6 +398,7 @@ async function getProductDetail(code, clientCode) {
             anoBaja: parseInt(raw.ANOBAJA) || 0,
             mesBaja: parseInt(raw.MESBAJA) || 0,
         };
+
         product.tariffs = (tariffRows || []).map(t => {
             const price = parseFloat(t.PRECIOTARIFA) || 0;
             return {
@@ -404,6 +410,7 @@ async function getProductDetail(code, clientCode) {
                     : price,
             };
         });
+
         product.stock = (stockRows || []).map(s => ({
             almacen: s.CODIGOALMACEN,
             almacenDesc: (s.ALMACENDESC || '').trim(),
@@ -411,45 +418,67 @@ async function getProductDetail(code, clientCode) {
             unidades: parseFloat(s.UNIDADES) || 0,
         }));
 
-        // Client-specific price from most recent sale (historical, not tariff)
+        // Stage: client historical price
         if (clientCode) {
-            const clientPriceSql = `
-                SELECT L.PRECIOVENTA AS PRECIOCLIENTE
-                FROM DSEDAC.LINDTO L
-                WHERE TRIM(L.CODIGOARTICULO) = ?
-                  AND TRIM(L.CODIGOCLIENTEALBARAN) = ?
-                  AND L.TIPOVENTA IN ('CC', 'VC')
-                  AND L.CLASELINEA IN ('AB', 'VT')
-                  AND L.SERIEALBARAN NOT IN ('N', 'Z')
-                ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
-                FETCH FIRST 1 ROW ONLY`;
-            const priceRows = await queryWithParams(clientPriceSql, [trimCode, clientCode.trim()]);
-            product.precioCliente = priceRows && priceRows.length > 0
-                ? parseFloat(priceRows[0].PRECIOCLIENTE) || 0
-                : null;
+            const h0 = Date.now();
+            logger.info(`[PEDIDOS] getProductDetail stage=HISTORICO code=${trimCode} client=${clientCode}`);
+            try {
+                const clientPriceSql = `
+                    SELECT L.PRECIOVENTA AS PRECIOCLIENTE
+                    FROM DSEDAC.LINDTO L
+                    WHERE TRIM(L.CODIGOARTICULO) = ?
+                      AND TRIM(L.CODIGOCLIENTEALBARAN) = ?
+                      AND L.TIPOVENTA IN ('CC', 'VC')
+                      AND L.CLASELINEA IN ('AB', 'VT')
+                      AND L.SERIEALBARAN NOT IN ('N', 'Z')
+                    ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
+                    FETCH FIRST 1 ROW ONLY`;
+                const priceRows = await queryWithParams(clientPriceSql, [trimCode, clientCode.trim()]);
+                logger.info(`[PEDIDOS] getProductDetail stage=HISTORICO rows=${priceRows?.length || 0} time=${Date.now() - h0}ms`);
+                
+                product.precioCliente = priceRows && priceRows.length > 0
+                    ? parseFloat(priceRows[0].PRECIOCLIENTE) || 0
+                    : null;
+            } catch (histErr) {
+                logger.warn(`[PEDIDOS] getProductDetail stage=HISTORICO error: ${histErr.message}`);
+                product.precioCliente = null;
+            }
         }
 
-        // Client assigned tariff code + tariff-based price for popup PT
-        if (clientCode) {
-            const cliTarifaSql = `
-                SELECT COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA
-                FROM DSEDAC.CLC
-                WHERE TRIM(CODIGOCLIENTE) = ?
-                FETCH FIRST 1 ROW ONLY`;
-            const cliRows = await queryWithParams(cliTarifaSql, [clientCode.trim()]);
-            const clientTarifaCode = cliRows && cliRows.length > 0
-                ? parseInt(cliRows[0].CODIGOTARIFA) || 1
-                : 1;
-            product.codigoTarifaCliente = clientTarifaCode;
-            product.precioTarifaCliente = product.tariffs.find(t => t.code === clientTarifaCode)?.price ?? 0;
-        } else {
-            product.codigoTarifaCliente = 1;
-            product.precioTarifaCliente = product.tariffs.find(t => t.code === 1)?.price ?? 0;
+        // Stage: client tariff price (with fallback to tariff 1)
+        const ct0 = Date.now();
+        logger.info(`[PEDIDOS] getProductDetail stage=TARIFA_CLIENTE code=${trimCode} client=${clientCode || 'none'}`);
+        let clientTarifaCode = 1;
+        try {
+            if (clientCode) {
+                const cliTarifaSql = `
+                    SELECT COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA
+                    FROM DSEDAC.CLC
+                    WHERE TRIM(CODIGOCLIENTE) = ?
+                    FETCH FIRST 1 ROW ONLY`;
+                const cliRows = await queryWithParams(cliTarifaSql, [clientCode.trim()]);
+                clientTarifaCode = cliRows && cliRows.length > 0
+                    ? parseInt(cliRows[0].CODIGOTARIFA) || 1
+                    : 1;
+                logger.info(`[PEDIDOS] getProductDetail stage=TARIFA_CLIENTE found tariff=${clientTarifaCode} time=${Date.now() - ct0}ms`);
+            }
+        } catch (tarifaErr) {
+            logger.warn(`[PEDIDOS] getProductDetail stage=TARIFA_CLIENTE fallback to 1: ${tarifaErr.message}`);
+            clientTarifaCode = 1;
+        }
+        
+        product.codigoTarifaCliente = clientTarifaCode;
+        const foundTariff = product.tariffs.find(t => t.code === clientTarifaCode);
+        product.precioTarifaCliente = foundTariff ? foundTariff.price : (product.tariffs.find(t => t.code === 1)?.price ?? 0);
+        
+        if (!foundTariff) {
+            logger.warn(`[PEDIDOS] getProductDetail stage=TARIFA_CLIENTE code=${trimCode} tariff=${clientTarifaCode} NOT FOUND, used fallback tariff=1 price=${product.precioTarifaCliente}`);
         }
 
+        logger.info(`[PEDIDOS] getProductDetail complete code=${trimCode} time=${Date.now() - t0}ms`);
         return product;
     } catch (error) {
-        logger.error(`[PEDIDOS] getProductDetail error: ${error.message}`);
+        logger.error(`[PEDIDOS] getProductDetail error: ${error.message} code=${trimCode}`);
         throw error;
     }
 }
@@ -1447,9 +1476,8 @@ async function getActivePromotions(clientCode) {
 
         // --- GIFT promotions from PMRL1 (header) + PMPL1 (product lines) ---
         // PMRL1 has promo headers per client, PMPL1 has product lines per promo
-        // The JOIN key: PMRL1.CODIGOPROMOCIONREGALO may contain client-specific suffix
-        // Strategy: query PMRL1 headers separately, then match PMPL1 products
-        const paramsPmr = [today];
+        // Strategy: query BOTH global (empty client) AND client-specific promos
+        const paramsPmr = [today, today];
         let sqlPmrHeaders = `
             SELECT TRIM(H.CODIGOPROMOCIONREGALO) AS PROMOCODE,
                    TRIM(H.NOMBREPROMOCIONREGALO) AS PROMONAME,
@@ -1464,12 +1492,15 @@ async function getActivePromotions(clientCode) {
             FROM DSEDAC.PMRL1 H
             WHERE (H.P1INFC <= ? OR H.P1INFC = 0)
               AND (H.P1FNFC >= ? OR H.P1FNFC = 0)`;
-        paramsPmr.push(today);
-
+        
+        // Include BOTH global (empty/whitespace client) AND specific client
         if (trimmedClientCode) {
-            sqlPmrHeaders += ` AND TRIM(H.CODIGOCLIENTE) = ?`;
+            sqlPmrHeaders += ` AND (TRIM(H.CODIGOCLIENTE) = '' OR TRIM(H.CODIGOCLIENTE) = ?)`;
             paramsPmr.push(trimmedClientCode);
+        } else {
+            sqlPmrHeaders += ` AND TRIM(H.CODIGOCLIENTE) = ''`;
         }
+        paramsPmr.push(today);
 
         // PMPL1: Get ALL products for all active promos (we'll match in JS)
         const sqlPmrProducts = `
@@ -1479,7 +1510,11 @@ async function getActivePromotions(clientCode) {
                    COALESCE(T.PRECIOTARIFA, 0) AS REGULARPRICE,
                    COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCKENVASES,
                    COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCKUNIDADES,
-                   PL.ORDEN AS ORDEN
+                   PL.ORDEN AS ORDEN,
+                   PL.CANTIDADMINIMAUNIDADES AS MINUNITS,
+                   PL.CANTIDADMINIMAENVASES AS MINBOXES,
+                   PL.CANTIDADMAXIMAUNIDADES AS MAXUNITS,
+                   PL.CANTIDADMAXIMAENVASES AS MAXBOXES
             FROM DSEDAC.PMPL1 PL
             JOIN DSEDAC.ART A ON TRIM(PL.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
             LEFT JOIN DSEDAC.ARA T ON TRIM(PL.CODIGOARTICULO) = TRIM(T.CODIGOARTICULO) AND T.CODIGOTARIFA = 1
@@ -1571,14 +1606,22 @@ async function getActivePromotions(clientCode) {
         });
 
         // Format GIFT promos — one entry per product in the promo
-        const giftPromos = [];
+        // Resolve conflicts: client-specific promos override global ones
+        const giftPromosMap = new Map(); // key: promoCode+code, value: promo (client wins over global)
+        
         for (const h of pmrHeaders) {
             const promoCode = (h.PROMOCODE || '').trim();
             const promoName = (h.PROMONAME || '').trim();
+            const clientCode = (h.CLIENTCODE || '').trim();
             const minQty = parseFloat(h.CANTIDADMINIMA) || 0;
             const giftQty = parseFloat(h.CANTIDADREGALO) || 0;
             const pFrom = parseDate(h.DATEFROM);
             const pTo = parseDate(h.DATETO);
+            const isClientSpecific = clientCode !== '' && clientCode === trimmedClientCode;
+            const scope = isClientSpecific ? 'client' : 'global';
+            
+            // Build canonical promo ID for dedup: strip client suffix
+            const canonicalPromoId = promoCode.replace(/[_\s]\d+$/, '').trim().toUpperCase();
 
             // Build readable description: "3+1 PASTELERIA" or from name
             let desc = promoName;
@@ -1589,10 +1632,19 @@ async function getActivePromotions(clientCode) {
             const products = findProductsForPromo(promoCode);
             if (products.length > 0) {
                 for (const p of products) {
-                    giftPromos.push({
+                    const productCode = (p.CODE || '').trim();
+                    const key = `${canonicalPromoId}|${productCode}`;
+                    
+                    // Skip if we already have a client-specific version
+                    const existing = giftPromosMap.get(key);
+                    if (existing && existing.scope === 'client' && scope === 'global') {
+                        continue;
+                    }
+                    
+                    giftPromosMap.set(key, {
                         promoType: 'GIFT',
                         promoCode,
-                        code: (p.CODE || '').trim(),
+                        code: productCode,
                         name: (p.NAME || '').trim(),
                         promoDesc: desc,
                         promoPrice: 0,
@@ -1607,11 +1659,25 @@ async function getActivePromotions(clientCode) {
                         minQty,
                         giftQty,
                         cumulative: (h.ACUMULATIVA || 'N').trim() === 'S',
+                        // PMPL1 limits per article
+                        minUnits: parseFloat(p.MINUNITS) || 0,
+                        minBoxes: parseFloat(p.MINBOXES) || 0,
+                        maxUnits: parseFloat(p.MAXUNITS) || 0,
+                        maxBoxes: parseFloat(p.MAXBOXES) || 0,
+                        // Scope and canonical ID for dedup
+                        scope,
+                        canonicalPromoId,
                     });
                 }
             } else {
                 // No matching products but promo exists — return header-only entry
-                giftPromos.push({
+                const key = `${canonicalPromoId}|`;
+                const existing = giftPromosMap.get(key);
+                if (existing && existing.scope === 'client' && scope === 'global') {
+                    continue;
+                }
+                
+                giftPromosMap.set(key, {
                     promoType: 'GIFT',
                     promoCode,
                     code: '',
@@ -1629,16 +1695,37 @@ async function getActivePromotions(clientCode) {
                     minQty,
                     giftQty,
                     cumulative: (h.ACUMULATIVA || 'N').trim() === 'S',
+                    // PMPL1 limits per article (none for header-only)
+                    minUnits: 0,
+                    minBoxes: 0,
+                    maxUnits: 0,
+                    maxBoxes: 0,
+                    // Scope and canonical ID for dedup
+                    scope,
+                    canonicalPromoId,
                 });
             }
         }
 
+        const giftPromos = Array.from(giftPromosMap.values());
+
+        // PRICE promos: also add scope and canonicalPromoId
+        const pricePromosWithMeta = pricePromos.map(p => ({
+            ...p,
+            scope: 'client', // CPESL1 is always client-specific
+            canonicalPromoId: p.promoCode.toUpperCase(),
+            minUnits: 0,
+            minBoxes: 0,
+            maxUnits: 0,
+            maxBoxes: 0,
+        }));
+
         const dedup = new Map();
-        for (const item of [...pricePromos, ...giftPromos]) {
+        for (const item of [...pricePromosWithMeta, ...giftPromos]) {
             if (!(item.code || '').trim()) continue;
             const key = [
                 item.promoType || '',
-                item.promoCode || '',
+                item.canonicalPromoId || '',
                 item.code || '',
                 item.dateFrom || '',
                 item.dateTo || '',
