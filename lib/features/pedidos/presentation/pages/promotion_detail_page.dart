@@ -14,7 +14,8 @@ class PromotionDetailPage extends StatefulWidget {
   final bool cumulative;
   final List<PromotionItem> items;
   final Future<void> Function(String code, String name) onProductTap;
-  final Future<String?> Function(String code, String name, double qty)? onAddGift;
+  final Future<String?> Function(String code, String name, double qty)?
+      onAddGift;
   final bool? Function(String code)? hasStockResolver;
   final double Function(String code)? qtyInOrderResolver;
 
@@ -95,7 +96,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
     for (final entry in _giftSelection.entries) {
       final item = widget.items.firstWhere(
         (it) => it.code == entry.key,
-        orElse: () => PromotionItem(code: entry.key, name: entry.key, promoDesc: ''),
+        orElse: () =>
+            PromotionItem(code: entry.key, name: entry.key, promoDesc: ''),
       );
       final qty = entry.value;
       if (qty <= 0) continue;
@@ -127,7 +129,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
   List<PromotionItem> get _filteredItems {
     return widget.items.where((item) {
       if (_onlyWithStock) {
-        final hasStock = widget.hasStockResolver?.call(item.code) ?? item.hasStock;
+        final hasStock =
+            widget.hasStockResolver?.call(item.code) ?? item.hasStock;
         if (hasStock != true) return false;
       }
       if (_search.isEmpty) return true;
@@ -140,9 +143,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = widget.promoType == 'GIFT'
-        ? AppTheme.neonPurple
-        : AppTheme.neonGreen;
+    final accent =
+        widget.promoType == 'GIFT' ? AppTheme.neonPurple : AppTheme.neonGreen;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
@@ -192,49 +194,53 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       'Vigencia: ${widget.dateFrom.isEmpty ? '-' : widget.dateFrom}  ->  ${widget.dateTo.isEmpty ? '-' : widget.dateTo}',
-                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      style:
+                          const TextStyle(color: Colors.white54, fontSize: 11),
                     ),
                   ),
                 if (widget.promoType == 'GIFT') ...[
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _pill('Compra min.', '${widget.minQty.toStringAsFixed(2)}'),
-                      const SizedBox(width: 8),
-                      _pill('Regalo', '${widget.giftQty.toStringAsFixed(2)}'),
-                      const SizedBox(width: 8),
-                      _pill('Modo', widget.cumulative ? 'Acumulable' : 'Unico'),
-                    ],
+                  // How the promo works
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonPurple.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: AppTheme.neonPurple.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Como funciona:',
+                          style: TextStyle(
+                            color: AppTheme.neonPurple.withOpacity(0.8),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llévate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llévate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(height: 8),
+                  // Progress bar: how close to min purchase
                   if (_purchasedQty > 0) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'En pedido: ${PedidosFormatters.number(_purchasedQty, decimals: 2)}  ->  Max. regalo: ${PedidosFormatters.number(_eligibleGiftQty, decimals: 2)}',
-                      style: TextStyle(
-                        color: AppTheme.neonBlue.withOpacity(0.95),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                  if (_eligibleGiftQty > 0) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Seleccionado: ${PedidosFormatters.number(_selectedGiftQty, decimals: 2)} / ${PedidosFormatters.number(_eligibleGiftQty, decimals: 2)}',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    _buildProgressSection(),
                   ] else ...[
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Aun no se cumple la cantidad minima para aplicar regalos.',
-                      style: TextStyle(
+                    Text(
+                      'Añade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
+                      style: const TextStyle(
                         color: Colors.white54,
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -250,12 +256,15 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
               decoration: InputDecoration(
                 hintText: 'Buscar articulo en promocion...',
                 hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon:
-                    const Icon(Icons.search, color: AppTheme.neonBlue, size: 18),
+                prefixIcon: const Icon(Icons.search,
+                    color: AppTheme.neonBlue, size: 18),
                 suffixIcon: IconButton(
-                  onPressed: () => setState(() => _onlyWithStock = !_onlyWithStock),
+                  onPressed: () =>
+                      setState(() => _onlyWithStock = !_onlyWithStock),
                   icon: Icon(
-                    _onlyWithStock ? Icons.inventory_2 : Icons.inventory_2_outlined,
+                    _onlyWithStock
+                        ? Icons.inventory_2
+                        : Icons.inventory_2_outlined,
                     color: _onlyWithStock ? AppTheme.neonGreen : Colors.white38,
                     size: 19,
                   ),
@@ -286,15 +295,18 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                     itemBuilder: (context, index) {
                       final item = _filteredItems[index];
                       final hasStock =
-                          widget.hasStockResolver?.call(item.code) ?? item.hasStock;
-                      final stockColor =
-                          hasStock == true ? AppTheme.neonGreen : AppTheme.error;
+                          widget.hasStockResolver?.call(item.code) ??
+                              item.hasStock;
+                      final stockColor = hasStock == true
+                          ? AppTheme.neonGreen
+                          : AppTheme.error;
                       return Card(
                         color: AppTheme.darkCard,
                         margin: const EdgeInsets.only(bottom: 8),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: AppTheme.borderColor.withOpacity(0.5)),
+                          side: BorderSide(
+                              color: AppTheme.borderColor.withOpacity(0.5)),
                         ),
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
@@ -337,7 +349,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                     Text(
                                       'Oferta: ${PedidosFormatters.money(item.promoPrice, decimals: 3)}',
                                       style: const TextStyle(
-                                          color: AppTheme.neonGreen, fontSize: 11),
+                                          color: AppTheme.neonGreen,
+                                          fontSize: 11),
                                     ),
                                   if (item.promoType == 'GIFT' &&
                                       widget.minQty > 0 &&
@@ -357,7 +370,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                             onPressed: () =>
                                 widget.onProductTap(item.code, item.name),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.neonBlue.withOpacity(0.18),
+                              backgroundColor:
+                                  AppTheme.neonBlue.withOpacity(0.18),
                               foregroundColor: AppTheme.neonBlue,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
@@ -366,7 +380,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                             ),
                             child: const Text(
                               'Seleccionar',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                              style: TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w700),
                             ),
                           ),
                           isThreeLine: widget.promoType == 'GIFT',
@@ -461,22 +476,108 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
     );
   }
 
-  Widget _pill(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
-      ),
-      child: Text(
-        '$label: $value',
-        style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
+  Widget _buildProgressSection() {
+    final progress = widget.minQty > 0
+        ? (_purchasedQty / widget.minQty).clamp(0.0, 1.0)
+        : 0.0;
+    final cycles = widget.cumulative
+        ? (_purchasedQty / widget.minQty).floor()
+        : (_purchasedQty >= widget.minQty ? 1 : 0);
+    final maxGifts = cycles * widget.giftQty;
+    final remaining = widget.minQty - (_purchasedQty % widget.minQty);
+    final progressColor =
+        _eligibleGiftQty > 0 ? AppTheme.neonGreen : AppTheme.neonBlue;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Comprado: ${PedidosFormatters.number(_purchasedQty, decimals: 2)}',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              'Min: ${widget.minQty.toStringAsFixed(0)}',
+              style: TextStyle(
+                color: _purchasedQty >= widget.minQty
+                    ? AppTheme.neonGreen
+                    : Colors.white54,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
-      ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 8,
+            backgroundColor: AppTheme.darkSurface,
+            valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+          ),
+        ),
+        const SizedBox(height: 6),
+        if (_eligibleGiftQty > 0) ...[
+          Row(
+            children: [
+              Icon(Icons.check_circle, color: AppTheme.neonGreen, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                'Tienes ${maxGifts.toStringAsFixed(0)} regalo(s) disponible(s)',
+                style: const TextStyle(
+                  color: AppTheme.neonGreen,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          if (widget.cumulative && remaining < widget.minQty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Faltan ${remaining.toStringAsFixed(0)} uds para otro regalo mas',
+                style: TextStyle(
+                  color: AppTheme.neonBlue.withOpacity(0.8),
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          const SizedBox(height: 4),
+          Text(
+            'Seleccionados: ${PedidosFormatters.number(_selectedGiftQty, decimals: 0)} / ${PedidosFormatters.number(_eligibleGiftQty, decimals: 0)}',
+            style: TextStyle(
+              color: _selectedGiftQty > _eligibleGiftQty
+                  ? AppTheme.error
+                  : Colors.white54,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ] else ...[
+          Row(
+            children: [
+              Icon(Icons.info_outline, color: AppTheme.warning, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                'Faltan ${remaining.toStringAsFixed(0)} uds para desbloquear el regalo',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

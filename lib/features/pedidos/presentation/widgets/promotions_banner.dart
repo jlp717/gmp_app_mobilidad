@@ -5,10 +5,12 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/api/api_client.dart';
 import '../../data/pedidos_service.dart';
+import '../../providers/pedidos_provider.dart';
 import '../utils/pedidos_formatters.dart';
 
 class PromotionsBanner extends StatefulWidget {
@@ -28,7 +30,7 @@ class PromotionsBanner extends StatefulWidget {
 class _PromotionsBannerState extends State<PromotionsBanner> {
   List<PromotionItem> _promotions = [];
   bool _isLoading = true;
-  bool _isExpanded = false;
+  bool _isExpanded = true;
 
   @override
   void initState() {
@@ -52,9 +54,16 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
 
   Future<void> _loadPromotions() async {
     try {
+      final provider = Provider.of<PedidosProvider>(context, listen: false);
+      final clientCode = provider.clientCode;
+      if (clientCode == null || clientCode.isEmpty) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
       final response = await ApiClient.get(
         '/pedidos/promotions',
-        cacheKey: 'pedidos:promotions',
+        queryParameters: {'clientCode': clientCode},
+        cacheKey: 'pedidos:promotions:$clientCode',
         cacheTTL: const Duration(minutes: 10),
       );
       final list = response['promotions'] as List? ?? [];
@@ -214,8 +223,8 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                 if (promo.cumulative) ...[
                   const SizedBox(width: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
                       color: AppTheme.neonBlue.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
@@ -296,8 +305,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                 style: TextStyle(
                   color: AppTheme.neonPurple,
                   fontWeight: FontWeight.bold,
-                  fontSize: Responsive.fontSize(
-                      context, small: 11, large: 13),
+                  fontSize: Responsive.fontSize(context, small: 11, large: 13),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -307,8 +315,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                   'Compra ${promo.minQty.toInt()}, lleva ${(promo.minQty + promo.giftQty).toInt()}',
                   style: TextStyle(
                     color: AppTheme.neonPurple.withOpacity(0.7),
-                    fontSize: Responsive.fontSize(
-                        context, small: 9, large: 10),
+                    fontSize: Responsive.fontSize(context, small: 9, large: 10),
                   ),
                 ),
             ],

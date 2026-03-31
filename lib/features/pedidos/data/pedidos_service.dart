@@ -153,8 +153,12 @@ class Product {
     );
   }
 
-  /// Best available price (client > tariff)
-  double get bestPrice => precioCliente > 0 ? precioCliente : precioTarifa1;
+  /// Best available price (client > tariff), never below minimum price.
+  double get bestPrice {
+    final raw = precioCliente > 0 ? precioCliente : precioTarifa1;
+    if (precioMinimo > 0 && raw < precioMinimo) return precioMinimo;
+    return raw;
+  }
 
   /// Whether stock is available
   bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
@@ -320,6 +324,10 @@ class Product {
     if (unit == 'UNIDADES' || unit == norm) {
       return unitsPerBox > 0 ? base / unitsPerBox : base;
     }
+    // PIEZAS / BANDEJAS / ESTUCHES / etc. — use unitsRetractil as content per box
+    if (unitsRetractil > 0 && unitsRetractil != unitsPerBox) {
+      return base / unitsRetractil;
+    }
     return base;
   }
 
@@ -329,6 +337,10 @@ class Product {
     final norm = _normalizedUnit;
     if (norm == 'KILOGRAMOS' && (unit == 'KILOGRAMOS' || unit == norm)) {
       return stockEnvases * kgPerBox + stockUnidades;
+    }
+    // PIEZAS / BANDEJAS / ESTUCHES: total pieces = envases * unitsRetractil + loose unidades
+    if (unitsRetractil > 0 && unitsRetractil != unitsPerBox) {
+      return stockEnvases * unitsRetractil + stockUnidades;
     }
     // For all other units: total = envases * unitsPerBox + loose unidades
     return stockEnvases * unitsPerBox + stockUnidades;
@@ -340,6 +352,10 @@ class Product {
     final norm = _normalizedUnit;
     if (norm == 'KILOGRAMOS' && (unit == 'KILOGRAMOS' || unit == norm)) {
       return kgPerBox;
+    }
+    // PIEZAS / BANDEJAS / ESTUCHES: use unitsRetractil
+    if (unitsRetractil > 0 && unitsRetractil != unitsPerBox) {
+      return unitsRetractil;
     }
     // For LITROS, UNIDADES, etc.: unitsPerBox
     return unitsPerBox > 0 ? unitsPerBox : 1;
@@ -429,7 +445,7 @@ class Product {
 
   /// Available unit types for this product.
   /// Weight products: CAJAS + KILOGRAMOS (with CANTIDAD selector)
-  /// Standard with fraction checking: CAJAS + UNIDADES (dual-field)
+  /// Standard with fraction-checking: CAJAS + UNIDADES (dual-field)
   /// Simple boxes: CAJAS only
   List<String> get availableUnits {
     final norm = _normalizedUnit;
@@ -440,9 +456,11 @@ class Product {
 
     if (isDualFieldProduct) return ['CAJAS', 'UNIDADES'];
 
-    // Explicit sub-unit (BANDEJAS, ESTUCHES, BOLSAS…) with UC > 1 →
+    // Explicit sub-unit (BANDEJAS, ESTUCHES, BOLSAS, PIEZAS…) with UC > 1 →
     // can sell by full box OR by individual unit
-    if (dUnit != 'CAJAS' && unitsPerBox > 1) return ['CAJAS', dUnit];
+    if (dUnit != 'CAJAS' && (unitsPerBox > 1 || unitsRetractil > 0)) {
+      return ['CAJAS', dUnit];
+    }
 
     return [dUnit];
   }
@@ -708,7 +726,8 @@ class OrderLine {
           fallback: 0.21),
       unidadesFraccion:
           _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
-      claseLinea: (json['claseLinea'] ?? json['CLASELINEA'] ?? 'VT').toString().trim(),
+      claseLinea:
+          (json['claseLinea'] ?? json['CLASELINEA'] ?? 'VT').toString().trim(),
     );
   }
 
