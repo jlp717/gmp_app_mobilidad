@@ -98,6 +98,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     if (!mounted) return;
 
+    // Debug: Print the actual error
+    if (!success) {
+      debugPrint('[LoginPage] Login FAILED. Error: ${auth.error}');
+    }
+
     if (success) {
       final user = auth.currentUser;
       debugPrint(
