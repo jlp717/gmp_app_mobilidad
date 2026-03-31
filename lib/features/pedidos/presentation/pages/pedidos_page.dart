@@ -2587,6 +2587,10 @@ class _PedidosPageState extends State<PedidosPage>
               (order.estado == 'ENVIADO' || order.estado == 'FACTURADO')
                   ? () => _viewAlbaran(order)
                   : null,
+          onResend:
+              order.estado == 'BORRADOR' ? () => _confirmBorrador(order) : null,
+          onDelete:
+              order.estado == 'BORRADOR' ? () => _deleteBorrador(order) : null,
         );
       },
     );
@@ -2671,6 +2675,117 @@ class _PedidosPageState extends State<PedidosPage>
             backgroundColor: AppTheme.error,
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _confirmBorrador(OrderSummary order) async {
+    final prov = context.read<PedidosProvider>();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_outline,
+                color: AppTheme.neonGreen, size: 22),
+            SizedBox(width: 8),
+            Text('Confirmar borrador', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Text(
+          '¿Deseas confirmar el borrador #${order.numeroPedidoFormatted}?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child:
+                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirmar',
+                style: TextStyle(color: AppTheme.neonGreen)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      try {
+        await prov.cloneOrderIntoCart(order.id);
+        _tabController.animateTo(0);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Borrador #${order.numeroPedidoFormatted} cargado en el carrito. Confirma desde el carrito.'),
+              backgroundColor: AppTheme.neonBlue,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error: $e'), backgroundColor: AppTheme.error),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _deleteBorrador(OrderSummary order) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 22),
+            SizedBox(width: 8),
+            Text('Eliminar borrador', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Text(
+          '¿Seguro que quieres eliminar el borrador #${order.numeroPedidoFormatted}? Esta acción no se puede deshacer.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child:
+                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child:
+                const Text('Eliminar', style: TextStyle(color: AppTheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      try {
+        await context.read<PedidosProvider>().cancelExistingOrder(order.id);
+        _loadOrdersWithFilters(context.read<PedidosProvider>());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Borrador eliminado'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error: $e'), backgroundColor: AppTheme.error),
+          );
+        }
       }
     }
   }

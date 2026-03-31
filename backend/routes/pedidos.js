@@ -425,10 +425,10 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /api/pedidos/stats
+ * GET /api/pedidos/orders/stats
  * Order statistics and analytics
  */
-router.get('/stats', async (req, res) => {
+router.get('/orders/stats', async (req, res) => {
     try {
         const vendedorCodes = req.query.vendedorCodes || 'ALL';
         const stats = await pedidosService.getOrderStats(
@@ -438,7 +438,7 @@ router.get('/stats', async (req, res) => {
         );
         res.json({ success: true, stats });
     } catch (error) {
-        logger.error(`[PEDIDOS] Error in GET /stats: ${error.message}`);
+        logger.error(`[PEDIDOS] Error in GET /orders/stats: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });

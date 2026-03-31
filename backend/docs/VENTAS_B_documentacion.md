@@ -356,3 +356,227 @@ ORDER BY CODIGOVENDEDOR, EJERCICIO;
 | INSERT 2026, mes 2 (vendedores 1, 13, 97) | Comisiones, objetivos, dashboard de 2026 | Bajo — datos nuevos |
 | INSERT 2026, mes 3 (vendedores 1, 13, 97) | Comisiones, objetivos, dashboard de 2026 | Bajo — datos nuevos |
 | Valores negativos | Se restan de las ventas totales | Bajo — el código lo soporta |
+
+---
+
+## 13. Resultado de Verificación (31/03/2026)
+
+### ✅ Todos los cambios aplicados correctamente
+
+| Verificación | Estado |
+|--------------|--------|
+| Vendedor 13, 2025, mes 9 → 11316.24 | ✅ OK |
+| Vendedor 13, 2025, mes 10 → 19709.53 | ✅ OK |
+| Vendedor 13, 2025, mes 11 → 11813.10 | ✅ OK |
+| Vendedor 13, 2025, mes 12 → 39528.40 | ✅ OK |
+| 2026 Mes 2, vendedor 1 → -479.72 | ✅ OK |
+| 2026 Mes 2, vendedor 13 → 15652.84 | ✅ OK |
+| 2026 Mes 2, vendedor 97 → -416.47 | ✅ OK |
+| 2026 Mes 3, vendedor 1 → -614.75 | ✅ OK |
+| 2026 Mes 3, vendedor 13 → 20380.15 | ✅ OK |
+| 2026 Mes 3, vendedor 97 → -887.00 | ✅ OK |
+| Registros duplicados | ✅ Ninguno |
+
+**Total registros en tabla: 35**
+
+---
+
+## 14. Tabla Resumen: Lo que debe salir en la app por comercial
+
+### COMERCIAL 1
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | 0.00€ |
+| Objetivo 2026 (solo ventas B) | 0.00€ |
+| Ventas B 2026 acumulado | **-1094.47€** |
+
+| Mes | Ventas B 2026 | Efecto |
+|-----|--------------|--------|
+| 1 | Sin dato | — |
+| 2 | -479.72€ | **RESTA** a LACLAE |
+| 3 | -614.75€ | **RESTA** a LACLAE |
+
+> **Nota**: Este comercial no tiene ventas B en 2025, así que su objetivo no se ve afectado por VENTAS_B. En 2026, las ventas B son negativas (devoluciones/ajustes), por lo que **reducen** las ventas totales respecto a LACLAE sola.
+
+---
+
+### COMERCIAL 2
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | 2881.88€ |
+| Objetivo 2026 (solo ventas B) | 2968.34€ |
+| Ventas B 2026 acumulado | 0.00€ |
+
+| Mes | Ventas B 2025 |
+|-----|--------------|
+| 1 | 1340.22€ |
+| 2 | 1541.66€ |
+| 3-12 | Sin dato |
+
+> **Nota**: Sin ventas B en 2026 todavía. El objetivo 2026 sube 2968.34€ por las ventas B de 2025.
+
+---
+
+### COMERCIAL 3
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | 1205.17€ |
+| Objetivo 2026 (solo ventas B) | 1241.33€ |
+| Ventas B 2026 acumulado | 0.00€ |
+
+| Mes | Ventas B 2025 |
+|-----|--------------|
+| 1 | 471.10€ |
+| 2 | 734.07€ |
+| 3-12 | Sin dato |
+
+---
+
+### COMERCIAL 5
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | 23173.90€ |
+| Objetivo 2026 (solo ventas B) | 23869.12€ |
+| Ventas B 2026 acumulado | 0.00€ |
+
+| Mes | Ventas B 2025 |
+|-----|--------------|
+| 1 | 15585.45€ |
+| 2 | 7588.45€ |
+| 3-12 | Sin dato |
+
+---
+
+### COMERCIAL 13 ⭐ (más datos)
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | **154923.13€** |
+| Objetivo 2026 (solo ventas B) | **159570.82€** |
+| Ventas B 2026 acumulado | **53706.92€** |
+
+| Mes | Ventas B 2025 | Ventas B 2026 | Efecto 2026 |
+|-----|--------------|--------------|-------------|
+| 1 | 25611.24€ | 17673.93€ | SUMA |
+| 2 | 14836.08€ | 15652.84€ | SUMA |
+| 3 | 1681.64€ | 20380.15€ | SUMA |
+| 4 | 2806.08€ | Sin dato | — |
+| 5 | 8465.63€ | Sin dato | — |
+| 6 | 7583.48€ | Sin dato | — |
+| 7 | 572.88€ | Sin dato | — |
+| 8 | 10998.83€ | Sin dato | — |
+| 9 | 11316.24✅ | Sin dato | — |
+| 10 | 19709.53✅ | Sin dato | — |
+| 11 | 11813.10✅ | Sin dato | — |
+| 12 | 39528.40✅ | Sin dato | — |
+
+> **Nota**: Comercial con más actividad. Los meses 9-12 de 2025 fueron corregidos (marcados con ✅). En 2026 lleva 3 meses con ventas B positivas que suman 53706.92€.
+
+---
+
+### COMERCIAL 16
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | 68.48€ |
+| Objetivo 2026 (solo ventas B) | 70.53€ |
+| Ventas B 2026 acumulado | 0.00€ |
+
+| Mes | Ventas B 2025 |
+|-----|--------------|
+| 1 | 68.48€ |
+| 2-12 | Sin dato |
+
+---
+
+### COMERCIAL 20
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | 35.40€ |
+| Objetivo 2026 (solo ventas B) | 36.46€ |
+| Ventas B 2026 acumulado | 0.00€ |
+
+| Mes | Ventas B 2025 |
+|-----|--------------|
+| 1 | 35.40€ |
+| 2-12 | Sin dato |
+
+---
+
+### COMERCIAL 92
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | 23.40€ |
+| Objetivo 2026 (solo ventas B) | 24.10€ |
+| Ventas B 2026 acumulado | 0.00€ |
+
+| Mes | Ventas B 2025 |
+|-----|--------------|
+| 1 | 23.40€ |
+| 2-12 | Sin dato |
+
+---
+
+### COMERCIAL 94
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | 12.85€ |
+| Objetivo 2026 (solo ventas B) | 13.24€ |
+| Ventas B 2026 acumulado | 0.00€ |
+
+| Mes | Ventas B 2025 |
+|-----|--------------|
+| 1 | 12.85€ |
+| 2-12 | Sin dato |
+
+---
+
+### COMERCIAL 97
+
+| Concepto | Valor |
+|----------|-------|
+| Ventas B 2025 (base objetivo) | 23155.57€ |
+| Objetivo 2026 (solo ventas B) | 23850.24€ |
+| Ventas B 2026 acumulado | **-1303.47€** |
+
+| Mes | Ventas B 2025 | Ventas B 2026 | Efecto 2026 |
+|-----|--------------|--------------|-------------|
+| 1 | 734.57€ | Sin dato | — |
+| 2 | 575.25€ | -416.47€ | **RESTA** |
+| 3 | Sin dato | -887.00€ | **RESTA** |
+| 4 | Sin dato | Sin dato | — |
+| 5 | 2397.60€ | Sin dato | — |
+| 6 | Sin dato | Sin dato | — |
+| 7 | -795.60€ | Sin dato | — |
+| 8 | Sin dato | Sin dato | — |
+| 9 | Sin dato | Sin dato | — |
+| 10 | Sin dato | Sin dato | — |
+| 11 | 12080.24€ | Sin dato | — |
+| 12 | 8163.51€ | Sin dato | — |
+
+> **Nota**: Comercial con ventas B negativas en 2026 (febrero -416.47€, marzo -887.00€). Ya tenía un negativo histórico en julio 2025 (-795.60€). Las ventas B de 2026 **reducen** las ventas totales en 1303.47€.
+
+---
+
+### Resumen Global
+
+| Comercial | Ventas B 2025 | Objetivo B 2026 (+3%) | Ventas B 2026 | Efecto neto 2026 |
+|-----------|--------------|----------------------|--------------|-----------------|
+| 1 | 0.00€ | 0.00€ | -1094.47€ | **RESTA** |
+| 2 | 2881.88€ | 2968.34€ | 0.00€ | Neutro |
+| 3 | 1205.17€ | 1241.33€ | 0.00€ | Neutro |
+| 5 | 23173.90€ | 23869.12€ | 0.00€ | Neutro |
+| 13 | 154923.13€ | 159570.82€ | 53706.92€ | **SUMA** |
+| 16 | 68.48€ | 70.53€ | 0.00€ | Neutro |
+| 20 | 35.40€ | 36.46€ | 0.00€ | Neutro |
+| 92 | 23.40€ | 24.10€ | 0.00€ | Neutro |
+| 94 | 12.85€ | 13.24€ | 0.00€ | Neutro |
+| 97 | 23155.57€ | 23850.24€ | -1303.47€ | **RESTA** |
+| **TOTAL** | **205479.78€** | **211644.18€** | **51308.98€** | |

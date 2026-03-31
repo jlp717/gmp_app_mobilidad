@@ -1,6 +1,6 @@
 # Plan: Rediseño completo de "Mis Pedidos"
 
-## Estado: ✅ IMPLEMENTADO
+## Estado: ✅ IMPLEMENTADO + BUGS CORREGIDOS
 
 ---
 
@@ -93,13 +93,16 @@ La pestaña Pedidos tendrá dos zonas:
 |--------|-------------------|-------------|
 | **Ver detalle** | Todos | Sheet expandible con líneas, totales, observaciones |
 | **Duplicar al carrito** | Todos | Clona todas las líneas al carrito actual |
+| **Confirmar** | BORRADOR | Carga en carrito para confirmar |
+| **Eliminar** | BORRADOR | Borra el borrador |
 | **Anular** | CONFIRMADO, ENVIADO, FACTURADO | Cambia estado a ANULADO |
-| **Reenviar** | BORRADOR | Vuelve a intentar confirmación |
 | **Exportar PDF** | Todos | Genera PDF del pedido |
 | **Ver albarán** | ENVIADO, FACTURADO | Abre info del albarán vinculado en CAC |
 
 ### 3.5 Actualización dinámica
-- Al confirmar un pedido → se actualiza la lista y KPIs automáticamente
+- Al confirmar un pedido → se actualiza la lista y KPIs automáticamente + snackbar de éxito
+- Al guardar borrador → aparece en sección borradores
+- Al anular → se actualiza el badge de estado
 - Pull-to-refresh recarga todo (KPIs + lista)
 - Auto-sync cada 30 segundos cuando la pestaña está visible
 
@@ -159,33 +162,6 @@ Ya existe la tabla `JAVIER.PEDIDOS_SEQ` con: `EJERCICIO` (NUMERIC 4), `ULTIMO_NU
 - `sortBy` — `fecha`, `importe`, `cliente`, `numero`
 - `sortOrder` — `ASC`, `DESC`
 
-**Respuesta reforzada** — cada pedido devuelve:
-```json
-{
-  "id": 42,
-  "numeroPedido": 42,
-  "numeroPedidoFormatted": "M-2026-000042",
-  "serie": "M",
-  "ejercicio": 2026,
-  "fecha": "2026-03-31T10:30:00.000Z",
-  "fechaFormatted": "31/03/2026 10:30",
-  "clienteCode": "30887",
-  "clienteName": "CLIENTE EJEMPLO",
-  "vendedorCode": "01",
-  "estado": "CONFIRMADO",
-  "lineCount": 12,
-  "total": 1250.50,
-  "base": 1020.00,
-  "iva": 230.50,
-  "costo": 850.00,
-  "margen": 15.7,
-  "observaciones": "Entregar por la mañana",
-  "tarifa": 1,
-  "formaPago": "02",
-  "origen": "A"
-}
-```
-
 ### 5.3 Reforzado: PUT /orders/:id/status
 **Body**: `{ "estado": "ANULADO" }`
 - Valida transición de estado permitida
@@ -201,20 +177,20 @@ Ya existe la tabla `JAVIER.PEDIDOS_SEQ` con: `EJERCICIO` (NUMERIC 4), `ULTIMO_NU
 
 ## 6. Frontend — Archivos
 
-### 6.1 Archivos a crear (6 nuevos)
+### 6.1 Archivos creados (6 nuevos)
 | Archivo | Descripción |
 |---------|-------------|
 | `lib/features/pedidos/presentation/widgets/order_kpi_dashboard.dart` | Dashboard KPIs con 4 tarjetas, contadores por estado, gráfico de tendencia |
-| `lib/features/pedidos/presentation/widgets/order_card.dart` | Card premium de pedido con gradientes por estado, info completa, swipe actions |
+| `lib/features/pedidos/presentation/widgets/order_card.dart` | Card premium de pedido con gradientes por estado, info completa, acciones por estado |
 | `lib/features/pedidos/presentation/widgets/order_filters_bar.dart` | Barra de filtros completa: búsqueda, estado, fechas, importes, ordenación, presets |
 | `lib/features/pedidos/presentation/widgets/order_empty_state.dart` | Estado vacío con ilustración, mensaje contextual según filtros activos, CTA |
 | `lib/features/pedidos/presentation/widgets/order_status_badge.dart` | Widget reutilizable de badge de estado con color, icono y animación |
 | `lib/features/pedidos/presentation/widgets/order_trend_chart.dart` | Mini gráfico de líneas para tendencia de 7 días (CustomPainter, sin dependencias externas) |
 
-### 6.2 Archivos a modificar (4 existentes)
+### 6.2 Archivos modificados (4 existentes)
 | Archivo | Cambios |
 |---------|---------|
-| `lib/features/pedidos/presentation/pages/pedidos_page.dart` | Eliminar código antiguo de orders. Integrar nueva sección con widgets nuevos. |
+| `lib/features/pedidos/presentation/pages/pedidos_page.dart` | Eliminar código antiguo de orders. Integrar nueva sección con widgets nuevos. Añadir acciones para borradores (confirmar, eliminar). |
 | `lib/features/pedidos/providers/pedidos_provider.dart` | Añadir: orderStats, isLoadingStats, loadOrderStats(), filtros avanzados, applyFilters() |
 | `lib/features/pedidos/data/pedidos_service.dart` | Añadir: getOrderStats(), getOrderAlbaran(), OrderStats model, OrderSummary campos nuevos |
 | `backend/routes/pedidos.js` | Nuevo GET /orders/stats, reforzar GET /orders, nuevo GET /orders/:id/albaran |
@@ -229,6 +205,7 @@ Ya existe la tabla `JAVIER.PEDIDOS_SEQ` con: `EJERCICIO` (NUMERIC 4), `ULTIMO_NU
 - Consultas parametrizadas — nunca string concat
 - Fallback seguro — si una tabla no existe, devolver [] o null con warning
 - Logging por etapa — cada consulta con logger.info/error
+- Limitar parámetros IN a 50 máximo para evitar error CWB0111 de DB2
 
 ### Frontend
 - Código limpio — widgets pequeños, responsabilidades únicas
@@ -249,8 +226,9 @@ Ya existe la tabla `JAVIER.PEDIDOS_SEQ` con: `EJERCICIO` (NUMERIC 4), `ULTIMO_NU
 - [x] Presets de fecha funcionan correctamente
 - [x] Cards muestran toda la info del pedido
 - [x] Colores de estado coinciden con la paleta definida
-- [x] Swipe actions funcionan (duplicar, ver detalle)
-- [x] Anular pedido cambia estado correctamente
+- [x] Acciones por estado: BORRADOR (Confirmar, Eliminar), CONFIRMADO+ (Anular, Duplicar), ENVIADO+ (Ver albarán)
+- [x] Confirmar pedido muestra snackbar de éxito
+- [x] Tras confirmar, la lista de pedidos y KPIs se actualizan
 - [x] Duplicar pedido clona líneas al carrito
 - [x] Pull-to-refresh recarga todo
 - [x] Estado vacío muestra mensaje contextual
@@ -278,13 +256,28 @@ Ya existe la tabla `JAVIER.PEDIDOS_SEQ` con: `EJERCICIO` (NUMERIC 4), `ULTIMO_NU
 **Error**: Mismo que Bug 2
 **Fix**: Mismo fix aplicado — >50 vendedores = ALL
 
+### Bug 4: KPIs cargando infinito (404 en /orders/stats)
+**Error**: `GET /api/pedidos/orders/stats → 404`
+**Causa**: La ruta estaba registrada como `/stats` pero el frontend llamaba `/orders/stats`
+**Fix**: Cambiada la ruta de `/stats` a `/orders/stats` en pedidos.js
+
+### Bug 5: Confirmar pedido sin feedback visual
+**Error**: Al confirmar pedido no se mostraba snackbar ni se actualizaba la lista de pedidos
+**Causa**: `_onConfirm` y `_showOrderPreview` no recargaban la lista de pedidos ni los KPIs tras confirmar
+**Fix**: Añadido `provider.loadOrders()` + `provider.loadOrderStats()` + snackbar de éxito en ambos métodos
+
+### Bug 6: Borradores sin acciones en "Mis Pedidos"
+**Error**: Los pedidos en estado BORRADOR no tenían acciones para confirmar o eliminar
+**Causa**: `OrderCard` no tenía callbacks para acciones de borrador
+**Fix**: Añadidos `onResend` y `onDelete` en `OrderCard`, con métodos `_confirmBorrador` y `_deleteBorrador` en `pedidos_page.dart`
+
 ---
 
 ## 10. Resumen de cambios
 
 ### Backend
 - `backend/services/pedidos.service.js`: 3 funciones nuevas/reforzadas
-- `backend/routes/pedidos.js`: 2 endpoints nuevos, 1 reforzado
+- `backend/routes/pedidos.js`: 2 endpoints nuevos, 1 reforzado, 1 ruta corregida
 
 ### Frontend
 - 6 widgets nuevos creados
@@ -292,3 +285,27 @@ Ya existe la tabla `JAVIER.PEDIDOS_SEQ` con: `EJERCICIO` (NUMERIC 4), `ULTIMO_NU
 - 3880 → 2763 líneas en pedidos_page.dart (1117 líneas menos)
 - 0 errores en flutter analyze
 - 0 errores en node -c
+
+---
+
+## 11. Flujo completo de pedido verificado
+
+```
+1. Usuario selecciona cliente
+2. Busca y añade productos al carrito
+3. Pulsa "Confirmar pedido" → Preview sheet
+4. Pulsa "CONFIRMAR PEDIDO" en el preview
+5. Backend: Crea pedido (BORRADOR) → Confirma (CONFIRMADO)
+6. Frontend: Muestra snackbar "Pedido #XXX confirmado correctamente"
+7. Frontend: Limpia carrito
+8. Frontend: Recarga KPIs + lista de pedidos
+9. Usuario va a "Mis Pedidos" → Ve el pedido como CONFIRMADO
+10. Usuario puede: Ver detalle, Duplicar, Anular, Ver albarán
+
+Para borradores:
+1. Usuario guarda pedido como borrador
+2. Va a "Mis Pedidos" → Ve el borrador con estado BORRADOR
+3. Puede: Confirmar (carga en carrito) o Eliminar
+4. Al confirmar → carga en carrito → confirma desde carrito
+5. Al eliminar → borra de la DB → actualiza lista
+```

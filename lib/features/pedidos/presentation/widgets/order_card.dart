@@ -15,6 +15,8 @@ class OrderCard extends StatelessWidget {
   final VoidCallback? onDuplicate;
   final VoidCallback? onCancel;
   final VoidCallback? onViewAlbaran;
+  final VoidCallback? onResend;
+  final VoidCallback? onDelete;
 
   const OrderCard({
     Key? key,
@@ -23,6 +25,8 @@ class OrderCard extends StatelessWidget {
     this.onDuplicate,
     this.onCancel,
     this.onViewAlbaran,
+    this.onResend,
+    this.onDelete,
   }) : super(key: key);
 
   @override
@@ -164,11 +168,29 @@ class OrderCard extends StatelessWidget {
                 // Actions row (if available)
                 if (onDuplicate != null ||
                     onCancel != null ||
-                    onViewAlbaran != null)
+                    onViewAlbaran != null ||
+                    onResend != null ||
+                    onDelete != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Row(
                       children: [
+                        if (onResend != null)
+                          _actionChip(
+                            context,
+                            Icons.send_outlined,
+                            'Confirmar',
+                            AppTheme.neonGreen,
+                            onResend!,
+                          ),
+                        if (onDelete != null)
+                          _actionChip(
+                            context,
+                            Icons.delete_outline,
+                            'Eliminar',
+                            AppTheme.error,
+                            onDelete!,
+                          ),
                         if (onDuplicate != null)
                           _actionChip(
                             context,

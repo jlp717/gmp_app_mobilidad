@@ -476,9 +476,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                     provider.isDirty
                         ? Icons.edit_outlined
                         : Icons.check_circle_outline,
-                    color: provider.isDirty
-                        ? Colors.white38
-                        : AppTheme.neonGreen,
+                    color:
+                        provider.isDirty ? Colors.white38 : AppTheme.neonGreen,
                     size: 12,
                   ),
                   const SizedBox(width: 4),
@@ -573,7 +572,6 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
 
   void _showEditLineDialog(BuildContext context, PedidosProvider provider,
       OrderLine line, int index) {
-
     final isDual = line.unidadesCaja > 1 &&
         line.unidadesFraccion > 0 &&
         line.unidadesFraccion < line.unidadesCaja;
@@ -589,17 +587,13 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
           : line.cantidadUnidades),
     );
     final cajasController = TextEditingController(
-      text: line.cantidadEnvases > 0
-          ? formatQty(line.cantidadEnvases)
-          : '',
+      text: line.cantidadEnvases > 0 ? formatQty(line.cantidadEnvases) : '',
     );
     final unidadesController = TextEditingController(
-      text: line.cantidadUnidades > 0
-          ? formatQty(line.cantidadUnidades)
-          : '',
+      text: line.cantidadUnidades > 0 ? formatQty(line.cantidadUnidades) : '',
     );
-    final priceController = TextEditingController(
-        text: line.precioVenta.toStringAsFixed(3));
+    final priceController =
+        TextEditingController(text: line.precioVenta.toStringAsFixed(3));
 
     final unitLabel = Product.unitLabel(line.unidadMedida);
     final equivText = line.unidadesCaja > 1
@@ -612,10 +606,10 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
       builder: (ctx) {
         return Dialog(
           backgroundColor: AppTheme.darkSurface,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
-          insetPadding: const EdgeInsets.symmetric(
-              horizontal: 24, vertical: 40),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           child: SingleChildScrollView(
             padding: EdgeInsets.only(
               left: 20,
@@ -659,8 +653,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                   line.descripcion,
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: Responsive.fontSize(context,
-                        small: 14, large: 16),
+                    fontSize:
+                        Responsive.fontSize(context, small: 14, large: 16),
                     fontWeight: FontWeight.w600,
                   ),
                   maxLines: 2,
@@ -671,16 +665,16 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                   line.codigoArticulo,
                   style: TextStyle(
                     color: AppTheme.neonBlue,
-                    fontSize: Responsive.fontSize(context,
-                        small: 11, large: 13),
+                    fontSize:
+                        Responsive.fontSize(context, small: 11, large: 13),
                   ),
                 ),
                 // Equivalence info
                 if (equivText != null) ...[
                   const SizedBox(height: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppTheme.neonBlue.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(6),
@@ -702,17 +696,16 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                       Expanded(
                         child: TextField(
                           controller: cajasController,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 18,
+                              color: Colors.white,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText: 'Cajas',
-                            labelStyle:
-                                const TextStyle(color: Colors.white70),
+                            labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
                             fillColor: AppTheme.darkCard,
                             border: OutlineInputBorder(
@@ -729,9 +722,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                                     color: AppTheme.neonGreen)),
                           ),
                           onChanged: (val) {
-                            final cur = double.tryParse(
-                                    val.replaceAll(',', '.')) ??
-                                0;
+                            final cur =
+                                double.tryParse(val.replaceAll(',', '.')) ?? 0;
                             unidadesController.text =
                                 formatQty(cur * line.unidadesCaja);
                           },
@@ -741,18 +733,17 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                       Expanded(
                         child: TextField(
                           controller: unidadesController,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 18,
+                              color: Colors.white,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText:
                                 'Uds (${formatQty(line.unidadesCaja)} U/C)',
-                            labelStyle:
-                                const TextStyle(color: Colors.white70),
+                            labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
                             fillColor: AppTheme.darkCard,
                             border: OutlineInputBorder(
@@ -765,13 +756,12 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                                     color: AppTheme.borderColor)),
                             focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: AppTheme.neonBlue)),
+                                borderSide:
+                                    const BorderSide(color: AppTheme.neonBlue)),
                           ),
                           onChanged: (val) {
-                            final cur = double.tryParse(
-                                    val.replaceAll(',', '.')) ??
-                                0;
+                            final cur =
+                                double.tryParse(val.replaceAll(',', '.')) ?? 0;
                             cajasController.text =
                                 formatQty(cur / line.unidadesCaja);
                           },
@@ -783,28 +773,26 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                   TextField(
                     controller: priceController,
                     keyboardType:
-                        const TextInputType.numberWithOptions(
-                            decimal: true),
+                        const TextInputType.numberWithOptions(decimal: true),
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       labelText: 'Precio',
                       suffixText: ' \u20AC',
-                      labelStyle:
-                          const TextStyle(color: Colors.white70),
+                      labelStyle: const TextStyle(color: Colors.white70),
                       filled: true,
                       fillColor: AppTheme.darkCard,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: AppTheme.borderColor)),
+                          borderSide:
+                              const BorderSide(color: AppTheme.borderColor)),
                       enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: AppTheme.borderColor)),
+                          borderSide:
+                              const BorderSide(color: AppTheme.borderColor)),
                       focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: AppTheme.neonBlue)),
+                          borderSide:
+                              const BorderSide(color: AppTheme.neonBlue)),
                     ),
                   ),
                 ] else ...[
@@ -813,17 +801,16 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                       Expanded(
                         child: TextField(
                           controller: qtyController,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 18,
+                              color: Colors.white,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText: 'Cantidad ($unitLabel)',
-                            labelStyle:
-                                const TextStyle(color: Colors.white70),
+                            labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
                             fillColor: AppTheme.darkCard,
                             border: OutlineInputBorder(
@@ -836,8 +823,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                                     color: AppTheme.borderColor)),
                             focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: AppTheme.neonBlue)),
+                                borderSide:
+                                    const BorderSide(color: AppTheme.neonBlue)),
                           ),
                         ),
                       ),
@@ -845,15 +832,13 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                       Expanded(
                         child: TextField(
                           controller: priceController,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             labelText: 'Precio',
                             suffixText: ' \u20AC',
-                            labelStyle:
-                                const TextStyle(color: Colors.white70),
+                            labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
                             fillColor: AppTheme.darkCard,
                             border: OutlineInputBorder(
@@ -866,8 +851,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                                     color: AppTheme.borderColor)),
                             focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: AppTheme.neonBlue)),
+                                borderSide:
+                                    const BorderSide(color: AppTheme.neonBlue)),
                           ),
                         ),
                       ),
@@ -881,8 +866,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                       'Precio minimo: ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
                       style: TextStyle(
                         color: Colors.white54,
-                        fontSize: Responsive.fontSize(context,
-                            small: 10, large: 12),
+                        fontSize:
+                            Responsive.fontSize(context, small: 10, large: 12),
                       ),
                     ),
                   ),
@@ -899,14 +884,12 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                             provider.removeLine(index);
                             Navigator.pop(ctx);
                           },
-                          icon: const Icon(Icons.delete_outline,
-                              size: 16),
+                          icon: const Icon(Icons.delete_outline, size: 16),
                           label: const Text('ELIMINAR',
                               style: TextStyle(fontSize: 13)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppTheme.error,
-                            side:
-                                const BorderSide(color: AppTheme.error),
+                            side: const BorderSide(color: AppTheme.error),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -922,19 +905,16 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                         height: 46,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            final price = double.tryParse(
-                                    priceController.text
-                                        .replaceAll(',', '.')) ??
+                            final price = double.tryParse(priceController.text
+                                    .replaceAll(',', '.')) ??
                                 0;
 
                             if (isDual) {
-                              final c = double.tryParse(
-                                      cajasController.text
-                                          .replaceAll(',', '.')) ??
+                              final c = double.tryParse(cajasController.text
+                                      .replaceAll(',', '.')) ??
                                   0;
-                              final u = double.tryParse(
-                                      unidadesController.text
-                                          .replaceAll(',', '.')) ??
+                              final u = double.tryParse(unidadesController.text
+                                      .replaceAll(',', '.')) ??
                                   0;
                               if (c <= 0 && u <= 0) return;
                               provider.updateLine(
@@ -944,19 +924,15 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                                 precioVenta: price,
                               );
                             } else {
-                              final qty = double.tryParse(
-                                      qtyController.text
-                                          .replaceAll(',', '.')) ??
+                              final qty = double.tryParse(qtyController.text
+                                      .replaceAll(',', '.')) ??
                                   0;
                               if (qty <= 0) return;
-                              final isBoxes =
-                                  line.cantidadEnvases > 0;
+                              final isBoxes = line.cantidadEnvases > 0;
                               provider.updateLine(
                                 index,
-                                cantidadEnvases:
-                                    isBoxes ? qty : null,
-                                cantidadUnidades:
-                                    isBoxes ? null : qty,
+                                cantidadEnvases: isBoxes ? qty : null,
+                                cantidadUnidades: isBoxes ? null : qty,
                                 precioVenta: price,
                               );
                             }
@@ -965,8 +941,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                           icon: const Icon(Icons.check, size: 18),
                           label: const Text('GUARDAR',
                               style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold)),
+                                  fontSize: 14, fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.neonBlue,
                             foregroundColor: AppTheme.darkBase,
@@ -1005,10 +980,19 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
       _obsCtrl.clear();
       _discountCtrl.clear();
       await provider.loadPromotions();
+      // Refresh orders list + KPIs
+      provider.loadOrders(
+        vendedorCodes: widget.vendedorCode,
+        forceRefresh: true,
+      );
+      provider.loadOrderStats(
+        vendedorCodes: widget.vendedorCode,
+        forceRefresh: true,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Pedido #${result['numeroPedido'] ?? ''} creado correctamente'),
+              'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente'),
           backgroundColor: AppTheme.neonGreen,
         ),
       );
@@ -1033,16 +1017,26 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
       onConfirm: (observaciones) async {
         final result = await provider.confirmOrder(
           widget.vendedorCode,
-          observaciones: observaciones.isNotEmpty ? observaciones : _obsCtrl.text.trim(),
+          observaciones:
+              observaciones.isNotEmpty ? observaciones : _obsCtrl.text.trim(),
         );
         if (result != null && context.mounted) {
           _obsCtrl.clear();
           _discountCtrl.clear();
           await provider.loadPromotions();
+          // Refresh orders list + KPIs
+          provider.loadOrders(
+            vendedorCodes: widget.vendedorCode,
+            forceRefresh: true,
+          );
+          provider.loadOrderStats(
+            vendedorCodes: widget.vendedorCode,
+            forceRefresh: true,
+          );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                  'Pedido #${result['numeroPedido'] ?? ''} creado correctamente'),
+                  'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente'),
               backgroundColor: AppTheme.neonGreen,
             ),
           );
