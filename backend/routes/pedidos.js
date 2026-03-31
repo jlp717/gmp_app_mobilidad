@@ -390,7 +390,7 @@ router.get('/promotions', async (req, res) => {
  */
 router.get('/', async (req, res) => {
     try {
-        const { vendedorCodes, status, dateFrom, dateTo } = req.query;
+        const { vendedorCodes, status, year, month, dateFrom, dateTo, search, minAmount, maxAmount, sortBy, sortOrder } = req.query;
 
         if (!vendedorCodes) {
             return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
@@ -401,25 +401,58 @@ router.get('/', async (req, res) => {
             ? 'ALL'
             : vendedorCodes;
 
-        const year = parseIntSafe(req.query.year, undefined);
-        const month = parseIntSafe(req.query.month, undefined);
-        const limit = parseIntSafe(req.query.limit, 50);
-        const offset = parseIntSafe(req.query.offset, 0);
-
         const result = await pedidosService.getOrders({
             vendedorCodes: effectiveVendedorCodes,
             status: status ? String(status).trim() : undefined,
-            year,
-            month,
+            year: year ? parseInt(year) : undefined,
+            month: month ? parseInt(month) : undefined,
             dateFrom: dateFrom ? String(dateFrom).trim() : undefined,
             dateTo: dateTo ? String(dateTo).trim() : undefined,
-            limit,
-            offset
+            search: search ? String(search).trim() : undefined,
+            minAmount: minAmount ? parseFloat(minAmount) : undefined,
+            maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
+            sortBy: sortBy ? String(sortBy).trim() : 'fecha',
+            sortOrder: (sortOrder || 'DESC').toUpperCase(),
+            limit: parseIntSafe(req.query.limit, 50),
+            offset: parseIntSafe(req.query.offset, 0),
         });
 
         res.json({ success: true, orders: result.orders, count: result.count });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/pedidos/stats
+ * Order statistics and analytics
+ */
+router.get('/stats', async (req, res) => {
+    try {
+        const vendedorCodes = req.query.vendedorCodes || 'ALL';
+        const stats = await pedidosService.getOrderStats(
+            vendedorCodes,
+            req.query.dateFrom ? String(req.query.dateFrom).trim() : undefined,
+            req.query.dateTo ? String(req.query.dateTo).trim() : undefined
+        );
+        res.json({ success: true, stats });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in GET /stats: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/pedidos/:id/albaran
+ * Find albaranes linked to an order
+ */
+router.get('/:id/albaran', async (req, res) => {
+    try {
+        const albaranes = await pedidosService.getOrderAlbaran(req.params.id);
+        res.json({ success: true, albaranes });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in GET /${req.params.id}/albaran: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });

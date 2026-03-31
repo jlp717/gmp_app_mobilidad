@@ -723,77 +723,156 @@ async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = '
 // GET ORDERS
 // ============================================================================
 
-async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo, limit = 50, offset = 0 }) {
+async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo, search, minAmount, maxAmount, sortBy, sortOrder, limit = 50, offset = 0 }) {
     if (!vendedorCodes) throw new Error('vendedorCodes is required');
 
     const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
 
     let sql = `
-        SELECT ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO,
-            DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO,
-            TRIM(CODIGOCLIENTE) AS CODIGOCLIENTE,
-            TRIM(NOMBRECLIENTE) AS NOMBRECLIENTE,
-            TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
-            TRIM(TIPOVENTA) AS TIPOVENTA,
-            TRIM(ESTADO) AS ESTADO,
-            IMPORTETOTAL, IMPORTEBASE, IMPORTECOSTO, IMPORTEMARGEN,
-            TRIM(OBSERVACIONES) AS OBSERVACIONES,
-            CREATED_AT, UPDATED_AT
-        FROM JAVIER.PEDIDOS_CAB
+        SELECT C.ID, C.EJERCICIO, C.NUMEROPEDIDO, C.SERIEPEDIDO,
+            C.DIADOCUMENTO, C.MESDOCUMENTO, C.ANODOCUMENTO, C.HORADOCUMENTO,
+            TRIM(C.CODIGOCLIENTE) AS CODIGOCLIENTE,
+            TRIM(C.NOMBRECLIENTE) AS NOMBRECLIENTE,
+            TRIM(C.CODIGOVENDEDOR) AS CODIGOVENDEDOR,
+            TRIM(C.TIPOVENTA) AS TIPOVENTA,
+            TRIM(C.ESTADO) AS ESTADO,
+            C.IMPORTETOTAL, C.IMPORTEBASE, C.IMPORTEIVA, C.IMPORTECOSTO, C.IMPORTEMARGEN,
+            TRIM(C.OBSERVACIONES) AS OBSERVACIONES,
+            TRIM(C.CODIGOFORMAPAGO) AS CODIGOFORMAPAGO,
+            C.CODIGOTARIFA,
+            TRIM(C.ORIGEN) AS ORIGEN,
+            C.CREATED_AT, C.UPDATED_AT,
+            COALESCE(LC.LINE_COUNT, 0) AS LINE_COUNT
+        FROM JAVIER.PEDIDOS_CAB C
+        LEFT JOIN (SELECT PEDIDO_ID, COUNT(*) AS LINE_COUNT FROM JAVIER.PEDIDOS_LIN GROUP BY PEDIDO_ID) LC ON C.ID = LC.PEDIDO_ID
         WHERE 1=1`;
 
+    const params = [];
+
     if (!isAll) {
-        const vendorList = vendedorCodes.split(',').map(v => `'${sanitize(v.trim())}'`).join(',');
-        sql += ` AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
+        const vendorList = vendedorCodes.split(',').map(v => v.trim()).filter(Boolean);
+        if (vendorList.length === 1) {
+            sql += ` AND TRIM(C.CODIGOVENDEDOR) = ?`;
+            params.push(vendorList[0]);
+        } else {
+            sql += ` AND TRIM(C.CODIGOVENDEDOR) IN (${vendorList.map(() => '?').join(',')})`;
+            params.push(...vendorList);
+        }
     }
 
     if (status) {
-        sql += ` AND TRIM(ESTADO) = '${sanitize(status)}'`;
+        sql += ` AND TRIM(C.ESTADO) = ?`;
+        params.push(status.trim());
     }
 
-    // Date filters
-    let dateFilterApplied = false;
-    if (dateFrom && dateTo) {
-        const fromInt = parseInt(String(dateFrom).replace(/-/g, ''));
-        const toInt = parseInt(String(dateTo).replace(/-/g, ''));
-        if (!isNaN(fromInt) && !isNaN(toInt)) {
-            sql += ` AND (ANODOCUMENTO * 10000 + MESDOCUMENTO * 100 + DIADOCUMENTO) BETWEEN ${fromInt} AND ${toInt}`;
-            dateFilterApplied = true;
+    // Date range filters
+    if (dateFrom) {
+        const df = String(dateFrom).replace(/-/g, '');
+        if (df.length === 8) {
+            const y = parseInt(df.substring(0, 4));
+            const m = parseInt(df.substring(4, 6));
+            const d = parseInt(df.substring(6, 8));
+            sql += ` AND (C.ANODOCUMENTO > ? OR (C.ANODOCUMENTO = ? AND C.MESDOCUMENTO > ?) OR (C.ANODOCUMENTO = ? AND C.MESDOCUMENTO = ? AND C.DIADOCUMENTO >= ?))`;
+            params.push(y, y, m, y, m, d);
+        }
+    }
+    if (dateTo) {
+        const dt = String(dateTo).replace(/-/g, '');
+        if (dt.length === 8) {
+            const y = parseInt(dt.substring(0, 4));
+            const m = parseInt(dt.substring(4, 6));
+            const d = parseInt(dt.substring(6, 8));
+            sql += ` AND (C.ANODOCUMENTO < ? OR (C.ANODOCUMENTO = ? AND C.MESDOCUMENTO < ?) OR (C.ANODOCUMENTO = ? AND C.MESDOCUMENTO = ? AND C.DIADOCUMENTO <= ?))`;
+            params.push(y, y, m, y, m, d);
         }
     }
 
-    if (!dateFilterApplied) {
+    // Year/month fallback (only if no date range applied)
+    if (!dateFrom && !dateTo) {
         const currentYear = year || new Date().getFullYear();
-        sql += ` AND EJERCICIO = ${parseInt(currentYear)}`;
+        sql += ` AND C.EJERCICIO = ?`;
+        params.push(parseInt(currentYear));
         if (month) {
-            sql += ` AND MESDOCUMENTO = ${parseInt(month)}`;
+            sql += ` AND C.MESDOCUMENTO = ?`;
+            params.push(parseInt(month));
         }
     }
 
-    sql += ` ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC, NUMEROPEDIDO DESC`;
+    // Text search
+    if (search) {
+        const s = `%${search.toUpperCase()}%`;
+        sql += ` AND (UPPER(TRIM(C.NOMBRECLIENTE)) LIKE ? OR UPPER(TRIM(C.CODIGOCLIENTE)) LIKE ? OR UPPER(TRIM(CAST(C.NUMEROPEDIDO AS VARCHAR(10)))) LIKE ?)`;
+        params.push(s, s, s);
+    }
+
+    // Amount filters
+    if (minAmount !== undefined) {
+        sql += ` AND C.IMPORTETOTAL >= ?`;
+        params.push(parseFloat(minAmount));
+    }
+    if (maxAmount !== undefined) {
+        sql += ` AND C.IMPORTETOTAL <= ?`;
+        params.push(parseFloat(maxAmount));
+    }
+
+    // Dynamic ORDER BY
+    const sortField = (sortBy || 'fecha').toLowerCase();
+    const sortDir = (sortOrder || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    switch (sortField) {
+        case 'importe':
+            sql += ` ORDER BY C.IMPORTETOTAL ${sortDir}`;
+            break;
+        case 'cliente':
+            sql += ` ORDER BY C.NOMBRECLIENTE ${sortDir}`;
+            break;
+        case 'numero':
+            sql += ` ORDER BY C.NUMEROPEDIDO ${sortDir}`;
+            break;
+        case 'fecha':
+        default:
+            sql += ` ORDER BY C.ANODOCUMENTO ${sortDir}, C.MESDOCUMENTO ${sortDir}, C.DIADOCUMENTO ${sortDir}`;
+            break;
+    }
+    sql += `, C.NUMEROPEDIDO DESC`;
     sql += ` OFFSET ${parseInt(offset)} ROWS FETCH FIRST ${parseInt(limit)} ROWS ONLY`;
 
     try {
-        const rows = await query(sql);
-        const orders = rows.map(r => ({
-            id: r.ID,
-            ejercicio: r.EJERCICIO,
-            numeroPedido: r.NUMEROPEDIDO,
-            serie: r.SERIEPEDIDO,
-            fecha: `${String(r.DIADOCUMENTO).padStart(2, '0')}/${String(r.MESDOCUMENTO).padStart(2, '0')}/${r.ANODOCUMENTO}`,
-            clienteCode: r.CODIGOCLIENTE,
-            clienteName: r.NOMBRECLIENTE || `Cliente ${r.CODIGOCLIENTE}`,
-            vendedorCode: r.CODIGOVENDEDOR,
-            tipoventa: r.TIPOVENTA,
-            estado: r.ESTADO,
-            total: parseFloat(r.IMPORTETOTAL) || 0,
-            base: parseFloat(r.IMPORTEBASE) || 0,
-            costo: parseFloat(r.IMPORTECOSTO) || 0,
-            margen: parseFloat(r.IMPORTEMARGEN) || 0,
-            observaciones: r.OBSERVACIONES,
-            createdAt: r.CREATED_AT,
-            updatedAt: r.UPDATED_AT,
-        }));
+        const rows = await queryWithParams(sql, params);
+        const orders = rows.map(r => {
+            const dia = String(r.DIADOCUMENTO).padStart(2, '0');
+            const mes = String(r.MESDOCUMENTO).padStart(2, '0');
+            const ano = r.ANODOCUMENTO;
+            const hora = r.HORADOCUMENTO ? String(r.HORADOCUMENTO).padStart(6, '0') : '000000';
+            const hh = hora.substring(0, 2);
+            const mm = hora.substring(2, 4);
+            const numPedido = String(r.NUMEROPEDIDO).padStart(6, '0');
+            return {
+                id: r.ID,
+                ejercicio: r.EJERCICIO,
+                numeroPedido: r.NUMEROPEDIDO,
+                numeroPedidoFormatted: `${r.SERIEPEDIDO || 'M'}-${ano}-${numPedido}`,
+                serie: r.SERIEPEDIDO,
+                fecha: `${dia}/${mes}/${ano}`,
+                fechaFormatted: `${dia}/${mes}/${ano} ${hh}:${mm}`,
+                clienteCode: r.CODIGOCLIENTE,
+                clienteName: r.NOMBRECLIENTE || `Cliente ${r.CODIGOCLIENTE}`,
+                vendedorCode: r.CODIGOVENDEDOR,
+                tipoventa: r.TIPOVENTA,
+                estado: r.ESTADO,
+                total: parseFloat(r.IMPORTETOTAL) || 0,
+                base: parseFloat(r.IMPORTEBASE) || 0,
+                iva: parseFloat(r.IMPORTEIVA) || 0,
+                costo: parseFloat(r.IMPORTECOSTO) || 0,
+                margen: parseFloat(r.IMPORTEMARGEN) || 0,
+                observaciones: r.OBSERVACIONES,
+                formaPago: r.CODIGOFORMAPAGO,
+                tarifa: r.CODIGOTARIFA,
+                origen: r.ORIGEN,
+                lineCount: parseInt(r.LINE_COUNT) || 0,
+                createdAt: r.CREATED_AT,
+                updatedAt: r.UPDATED_AT,
+            };
+        });
         return { orders, count: orders.length };
     } catch (error) {
         logger.error(`[PEDIDOS] getOrders error: ${error.message}`);
@@ -1310,6 +1389,171 @@ async function updateOrderStatus(orderId, newStatus, options = {}) {
     } catch (auditErr) { /* silent */ }
 
     return getOrderDetail(id);
+}
+
+// ============================================================================
+// ORDER STATS
+// ============================================================================
+
+async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
+    const whereParts = [];
+    const params = [];
+
+    if (vendedorCodes && vendedorCodes.trim().toUpperCase() !== 'ALL') {
+        const codes = vendedorCodes.split(',').map(c => c.trim()).filter(Boolean);
+        if (codes.length === 1) {
+            whereParts.push('CODIGOVENDEDOR = ?');
+            params.push(codes[0]);
+        } else {
+            whereParts.push(`CODIGOVENDEDOR IN (${codes.map(() => '?').join(',')})`);
+            params.push(...codes);
+        }
+    }
+
+    if (dateFrom) {
+        const df = String(dateFrom).replace(/-/g, '');
+        if (df.length === 8) {
+            const y = parseInt(df.substring(0, 4));
+            const m = parseInt(df.substring(4, 6));
+            const d = parseInt(df.substring(6, 8));
+            whereParts.push('(ANODOCUMENTO > ? OR (ANODOCUMENTO = ? AND MESDOCUMENTO > ?) OR (ANODOCUMENTO = ? AND MESDOCUMENTO = ? AND DIADOCUMENTO >= ?))');
+            params.push(y, y, m, y, m, d);
+        }
+    }
+    if (dateTo) {
+        const dt = String(dateTo).replace(/-/g, '');
+        if (dt.length === 8) {
+            const y = parseInt(dt.substring(0, 4));
+            const m = parseInt(dt.substring(4, 6));
+            const d = parseInt(dt.substring(6, 8));
+            whereParts.push('(ANODOCUMENTO < ? OR (ANODOCUMENTO = ? AND MESDOCUMENTO < ?) OR (ANODOCUMENTO = ? AND MESDOCUMENTO = ? AND DIADOCUMENTO <= ?))');
+            params.push(y, y, m, y, m, d);
+        }
+    }
+
+    const where = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+    const statsSql = `
+        SELECT
+            COUNT(*) AS TOTALORDERS,
+            COALESCE(SUM(IMPORTETOTAL), 0) AS TOTALAMOUNT,
+            COALESCE(SUM(IMPORTEBASE), 0) AS TOTALBASE,
+            COALESCE(SUM(IMPORTEIVA), 0) AS TOTALIVA,
+            CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(IMPORTEMARGEN) * 100.0 / NULLIF(SUM(IMPORTEBASE), 0), 0) ELSE 0 END AS AVGMARGIN,
+            CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(IMPORTETOTAL) * 1.0 / COUNT(*), 0) ELSE 0 END AS AVGTICKET
+        FROM JAVIER.PEDIDOS_CAB ${where}`;
+
+    const statusSql = `
+        SELECT TRIM(ESTADO) AS ESTADO, COUNT(*) AS CNT
+        FROM JAVIER.PEDIDOS_CAB ${where}
+        GROUP BY ESTADO`;
+
+    const trendSql = `
+        SELECT ANODOCUMENTO AS Y, MESDOCUMENTO AS M, DIADOCUMENTO AS D,
+            COUNT(*) AS ORDERS, COALESCE(SUM(IMPORTETOTAL), 0) AS AMOUNT
+        FROM JAVIER.PEDIDOS_CAB ${where ? where + ' AND' : 'WHERE'} ANODOCUMENTO > 0
+        ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
+        FETCH FIRST 7 ROWS ONLY`;
+
+    const topSql = `
+        SELECT TRIM(CODIGOCLIENTE) AS CODE, TRIM(NOMBRECLIENTE) AS NAME,
+            COUNT(*) AS ORDERS, COALESCE(SUM(IMPORTETOTAL), 0) AS AMOUNT
+        FROM JAVIER.PEDIDOS_CAB ${where ? where + ' AND' : 'WHERE'} CODIGOCLIENTE <> ''
+        GROUP BY CODIGOCLIENTE, NOMBRECLIENTE
+        ORDER BY AMOUNT DESC
+        FETCH FIRST 5 ROWS ONLY`;
+
+    try {
+        const [statsRows, statusRows, trendRows, topRows] = await Promise.all([
+            queryWithParams(statsSql, params).catch(e => { logger.warn(`[PEDIDOS] stats err: ${e.message}`); return []; }),
+            queryWithParams(statusSql, params).catch(e => { logger.warn(`[PEDIDOS] status err: ${e.message}`); return []; }),
+            queryWithParams(trendSql, params).catch(e => { logger.warn(`[PEDIDOS] trend err: ${e.message}`); return []; }),
+            queryWithParams(topSql, params).catch(e => { logger.warn(`[PEDIDOS] top err: ${e.message}`); return []; }),
+        ]);
+
+        const stats = statsRows[0] || {};
+        const byStatus = {};
+        for (const s of (statusRows || [])) {
+            byStatus[(s.ESTADO || '').trim()] = parseInt(s.CNT) || 0;
+        }
+
+        const dailyTrend = (trendRows || []).map(r => ({
+            date: `${String(r.Y).padStart(4, '0')}-${String(r.M).padStart(2, '0')}-${String(r.D).padStart(2, '0')}`,
+            orders: parseInt(r.ORDERS) || 0,
+            amount: parseFloat(r.AMOUNT) || 0,
+        })).reverse();
+
+        const topClients = (topRows || []).map(r => ({
+            code: (r.CODE || '').trim(),
+            name: (r.NAME || '').trim(),
+            orders: parseInt(r.ORDERS) || 0,
+            amount: parseFloat(r.AMOUNT) || 0,
+        }));
+
+        return {
+            totalOrders: parseInt(stats.TOTALORDERS) || 0,
+            totalAmount: parseFloat(stats.TOTALAMOUNT) || 0,
+            totalBase: parseFloat(stats.TOTALBASE) || 0,
+            totalIva: parseFloat(stats.TOTALIVA) || 0,
+            avgMargin: parseFloat(stats.AVGMARGIN) || 0,
+            avgTicket: parseFloat(stats.AVGTICKET) || 0,
+            byStatus,
+            dailyTrend,
+            topClients,
+        };
+    } catch (error) {
+        logger.error(`[PEDIDOS] getOrderStats error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// ORDER ALBARAN LOOKUP
+// ============================================================================
+
+async function getOrderAlbaran(orderId) {
+    const id = parseInt(orderId);
+    if (isNaN(id)) throw new Error('Invalid orderId');
+
+    const orderRows = await queryWithParams(
+        `SELECT CODIGOCLIENTE, DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, NUMEROPEDIDO
+         FROM JAVIER.PEDIDOS_CAB WHERE ID = ?`,
+        [id]
+    );
+    if (!orderRows || orderRows.length === 0) throw new Error('Pedido no encontrado');
+
+    const order = orderRows[0];
+    const clientCode = (order.CODIGOCLIENTE || '').trim();
+
+    const albaranSql = `
+        SELECT TRIM(C.NUMEROALBARAN) AS NUMEROALBARAN,
+               TRIM(C.SERIEALBARAN) AS SERIEALBARAN,
+               C.DIADOCUMENTO, C.MESDOCUMENTO, C.ANODOCUMENTO,
+               TRIM(C.CODIGOCLIENTE) AS CODIGOCLIENTE,
+               C.IMPORTEALBARAN,
+               TRIM(C.SITUACIONALBARAN) AS SITUACION,
+               TRIM(C.ESTADOENVIO) AS ESTADOENVIO
+        FROM DSEDAC.CAC C
+        WHERE TRIM(C.CODIGOCLIENTE) = ?
+          AND C.ANODOCUMENTO = ?
+          AND C.ELIMINADOSN <> 'N'
+        ORDER BY C.ANODOCUMENTO DESC, C.MESDOCUMENTO DESC, C.DIADOCUMENTO DESC
+        FETCH FIRST 3 ROWS ONLY`;
+
+    try {
+        const rows = await queryWithParams(albaranSql, [clientCode, order.ANODOCUMENTO]);
+        return (rows || []).map(r => ({
+            numeroAlbaran: r.NUMEROALBARAN,
+            serie: r.SERIEALBARAN,
+            fecha: `${String(r.DIADOCUMENTO).padStart(2, '0')}/${String(r.MESDOCUMENTO).padStart(2, '0')}/${r.ANODOCUMENTO}`,
+            situacion: (r.SITUACION || '').trim(),
+            estadoEnvio: (r.ESTADOENVIO || '').trim(),
+            importe: parseFloat(r.IMPORTEALBARAN) || 0,
+        }));
+    } catch (error) {
+        logger.warn(`[PEDIDOS] getOrderAlbaran: ${error.message}`);
+        return [];
+    }
 }
 
 // ============================================================================
@@ -2608,4 +2852,6 @@ module.exports = {
     getSimilarProducts,
     searchProductsWithStock,
     calculateLineImporte,
+    getOrderStats,
+    getOrderAlbaran,
 };

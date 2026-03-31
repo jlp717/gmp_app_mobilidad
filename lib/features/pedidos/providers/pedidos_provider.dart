@@ -31,6 +31,10 @@ class PedidosProvider with ChangeNotifier {
   bool _isLoadingOrders = false;
   String? _orderStatusFilter;
 
+  // ── Order Stats ──
+  OrderStats? _orderStats;
+  bool _isLoadingStats = false;
+
   // ── Recommendations ──
   List<Recommendation> _clientHistory = [];
   List<Recommendation> _similarClients = [];
@@ -94,6 +98,8 @@ class PedidosProvider with ChangeNotifier {
   List<OrderSummary> get orders => _orders;
   bool get isLoadingOrders => _isLoadingOrders;
   String? get orderStatusFilter => _orderStatusFilter;
+  OrderStats? get orderStats => _orderStats;
+  bool get isLoadingStats => _isLoadingStats;
   List<Recommendation> get clientHistory => _clientHistory;
   List<Recommendation> get similarClients => _similarClients;
   bool get isSaving => _isSaving;
@@ -737,6 +743,13 @@ class PedidosProvider with ChangeNotifier {
     required String vendedorCodes,
     String? status,
     bool forceRefresh = false,
+    String? dateFrom,
+    String? dateTo,
+    String? search,
+    double? minAmount,
+    double? maxAmount,
+    String sortBy = 'fecha',
+    String sortOrder = 'DESC',
   }) async {
     _isLoadingOrders = true;
     _orderStatusFilter = status;
@@ -748,6 +761,13 @@ class PedidosProvider with ChangeNotifier {
         vendedorCodes: vendedorCodes,
         status: status,
         forceRefresh: forceRefresh,
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        search: search,
+        minAmount: minAmount,
+        maxAmount: maxAmount,
+        sortBy: sortBy,
+        sortOrder: sortOrder,
       );
     } catch (e) {
       _error = e.toString();
@@ -755,6 +775,34 @@ class PedidosProvider with ChangeNotifier {
       _isLoadingOrders = false;
       notifyListeners();
     }
+  }
+
+  Future<void> loadOrderStats({
+    required String vendedorCodes,
+    String? dateFrom,
+    String? dateTo,
+    bool forceRefresh = false,
+  }) async {
+    _isLoadingStats = true;
+    notifyListeners();
+    try {
+      _orderStats = await PedidosService.getOrderStats(
+        vendedorCodes: vendedorCodes,
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        forceRefresh: forceRefresh,
+      );
+    } catch (e) {
+      debugPrint('[PedidosProvider] loadOrderStats error: $e');
+    } finally {
+      _isLoadingStats = false;
+      notifyListeners();
+    }
+  }
+
+  void setOrderStatusFilter(String? status) {
+    _orderStatusFilter = status;
+    notifyListeners();
   }
 
   Future<void> cancelExistingOrder(int orderId) async {

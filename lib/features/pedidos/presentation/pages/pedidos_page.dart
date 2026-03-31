@@ -30,6 +30,11 @@ import '../widgets/product_detail_sheet.dart';
 import '../widgets/stock_alternatives_sheet.dart';
 import '../widgets/tarifa_selector_modal.dart';
 import '../widgets/unit_selector_modal.dart';
+import '../widgets/order_kpi_dashboard.dart';
+import '../widgets/order_card.dart';
+import '../widgets/order_filters_bar.dart';
+import '../widgets/order_empty_state.dart';
+import '../widgets/order_status_badge.dart';
 import '../utils/pedidos_formatters.dart';
 import '../dialogs/client_search_dialog.dart';
 import '../../data/pedidos_offline_service.dart';
@@ -62,10 +67,12 @@ class _PedidosPageState extends State<PedidosPage>
 
   // Mejora 10 â€” Mis Pedidos search & date filter
   String _orderSearch = '';
-  String _orderDateFilter = 'Todo';
-  int? _orderFilterYear;
-  int? _orderFilterMonth;
-  DateTimeRange? _orderCustomRange;
+  DateTime? _orderDateFrom;
+  DateTime? _orderDateTo;
+  double? _orderMinAmount;
+  double? _orderMaxAmount;
+  String _orderSortBy = 'fecha';
+  String _orderSortOrder = 'DESC';
 
   @override
   void initState() {
@@ -130,11 +137,12 @@ class _PedidosPageState extends State<PedidosPage>
 
   void _onTabChange() {
     if (_tabController.index == 1 && mounted) {
-      // Load analytics when switching to "Mis Pedidos"
-      context.read<PedidosProvider>().loadAnalytics(_vendedorCodes);
+      context
+          .read<PedidosProvider>()
+          .loadOrderStats(vendedorCodes: _vendedorCodes);
+      _loadOrdersWithFilters(context.read<PedidosProvider>());
     }
     if (_tabController.index == 0 && mounted) {
-      // Load complementary products when switching back to catalog
       context.read<PedidosProvider>().loadComplementaryProducts();
     }
   }
@@ -2442,1426 +2450,319 @@ class _PedidosPageState extends State<PedidosPage>
     );
   }
 
-  // â”€â”€ TAB 2: Mis Pedidos â”€â”€
+  // ── TAB 2: Mis Pedidos ──
 
   Widget _buildMisPedidosTab() {
     final provider = context.watch<PedidosProvider>();
     return Column(
       children: [
-        _buildOrderStatusFilters(provider),
-        // Mejora 10 \u2014 Search and date filter
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          color: AppTheme.darkSurface,
-          child: Column(
-            children: [
-              TextField(
-                onChanged: (v) => setState(() => _orderSearch = v),
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: 'Buscar pedido, cliente...',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon: const Icon(Icons.search,
-                      color: AppTheme.neonBlue, size: 18),
-                  filled: true,
-                  fillColor: AppTheme.darkCard,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 6),
-              // Date filter chips
-              SizedBox(
-                height: 32,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    ...['Todo', 'Hoy', 'Semana', 'Mes'].map((label) {
-                      final selected = _orderDateFilter == label &&
-                          _orderCustomRange == null;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: FilterChip(
-                          label: Text(label),
-                          selected: selected,
-                          selectedColor: AppTheme.neonBlue.withOpacity(0.2),
-                          backgroundColor: AppTheme.darkCard,
-                          labelStyle: TextStyle(
-                            color:
-                                selected ? AppTheme.neonBlue : Colors.white70,
-                            fontSize: 11,
-                          ),
-                          side: BorderSide(
-                              color: selected
-                                  ? AppTheme.neonBlue
-                                  : AppTheme.borderColor),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                          onSelected: (_) => setState(() {
-                            _orderDateFilter = label;
-                            _orderCustomRange = null;
-                            _orderFilterYear = null;
-                            _orderFilterMonth = null;
-                          }),
-                        ),
-                      );
-                    }),
-                    // Custom range chip
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: FilterChip(
-                        avatar: const Icon(Icons.date_range,
-                            size: 14, color: AppTheme.neonPurple),
-                        label: Text(_orderCustomRange != null
-                            ? '${_orderCustomRange!.start.day}/${_orderCustomRange!.start.month} - ${_orderCustomRange!.end.day}/${_orderCustomRange!.end.month}'
-                            : 'Rango'),
-                        selected: _orderCustomRange != null,
-                        selectedColor: AppTheme.neonPurple.withOpacity(0.2),
-                        backgroundColor: AppTheme.darkCard,
-                        labelStyle: TextStyle(
-                          color: _orderCustomRange != null
-                              ? AppTheme.neonPurple
-                              : Colors.white70,
-                          fontSize: 11,
-                        ),
-                        side: BorderSide(
-                            color: _orderCustomRange != null
-                                ? AppTheme.neonPurple
-                                : AppTheme.borderColor),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                        onSelected: (_) async {
-                          final range = await showDateRangePicker(
-                            context: context,
-                            firstDate: DateTime(2024),
-                            lastDate: DateTime.now(),
-                            initialDateRange: _orderCustomRange,
-                            builder: (ctx, child) {
-                              return Theme(
-                                data: ThemeData.dark().copyWith(
-                                  colorScheme: const ColorScheme.dark(
-                                    primary: AppTheme.neonBlue,
-                                    surface: AppTheme.darkSurface,
-                                  ),
-                                ),
-                                child: child!,
-                              );
-                            },
-                          );
-                          if (range != null) {
-                            setState(() {
-                              _orderCustomRange = range;
-                              _orderDateFilter = 'Rango';
-                              _orderFilterYear = null;
-                              _orderFilterMonth = null;
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                    // Year selector
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: PopupMenuButton<int>(
-                        onSelected: (year) => setState(() {
-                          _orderFilterYear = year;
-                          _orderDateFilter = 'Ano';
-                          _orderCustomRange = null;
-                        }),
-                        itemBuilder: (_) {
-                          final now = DateTime.now().year;
-                          return [now, now - 1, now - 2]
-                              .map((y) => PopupMenuItem(
-                                    value: y,
-                                    child: Text('$y'),
-                                  ))
-                              .toList();
-                        },
-                        child: Chip(
-                          label: Text(
-                            _orderFilterYear != null
-                                ? '$_orderFilterYear'
-                                : 'Año',
-                            style: TextStyle(
-                              color: _orderFilterYear != null
-                                  ? AppTheme.neonGreen
-                                  : Colors.white70,
-                              fontSize: 11,
-                            ),
-                          ),
-                          side: BorderSide(
-                              color: _orderFilterYear != null
-                                  ? AppTheme.neonGreen
-                                  : AppTheme.borderColor),
-                          backgroundColor: _orderFilterYear != null
-                              ? AppTheme.neonGreen.withOpacity(0.1)
-                              : AppTheme.darkCard,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                    ),
-                    // Month selector
-                    if (_orderFilterYear != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: PopupMenuButton<int>(
-                          onSelected: (m) => setState(() {
-                            _orderFilterMonth = m;
-                            _orderDateFilter = 'Ano';
-                            _orderCustomRange = null;
-                          }),
-                          itemBuilder: (_) {
-                            const names = [
-                              'Ene',
-                              'Feb',
-                              'Mar',
-                              'Abr',
-                              'May',
-                              'Jun',
-                              'Jul',
-                              'Ago',
-                              'Sep',
-                              'Oct',
-                              'Nov',
-                              'Dic'
-                            ];
-                            return List.generate(
-                                12,
-                                (i) => PopupMenuItem(
-                                      value: i + 1,
-                                      child: Text(names[i]),
-                                    ));
-                          },
-                          child: Chip(
-                            label: Text(
-                              _orderFilterMonth != null
-                                  ? _monthName(_orderFilterMonth!)
-                                  : 'Mes',
-                              style: TextStyle(
-                                color: _orderFilterMonth != null
-                                    ? AppTheme.neonGreen
-                                    : Colors.white70,
-                                fontSize: 11,
-                              ),
-                            ),
-                            side: BorderSide(
-                                color: _orderFilterMonth != null
-                                    ? AppTheme.neonGreen
-                                    : AppTheme.borderColor),
-                            backgroundColor: _orderFilterMonth != null
-                                ? AppTheme.neonGreen.withOpacity(0.1)
-                                : AppTheme.darkCard,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        OrderKpiDashboard(vendedorCodes: _vendedorCodes),
+        const Divider(color: AppTheme.borderColor, height: 1),
+        OrderFiltersBar(
+          searchQuery: _orderSearch,
+          statusFilter: provider.orderStatusFilter,
+          dateFrom: _orderDateFrom,
+          dateTo: _orderDateTo,
+          minAmount: _orderMinAmount,
+          maxAmount: _orderMaxAmount,
+          sortBy: _orderSortBy,
+          sortOrder: _orderSortOrder,
+          onSearchChanged: (v) {
+            setState(() => _orderSearch = v);
+            _debouncedLoadOrders(provider);
+          },
+          onStatusChanged: (status) {
+            provider.setOrderStatusFilter(status);
+            _loadOrdersWithFilters(provider);
+          },
+          onDateFromChanged: (d) => setState(() => _orderDateFrom = d),
+          onDateToChanged: (d) => setState(() => _orderDateTo = d),
+          onMinAmountChanged: (v) => setState(() => _orderMinAmount = v),
+          onMaxAmountChanged: (v) => setState(() => _orderMaxAmount = v),
+          onSortByChanged: (v) => setState(() => _orderSortBy = v),
+          onSortOrderChanged: (v) => setState(() => _orderSortOrder = v),
+          onApplyAdvanced: () => _loadOrdersWithFilters(provider),
+          onClearAll: () {
+            setState(() {
+              _orderSearch = '';
+              _orderDateFrom = null;
+              _orderDateTo = null;
+              _orderMinAmount = null;
+              _orderMaxAmount = null;
+              _orderSortBy = 'fecha';
+              _orderSortOrder = 'DESC';
+            });
+            provider.setOrderStatusFilter(null);
+            _loadOrdersWithFilters(provider);
+          },
         ),
+        const Divider(color: AppTheme.borderColor, height: 1),
         Expanded(
-          child: _buildOrdersListWithAnalytics(provider),
+          child: RefreshIndicator(
+            color: AppTheme.neonBlue,
+            backgroundColor: AppTheme.darkSurface,
+            onRefresh: () async {
+              await provider.loadOrderStats(
+                vendedorCodes: _vendedorCodes,
+                forceRefresh: true,
+              );
+              _loadOrdersWithFilters(provider);
+            },
+            child: _buildOrdersList(provider),
+          ),
         ),
       ],
     );
   }
 
-  List<OrderSummary> _filteredOrders(List<OrderSummary> all) {
-    var filtered = all;
-
-    // Text filter
-    if (_orderSearch.isNotEmpty) {
-      final q = _orderSearch.toLowerCase();
-      filtered = filtered
-          .where((o) =>
-              o.clienteName.toLowerCase().contains(q) ||
-              o.clienteCode.toLowerCase().contains(q) ||
-              o.numeroPedido.toString().contains(q))
-          .toList();
-    }
-
-    // Date filter
-    if (_orderDateFilter != 'Todo') {
-      final now = DateTime.now();
-      filtered = filtered.where((o) {
-        try {
-          final dateStr =
-              o.fecha.length >= 10 ? o.fecha.substring(0, 10) : o.fecha;
-          final d = DateTime.parse(dateStr);
-          if (_orderDateFilter == 'Rango' && _orderCustomRange != null) {
-            return !d.isBefore(_orderCustomRange!.start) &&
-                !d.isAfter(_orderCustomRange!.end.add(const Duration(days: 1)));
-          }
-          if (_orderDateFilter == 'Ano') {
-            if (_orderFilterYear != null && d.year != _orderFilterYear) {
-              return false;
-            }
-            if (_orderFilterMonth != null && d.month != _orderFilterMonth)
-              return false;
-            return true;
-          }
-          final days = now.difference(d).inDays;
-          if (_orderDateFilter == 'Hoy') {
-            return d.year == now.year &&
-                d.month == now.month &&
-                d.day == now.day;
-          } else if (_orderDateFilter == 'Semana') {
-            return days >= 0 && days <= 7;
-          } else if (_orderDateFilter == 'Mes') {
-            return days >= 0 && days <= 30;
-          }
-        } catch (_) {
-          return false;
-        }
-        return true;
-      }).toList();
-    }
-
-    return filtered;
+  Timer? _debounceTimer;
+  void _debouncedLoadOrders(PedidosProvider provider) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _loadOrdersWithFilters(provider);
+    });
   }
 
-  List<Map<String, dynamic>> _filteredDrafts(List<Map<String, dynamic>> all) {
-    var filtered = all;
-
-    if (_orderSearch.isNotEmpty) {
-      final q = _orderSearch.toLowerCase();
-      filtered = filtered.where((d) {
-        final name = (d['clientName'] ?? '').toString().toLowerCase();
-        final code = (d['clientCode'] ?? '').toString().toLowerCase();
-        final draftKey = (d['draftKey'] ?? '').toString().toLowerCase();
-        return name.contains(q) || code.contains(q) || draftKey.contains(q);
-      }).toList();
-    }
-
-    if (_orderDateFilter != 'Todo') {
-      final now = DateTime.now();
-      filtered = filtered.where((d) {
-        final raw = (d['savedAt'] ?? '').toString();
-        final parsed = DateTime.tryParse(raw);
-        if (parsed == null) return false;
-        final date = DateTime(parsed.year, parsed.month, parsed.day);
-        final today = DateTime(now.year, now.month, now.day);
-        final days = today.difference(date).inDays;
-        if (_orderDateFilter == 'Hoy') {
-          return days == 0;
-        }
-        if (_orderDateFilter == 'Semana') {
-          return days >= 0 && days <= 7;
-        }
-        if (_orderDateFilter == 'Mes') {
-          return days >= 0 && days <= 30;
-        }
-        return true;
-      }).toList();
-    }
-
-    return filtered;
+  void _loadOrdersWithFilters(PedidosProvider provider) {
+    provider.loadOrders(
+      vendedorCodes: _vendedorCodes,
+      status: provider.orderStatusFilter,
+      dateFrom: _orderDateFrom != null
+          ? '${_orderDateFrom!.year}${_orderDateFrom!.month.toString().padLeft(2, '0')}${_orderDateFrom!.day.toString().padLeft(2, '0')}'
+          : null,
+      dateTo: _orderDateTo != null
+          ? '${_orderDateTo!.year}${_orderDateTo!.month.toString().padLeft(2, '0')}${_orderDateTo!.day.toString().padLeft(2, '0')}'
+          : null,
+      search: _orderSearch.isNotEmpty ? _orderSearch : null,
+      minAmount: _orderMinAmount,
+      maxAmount: _orderMaxAmount,
+      sortBy: _orderSortBy,
+      sortOrder: _orderSortOrder,
+      forceRefresh: true,
+    );
   }
 
-  Widget _buildOrdersListWithAnalytics(PedidosProvider provider) {
-    final displayOrders = _filteredOrders(provider.orders);
-    final showDrafts = provider.orderStatusFilter == null ||
-        provider.orderStatusFilter == 'BORRADOR';
-    final displayDrafts = showDrafts
-        ? _filteredDrafts(provider.savedDrafts)
-        : <Map<String, dynamic>>[];
-
-    return RefreshIndicator(
-      color: AppTheme.neonBlue,
-      backgroundColor: AppTheme.darkSurface,
-      onRefresh: () async {
-        await provider.loadOrders(
-          vendedorCodes: _vendedorCodes,
-          status: provider.orderStatusFilter,
-          forceRefresh: true,
+  Widget _buildOrdersList(PedidosProvider provider) {
+    if (provider.isLoadingOrders) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.neonBlue),
+      );
+    }
+    if (provider.orders.isEmpty) {
+      return OrderEmptyState(
+        hasActiveFilters: _orderSearch.isNotEmpty ||
+            provider.orderStatusFilter != null ||
+            _orderDateFrom != null ||
+            _orderDateTo != null ||
+            _orderMinAmount != null ||
+            _orderMaxAmount != null,
+        onClearFilters: () {
+          setState(() {
+            _orderSearch = '';
+            _orderDateFrom = null;
+            _orderDateTo = null;
+            _orderMinAmount = null;
+            _orderMaxAmount = null;
+            _orderSortBy = 'fecha';
+            _orderSortOrder = 'DESC';
+          });
+          provider.setOrderStatusFilter(null);
+          _loadOrdersWithFilters(provider);
+        },
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 16),
+      itemCount: provider.orders.length,
+      itemBuilder: (context, index) {
+        final order = provider.orders[index];
+        return OrderCard(
+          order: order,
+          onTap: () => _showOrderDetail(order),
+          onDuplicate: () => _duplicateOrder(order),
+          onCancel: order.estado != 'ANULADO' && order.estado != 'BORRADOR'
+              ? () => _cancelOrder(order)
+              : null,
+          onViewAlbaran:
+              (order.estado == 'ENVIADO' || order.estado == 'FACTURADO')
+                  ? () => _viewAlbaran(order)
+                  : null,
         );
-        provider.loadAnalytics(_vendedorCodes);
       },
-      child: CustomScrollView(
-        slivers: [
-          // Analytics dashboard
-          SliverToBoxAdapter(
-            child: AnalyticsDashboard(
-              analytics: provider.analytics,
-              isLoading: provider.isLoadingAnalytics,
+    );
+  }
+
+  void _showOrderDetail(OrderSummary order) async {
+    final result = await OrderDetailSheet.show(context, orderId: order.id);
+    if (result == 'cancelled' && mounted) {
+      _loadOrdersWithFilters(context.read<PedidosProvider>());
+    } else if (result != null && result.startsWith('clone:') && mounted) {
+      final cloneId = int.tryParse(result.substring(6));
+      if (cloneId != null) {
+        final prov = context.read<PedidosProvider>();
+        await prov.cloneOrderIntoCart(cloneId);
+        _tabController.animateTo(0);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Pedido #${order.numeroPedidoFormatted} clonado al carrito'),
+              backgroundColor: AppTheme.neonBlue,
             ),
-          ),
-          // Premium Summary KPIs (Mirroring Facturas)
-          SliverToBoxAdapter(
-            child: _buildSummaryCards(displayOrders),
-          ),
-          // Divider
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Divider(color: AppTheme.borderColor, height: 1),
-            ),
-          ),
-          // Orders list
-          if (provider.isLoadingOrders)
-            const SliverFillRemaining(
-              child: Center(
-                  child: CircularProgressIndicator(color: AppTheme.neonBlue)),
-            )
-          else if (displayOrders.isEmpty && displayDrafts.isEmpty)
-            SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.receipt_long_outlined,
-                        color: Colors.white38, size: 48),
-                    const SizedBox(height: 12),
-                    Text('No hay pedidos',
-                        style: TextStyle(
-                            color: Colors.white54,
-                            fontSize: Responsive.fontSize(context,
-                                small: 14, large: 16))),
-                  ],
-                ),
-              ),
-            )
-          else ...[
-            if (displayDrafts.isNotEmpty)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                sliver: SliverToBoxAdapter(
-                  child: Text(
-                    'Borradores locales',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w700,
-                      fontSize:
-                          Responsive.fontSize(context, small: 13, large: 15),
-                    ),
-                  ),
-                ),
-              ),
-            if (displayDrafts.isNotEmpty)
-              SliverPadding(
-                padding: Responsive.contentPadding(context),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (ctx, i) => _buildDraftCard(provider, displayDrafts[i]),
-                    childCount: displayDrafts.length,
-                  ),
-                ),
-              ),
-            if (displayOrders.isNotEmpty)
-              SliverPadding(
-                padding: displayDrafts.isEmpty
-                    ? Responsive.contentPadding(context)
-                    : const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (ctx, i) => _buildOrderCard(displayOrders[i]),
-                    childCount: displayOrders.length,
-                  ),
-                ),
-              ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _duplicateOrder(OrderSummary order) async {
+    final prov = context.read<PedidosProvider>();
+    await prov.cloneOrderIntoCart(order.id);
+    _tabController.animateTo(0);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Pedido #${order.numeroPedidoFormatted} duplicado al carrito'),
+          backgroundColor: AppTheme.neonBlue,
+        ),
+      );
+    }
+  }
+
+  Future<void> _cancelOrder(OrderSummary order) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 22),
+            SizedBox(width: 8),
+            Text('Anular pedido', style: TextStyle(color: Colors.white)),
           ],
+        ),
+        content: Text(
+          '¿Seguro que quieres anular el pedido #${order.numeroPedidoFormatted}?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child:
+                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child:
+                const Text('Anular', style: TextStyle(color: AppTheme.error)),
+          ),
         ],
       ),
     );
-  }
-
-  Widget _buildOrderStatusFilters(PedidosProvider provider) {
-    final statuses = ['BORRADOR', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
-    final statusColors = {
-      'BORRADOR': Colors.orange,
-      'CONFIRMADO': AppTheme.neonBlue,
-      'ENVIADO': AppTheme.neonGreen,
-      'ANULADO': AppTheme.error,
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: AppTheme.darkSurface,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            // "Todos" chip
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilterChip(
-                label: const Text('Todos'),
-                selected: provider.orderStatusFilter == null,
-                selectedColor: AppTheme.neonBlue.withOpacity(0.2),
-                backgroundColor: AppTheme.darkCard,
-                labelStyle: TextStyle(
-                  color: provider.orderStatusFilter == null
-                      ? AppTheme.neonBlue
-                      : Colors.white70,
-                  fontSize: Responsive.fontSize(context, small: 12, large: 14),
-                ),
-                side: BorderSide(
-                  color: provider.orderStatusFilter == null
-                      ? AppTheme.neonBlue
-                      : AppTheme.borderColor,
-                ),
-                onSelected: (_) {
-                  provider.loadOrders(
-                    vendedorCodes: _vendedorCodes,
-                    forceRefresh: true,
-                  );
-                },
-              ),
-            ),
-            ...statuses.map((status) {
-              final isSelected = provider.orderStatusFilter == status;
-              final color = statusColors[status] ?? Colors.white70;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilterChip(
-                  label: Text(status),
-                  selected: isSelected,
-                  selectedColor: color.withOpacity(0.2),
-                  backgroundColor: AppTheme.darkCard,
-                  labelStyle: TextStyle(
-                    color: isSelected ? color : Colors.white70,
-                    fontSize:
-                        Responsive.fontSize(context, small: 12, large: 14),
-                  ),
-                  side: BorderSide(
-                    color: isSelected ? color : AppTheme.borderColor,
-                  ),
-                  onSelected: (_) {
-                    provider.loadOrders(
-                      vendedorCodes: _vendedorCodes,
-                      status: status,
-                      forceRefresh: true,
-                    );
-                  },
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDraftCard(PedidosProvider provider, Map<String, dynamic> draft) {
-    final clientName = (draft['clientName'] ?? '').toString();
-    final clientCode = (draft['clientCode'] ?? '').toString();
-    final lines = (draft['lines'] as List?) ?? const [];
-    final draftKey = (draft['draftKey'] ?? '').toString();
-    final savedAt = DateTime.tryParse((draft['savedAt'] ?? '').toString());
-    final dateLabel = savedAt == null
-        ? ''
-        : '${savedAt.day.toString().padLeft(2, '0')}/${savedAt.month.toString().padLeft(2, '0')}/${savedAt.year} ${savedAt.hour.toString().padLeft(2, '0')}:${savedAt.minute.toString().padLeft(2, '0')}';
-
-    double total = 0;
-    for (final row in lines) {
-      if (row is Map) {
-        final data = Map<String, dynamic>.from(row);
-        final envases = (data['cantidadEnvases'] as num?)?.toDouble() ?? 0;
-        final unidades = (data['cantidadUnidades'] as num?)?.toDouble() ?? 0;
-        final price = (data['precioVenta'] as num?)?.toDouble() ?? 0;
-        total += (envases > 0 ? envases : unidades) * price;
-      }
-    }
-
-    Future<void> restoreDraft() async {
-      provider.loadDraft(draft);
-      _tabController.animateTo(0);
+    if (confirm == true && mounted) {
+      await context.read<PedidosProvider>().cancelExistingOrder(order.id);
+      _loadOrdersWithFilters(context.read<PedidosProvider>());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Borrador cargado en el carrito'),
-            backgroundColor: AppTheme.neonBlue,
+            content: Text('Pedido anulado'),
+            backgroundColor: AppTheme.error,
           ),
         );
       }
     }
+  }
 
-    Future<void> deleteDraft() async {
-      final confirm = await showDialog<bool>(
+  Future<void> _viewAlbaran(OrderSummary order) async {
+    try {
+      final albaranes = await PedidosService.getOrderAlbaran(order.id);
+      if (!mounted) return;
+      if (albaranes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se encontró albarán vinculado'),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+        return;
+      }
+      showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppTheme.darkSurface,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Eliminar borrador',
+          title: const Text('Albaranes vinculados',
               style: TextStyle(color: Colors.white)),
-          content: const Text(
-            'Este borrador local se eliminara definitivamente.',
-            style: TextStyle(color: Colors.white70),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: albaranes.map((a) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.darkCard,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "${a['serie'] ?? ''} ${a['numeroAlbaran'] ?? ''}",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Fecha: ${a['fecha'] ?? ''}",
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 12),
+                      ),
+                      Text(
+                        "Importe: ${PedidosFormatters.money((a['importe'] as num? ?? 0).toDouble())}",
+                        style: const TextStyle(
+                            color: AppTheme.neonGreen, fontSize: 12),
+                      ),
+                      Text(
+                        "Estado: ${a['situacion'] ?? ''}",
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar',
-                  style: TextStyle(color: Colors.white54)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Eliminar',
-                  style: TextStyle(color: AppTheme.error)),
+              onPressed: () => Navigator.pop(ctx),
+              child:
+                  const Text('Cerrar', style: TextStyle(color: Colors.white54)),
             ),
           ],
         ),
       );
-
-      if (confirm != true || draftKey.isEmpty) return;
-      await provider.deleteDraft(draftKey);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
     }
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(
-          color: Colors.orange.withOpacity(0.2),
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Color accent bar on the left
-          Positioned(
-            left: 0,
-            top: 20,
-            bottom: 20,
-            child: Container(
-              width: 4,
-              decoration: BoxDecoration(
-                color: Colors.orange,
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(4),
-                  bottomRight: Radius.circular(4),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.orange.withOpacity(0.5), blurRadius: 4),
-                ],
-              ),
-            ),
-          ),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: restoreDraft,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Icon Box
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.orange.withOpacity(0.5),
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.edit_note_rounded,
-                            color: Colors.orange,
-                            size: 26,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-
-                        // Info
-                        Expanded(
-                          flex: 4,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                clientName.isNotEmpty ? clientName : clientCode,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize:
-                                      Responsive.isSmall(context) ? 16 : 18,
-                                  color: const Color(0xFF90CAF9),
-                                  letterSpacing: 0.3,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange.withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(
-                                          color:
-                                              Colors.orange.withOpacity(0.3)),
-                                    ),
-                                    child: const Text(
-                                      'BORRADOR',
-                                      style: TextStyle(
-                                        color: Colors.orange,
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  if (dateLabel.isNotEmpty)
-                                    Text(
-                                      dateLabel,
-                                      style: const TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(width: 8),
-
-                        // Amount
-                        Expanded(
-                          flex: 2,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  PedidosFormatters.money(total),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize:
-                                        Responsive.isSmall(context) ? 18 : 20,
-                                    color: AppTheme.neonGreen,
-                                  ),
-                                  textAlign: TextAlign.right,
-                                ),
-                              ),
-                              Text(
-                                '${lines.length} líneas',
-                                style: const TextStyle(
-                                    color: Colors.white38, fontSize: 10),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-                    Divider(height: 1, color: Colors.white.withOpacity(0.05)),
-                    const SizedBox(height: 12),
-
-                    // Actions
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        _buildActionButton(
-                          icon: Icons.restore,
-                          label: 'Cargar',
-                          onTap: restoreDraft,
-                          isPrimary: false,
-                        ),
-                        const SizedBox(width: 8),
-                        _buildActionButton(
-                          icon: Icons.delete_outline,
-                          label: 'Eliminar',
-                          onTap: deleteDraft,
-                          isPrimary: false,
-                          colorOverride: AppTheme.error,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
-  Widget _buildOrderCard(OrderSummary order) {
-    final statusColors = {
-      'BORRADOR': const Color(0xFFF97316),
-      'PENDIENTE': const Color(0xFFEAB308),
-      'CONFIRMADO': const Color(0xFF3B82F6),
-      'ENVIADO': const Color(0xFF22C55E),
-      'ANULADO': const Color(0xFFEF4444),
-    };
-    final color = statusColors[order.estado] ?? const Color(0xFF9CA3AF);
-    final marginColor = order.margen >= 15
-        ? const Color(0xFF22C55E)
-        : order.margen >= 5
-            ? const Color(0xFFF97316)
-            : const Color(0xFFEF4444);
-    final statusLabels = {
-      'BORRADOR': 'Borrador',
-      'PENDIENTE': 'Pendiente',
-      'CONFIRMADO': 'Confirmado',
-      'ENVIADO': 'Enviado',
-      'ANULADO': 'Anulado',
-    };
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-        border: Border.all(
-          color: color.withOpacity(0.25),
-          width: 1,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () async {
-              final result =
-                  await OrderDetailSheet.show(context, orderId: order.id);
-              if (result == 'cancelled' && mounted) {
-                context.read<PedidosProvider>().loadOrders(
-                      vendedorCodes: _vendedorCodes,
-                      forceRefresh: true,
-                    );
-              } else if (result != null &&
-                  result.startsWith('clone:') &&
-                  mounted) {
-                final cloneId = int.tryParse(result.substring(6));
-                if (cloneId != null) {
-                  final prov = context.read<PedidosProvider>();
-                  await prov.cloneOrderIntoCart(cloneId);
-                  _tabController.animateTo(0);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                            'Pedido #${order.numeroPedido} clonado al carrito'),
-                        backgroundColor: const Color(0xFF3B82F6),
-                      ),
-                    );
-                  }
-                }
-              }
-            },
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  color.withOpacity(0.2),
-                                  color.withOpacity(0.1)
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: color.withOpacity(0.4)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: color,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                          color: color.withOpacity(0.6),
-                                          blurRadius: 4)
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  statusLabels[order.estado] ?? order.estado,
-                                  style: TextStyle(
-                                    color: color,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Spacer(),
-                          Icon(Icons.calendar_today_outlined,
-                              size: 14, color: Colors.white.withOpacity(0.4)),
-                          const SizedBox(width: 6),
-                          Text(
-                            order.fecha.length > 10
-                                ? order.fecha.substring(0, 10)
-                                : order.fecha,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  color.withOpacity(0.2),
-                                  color.withOpacity(0.08)
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: color.withOpacity(0.3)),
-                            ),
-                            child: Icon(
-                              Icons.receipt_long_rounded,
-                              color: color,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            flex: 4,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  order.clienteName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 17,
-                                    color: Colors.white,
-                                    letterSpacing: 0.3,
-                                    height: 1.2,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  '#${order.numeroPedido}',
-                                  style: TextStyle(
-                                    color: color.withOpacity(0.8),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                PedidosFormatters.money(order.total),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 22,
-                                  color: Color(0xFF22C55E),
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: marginColor.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '${order.margen.toStringAsFixed(1)}%',
-                                  style: TextStyle(
-                                    color: marginColor,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.03),
-                    border: Border(
-                      top: BorderSide(color: Colors.white.withOpacity(0.08)),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      _buildPremiumActionBtn(
-                        icon: Icons.visibility_outlined,
-                        label: 'Ver',
-                        onTap: () =>
-                            OrderDetailSheet.show(context, orderId: order.id),
-                      ),
-                      _buildPremiumDivider(),
-                      _buildPremiumActionBtn(
-                        icon: Icons.copy,
-                        label: 'Clonar',
-                        onTap: () async {
-                          final prov = context.read<PedidosProvider>();
-                          await prov.cloneOrderIntoCart(order.id);
-                          _tabController.animateTo(0);
-                        },
-                      ),
-                      _buildPremiumDivider(),
-                      _buildPremiumActionBtn(
-                        icon: Icons.picture_as_pdf_outlined,
-                        label: 'PDF',
-                        onTap: () async {
-                          final detail =
-                              await PedidosService.getOrderDetail(order.id);
-                          await OrderPdfGenerator.generateAndShare(
-                              context, detail);
-                        },
-                      ),
-                      if (order.estado == 'BORRADOR' ||
-                          order.estado == 'PENDIENTE') ...[
-                        _buildPremiumDivider(),
-                        _buildPremiumActionBtn(
-                          icon: Icons.hourglass_empty,
-                          label: 'Pendiente',
-                          onTap: () =>
-                              _showPendingApprovalDialog(context, order),
-                          color: const Color(0xFFEAB308),
-                        ),
-                        _buildPremiumDivider(),
-                        _buildPremiumActionBtn(
-                          icon: Icons.send,
-                          label: 'Enviar',
-                          onTap: () => _showSendOrderDialog(context, order),
-                          color: const Color(0xFF3B82F6),
-                          isPrimary: true,
-                        ),
-                        _buildPremiumDivider(),
-                        _buildPremiumActionBtn(
-                          icon: Icons.cancel_outlined,
-                          label: 'Anular',
-                          onTap: () => _showCancelOrderDialog(context, order),
-                          color: const Color(0xFFEF4444),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPremiumDivider() =>
-      Container(width: 1, height: 44, color: Colors.white.withOpacity(0.1));
-
-  Widget _buildPremiumActionBtn({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    Color? color,
-    bool isPrimary = false,
-  }) {
-    final btnColor = color ?? Colors.white.withOpacity(0.6);
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 20, color: btnColor),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: btnColor,
-                  fontSize: 11,
-                  fontWeight: isPrimary ? FontWeight.w700 : FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showPendingApprovalDialog(BuildContext context, OrderSummary order) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.hourglass_empty, color: Color(0xFFEAB308)),
-            SizedBox(width: 12),
-            Text('Marcar Pendiente',
-                style: TextStyle(color: Colors.white, fontSize: 18)),
-          ],
-        ),
-        content: Text(
-          '¿Marcar el pedido #${order.numeroPedido} como Pendiente de aprobación?',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child:
-                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEAB308)),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final prov = context.read<PedidosProvider>();
-              await prov.setOrderPendingApproval(order.id);
-              prov.loadOrders(
-                  vendedorCodes: _vendedorCodes, forceRefresh: true);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        'Pedido #${order.numeroPedido} marcado como pendiente'),
-                    backgroundColor: const Color(0xFFEAB308),
-                  ),
-                );
-              }
-            },
-            child: const Text('Confirmar',
-                style: TextStyle(
-                    color: Color(0xFF1E293B), fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSendOrderDialog(BuildContext context, OrderSummary order) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.send, color: Color(0xFF3B82F6)),
-            SizedBox(width: 12),
-            Text('Enviar Pedido',
-                style: TextStyle(color: Colors.white, fontSize: 18)),
-          ],
-        ),
-        content: Text(
-          '¿Enviar el pedido #${order.numeroPedido}? Esta acción no se puede deshacer.',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child:
-                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3B82F6)),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final prov = context.read<PedidosProvider>();
-              await prov.sendOrder(order.id);
-              prov.loadOrders(
-                  vendedorCodes: _vendedorCodes, forceRefresh: true);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        'Pedido #${order.numeroPedido} enviado correctamente'),
-                    backgroundColor: const Color(0xFF22C55E),
-                  ),
-                );
-              }
-            },
-            child: const Text('Enviar',
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCancelOrderDialog(BuildContext context, OrderSummary order) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.cancel_outlined, color: Color(0xFFEF4444)),
-            SizedBox(width: 12),
-            Text('Anular Pedido',
-                style: TextStyle(color: Colors.white, fontSize: 18)),
-          ],
-        ),
-        content: Text(
-          '¿Anular el pedido #${order.numeroPedido}? Esta acción no se puede deshacer.',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child:
-                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444)),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final prov = context.read<PedidosProvider>();
-              await PedidosService.updateOrderStatus(order.id, 'ANULADO');
-              prov.loadOrders(
-                  vendedorCodes: _vendedorCodes, forceRefresh: true);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Pedido #${order.numeroPedido} anulado'),
-                    backgroundColor: const Color(0xFFEF4444),
-                  ),
-                );
-              }
-            },
-            child: const Text('Anular',
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryCards(List<OrderSummary> orders) {
-    final totalOrders = orders.length;
-    final totalAmount = orders.fold(0.0, (sum, o) => sum + o.total);
-    final avgMargin = orders.isEmpty
-        ? 0.0
-        : orders.fold(0.0, (sum, o) => sum + o.margen) / orders.length;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final columns = constraints.maxWidth < 400 ? 2 : 3;
-          final itemWidth =
-              (constraints.maxWidth - (columns - 1) * 8) / columns;
-          return Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildSummaryItem(
-                icon: Icons.receipt_long,
-                label: 'Pedidos',
-                value: '$totalOrders',
-                color: AppTheme.neonBlue,
-                width: itemWidth,
-              ),
-              _buildSummaryItem(
-                icon: Icons.euro,
-                label: 'Total Periodo',
-                value: PedidosFormatters.money(totalAmount),
-                color: AppTheme.neonGreen,
-                width: itemWidth,
-              ),
-              _buildSummaryItem(
-                icon: Icons.analytics_outlined,
-                label: 'Margen Medio',
-                value: '${avgMargin.toStringAsFixed(1)}%',
-                color: Colors.orange,
-                width: itemWidth,
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSummaryItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-    double? width,
-  }) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E2746),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 10,
-                fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required bool isPrimary,
-    Color? colorOverride,
-  }) {
-    final color =
-        colorOverride ?? (isPrimary ? AppTheme.neonBlue : Colors.white70);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isPrimary ? color.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isPrimary
-                ? color.withOpacity(0.4)
-                : Colors.white.withOpacity(0.1),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _monthName(int month) {
-    const months = [
-      'Ene',
-      'Feb',
-      'Mar',
-      'Abr',
-      'May',
-      'Jun',
-      'Jul',
-      'Ago',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dic'
-    ];
-    return months[month - 1];
+  String _formatTime(DateTime dt) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   String _formatUc(double value) {

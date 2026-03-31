@@ -796,6 +796,18 @@ class OrderSummary {
   final double total;
   final double margen;
   final int lineCount;
+  // New fields
+  final String serie;
+  final int ejercicio;
+  final String numeroPedidoFormatted;
+  final String fechaFormatted;
+  final double base;
+  final double iva;
+  final double costo;
+  final String observaciones;
+  final int tarifa;
+  final String formaPago;
+  final String origen;
 
   OrderSummary({
     required this.id,
@@ -809,6 +821,17 @@ class OrderSummary {
     required this.total,
     this.margen = 0,
     this.lineCount = 0,
+    this.serie = 'M',
+    this.ejercicio = 0,
+    this.numeroPedidoFormatted = '',
+    this.fechaFormatted = '',
+    this.base = 0,
+    this.iva = 0,
+    this.costo = 0,
+    this.observaciones = '',
+    this.tarifa = 1,
+    this.formaPago = '02',
+    this.origen = 'A',
   });
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
@@ -824,6 +847,71 @@ class OrderSummary {
       total: _toDouble(json['total']),
       margen: _toDouble(json['margen']),
       lineCount: _toInt(json['lineCount']),
+      serie: (json['serie'] ?? 'M').toString().trim(),
+      ejercicio: _toInt(json['ejercicio']),
+      numeroPedidoFormatted: (json['numeroPedidoFormatted'] ?? '').toString(),
+      fechaFormatted: (json['fechaFormatted'] ?? '').toString(),
+      base: _toDouble(json['base']),
+      iva: _toDouble(json['iva']),
+      costo: _toDouble(json['costo']),
+      observaciones: (json['observaciones'] ?? '').toString().trim(),
+      tarifa: _toInt(json['tarifa']),
+      formaPago: (json['formaPago'] ?? '02').toString().trim(),
+      origen: (json['origen'] ?? 'A').toString().trim(),
+    );
+  }
+}
+
+/// Order statistics
+class OrderStats {
+  final int totalOrders;
+  final double totalAmount;
+  final double totalBase;
+  final double totalIva;
+  final double avgMargin;
+  final double avgTicket;
+  final Map<String, int> byStatus;
+  final List<Map<String, dynamic>> dailyTrend;
+  final List<Map<String, dynamic>> topClients;
+  final double trendOrdersPct;
+  final double trendAmountPct;
+
+  OrderStats({
+    required this.totalOrders,
+    required this.totalAmount,
+    required this.totalBase,
+    required this.totalIva,
+    required this.avgMargin,
+    required this.avgTicket,
+    required this.byStatus,
+    required this.dailyTrend,
+    required this.topClients,
+    this.trendOrdersPct = 0,
+    this.trendAmountPct = 0,
+  });
+
+  factory OrderStats.fromJson(Map<String, dynamic> json) {
+    final trendOrdersPct = _toDouble(json['trendOrdersPct']);
+    final trendAmountPct = _toDouble(json['trendAmountPct']);
+    return OrderStats(
+      totalOrders: _toInt(json['totalOrders']),
+      totalAmount: _toDouble(json['totalAmount']),
+      totalBase: _toDouble(json['totalBase']),
+      totalIva: _toDouble(json['totalIva']),
+      avgMargin: _toDouble(json['avgMargin']),
+      avgTicket: _toDouble(json['avgTicket']),
+      byStatus: (json['byStatus'] as Map? ?? {}).map(
+        (k, v) => MapEntry(
+            k.toString(), v is int ? v : int.tryParse(v.toString()) ?? 0),
+      ),
+      dailyTrend: (json['dailyTrend'] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>))
+          .toList(),
+      topClients: (json['topClients'] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>))
+          .toList(),
+      trendOrdersPct: trendOrdersPct,
+      trendAmountPct: trendAmountPct,
     );
   }
 }
@@ -1040,15 +1128,29 @@ class PedidosService {
     int limit = 50,
     int offset = 0,
     bool forceRefresh = false,
+    String? dateFrom,
+    String? dateTo,
+    String? search,
+    double? minAmount,
+    double? maxAmount,
+    String sortBy = 'fecha',
+    String sortOrder = 'DESC',
   }) async {
     final params = <String, dynamic>{
       'vendedorCodes': vendedorCodes,
       'limit': limit.toString(),
       'offset': offset.toString(),
+      'sortBy': sortBy,
+      'sortOrder': sortOrder,
     };
     if (status != null) params['status'] = status;
     if (year != null) params['year'] = year.toString();
     if (month != null) params['month'] = month.toString();
+    if (dateFrom != null) params['dateFrom'] = dateFrom;
+    if (dateTo != null) params['dateTo'] = dateTo;
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    if (minAmount != null) params['minAmount'] = minAmount.toStringAsFixed(2);
+    if (maxAmount != null) params['maxAmount'] = maxAmount.toStringAsFixed(2);
 
     try {
       final response = await ApiClient.get(
@@ -1066,6 +1168,44 @@ class PedidosService {
     } catch (e) {
       debugPrint('[PedidosService] Error getOrders: $e');
       rethrow;
+    }
+  }
+
+  static Future<OrderStats> getOrderStats({
+    required String vendedorCodes,
+    String? dateFrom,
+    String? dateTo,
+    bool forceRefresh = false,
+  }) async {
+    final params = <String, dynamic>{'vendedorCodes': vendedorCodes};
+    if (dateFrom != null) params['dateFrom'] = dateFrom;
+    if (dateTo != null) params['dateTo'] = dateTo;
+
+    try {
+      final response = await ApiClient.get(
+        '$_base/orders/stats',
+        queryParameters: params,
+        cacheKey:
+            'pedidos:stats:$vendedorCodes:${dateFrom ?? ''}:${dateTo ?? ''}',
+        cacheTTL: const Duration(minutes: 5),
+        forceRefresh: forceRefresh,
+      );
+      return OrderStats.fromJson(response['stats'] as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint('[PedidosService] Error getOrderStats: $e');
+      rethrow;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getOrderAlbaran(int orderId) async {
+    try {
+      final response = await ApiClient.get('$_base/$orderId/albaran');
+      return (response['albaranes'] as List? ?? [])
+          .map((a) => Map<String, dynamic>.from(a as Map))
+          .toList();
+    } catch (e) {
+      debugPrint('[PedidosService] Error getOrderAlbaran: $e');
+      return [];
     }
   }
 
