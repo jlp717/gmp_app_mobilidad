@@ -49,8 +49,12 @@ void main() async {
   // Initialize Hive cache
   await CacheService.init();
 
-  // Initialize API client
+  // Initialize API client - FORCE PRODUCTION MODE
+  // This ensures the app always uses https://api.mari-pepa.com
   await ApiClient.initialize();
+  
+  // Debug: Log the active API URL
+  debugPrint('[MAIN] API Base URL: ${ApiClient.dio.options.baseUrl}');
 
   // Initialize date formatting for Spanish
   await initializeDateFormatting('es', null);
