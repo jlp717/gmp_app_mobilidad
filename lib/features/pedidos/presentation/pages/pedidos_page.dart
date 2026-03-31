@@ -250,35 +250,35 @@ class _PedidosPageState extends State<PedidosPage>
       }
       return;
     }
-    Product? product;
 
-    for (final p in provider.products) {
-      if (p.code == productCode) {
-        product = p;
-        break;
+    // Always fetch fresh product detail to ensure correct price for current client
+    Product? product;
+    try {
+      final detail = await PedidosService.getProductDetail(
+        productCode,
+        clientCode: provider.clientCode,
+      );
+      product = detail.product;
+    } catch (_) {
+      // Fallback: try to find in cached catalog
+      for (final p in provider.products) {
+        if (p.code == productCode) {
+          product = p;
+          break;
+        }
       }
     }
 
-    if (product == null) {
-      try {
-        final detail = await PedidosService.getProductDetail(
-          productCode,
-          clientCode: provider.hasClient ? provider.clientCode : null,
-        );
-        product = detail.product;
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'No se pudo cargar el artículo ${fallbackName.isNotEmpty ? fallbackName : productCode}',
-              ),
-              backgroundColor: AppTheme.error,
-            ),
-          );
-        }
-        return;
-      }
+    if (product == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo cargar el artículo ${fallbackName.isNotEmpty ? fallbackName : productCode}',
+          ),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
     }
 
     if (mounted && product != null) {
@@ -1776,6 +1776,9 @@ class _PedidosPageState extends State<PedidosPage>
             builder: (ctx, prov, _) {
               if (!prov.hasClient) return const SizedBox.shrink();
               final promos = prov.activePromotionsList;
+              // Count unique promotions by promoCode, not individual items
+              final uniquePromoCodes =
+                  promos.map((p) => p.promoCode).toSet().length;
               return Stack(
                 children: [
                   IconButton(
@@ -1828,7 +1831,7 @@ class _PedidosPageState extends State<PedidosPage>
                         shape: BoxShape.circle,
                       ),
                       child: Text(
-                        '${promos.length}',
+                        '$uniquePromoCodes',
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,

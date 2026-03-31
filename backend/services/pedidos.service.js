@@ -1458,6 +1458,7 @@ async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
         SELECT ANODOCUMENTO AS Y, MESDOCUMENTO AS M, DIADOCUMENTO AS D,
             COUNT(*) AS ORDERS, COALESCE(SUM(IMPORTETOTAL), 0) AS AMOUNT
         FROM JAVIER.PEDIDOS_CAB ${where ? where + ' AND' : 'WHERE'} ANODOCUMENTO > 0
+        GROUP BY ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO
         ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
         FETCH FIRST 7 ROWS ONLY`;
 
@@ -2108,7 +2109,11 @@ async function getComplementaryProducts(productCodes, clientCode) {
     const sql = `
         SELECT TRIM(L2.CODIGOARTICULO) AS code,
                TRIM(A.DESCRIPCIONARTICULO) AS NAME,
-               COUNT(DISTINCT L2.CODIGOCLIENTEALBARAN || CAST(L2.ANODOCUMENTO AS CHAR(4)) || CAST(L2.NUMERODOCUMENTO AS CHAR(6))) AS cooccurrences
+               COUNT(DISTINCT L2.CODIGOCLIENTEALBARAN || CAST(L2.ANODOCUMENTO AS CHAR(4)) || CAST(L2.NUMERODOCUMENTO AS CHAR(6))) AS cooccurrences,
+               COALESCE(T.PRECIOTARIFA, 0) AS price,
+               A.UNIDADESCAJA AS unitsPerBox,
+               COALESCE(S.ENVASES_DISP, 0) AS stockEnvases,
+               COALESCE(S.UNIDADES_DISP, 0) AS stockUnidades
         FROM DSEDAC.LINDTO L1
         JOIN DSEDAC.LINDTO L2
             ON L2.CODIGOCLIENTEALBARAN = L1.CODIGOCLIENTEALBARAN
@@ -2116,13 +2121,21 @@ async function getComplementaryProducts(productCodes, clientCode) {
             AND L2.NUMERODOCUMENTO = L1.NUMERODOCUMENTO
             AND TRIM(L2.CODIGOARTICULO) NOT IN (${codeList})
         JOIN DSEDAC.ART A ON TRIM(A.CODIGOARTICULO) = TRIM(L2.CODIGOARTICULO)
+        LEFT JOIN DSEDAC.ARA T ON TRIM(L2.CODIGOARTICULO) = TRIM(T.CODIGOARTICULO) AND T.CODIGOTARIFA = 1
+        LEFT JOIN (
+            SELECT CODIGOARTICULO,
+                SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
+                SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
+            FROM DSEDAC.ARO WHERE CODIGOALMACEN = 1
+            GROUP BY CODIGOARTICULO
+        ) S ON TRIM(L2.CODIGOARTICULO) = TRIM(S.CODIGOARTICULO)
         WHERE TRIM(L1.CODIGOARTICULO) IN (${codeList})
           AND L1.ANODOCUMENTO >= YEAR(CURRENT_DATE) - 1
           AND L1.TIPOVENTA IN ('CC','VC')
           AND L1.CLASELINEA IN ('AB','VT')
           AND L2.CLASELINEA IN ('AB','VT')
           AND A.ANOBAJA = 0
-        GROUP BY L2.CODIGOARTICULO, A.DESCRIPCIONARTICULO
+        GROUP BY L2.CODIGOARTICULO, A.DESCRIPCIONARTICULO, T.PRECIOTARIFA, A.UNIDADESCAJA, S.ENVASES_DISP, S.UNIDADES_DISP
         HAVING COUNT(DISTINCT L2.CODIGOCLIENTEALBARAN || CAST(L2.ANODOCUMENTO AS CHAR(4)) || CAST(L2.NUMERODOCUMENTO AS CHAR(6))) >= 3
         ORDER BY cooccurrences DESC
         FETCH FIRST 10 ROWS ONLY
@@ -2137,6 +2150,10 @@ async function getComplementaryProducts(productCodes, clientCode) {
             code: (r.CODE || '').trim(),
             name: (r.NAME || '').trim(),
             cooccurrences: parseInt(r.COOCCURRENCES) || 0,
+            price: parseFloat(r.PRICE) || 0,
+            unitsPerBox: parseFloat(r.UNITSPERBOX) || 1,
+            stockEnvases: parseFloat(r.STOCKENVASES) || 0,
+            stockUnidades: parseFloat(r.STOCKUNIDADES) || 0,
             source: 'complementary',
         }));
     } catch (error) {

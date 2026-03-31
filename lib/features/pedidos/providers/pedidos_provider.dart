@@ -30,6 +30,7 @@ class PedidosProvider with ChangeNotifier {
   List<OrderSummary> _orders = [];
   bool _isLoadingOrders = false;
   String? _orderStatusFilter;
+  String _vendedorCodes = 'ALL';
 
   // ── Order Stats ──
   OrderStats? _orderStats;
@@ -98,6 +99,7 @@ class PedidosProvider with ChangeNotifier {
   List<OrderSummary> get orders => _orders;
   bool get isLoadingOrders => _isLoadingOrders;
   String? get orderStatusFilter => _orderStatusFilter;
+  String get vendedorCodes => _vendedorCodes;
   OrderStats? get orderStats => _orderStats;
   bool get isLoadingStats => _isLoadingStats;
   List<Recommendation> get clientHistory => _clientHistory;
@@ -723,6 +725,9 @@ class PedidosProvider with ChangeNotifier {
       _complementaryProducts = [];
       _clientBalance = {};
 
+      // Refresh orders list + stats in background
+      refreshOrdersAndStats();
+
       // Return the confirmed order result
       if (confirmedResult != null && confirmedResult['header'] != null) {
         return confirmedResult['header'] as Map<String, dynamic>;
@@ -751,6 +756,7 @@ class PedidosProvider with ChangeNotifier {
     String sortBy = 'fecha',
     String sortOrder = 'DESC',
   }) async {
+    _vendedorCodes = vendedorCodes;
     _isLoadingOrders = true;
     _orderStatusFilter = status;
     _error = null;
@@ -775,6 +781,19 @@ class PedidosProvider with ChangeNotifier {
       _isLoadingOrders = false;
       notifyListeners();
     }
+  }
+
+  /// Refresh stats + orders list after any order state change
+  Future<void> refreshOrdersAndStats() async {
+    await loadOrders(
+      vendedorCodes: _vendedorCodes,
+      status: _orderStatusFilter,
+      forceRefresh: true,
+    );
+    await loadOrderStats(
+      vendedorCodes: _vendedorCodes,
+      forceRefresh: true,
+    );
   }
 
   Future<void> loadOrderStats({
@@ -827,6 +846,8 @@ class PedidosProvider with ChangeNotifier {
       );
       notifyListeners();
     }
+    // Refresh stats + full list in background
+    refreshOrdersAndStats();
   }
 
   Future<void> confirmExistingOrder(int orderId, String saleType) async {
@@ -851,6 +872,8 @@ class PedidosProvider with ChangeNotifier {
       );
       notifyListeners();
     }
+    // Refresh stats + full list in background
+    refreshOrdersAndStats();
   }
 
   Future<void> setOrderPendingApproval(int orderId) async {
@@ -874,6 +897,7 @@ class PedidosProvider with ChangeNotifier {
       );
       notifyListeners();
     }
+    refreshOrdersAndStats();
   }
 
   Future<void> sendOrder(int orderId) async {
@@ -897,6 +921,7 @@ class PedidosProvider with ChangeNotifier {
       );
       notifyListeners();
     }
+    refreshOrdersAndStats();
   }
 
   // ── Recommendations ──
