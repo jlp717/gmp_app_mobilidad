@@ -4,10 +4,9 @@ import 'package:flutter/foundation.dart';
 /// Secure storage wrapper with error handling
 /// Uses FlutterSecureStorage for encrypted storage
 class SecureStorage {
-  static const _storage = FlutterSecureStorage(
+  static const FlutterSecureStorage _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(
       encryptedSharedPreferences: true,
-      preferencesName: 'gmp_secure_prefs',
     ),
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock_this_device,

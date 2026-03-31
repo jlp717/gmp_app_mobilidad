@@ -85,6 +85,25 @@ class NetworkService {
     return _activeBaseUrl ?? productionUrl;
   }
 
+  /// Obtiene el servidor activo actual (para UI de settings)
+  static ServerConfig? get activeServer {
+    if (_forceProduction || !kDebugMode) {
+      return _devServers.firstWhere((s) => s.baseUrl == productionUrl);
+    }
+    return _devServers.firstWhere(
+      (s) => s.baseUrl == _activeBaseUrl,
+      orElse: () => _devServers.first,
+    );
+  }
+
+  /// Obtiene todos los servidores disponibles (para UI de settings)
+  static List<ServerConfig> get availableServers {
+    if (_forceProduction || !kDebugMode) {
+      return _devServers.where((s) => !s.debugOnly).toList();
+    }
+    return _devServers;
+  }
+
   /// Indica si el servicio está inicializado
   static bool get isInitialized => _isInitialized;
 

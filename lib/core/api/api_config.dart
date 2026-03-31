@@ -94,6 +94,18 @@ class ApiConfig {
     _productionUrl = url;
   }
 
+  /// Refresca la conexión (para cuando cambia la red)
+  static Future<void> refreshConnection() async {
+    await NetworkService.initialize();
+  }
+
+  /// Fuerza un servidor manualmente (solo debug)
+  static Future<bool> setServerManually(String baseUrl) async {
+    if (!kDebugMode) return false; // Solo en debug
+    // En producción, siempre usa productionUrl
+    return false;
+  }
+
   // =============================================================================
   // ENDPOINTS DE LA API
   // =============================================================================
@@ -108,6 +120,7 @@ class ApiConfig {
   static const String recentSales = '/dashboard/recent-sales';
   static const String salesEvolution = '/dashboard/sales-evolution';
   static const String yoyComparison = '/analytics/yoy-comparison';
+  static const String matrixData = '/dashboard/matrix-data';
 
   // Clients Endpoints
   static const String clientsList = '/clients';
@@ -117,29 +130,65 @@ class ApiConfig {
   static const String routerCalendar = '/router/calendar';
   static const String ruteroWeek = '/rutero/week';
   static const String ruteroDay = '/rutero/day';
+  static const String ruteroConfig = '/rutero/config';
+  static const String ruteroClientStatus = '/rutero/client';
+  static const String ruteroClientDetail = '/rutero/client';
+  static const String ruteroCounts = '/rutero/counts';
+  static const String ruteroPositions = '/rutero/positions';
+  static const String ruteroMoveClients = '/rutero/move_clients';
+  static const String ruteroVendedores = '/rutero/vendedores';
 
   // Objectives Endpoints
   static const String objectives = '/objectives';
   static const String objectivesByClient = '/objectives/by-client';
   static const String objectivesEvolution = '/objectives/evolution';
+  static const String clientMatrix = '/objectives/client-matrix';
+  static const String objectivesPopulations = '/objectives/populations';
 
   // Analytics Endpoints
   static const String topProducts = '/analytics/top-products';
   static const String topClients = '/analytics/top-clients';
+  static const String margins = '/analytics/margins';
+  static const String trends = '/analytics/trends';
 
   // Products Endpoints
   static const String productsList = '/products';
   static const String salesHistory = '/sales-history';
 
+  // Vendedores Endpoints
+  static const String vendedores = '/vendedores';
+
   // Pedidos Endpoints
   static const String pedidosList = '/pedidos';
   static const String pedidosCreate = '/pedidos/create';
+  static const String pedidosProducts = '/pedidos/products';
+  static const String pedidosRecommendations = '/pedidos/recommendations';
+  static const String pedidosPromotions = '/pedidos/promotions';
+  static const String pedidosClientBalance = '/pedidos/client-balance';
+  static const String pedidosFamilies = '/pedidos/families';
+  static const String pedidosBrands = '/pedidos/brands';
 
   // Commissions Endpoints
   static const String commissionsSummary = '/commissions/summary';
+  static const String commissionsYears = '/commissions/years';
+
+  // KPI Alerts Endpoints
+  static const String kpiAlerts = '/kpi/alerts';
+  static const String kpiDashboard = '/kpi/dashboard';
+  static const String kpiEtl = '/kpi/etl';
+  static const String kpiHealth = '/kpi/health';
+
+  // Facturas Endpoints
+  static const String facturasList = '/facturas';
+  static const String facturasYears = '/facturas/years';
+  static const String facturasSummary = '/facturas/summary';
+
+  // Export Endpoints
+  static const String exportClientReport = '/export/client-report';
 
   // Health Check
   static const String health = '/health';
+  static const String healthVersionCheck = '/health/version-check';
 
   // =============================================================================
   // TIMEOUTS
