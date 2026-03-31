@@ -157,7 +157,14 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
       if (success) {
         if (mounted) {
             Navigator.of(context).pop();
+            // Navigate to dashboard - the redirect will handle auth state
             context.go('/dashboard');
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${auth.error ?? "Failed to switch role"}'))
+          );
         }
       }
     } catch (e) {

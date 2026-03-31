@@ -116,7 +116,7 @@ class _GMPSalesAnalyticsAppState extends State<GMPSalesAnalyticsApp> {
 
   GoRouter _createRouter() {
     return GoRouter(
-      initialLocation: '/login',
+      initialLocation: '/dashboard',
       routes: [
         GoRoute(
           path: '/login',
@@ -127,51 +127,17 @@ class _GMPSalesAnalyticsAppState extends State<GMPSalesAnalyticsApp> {
           ),
         ),
         GoRoute(
-          path: '/',
-          name: 'main',
+          path: '/dashboard',
+          name: 'dashboard',
           pageBuilder: (context, state) => MaterialPage(
             key: state.pageKey,
             child: MainShell(),
           ),
-          routes: [
-            GoRoute(
-              path: 'dashboard',
-              name: 'dashboard',
-              pageBuilder: (context, state) => MaterialPage(
-                key: state.pageKey,
-                child: Center(child: Text('Dashboard')),
-              ),
-            ),
-            GoRoute(
-              path: 'pedidos',
-              name: 'pedidos',
-              pageBuilder: (context, state) => MaterialPage(
-                key: state.pageKey,
-                child: Center(child: Text('Pedidos')),
-              ),
-            ),
-            GoRoute(
-              path: 'cobros',
-              name: 'cobros',
-              pageBuilder: (context, state) => MaterialPage(
-                key: state.pageKey,
-                child: Center(child: Text('Cobros')),
-              ),
-            ),
-            GoRoute(
-              path: 'entregas',
-              name: 'entregas',
-              pageBuilder: (context, state) => MaterialPage(
-                key: state.pageKey,
-                child: Center(child: Text('Entregas')),
-              ),
-            ),
-          ],
         ),
       ],
       redirect: (context, state) {
-        // TODO: Implementar lógica de redirección basada en auth state
-        final isLoggedIn = false; // ref.read(authStateProvider).value?.isAuthenticated ?? false;
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        final isLoggedIn = auth.isAuthenticated;
         final isLoggingIn = state.matchedLocation == '/login';
 
         if (!isLoggedIn && !isLoggingIn) {
@@ -179,7 +145,7 @@ class _GMPSalesAnalyticsAppState extends State<GMPSalesAnalyticsApp> {
         }
 
         if (isLoggedIn && isLoggingIn) {
-          return '/';
+          return '/dashboard';
         }
 
         return null;
