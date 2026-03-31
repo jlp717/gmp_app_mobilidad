@@ -2,17 +2,23 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../data/pedidos_service.dart';
 import '../utils/pedidos_formatters.dart';
+import 'promotion_detail_page.dart';
 
 class PromotionsListPage extends StatefulWidget {
   final List<PromotionItem> promotions;
   final Future<void> Function(String code, String name) onProductTap;
+  final Future<String?> Function(String code, String name, double qty)?
+      onAddGift;
   final bool? Function(String code)? hasStockResolver;
+  final double Function(String code)? qtyInOrderResolver;
 
   const PromotionsListPage({
     Key? key,
     required this.promotions,
     required this.onProductTap,
+    this.onAddGift,
     this.hasStockResolver,
+    this.qtyInOrderResolver,
   }) : super(key: key);
 
   @override
@@ -163,9 +169,28 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: group.items.length == 1
-            ? () => widget.onProductTap(first.code, first.name)
-            : null,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => PromotionDetailPage(
+                promoType: group.promoType,
+                promoCode: group.promoCode,
+                promoDesc: group.promoDesc,
+                dateFrom: group.dateFrom,
+                dateTo: group.dateTo,
+                minQty: group.minQty,
+                giftQty: group.giftQty,
+                cumulative: group.cumulative,
+                items: group.items,
+                onProductTap: widget.onProductTap,
+                onAddGift: widget.onAddGift,
+                hasStockResolver: widget.hasStockResolver,
+                qtyInOrderResolver: widget.qtyInOrderResolver,
+              ),
+            ),
+          );
+        },
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -267,6 +292,28 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                 ),
               ],
               const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                        color: AppTheme.borderColor.withOpacity(0.5)),
+                  ),
+                  child: const Text(
+                    'Ver detalle',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
@@ -325,11 +372,13 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     final grouped = <String, List<PromotionItem>>{};
 
     for (final p in promos) {
+      String norm(String s) =>
+          s.trim().toUpperCase().replaceAll(RegExp(r'\s+'), ' ');
       // Group GIFT promos by promoCode (one promo = one group)
       // Group PRICE promos by desc+price combo
       final key = p.promoCode.isNotEmpty
-          ? '${p.promoType}|${p.promoCode}'
-          : '${p.promoType}|${p.promoDesc}|${p.promoPrice}|${p.regularPrice}|${p.dateFrom}|${p.dateTo}';
+          ? '${norm(p.promoType)}|${norm(p.promoCode)}|${norm(p.dateFrom)}|${norm(p.dateTo)}|${p.minQty}|${p.giftQty}'
+          : '${norm(p.promoType)}|${norm(p.promoDesc)}|${p.promoPrice}|${p.regularPrice}|${norm(p.dateFrom)}|${norm(p.dateTo)}';
       grouped.putIfAbsent(key, () => []).add(p);
     }
 
@@ -372,11 +421,15 @@ class _PromotionGroup {
   });
 
   String get promoType => items.first.promoType;
+  String get promoCode => items.first.promoCode;
   String get promoDesc => items.first.promoDesc;
   double get promoPrice => items.first.promoPrice;
   double get regularPrice => items.first.regularPrice;
   String get dateFrom => items.first.dateFrom;
   String get dateTo => items.first.dateTo;
+  double get minQty => items.first.minQty;
+  double get giftQty => items.first.giftQty;
+  bool get cumulative => items.first.cumulative;
 
   double get discountPct {
     if (regularPrice <= 0 || promoPrice <= 0 || promoPrice >= regularPrice) {

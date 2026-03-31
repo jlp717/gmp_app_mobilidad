@@ -193,7 +193,9 @@ class _PedidosPageState extends State<PedidosPage>
   void _loadInitialData() {
     final provider = context.read<PedidosProvider>();
     final codes = _vendedorCodes;
-    provider.loadProducts(vendedorCodes: codes, reset: true);
+    if (provider.hasClient) {
+      provider.loadProducts(vendedorCodes: codes, reset: true, forceRefresh: true);
+    }
     provider.loadFilters();
     provider.loadOrders(vendedorCodes: codes);
     provider.loadPromotions();
@@ -203,11 +205,22 @@ class _PedidosPageState extends State<PedidosPage>
     if (_catalogScrollController.position.pixels >=
         _catalogScrollController.position.maxScrollExtent - 200) {
       final provider = context.read<PedidosProvider>();
+      if (!provider.hasClient) return;
       provider.loadMoreProducts(_vendedorCodes);
     }
   }
 
   void _onProductTap(Product product) {
+    final provider = context.read<PedidosProvider>();
+    if (!provider.hasClient) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona un cliente antes de anadir productos'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
     _showAddToOrderDialog(product);
   }
 
@@ -217,6 +230,17 @@ class _PedidosPageState extends State<PedidosPage>
     if (productCode.isEmpty) return;
 
     final provider = context.read<PedidosProvider>();
+    if (!provider.hasClient) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Selecciona un cliente antes de anadir productos'),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+      }
+      return;
+    }
     Product? product;
 
     for (final p in provider.products) {
@@ -251,6 +275,69 @@ class _PedidosPageState extends State<PedidosPage>
     if (mounted && product != null) {
       _onProductTap(product);
     }
+  }
+
+  Future<String?> _addGiftPromotionLine(
+      String code, String fallbackName, double qty) async {
+    if (qty <= 0) return null;
+    final provider = context.read<PedidosProvider>();
+    if (!provider.hasClient) {
+      return 'Selecciona un cliente primero';
+    }
+
+    final productCode = code.trim();
+    if (productCode.isEmpty) {
+      return 'Codigo de articulo invalido';
+    }
+
+    for (final line in provider.lines) {
+      if (line.codigoArticulo == productCode &&
+          line.claseLinea.toUpperCase() == 'VT') {
+        return 'El articulo ya esta en el pedido como venta (VT)';
+      }
+    }
+
+    Product? product;
+    for (final p in provider.products) {
+      if (p.code == productCode) {
+        product = p;
+        break;
+      }
+    }
+
+    if (product == null) {
+      try {
+        final detail = await PedidosService.getProductDetail(
+          productCode,
+          clientCode: provider.clientCode,
+        );
+        product = detail.product;
+      } catch (_) {
+        return 'No se pudo cargar el articulo ${fallbackName.isNotEmpty ? fallbackName : productCode}';
+      }
+    }
+
+    if (product == null) {
+      return 'No se pudo cargar el articulo ${fallbackName.isNotEmpty ? fallbackName : productCode}';
+    }
+
+    final unit = product.availableUnits.contains('CAJAS')
+        ? 'CAJAS'
+        : product.availableUnits.first;
+    final envases = unit == 'CAJAS' ? qty : 0.0;
+    final unidades = unit == 'CAJAS'
+        ? qty * (product.unitsPerBox > 0 ? product.unitsPerBox : 1)
+        : qty;
+
+    final err = provider.addLine(product, envases, unidades, unit, 0);
+    if (err != null) return err;
+
+    final idx =
+        provider.lines.lastIndexWhere((line) => line.codigoArticulo == productCode);
+    if (idx >= 0) {
+      provider.updateLineClaseLinea(idx, 'SC');
+    }
+    return null;
   }
 
   void _showAddToOrderDialog(Product product) {
@@ -1675,7 +1762,7 @@ class _PedidosPageState extends State<PedidosPage>
           Consumer<PedidosProvider>(
             builder: (ctx, prov, _) {
               final promos = prov.activePromotionsList;
-              if (promos.isEmpty) return const SizedBox.shrink();
+              if (!prov.hasClient || promos.isEmpty) return const SizedBox.shrink();
               return Stack(
                 children: [
                   IconButton(
@@ -1690,6 +1777,8 @@ class _PedidosPageState extends State<PedidosPage>
                             promotions: promos,
                             onProductTap: (code, name) =>
                                 _openProductByCode(code, fallbackName: name),
+                            onAddGift: (code, name, qty) =>
+                                _addGiftPromotionLine(code, name, qty),
                             hasStockResolver: (code) {
                               for (final p in prov.products) {
                                 if (p.code == code) return p.hasStock;
@@ -1700,6 +1789,16 @@ class _PedidosPageState extends State<PedidosPage>
                                 }
                               }
                               return null;
+                            },
+                            qtyInOrderResolver: (code) {
+                              for (final line in prov.lines) {
+                                if (line.codigoArticulo == code) {
+                                  return line.cantidadEnvases > 0
+                                      ? line.cantidadEnvases
+                                      : line.cantidadUnidades;
+                                }
+                              }
+                              return 0;
                             },
                           ),
                         ),
@@ -1930,6 +2029,44 @@ class _PedidosPageState extends State<PedidosPage>
   }
 
   Widget _buildCatalogPanel(PedidosProvider provider) {
+    if (!provider.hasClient) {
+      return Column(
+        children: [
+          _buildOrderHeader(provider),
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.lock_person_outlined,
+                        color: Colors.white38, size: 56),
+                    SizedBox(height: 12),
+                    Text(
+                      'Selecciona un cliente para cargar catalogo, tarifas y promociones.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Sin cliente no se permite anadir articulos.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       children: [
         // Client & sale type header

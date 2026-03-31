@@ -1396,6 +1396,11 @@ async function getBrands() {
 
 async function getActivePromotions(clientCode) {
     try {
+        const trimmedClientCode = String(clientCode || '').trim();
+        if (!trimmedClientCode) {
+            return [];
+        }
+
         const now = new Date();
         const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate(); // YYYYMMDD
 
@@ -1435,9 +1440,9 @@ async function getActivePromotions(clientCode) {
             ) RES ON TRIM(P.CODIGOARTICULO) = TRIM(RES.CODIGOARTICULO)
             WHERE P.C9INFC <= ? AND (P.C9FIFC >= ? OR P.C9FIFC = 0)`;
 
-        if (clientCode) {
+        if (trimmedClientCode) {
             sqlCpes += ` AND TRIM(P.CODIGOCLIENTE) = ?`;
-            paramsCpes.push(clientCode.trim());
+            paramsCpes.push(trimmedClientCode);
         }
 
         // --- GIFT promotions from PMRL1 (header) + PMPL1 (product lines) ---
@@ -1461,9 +1466,9 @@ async function getActivePromotions(clientCode) {
               AND (H.P1FNFC >= ? OR H.P1FNFC = 0)`;
         paramsPmr.push(today);
 
-        if (clientCode) {
+        if (trimmedClientCode) {
             sqlPmrHeaders += ` AND TRIM(H.CODIGOCLIENTE) = ?`;
-            paramsPmr.push(clientCode.trim());
+            paramsPmr.push(trimmedClientCode);
         }
 
         // PMPL1: Get ALL products for all active promos (we'll match in JS)
@@ -1628,7 +1633,24 @@ async function getActivePromotions(clientCode) {
             }
         }
 
-        return [...pricePromos, ...giftPromos];
+        const dedup = new Map();
+        for (const item of [...pricePromos, ...giftPromos]) {
+            if (!(item.code || '').trim()) continue;
+            const key = [
+                item.promoType || '',
+                item.promoCode || '',
+                item.code || '',
+                item.dateFrom || '',
+                item.dateTo || '',
+                item.minQty || 0,
+                item.giftQty || 0,
+                item.promoPrice || 0,
+                item.regularPrice || 0,
+            ].join('|');
+            if (!dedup.has(key)) dedup.set(key, item);
+        }
+
+        return Array.from(dedup.values());
 
     } catch (error) {
         logger.warn(`[PEDIDOS] getActivePromotions error (returning []): ${error.message}`);

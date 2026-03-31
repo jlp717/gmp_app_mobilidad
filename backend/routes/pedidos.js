@@ -362,7 +362,11 @@ router.get('/product-history/:productCode/:clientCode', async (req, res) => {
 router.get('/promotions', async (req, res) => {
     try {
         const { clientCode } = req.query;
-        const promotions = await pedidosService.getActivePromotions(clientCode);
+        const trimmedClient = clientCode ? String(clientCode).trim() : '';
+        if (!trimmedClient) {
+            return res.json({ success: true, promotions: [] });
+        }
+        const promotions = await pedidosService.getActivePromotions(trimmedClient);
         res.json({ success: true, promotions });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /promotions: ${error.message}`);

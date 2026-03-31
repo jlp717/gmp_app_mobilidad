@@ -337,6 +337,13 @@ class PedidosProvider with ChangeNotifier {
 
   String? addLine(Product product, double cantidadEnvases,
       double cantidadUnidades, String unidadMedida, double precioVenta) {
+    if (!hasClient) {
+      const msg = 'Debes seleccionar un cliente antes de anadir productos.';
+      _error = msg;
+      notifyListeners();
+      return msg;
+    }
+
     final unit = unidadMedida.trim().isEmpty
         ? 'CAJAS'
         : unidadMedida.trim().toUpperCase();
@@ -578,6 +585,9 @@ class PedidosProvider with ChangeNotifier {
     _clientName = null;
     _saleType = 'CC';
     _globalDiscountPct = 0;
+    _products = [];
+    _productOffset = 0;
+    _hasMoreProducts = false;
     _isDirty = false;
     _lastAutoSaved = null;
     _complementaryProducts = [];
@@ -936,16 +946,25 @@ class PedidosProvider with ChangeNotifier {
   }
 
   Future<void> loadPromotions() async {
+    if (!hasClient) {
+      _activePromotionsList.clear();
+      _activePromotions.clear();
+      notifyListeners();
+      return;
+    }
+
     try {
       final response = await ApiClient.get('/pedidos/promotions',
-          queryParameters:
-              _clientCode != null ? {'clientCode': _clientCode} : null);
+          queryParameters: {'clientCode': _clientCode});
       final list = response['promotions'] as List? ?? [];
       _activePromotionsList.clear();
       _activePromotions.clear();
+      final seen = <String>{};
       for (final p in list) {
         final item = PromotionItem.fromJson(p as Map<String, dynamic>);
-        if (item.code.isNotEmpty) {
+        final key =
+            '${item.promoType}|${item.promoCode}|${item.code}|${item.dateFrom}|${item.dateTo}|${item.minQty}|${item.giftQty}|${item.promoPrice}';
+        if (item.code.isNotEmpty && seen.add(key)) {
           _activePromotionsList.add(item);
           _activePromotions.putIfAbsent(item.code, () => item);
         }
