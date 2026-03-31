@@ -14,16 +14,16 @@ enum ApiEnvironment {
 
 class ApiConfig {
   // =============================================================================
-  // CONFIGURACIÓN POR DEFECTO: PRODUCCIÓN
+  // CONFIGURACIÓN POR DEFECTO: PRODUCCIÓN (HARDCODED)
   // =============================================================================
-  // Los comerciales usan la app desde cualquier lugar → SIEMPRE producción
+  // Los comerciales usan la app desde CUALQUIER LUGAR → SIEMPRE producción
   static ApiEnvironment _currentEnvironment = ApiEnvironment.production;
 
   // -----------------------------------------------------------------------------
   // PRODUCCION (Cloudflare Named Tunnel — dominio fijo permanente)
   // Accesible desde cualquier lugar con internet
   // -----------------------------------------------------------------------------
-  static String _productionUrl = 'https://api.mari-pepa.com';
+  static String _productionUrl = 'https://api.mari-pepa.com/api'; // YA incluye /api
   static const int _serverPort = 3334;
 
   // -----------------------------------------------------------------------------
@@ -55,9 +55,8 @@ class ApiConfig {
   /// Obtiene la URL base activa
   static String get baseUrl {
     if (_currentEnvironment == ApiEnvironment.production) {
-      return _productionUrl.endsWith('/api') 
-          ? _productionUrl 
-          : '$_productionUrl/api';
+      // Producción: URL hardcoded (ya incluye /api)
+      return _productionUrl;
     }
     // Desarrollo: usar detección automática
     return NetworkService.activeBaseUrl;
