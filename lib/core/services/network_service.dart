@@ -4,31 +4,44 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Servicio de red inteligente con detección automática de servidor
-/// Soporta: WSA, Emulador Android, Dispositivo físico, Producción
+/// 
+/// ARQUITECTURA PROFESIONAL:
+/// - PRODUCCIÓN: Siempre usa https://api.mari-pepa.com (Cloudflare Tunnel)
+/// - DESARROLLO: Detecta automáticamente el servidor local
+/// 
+/// Los comerciales usan la app desde cualquier lugar → SIEMPRE producción
+/// Solo en desarrollo se prueba LAN/localhost
 class NetworkService {
   static const String _prefsKeyActiveServer = 'network_active_server';
   static const String _prefsKeyLastHealthCheck = 'network_last_health_check';
-  
+
   static String? _activeBaseUrl;
   static bool _isInitialized = false;
   
-  /// Lista de servidores ordenados por prioridad
-  /// El sistema probará cada uno en orden hasta encontrar uno que funcione
-  static final List<ServerConfig> _servers = [
-    // 1. Producción (Cloudflare Named Tunnel — dominio fijo permanente)
+  // Flag para forzar producción (usado en release builds)
+  static bool _forceProduction = !kDebugMode;
+
+  /// URL de producción (Cloudflare Named Tunnel - accesible desde cualquier lugar)
+  static const String productionUrl = 'https://api.mari-pepa.com/api';
+  
+  /// Servidores SOLO para desarrollo (debug)
+  /// En producción (release) NUNCA se usan estas IPs
+  static final List<ServerConfig> _devServers = [
+    // 1. Producción (también disponible en debug para testing)
     ServerConfig(
       name: 'Producción (api.mari-pepa.com)',
-      baseUrl: 'https://api.mari-pepa.com/api',
+      baseUrl: productionUrl,
       priority: 1,
       isSecure: true,
     ),
 
-    // 2. Servidor LAN directo (para red local)
+    // 2. Servidor LAN directo (solo desarrollo en oficina)
     ServerConfig(
       name: 'Servidor Local (LAN)',
-      baseUrl: 'http://192.168.1.238:3334/api',
+      baseUrl: 'http://192.168.1.52:3334/api',
       priority: 2,
       isSecure: false,
+      debugOnly: true,
     ),
 
     // 3. Emulador Android Studio
@@ -38,15 +51,17 @@ class NetworkService {
       priority: 3,
       isSecure: false,
       isEmulatorOnly: true,
+      debugOnly: true,
     ),
 
-    // 4. WSA (Windows Subsystem for Android) - IP especial Hyper-V
+    // 4. WSA (Windows Subsystem for Android)
     ServerConfig(
       name: 'WSA (Windows)',
       baseUrl: 'http://172.31.192.1:3334/api',
       priority: 4,
       isSecure: false,
       isWSAOnly: true,
+      debugOnly: true,
     ),
 
     // 5. Localhost (desarrollo local)
@@ -55,198 +70,175 @@ class NetworkService {
       baseUrl: 'http://127.0.0.1:3334/api',
       priority: 5,
       isSecure: false,
+      debugOnly: true,
     ),
   ];
-  
+
   /// Obtiene la URL base activa (con cache)
+  /// 
+  /// En PRODUCCIÓN (release): Siempre retorna productionUrl
+  /// En DESARROLLO (debug): Retorna el mejor servidor detectado
   static String get activeBaseUrl {
-    return _activeBaseUrl ?? _servers.first.baseUrl;
+    if (_forceProduction || !kDebugMode) {
+      return productionUrl;
+    }
+    return _activeBaseUrl ?? productionUrl;
   }
-  
+
   /// Indica si el servicio está inicializado
   static bool get isInitialized => _isInitialized;
-  
+
   /// Inicializa el servicio de red
-  /// Carga la última configuración funcional o detecta automáticamente
+  /// 
+  /// En PRODUCCIÓN: Usa directamente productionUrl
+  /// En DESARROLLO: Detecta el mejor servidor disponible
   static Future<void> initialize() async {
     if (_isInitialized) return;
-    
+
+    // =============================================================================
+    // PRODUCCIÓN (Release build) - Usar directamente productionUrl
+    // =============================================================================
+    if (_forceProduction || !kDebugMode) {
+      _activeBaseUrl = productionUrl;
+      _isInitialized = true;
+      debugPrint('[NetworkService] ✅ PRODUCCIÓN: $productionUrl');
+      return;
+    }
+
+    // =============================================================================
+    // DESARROLLO (Debug build) - Detectar mejor servidor
+    // =============================================================================
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedUrl = prefs.getString(_prefsKeyActiveServer);
-      
-      if (savedUrl != null && savedUrl.isNotEmpty) {
-        // Verificar si el servidor guardado sigue funcionando
+
+      // Si hay un servidor guardado de desarrollo, verificar si funciona
+      if (savedUrl != null && savedUrl.isNotEmpty && savedUrl != productionUrl) {
         final isHealthy = await _checkHealth(savedUrl);
         if (isHealthy) {
           _activeBaseUrl = savedUrl;
           _isInitialized = true;
-          debugPrint('[NetworkService] ✅ Usando servidor guardado: $savedUrl');
+          debugPrint('[NetworkService] ✅ DESARROLLO: Usando servidor guardado: $savedUrl');
           return;
         }
       }
-      
+
       // Si no hay servidor guardado o no funciona, detectar automáticamente
       await detectBestServer();
-      
+
     } catch (e) {
       debugPrint('[NetworkService] ⚠️ Error inicializando: $e');
-      // Usar producción como fallback
-      _activeBaseUrl = _servers.first.baseUrl;
+      // Fallback a producción incluso en debug
+      _activeBaseUrl = productionUrl;
       _isInitialized = true;
     }
   }
-  
+
   /// Detecta el mejor servidor disponible probando cada uno en orden
-  static Future<String?> detectBestServer({bool saveResult = true}) async {
-    debugPrint('[NetworkService] 🔍 Detectando mejor servidor...');
-    
-    for (final server in _servers) {
-      // Saltar servidores específicos de plataforma si no aplica
-      if (server.isEmulatorOnly && !_isRunningOnEmulator()) continue;
-      if (server.isWSAOnly && !_isRunningOnWSA()) continue;
-      
-      debugPrint('[NetworkService] Probando: ${server.name} (${server.baseUrl})');
-      
+  /// Solo se usa en DESARROLLO. En producción siempre va directo a productionUrl.
+  static Future<void> detectBestServer() async {
+    debugPrint('[NetworkService] 🔍 Detectando servidor (DEBUG MODE)...');
+
+    for (final server in _devServers) {
+      // Skip servidores debug-only si no estamos en debug
+      if (server.debugOnly && !kDebugMode) continue;
+
+      // Skip emuladores si no es emulador
+      if (server.isEmulatorOnly && !kIsWeb) {
+        // Check if running on Android emulator
+        final isEmulator = await _isRunningOnEmulator();
+        if (!isEmulator) continue;
+      }
+
       final isHealthy = await _checkHealth(server.baseUrl);
       if (isHealthy) {
         _activeBaseUrl = server.baseUrl;
         _isInitialized = true;
         
-        if (saveResult) {
-          await _saveActiveServer(server.baseUrl);
-        }
+        // Guardar preferencia
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_prefsKeyActiveServer, server.baseUrl);
         
-        debugPrint('[NetworkService] ✅ Servidor activo: ${server.name}');
-        return server.baseUrl;
+        debugPrint('[NetworkService] ✅ Servidor detectado: ${server.name}');
+        return;
       }
     }
-    
-    debugPrint('[NetworkService] ❌ Ningún servidor disponible');
-    return null;
+
+    // Si ningún servidor funciona, usar producción como fallback
+    _activeBaseUrl = productionUrl;
+    _isInitialized = true;
+    debugPrint('[NetworkService] ⚠️ Fallback a producción: $productionUrl');
   }
-  
-  /// Verifica la salud de un servidor específico
+
+  /// Verifica si un servidor está saludable
   static Future<bool> _checkHealth(String baseUrl) async {
     try {
-      final uri = Uri.parse('$baseUrl/health');
-      final response = await http.get(uri).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => http.Response('timeout', 408),
+      final url = Uri.parse('${baseUrl.replaceFirst('/api', '')}/api/health');
+      final response = await http.get(url).timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => http.Response('Timeout', 408),
       );
-      
-      return response.statusCode == 200;
+
+      if (response.statusCode == 200) {
+        final body = response.body.toLowerCase();
+        return body.contains('ok') || body.contains('success') || body.contains('connected');
+      }
+      return false;
     } catch (e) {
-      debugPrint('[NetworkService] Health check failed for $baseUrl: $e');
       return false;
     }
   }
-  
-  /// Guarda el servidor activo en preferencias
-  static Future<void> _saveActiveServer(String url) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefsKeyActiveServer, url);
-      await prefs.setString(_prefsKeyLastHealthCheck, DateTime.now().toIso8601String());
-    } catch (e) {
-      debugPrint('[NetworkService] Error guardando servidor: $e');
-    }
+
+  /// Detecta si se está ejecutando en un emulador Android
+  static Future<bool> _isRunningOnEmulator() async {
+    // En un emulador Android, 10.0.2.2 es localhost
+    return await _checkHealth('http://10.0.2.2:3334/api/health');
   }
-  
-  /// Fuerza un nuevo servidor manualmente
-  static Future<bool> setServer(String baseUrl) async {
-    final isHealthy = await _checkHealth(baseUrl);
+
+  /// Fuerza la reconexión al servidor de producción
+  /// Útil cuando el usuario cambia de red (WiFi → Datos)
+  static Future<bool> forceProductionServer() async {
+    debugPrint('[NetworkService] 🔄 Forzando servidor de producción...');
+    
+    final isHealthy = await _checkHealth(productionUrl);
     if (isHealthy) {
-      _activeBaseUrl = baseUrl;
-      await _saveActiveServer(baseUrl);
+      _activeBaseUrl = productionUrl;
+      _forceProduction = true;
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsKeyActiveServer, productionUrl);
+      
+      debugPrint('[NetworkService] ✅ Producción forzada: $productionUrl');
       return true;
     }
+    
+    debugPrint('[NetworkService] ❌ Producción no disponible');
     return false;
   }
-  
-  /// Agrega un servidor personalizado (WSA con IP detectada, etc)
-  static void addCustomServer(String name, String baseUrl, {int priority = 0}) {
-    // Insertar al inicio si prioridad es 0, sino ordenar
-    _servers.insert(0, ServerConfig(
-      name: name,
-      baseUrl: baseUrl,
-      priority: priority,
-      isSecure: baseUrl.startsWith('https'),
-    ));
-  }
-  
-  /// Obtiene la lista de servidores disponibles
-  static List<ServerConfig> get availableServers => List.unmodifiable(_servers);
-  
-  /// Obtiene el servidor actualmente activo
-  static ServerConfig? get activeServer {
-    try {
-      return _servers.firstWhere((s) => s.baseUrl == _activeBaseUrl);
-    } catch (_) {
-      return null;
-    }
-  }
-  
-  /// Re-detecta el servidor (útil cuando cambia la red)
-  static Future<void> refreshConnection() async {
-    _isInitialized = false;
-    _activeBaseUrl = null;
-    await initialize();
-  }
-  
-  /// Detecta si estamos en un emulador Android
-  static bool _isRunningOnEmulator() {
-    // En release mode, asumimos que no es emulador
-    if (kReleaseMode) return false;
-    
-    // Heurística simple: si hay ciertos archivos del emulador
-    try {
-      return Platform.isAndroid && !kReleaseMode;
-    } catch (_) {
-      return false;
-    }
-  }
-  
-  /// Detecta si estamos en WSA (Windows Subsystem for Android)
-  static bool _isRunningOnWSA() {
-    try {
-      if (!Platform.isAndroid) return false;
-      
-      // WSA tiene características únicas que podemos detectar
-      // Por ejemplo, el modelo del dispositivo contiene "Subsystem"
-      // Pero es difícil de detectar con certeza, así que lo probamos siempre
-      return true; // Probar siempre la IP de WSA
-    } catch (_) {
-      return false;
-    }
-  }
-  
-  /// Obtiene información de diagnóstico de red
+
+  /// Obtiene diagnósticos de red para debugging
   static Future<Map<String, dynamic>> getDiagnostics() async {
-    final results = <String, dynamic>{};
-    
-    results['activeServer'] = _activeBaseUrl;
-    results['isInitialized'] = _isInitialized;
-    results['platform'] = Platform.operatingSystem;
-    
-    // Probar cada servidor
-    final serverTests = <Map<String, dynamic>>[];
-    for (final server in _servers) {
-      final isHealthy = await _checkHealth(server.baseUrl);
-      serverTests.add({
-        'name': server.name,
-        'url': server.baseUrl,
-        'status': isHealthy ? 'OK' : 'FAIL',
-        'isActive': server.baseUrl == _activeBaseUrl,
-      });
+    final diagnostics = <String, dynamic>{
+      'activeBaseUrl': _activeBaseUrl,
+      'isInitialized': _isInitialized,
+      'forceProduction': _forceProduction,
+      'isDebugMode': kDebugMode,
+      'productionUrl': productionUrl,
+    };
+
+    // Check health de todos los servidores
+    final healthChecks = <String, bool>{};
+    for (final server in _devServers) {
+      if (server.debugOnly && !kDebugMode) continue;
+      healthChecks[server.name] = await _checkHealth(server.baseUrl);
     }
-    results['servers'] = serverTests;
-    
-    return results;
+    diagnostics['serverHealth'] = healthChecks;
+
+    return diagnostics;
   }
 }
 
-/// Configuración de un servidor
+/// Configuración de servidor
 class ServerConfig {
   final String name;
   final String baseUrl;
@@ -254,13 +246,15 @@ class ServerConfig {
   final bool isSecure;
   final bool isEmulatorOnly;
   final bool isWSAOnly;
-  
-  const ServerConfig({
+  final bool debugOnly;
+
+  ServerConfig({
     required this.name,
     required this.baseUrl,
     required this.priority,
     this.isSecure = false,
     this.isEmulatorOnly = false,
     this.isWSAOnly = false,
+    this.debugOnly = false,
   });
 }

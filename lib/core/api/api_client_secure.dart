@@ -88,7 +88,7 @@ class ApiClient {
       final client = HttpClient();
       client.badCertificateCallback = (X509Certificate cert, String host, int port) {
         // Allow development IPs without pinning
-        const devHosts = ['127.0.0.1', '10.0.2.2', '192.168.1.238', '172.31.192.1', 'localhost'];
+        const devHosts = ['127.0.0.1', '10.0.2.2', '192.168.1.52', '172.31.192.1', 'localhost'];
         if (devHosts.contains(host)) return true;
 
         // Production: Validate certificate

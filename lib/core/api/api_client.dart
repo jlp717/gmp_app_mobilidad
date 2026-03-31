@@ -78,7 +78,7 @@ class ApiClient {
       final client = HttpClient();
       client.badCertificateCallback = (X509Certificate cert, String host, int port) {
         // Allow development IPs without pinning
-        const devHosts = ['127.0.0.1', '10.0.2.2', '192.168.1.238', '172.31.192.1', 'localhost'];
+        const devHosts = ['127.0.0.1', '10.0.2.2', '192.168.1.52', '172.31.192.1', 'localhost'];
         if (devHosts.contains(host)) return true;
         
         // Production: pin certificate SHA256 fingerprint
@@ -343,18 +343,38 @@ class ApiClient {
 
   static ApiException _handleError(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout) {
-      return ApiException('Timeout de conexión - Verifica tu red',
-          statusCode: 0);
+      return ApiException(
+        'Timeout de conexión. Verifica tu conexión a internet e inténtalo de nuevo.',
+        statusCode: 0
+      );
     } else if (e.type == DioExceptionType.connectionError) {
-      return ApiException('Error de conexión - Verifica tu red WiFi',
-          statusCode: 0);
+      // Verificar si es error de socket (sin internet)
+      if (e.error is SocketException || 
+          (e.error?.toString().contains('SocketException') ?? false)) {
+        return ApiException(
+          'No hay conexión a internet. Verifica tu WiFi o datos móviles.',
+          statusCode: 0
+        );
+      }
+      return ApiException(
+        'Error de conexión. Verifica tu conexión a internet.',
+        statusCode: 0
+      );
     } else if (e.type == DioExceptionType.receiveTimeout) {
-      return ApiException('El servidor está tardando demasiado', statusCode: 0);
+      return ApiException(
+        'El servidor está tardando demasiado. Inténtalo de nuevo.',
+        statusCode: 0
+      );
+    } else if (e.type == DioExceptionType.sendTimeout) {
+      return ApiException(
+        'Error al enviar datos. Verifica tu conexión.',
+        statusCode: 0
+      );
     } else if (e.response != null) {
       final statusCode = e.response?.statusCode ?? 0;
       final data = e.response?.data;
 
-      // Extract server error message (include details for debugging)
+      // Extract server error message
       String? serverMessage;
       if (data is Map<String, dynamic>) {
         final error = data['error'] as String?;
@@ -365,29 +385,59 @@ class ApiClient {
       }
 
       if (statusCode == 401) {
-        // Trigger global logout on 401, unless it's the login endpoint
         final isLoginRequest = e.requestOptions.path.contains('/auth/login');
         if (!isLoginRequest) {
           onUnauthorized?.call();
         }
-        return ApiException(serverMessage ?? 'Credenciales inválidas',
-            statusCode: 401);
+        return ApiException(
+          serverMessage ?? 'Credenciales inválidas. Verifica usuario y PIN.',
+          statusCode: 401
+        );
       } else if (statusCode == 403) {
-        return ApiException(serverMessage ?? 'Acceso denegado',
-            statusCode: 403);
+        return ApiException(
+          serverMessage ?? 'Acceso denegado. No tienes permisos.',
+          statusCode: 403
+        );
+      } else if (statusCode == 404) {
+        return ApiException(
+          serverMessage ?? 'Recurso no encontrado.',
+          statusCode: 404
+        );
       } else if (statusCode == 429) {
         return ApiException(
-            serverMessage ?? 'Demasiados intentos - Espera un momento',
-            statusCode: 429);
+          serverMessage ?? 'Demasiados intentos. Espera un momento.',
+          statusCode: 429
+        );
+      } else if (statusCode >= 500) {
+        return ApiException(
+          'Error del servidor ($statusCode). Inténtalo más tarde.',
+          statusCode: statusCode
+        );
       }
-      return ApiException(serverMessage ?? 'Error: $statusCode',
-          statusCode: statusCode);
+      return ApiException(
+        serverMessage ?? 'Error ($statusCode)',
+        statusCode: statusCode
+      );
     } else if (e.type == DioExceptionType.unknown) {
-      if (e.error.toString().contains('SocketException')) {
-        return ApiException('No se pudo conectar al servidor', statusCode: 0);
+      final errorMsg = e.error?.toString().toLowerCase() ?? '';
+      if (errorMsg.contains('socket')) {
+        return ApiException(
+          'No hay conexión a internet. Verifica WiFi o datos móviles.',
+          statusCode: 0
+        );
+      } else if (errorMsg.contains('ssl') || errorMsg.contains('certificate')) {
+        return ApiException(
+          'Error de seguridad. Verifica tu conexión.',
+          statusCode: 0
+        );
       }
     }
-    return ApiException('Error de red', statusCode: 0);
+    
+    // Default error
+    return ApiException(
+      'Error de conexión. Verifica tu internet e inténtalo de nuevo.',
+      statusCode: 0
+    );
   }
 
   /// Deduplicated GET request - prevents duplicate concurrent API calls

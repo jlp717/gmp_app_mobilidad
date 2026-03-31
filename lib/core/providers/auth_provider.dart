@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import '../api/api_client.dart';
 import '../api/api_config.dart';
 import '../models/user_model.dart';
@@ -91,6 +92,14 @@ class AuthProvider with ChangeNotifier {
     try {
       if (kDebugMode) debugPrint('[AuthProvider] Calling API login...');
 
+      // Validate input
+      if (username.isEmpty || password.isEmpty) {
+        _error = 'Usuario y contraseña requeridos';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
       final response = await ApiClient.post(
         ApiConfig.login,
         {'username': username, 'password': password},
@@ -99,7 +108,15 @@ class AuthProvider with ChangeNotifier {
       if (kDebugMode)
         debugPrint('[AuthProvider] Response received: ${response.keys}');
 
-      if (response != null && response['user'] != null) {
+      // Validate response
+      if (response == null) {
+        _error = 'No se pudo conectar con el servidor';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (response['user'] != null) {
         _currentUser =
             UserModel.fromJson(response['user'] as Map<String, dynamic>);
 
@@ -109,16 +126,34 @@ class AuthProvider with ChangeNotifier {
               List<String>.from(response['vendedorCodes'] as Iterable);
         }
 
-        ApiClient.setAuthToken(response['token'] as String);
+        // Validate token exists
+        final token = response['token'] as String?;
+        if (token == null || token.isEmpty) {
+          _error = 'Respuesta inválida del servidor: token faltante';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
 
-        // Save sensitive data to secure storage
-        await SecureStorage.writeSecureData(
-            'user_token', response['token'] as String);
-        await SecureStorage.writeSecureData(
-            'user_data', jsonEncode(response['user']));
+        ApiClient.setAuthToken(token);
+
+        // Save sensitive data to secure storage (non-blocking)
+        try {
+          await SecureStorage.writeSecureData('user_token', token);
+          await SecureStorage.writeSecureData(
+              'user_data', jsonEncode(response['user']));
+        } catch (storageError) {
+          debugPrint('[AuthProvider] SecureStorage error: $storageError');
+          // Continue anyway - we have the token in memory
+        }
+
         // Non-sensitive data stays in SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setStringList('vendedor_codes', _vendedorCodes);
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setStringList('vendedor_codes', _vendedorCodes);
+        } catch (prefsError) {
+          debugPrint('[AuthProvider] SharedPreferences error: $prefsError');
+        }
 
         _isLoading = false;
         notifyListeners();
@@ -126,11 +161,14 @@ class AuthProvider with ChangeNotifier {
 
         // OPTIMIZATION: Pre-warm cache for instant data access
         // Run in background without awaiting to not block UI
-        CachePreWarmer.preWarmCache(this);
+        unawaited(CachePreWarmer.preWarmCache(this));
 
         return true;
       } else {
-        throw Exception('Respuesta inválida del servidor');
+        _error = response['error']?.toString() ?? 'Respuesta inválida del servidor';
+        _isLoading = false;
+        notifyListeners();
+        return false;
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[AuthProvider] Login ERROR: $e');
