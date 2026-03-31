@@ -9,10 +9,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/providers/auth_provider.dart';
+import 'core/providers/filter_provider.dart';
 import 'core/cache/cache_service.dart';
 import 'core/api/api_client.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/main_shell.dart';
+import 'features/sales_history/providers/sales_history_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -81,6 +83,8 @@ void main() async {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => AuthProvider()),
+          ChangeNotifierProvider(create: (_) => FilterProvider()),
+          ChangeNotifierProvider(create: (_) => SalesHistoryProvider()),
           // Add other providers here as needed
         ],
         child: GMPSalesAnalyticsApp(),

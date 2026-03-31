@@ -278,6 +278,12 @@ const _vendorNameCache = new Map();
 async function getVendorName(vendorCode) {
     if (!vendorCode || vendorCode === 'ALL') return 'Global';
     const trimmed = vendorCode.trim();
+    
+    // Handle comma-separated list (Jefe de Ventas case) - return generic name
+    if (trimmed.includes(',')) {
+        return 'Jefe de Ventas';
+    }
+    
     if (_vendorNameCache.has(trimmed)) return _vendorNameCache.get(trimmed);
     try {
         const rows = await queryWithParams(`SELECT NOMBREVENDEDOR FROM DSEDAC.VDD WHERE CODIGOVENDEDOR = ?`, [trimmed], false);

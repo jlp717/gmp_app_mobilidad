@@ -409,6 +409,13 @@ router.post('/load-plan', async (req, res) => {
                 logger.info(`[LOAD-PLAN] Compacted detalles JSON from large to ${detallesStr.length} bytes`);
             }
 
+            // TRUNCATE JSON if still too large (DB2 VARCHAR limit ~32KB but field may be smaller)
+            const MAX_JSON_LENGTH = 10000; // Safe limit for VARCHAR field
+            if (detallesStr && detallesStr.length > MAX_JSON_LENGTH) {
+                detallesStr = detallesStr.substring(0, MAX_JSON_LENGTH - 3) + '...';
+                logger.warn(`[LOAD-PLAN] Truncated detalles JSON from ${detallesStr.length} to ${MAX_JSON_LENGTH} chars`);
+            }
+
             await queryWithParams(`
         INSERT INTO JAVIER.ALMACEN_CARGA_HISTORICO
           (CODIGOVEHICULO, FECHA_PLANIFICACION, PESO_TOTAL_KG, VOLUMEN_TOTAL_CM3,
@@ -1616,6 +1623,13 @@ router.post('/save-load', async (req, res) => {
                 delete cl.clientName;
             }
             detallesManualStr = JSON.stringify(detalles);
+        }
+
+        // TRUNCATE JSON if still too large (DB2 VARCHAR limit)
+        const MAX_JSON_LENGTH = 10000; // Safe limit for VARCHAR field
+        if (detallesManualStr && detallesManualStr.length > MAX_JSON_LENGTH) {
+            detallesManualStr = detallesManualStr.substring(0, MAX_JSON_LENGTH - 3) + '...';
+            logger.warn(`[SAVE-LOAD] Truncated detalles JSON from ${detallesManualStr.length} to ${MAX_JSON_LENGTH} chars`);
         }
 
         await queryWithParams(`

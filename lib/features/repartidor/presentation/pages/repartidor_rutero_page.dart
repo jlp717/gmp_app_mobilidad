@@ -52,7 +52,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       vsync: this,
     );
     // Pre-fetch repartidores list once
-    _repartidoresFuture = ApiClient.getList('/repartidores').then(
+    _repartidoresFuture = ApiClient.getList('/auth/repartidores').then(
       (val) => val.map((e) => e as Map<String, dynamic>).toList(),
     );
     
