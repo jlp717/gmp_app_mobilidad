@@ -418,6 +418,11 @@ async function getProductDetail(code, clientCode) {
             unidades: parseFloat(s.UNIDADES) || 0,
         }));
 
+        // Expose stockEnvases/stockUnidades at root level (almacen 1 = default)
+        const mainStock = stockRows?.find(s => parseInt(s.CODIGOALMACEN) === 1);
+        product.stockEnvases = mainStock ? (parseFloat(mainStock.ENVASES) || 0) : 0;
+        product.stockUnidades = mainStock ? (parseFloat(mainStock.UNIDADES) || 0) : 0;
+
         // Stage: client historical price
         if (clientCode) {
             const h0 = Date.now();

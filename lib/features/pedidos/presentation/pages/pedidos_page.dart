@@ -1161,7 +1161,7 @@ class _PedidosPageState extends State<PedidosPage>
                       children: [
                         if (product.precioMinimo > 0)
                           Text(
-                            'Min: ${PedidosFormatters.money(product.precioMinimo, decimals: 3)}',
+                            'Min: ${PedidosFormatters.money(product.priceForUnit(selectedUnit), decimals: 3)}',
                             style: TextStyle(
                               color: price > 0 && price < product.precioMinimo
                                   ? AppTheme.error
@@ -1766,9 +1766,8 @@ class _PedidosPageState extends State<PedidosPage>
           // View Promotions button
           Consumer<PedidosProvider>(
             builder: (ctx, prov, _) {
+              if (!prov.hasClient) return const SizedBox.shrink();
               final promos = prov.activePromotionsList;
-              if (!prov.hasClient || promos.isEmpty)
-                return const SizedBox.shrink();
               return Stack(
                 children: [
                   IconButton(
