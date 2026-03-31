@@ -114,8 +114,7 @@ class LoadCanvasState extends State<LoadCanvas> {
           if (x != null && y != null) {
             provider.updateDragPosition(x, y);
             // Push collision state back to JS
-            final hasCollision =
-                provider.dragState?.hasCollision ?? false;
+            final hasCollision = provider.dragState?.hasCollision ?? false;
             if (hasCollision != _lastCollisionState) {
               _lastCollisionState = hasCollision;
               final idx = provider.dragState?.boxIndex ?? -1;
@@ -127,8 +126,7 @@ class LoadCanvasState extends State<LoadCanvas> {
           break;
 
         case 'boxDragEnd':
-          final hasCollision =
-              provider.dragState?.hasCollision ?? false;
+          final hasCollision = provider.dragState?.hasCollision ?? false;
           if (hasCollision) {
             HapticFeedback.heavyImpact();
           } else {

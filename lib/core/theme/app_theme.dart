@@ -139,6 +139,9 @@ class AppTheme {
         ],
       );
 
+  // Alias for compatibility (lightTheme not implemented, using darkTheme)
+  static ThemeData get lightTheme => darkTheme;
+
   // ============================================================================
   // THEME DATA
   // ============================================================================

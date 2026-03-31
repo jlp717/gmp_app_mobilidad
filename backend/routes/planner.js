@@ -50,7 +50,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
   COUNT(DISTINCT L.CODIGOARTICULO) as numProducts
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      WHERE L.ANODOCUMENTO = ${year} AND L.MESDOCUMENTO = ${month} 
+      WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ? 
         AND L.TIPOVENTA IN ('CC', 'VC')
         AND L.TIPOLINEA IN ('AB', 'VT')
         AND L.SERIEALBARAN NOT IN ('N', 'Z')
@@ -63,7 +63,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
 
         // Cache calendar for 15 minutes
         const cacheKey = `calendar:${year}:${month}:${vendedorCodes}`;
-        const activities = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM);
+        const activities = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, [year, month]);
 
         // Group by day
         const dayMap = {};
@@ -129,51 +129,54 @@ router.get('/rutero/week', async (req, res) => {
             // Calculate delivery progress for today
             let weekProgress = {};
             try {
-                const todayClients = cachedCounts[todayName] || 0;
-                if (todayClients > 0) {
-                    const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',') : null;
-                    let deliveredToday = 0;
-                    if (cleanCodes) {
-                        // HYBRID approach: Count from ERP data (primary) + App status (supplement)
-                        // 1. Primary: Count from OPP/CPC where CONFORMADOSN = 'S' for today (ERP native)
-                        const now = new Date();
-                        const dia = now.getDate();
-                        const mes = now.getMonth() + 1;
-                        const ano = now.getFullYear();
-                        try {
-                            const erpSql = `
-                                SELECT COUNT(DISTINCT CPC.NUMEROALBARAN) as DELIVERED
-                                FROM DSEDAC.OPP OPP
-                                INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanCodes})
-                                  AND OPP.DIAREPARTO = ${dia}
-                                  AND OPP.MESREPARTO = ${mes}
-                                  AND OPP.ANOREPARTO = ${ano}
-                                  AND (TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R'))
-                            `;
-                            const erpRows = await query(erpSql, false, false);
-                            deliveredToday = parseInt(erpRows[0]?.DELIVERED) || 0;
-                        } catch (erpErr) {
-                            logger.warn(`[RUTERO WEEK] ERP delivery count error: ${erpErr.message}`);
-                        }
+                    const todayClients = cachedCounts[todayName] || 0;
+                    if (todayClients > 0) {
+                        const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : [];
+                        let deliveredToday = 0;
+                        if (cleanCodes.length > 0) {
+                            // HYBRID approach: Count from ERP data (primary) + App status (supplement)
+                            // 1. Primary: Count from OPP/CPC where CONFORMADOSN = 'S' for today (ERP native)
+                            const now = new Date();
+                            const dia = now.getDate();
+                            const mes = now.getMonth() + 1;
+                            const ano = now.getFullYear();
+                            try {
+                                const erpPlaceholders = cleanCodes.map(() => '?').join(',');
+                                const erpSql = `
+                                    SELECT COUNT(DISTINCT CPC.NUMEROALBARAN) as DELIVERED
+                                    FROM DSEDAC.OPP OPP
+                                    INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                                    WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${erpPlaceholders})
+                                      AND OPP.DIAREPARTO = ?
+                                      AND OPP.MESREPARTO = ?
+                                      AND OPP.ANOREPARTO = ?
+                                      AND (TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R'))
+                                `;
+                                const erpParams = [...cleanCodes, dia, mes, ano];
+                                const erpRows = await queryWithParams(erpSql, erpParams, false, false);
+                                deliveredToday = parseInt(erpRows[0]?.DELIVERED) || 0;
+                            } catch (erpErr) {
+                                logger.warn(`[RUTERO WEEK] ERP delivery count error: ${erpErr.message}`);
+                            }
 
-                        // 2. Supplement: Add app-confirmed deliveries from DELIVERY_STATUS (if table exists)
-                        try {
-                            const appSql = `
-                                SELECT COUNT(DISTINCT DS.ID) as DELIVERED
-                                FROM JAVIER.DELIVERY_STATUS DS
-                                WHERE DS.STATUS = 'ENTREGADO'
-                                  AND DS.REPARTIDOR_ID IN (${cleanCodes})
-                                  AND DATE(DS.UPDATED_AT) = CURRENT DATE
-                            `;
-                            const appRows = await query(appSql, false, false);
-                            const appDelivered = parseInt(appRows[0]?.DELIVERED) || 0;
-                            // Use the higher of the two counts (avoid double counting)
-                            deliveredToday = Math.max(deliveredToday, appDelivered);
-                        } catch (dsErr) {
-                            // DELIVERY_STATUS table may not exist — this is OK, ERP data is primary
+                            // 2. Supplement: Add app-confirmed deliveries from DELIVERY_STATUS (if table exists)
+                            try {
+                                const appPlaceholders = cleanCodes.map(() => '?').join(',');
+                                const appSql = `
+                                    SELECT COUNT(DISTINCT DS.ID) as DELIVERED
+                                    FROM JAVIER.DELIVERY_STATUS DS
+                                    WHERE DS.STATUS = 'ENTREGADO'
+                                      AND DS.REPARTIDOR_ID IN (${appPlaceholders})
+                                      AND DATE(DS.UPDATED_AT) = CURRENT DATE
+                                `;
+                                const appRows = await queryWithParams(appSql, cleanCodes, false, false);
+                                const appDelivered = parseInt(appRows[0]?.DELIVERED) || 0;
+                                // Use the higher of the two counts (avoid double counting)
+                                deliveredToday = Math.max(deliveredToday, appDelivered);
+                            } catch (dsErr) {
+                                // DELIVERY_STATUS table may not exist — this is OK, ERP data is primary
+                            }
                         }
-                    }
                     weekProgress[todayName] = {
                         total: todayClients,
                         delivered: deliveredToday,
@@ -366,11 +369,11 @@ router.post('/rutero/move_clients', async (req, res) => {
             try {
                 const prevRes = await conn.query(`
                     SELECT TRIM(DIA) as DIA, ORDEN FROM JAVIER.RUTERO_CONFIG
-                    WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'
+                    WHERE VENDEDOR = ? AND TRIM(CLIENTE) = ?
                     AND ORDEN >= 0
                     ORDER BY ORDEN ASC
                     FETCH FIRST 1 ROWS ONLY
-                `);
+                `, [vendedor, clientTrimmed]);
                 if (prevRes && prevRes.length > 0) {
                     if (!fromDay) previousDay = prevRes[0].DIA?.trim() || previousDay;
                     previousOrder = prevRes[0].ORDEN;

@@ -12,6 +12,9 @@ import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.
 /// Service for printing delivery notes on Zebra ZQ520
 /// via Bluetooth Classic (SPP/RFCOMM) using raw ZPL commands.
 class ZebraPrintService {
+  // NOTE: Printer MAC addresses stored in SharedPreferences are low-risk
+  // (they are public identifiers, not secrets), but should migrate to
+  // flutter_secure_storage if the threat model changes.
   static const String _prefKey = 'repartidor_tiene_impresora';
   static const String _prefAddress = 'repartidor_printer_address';
   static const String _prefName = 'repartidor_printer_name';
@@ -116,9 +119,8 @@ class ZebraPrintService {
   }
 
   /// Global connection state notifier from the BT library.
-  static ValueNotifier<BluetoothConnectionState>
-      get connectionStateNotifier =>
-          FlutterBluetoothPrinter.connectionStateNotifier;
+  static ValueNotifier<BluetoothConnectionState> get connectionStateNotifier =>
+      FlutterBluetoothPrinter.connectionStateNotifier;
 
   /// Mask a BT address for display: "AA:BB:CC:DD:EE:FF" → "AA:BB:··:··:EE:FF"
   static String maskAddress(String address) {
@@ -223,6 +225,19 @@ class ZebraPrintService {
     return name.replaceFirst(RegExp(r'^\d+\s+'), '').trim();
   }
 
+  /// Escape ZPL special characters in field data to prevent ZPL injection.
+  /// ZPL interprets ^ and ~ as command prefixes even within ^FD...^FS blocks.
+  static String _sanitizeZpl(String text) {
+    return text
+        .replaceAll('^', '_^')
+        .replaceAll('~', '_~')
+        .replaceAll('\x00', '')
+        .replaceAll('\x1B', '');
+  }
+
+  /// Maximum ZPL payload size in bytes to prevent printer DoS.
+  static const int _maxZplPayloadBytes = 65536;
+
   static String generateDeliveryZpl({
     required AlbaranEntrega albaran,
     required List<EntregaItem> items,
@@ -270,38 +285,39 @@ class ZebraPrintService {
         ? '${albaran.serieFactura}-${albaran.terminal}-${albaran.numeroFactura}'
         : '${albaran.serie}-${albaran.terminal}-${albaran.numeroAlbaran}';
     buf.writeln('^CF0,28');
-    buf.writeln('^FO$_xLeft,$y^FD$docType: $docNum^FS');
+    buf.writeln('^FO$_xLeft,$y^FD$docType: ${_sanitizeZpl(docNum)}^FS');
     y += 32;
     buf.writeln('^CF0,18');
     buf.writeln('^FO$_xLeft,$y^FDFecha: ${albaran.fecha}^FS');
     y += 24;
     if (albaran.ordenPreparacion != null) {
       buf.writeln('^CF0,18');
-      buf.writeln('^FO$_xLeft,$y^FDOrden Prep.: ${albaran.ordenPreparacion}^FS');
+      buf.writeln(
+          '^FO$_xLeft,$y^FDOrden Prep.: ${albaran.ordenPreparacion!}^FS');
       y += 24;
     }
 
     // ═══ CLIENT INFO ═══
     buf.writeln('^CF0,20');
     buf.writeln(
-      '^FO$_xLeft,$y^FDCliente: ${albaran.codigoCliente}^FS',
+      '^FO$_xLeft,$y^FDCliente: ${_sanitizeZpl(albaran.codigoCliente)}^FS',
     );
     y += 24;
     buf.writeln('^CF0,18');
     buf.writeln(
-      '^FO$_xLeft,$y^FD${_truncate(albaran.nombreCliente, 42)}^FS',
+      '^FO$_xLeft,$y^FD${_truncate(_sanitizeZpl(albaran.nombreCliente), 42)}^FS',
     );
     y += 22;
     if (albaran.direccion.isNotEmpty) {
       buf.writeln('^CF0,16');
       buf.writeln(
-        '^FO$_xLeft,$y^FD${_truncate(albaran.direccion, 46)}^FS',
+        '^FO$_xLeft,$y^FD${_truncate(_sanitizeZpl(albaran.direccion), 46)}^FS',
       );
       y += 20;
     }
     buf.writeln('^CF0,16');
     buf.writeln(
-      '^FO$_xLeft,$y^FDForma de pago: ${albaran.formaPagoDesc}^FS',
+      '^FO$_xLeft,$y^FDForma de pago: ${_sanitizeZpl(albaran.formaPagoDesc)}^FS',
     );
     y += 24;
 
@@ -325,7 +341,8 @@ class ZebraPrintService {
       final item = items[i];
       final partida = '${i + 1}';
       // Use CANTIDADENVASES (bultos) for the Bultos column, not CANTIDADUNIDADES
-      final bultos = item.bultos > 0 ? item.bultos : item.cantidadPedida.toInt();
+      final bultos =
+          item.bultos > 0 ? item.bultos : item.cantidadPedida.toInt();
       totalBultos += bultos;
       final importe = item.cantidadPedida * item.precioUnitario;
 
@@ -335,7 +352,7 @@ class ZebraPrintService {
       if (item.codigoArticulo.isNotEmpty) {
         buf.writeln('^CF0,14');
         buf.writeln(
-          '^FO$_colDesc,$y^FD${_truncate(item.codigoArticulo, 30)}^FS',
+          '^FO$_colDesc,$y^FD${_truncate(_sanitizeZpl(item.codigoArticulo), 30)}^FS',
         );
       }
       buf.writeln('^CF0,16');
@@ -350,7 +367,7 @@ class ZebraPrintService {
       // Line 2: Description
       buf.writeln('^CF0,16');
       buf.writeln(
-        '^FO$_colDesc,$y^FD${_truncate(item.descripcion, 38)}^FS',
+        '^FO$_colDesc,$y^FD${_truncate(_sanitizeZpl(item.descripcion), 38)}^FS',
       );
       y += 20;
     }
@@ -371,7 +388,7 @@ class ZebraPrintService {
     if (albaran.importeNeto > 0) {
       buf.writeln(
         '^FO300,$y^FDImporte Neto: '
-        '${albaran.importeNeto.toStringAsFixed(2)} EUR^FS',
+        '${_sanitizeZpl(albaran.importeNeto.toStringAsFixed(2))} EUR^FS',
       );
       y += 22;
     }
@@ -382,7 +399,7 @@ class ZebraPrintService {
         buf.writeln('^CF0,16');
         buf.writeln(
           '^FO300,$y^FDIVA ${iva.pct.toStringAsFixed(0)}%: '
-          '${iva.iva.toStringAsFixed(2)} EUR^FS',
+          '${_sanitizeZpl(iva.iva.toStringAsFixed(2))} EUR^FS',
         );
         y += 20;
       }
@@ -393,7 +410,7 @@ class ZebraPrintService {
     buf.writeln('^CF0,26');
     buf.writeln(
       '^FO$_xLeft,$y^FDTOTAL: '
-      '${albaran.importeTotal.toStringAsFixed(2)} EUR^FS',
+      '${_sanitizeZpl(albaran.importeTotal.toStringAsFixed(2))} EUR^FS',
     );
     y += 32;
 
@@ -405,12 +422,12 @@ class ZebraPrintService {
     if (receptorNombre != null && receptorNombre.isNotEmpty) {
       buf.writeln('^CF0,18');
       buf.writeln(
-        '^FO$_xLeft,$y^FDFirmante: $receptorNombre^FS',
+        '^FO$_xLeft,$y^FDFirmante: ${_sanitizeZpl(receptorNombre)}^FS',
       );
       y += 22;
       if (receptorDni != null && receptorDni.isNotEmpty) {
         buf.writeln('^CF0,16');
-        buf.writeln('^FO$_xLeft,$y^FDDNI/NIF: $receptorDni^FS');
+        buf.writeln('^FO$_xLeft,$y^FDDNI/NIF: ${_sanitizeZpl(receptorDni)}^FS');
         y += 20;
       }
 
@@ -441,7 +458,7 @@ class ZebraPrintService {
     // ═══ OBSERVATIONS ═══
     if (observaciones.isNotEmpty) {
       buf.writeln('^CF0,16');
-      for (final line in _wrapText(observaciones, 52)) {
+      for (final line in _wrapText(_sanitizeZpl(observaciones), 52)) {
         buf.writeln('^FO$_xLeft,$y^FDObs: $line^FS');
         y += 18;
       }
@@ -469,7 +486,7 @@ class ZebraPrintService {
           : albaran.codigoRepartidor,
     );
     buf.writeln(
-      '^FO$_xLeft,$y^FDEntregado por: $repartidorDisplay^FS',
+      '^FO$_xLeft,$y^FDEntregado por: ${_sanitizeZpl(repartidorDisplay)}^FS',
     );
     y += 24;
 
@@ -490,6 +507,16 @@ class ZebraPrintService {
     String? address,
   }) async {
     try {
+      // DoS prevention: reject oversized payloads
+      final payloadBytes = utf8.encode(zplData).length;
+      if (payloadBytes > _maxZplPayloadBytes) {
+        debugPrint(
+          '[ZEBRA] ZPL payload too large: $payloadBytes bytes '
+          '(max $_maxZplPayloadBytes)',
+        );
+        return false;
+      }
+
       final addr = address ?? await getSavedPrinterAddress();
       if (addr == null) {
         debugPrint('[ZEBRA] No printer address configured');

@@ -4,13 +4,13 @@
  */
 
 const express = require('express');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 const { v4: uuidv4 } = require('uuid');
 
 const router = express.Router();
 
-// Helper to sanitize code
+// Helper to sanitize code (kept for non-SQL uses)
 function sanitizeCode(val) {
     if (val == null) return '';
     return String(val).replace(/'/g, "''").trim();
@@ -75,42 +75,31 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         // Build query based on whether ORIGEN column exists
         let sql;
         if (origenExists) {
-            // Query only APP-CREATED orders (ORIGEN = 'A')
             sql = `
             SELECT
                 PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
                 PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
                 PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
             FROM JAVIER.PEDIDOS_CAB PC
-            WHERE TRIM(PC.CODIGOCLIENTE) = '${codigoCliente}'
+            WHERE TRIM(PC.CODIGOCLIENTE) = ?
               AND PC.ORIGEN = 'A'
               AND PC.ESTADO = 'CONFIRMADO'
               AND PC.IMPORTETOTAL > 0`;
         } else {
-            // Query all confirmed orders
             sql = `
             SELECT
                 PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
                 PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
                 PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
             FROM JAVIER.PEDIDOS_CAB PC
-            WHERE TRIM(PC.CODIGOCLIENTE) = '${codigoCliente}'
+            WHERE TRIM(PC.CODIGOCLIENTE) = ?
               AND PC.ESTADO = 'CONFIRMADO'
               AND PC.IMPORTETOTAL > 0`;
         }
 
-        // Exclude already paid orders
-        if (cobrosTableExists) {
-            sql += ` AND NOT EXISTS (
-                SELECT 1 FROM JAVIER.COBROS JC 
-                WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE) 
-                  AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
-            )`;
-        }
-
         sql += ` ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC FETCH FIRST 100 ROWS ONLY`;
 
-        const resultado = await query(sql, []);
+        const resultado = await queryWithParams(sql, [codigoCliente], []);
 
         const ahora = new Date();
         const mesActual = ahora.getMonth() + 1;
@@ -250,7 +239,8 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
 
         // Build vendor filter
         const isAll = vendedorCode.toUpperCase() === 'ALL';
-        let vendorFilter = isAll ? '' : `AND TRIM(PC.CODIGOVENDEDOR) = '${vendedorCode}'`;
+        let vendorFilter = isAll ? '' : `AND TRIM(PC.CODIGOVENDEDOR) = ?`;
+        const vendorParams = isAll ? [] : [vendedorCode];
 
         let sql = `
             SELECT
@@ -274,7 +264,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
 
         sql += ` GROUP BY TRIM(PC.CODIGOCLIENTE) ORDER BY TOTAL_PENDIENTE DESC`;
 
-        const rows = await query(sql, []);
+        const rows = await queryWithParams(sql, vendorParams, []);
 
         const summary = {};
         let grandTotal = 0;

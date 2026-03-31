@@ -1,397 +1,447 @@
+/**
+ * GMP App - Auth Routes (Security Hardened)
+ * Secure authentication with bcrypt, rate limiting, and audit logging
+ */
+
 const express = require('express');
 const router = express.Router();
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
-const authenticateToken = require('../middleware/auth');
-const { signToken } = require('../middleware/auth');
-const { loginLimiter } = require('../middleware/security');
+const { 
+    verifyToken, 
+    signAccessToken, 
+    signRefreshToken, 
+    hashPassword, 
+    verifyPassword,
+    handleRefreshToken,
+    handleLogout
+} = require('../middleware/auth');
+const { loginLimiter, validateBody, sanitizeInput, detectSqlInjection } = require('../middleware/security');
 const { auditLogin, getClientIP } = require('../middleware/audit');
+const bcrypt = require('bcrypt');
+const fs = require('fs');
+const path = require('path');
 
-// Track failed login attempts per username (in-memory)
-const failedLoginAttempts = new Map();
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_TIME = 30 * 60 * 1000; // 30 minutes lockout
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
 
-// Helper to handle failed logins
-function failLogin(res, safeUser, requestId, message) {
-    const currentAttempts = failedLoginAttempts.get(safeUser) || { count: 0, lastAttempt: 0 };
-    currentAttempts.count += 1;
-    currentAttempts.lastAttempt = Date.now();
-    failedLoginAttempts.set(safeUser, currentAttempts);
+const lockoutsPath = path.join(__dirname, '../data/lockouts.json');
+const lockoutsDir = path.dirname(lockoutsPath);
 
-    const remainingAttempts = MAX_FAILED_ATTEMPTS - currentAttempts.count;
-    logger.warn(`[${requestId}] ❌ Login failed for user: ${safeUser} (attempt ${currentAttempts.count}/${MAX_FAILED_ATTEMPTS})`);
+if (!fs.existsSync(lockoutsDir)) {
+    fs.mkdirSync(lockoutsDir, { recursive: true, mode: 0o700 });
+}
 
-    if (remainingAttempts <= 0) {
+function loadLockouts() {
+    try {
+        if (fs.existsSync(lockoutsPath)) {
+            return JSON.parse(fs.readFileSync(lockoutsPath, 'utf8'));
+        }
+    } catch (e) {
+        logger.warn(`[Auth] Failed to load lockouts: ${e.message}`);
+    }
+    return {};
+}
+
+function saveLockouts(lockouts) {
+    try {
+        fs.writeFileSync(lockoutsPath, JSON.stringify(lockouts, null, 2), { mode: 0o600 });
+    } catch (e) {
+        logger.error(`[Auth] Failed to save lockouts: ${e.message}`);
+    }
+}
+
+const MAX_FAILED_ATTEMPTS = parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5', 10);
+const LOCKOUT_TIME_MS = parseInt(process.env.LOCK_TIME_MINUTES || '30', 10) * 60 * 1000;
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+function handleFailedLogin(res, safeUser, requestId, message) {
+    const lockouts = loadLockouts();
+    const current = lockouts[safeUser] || { count: 0, lastAttempt: 0 };
+    current.count += 1;
+    current.lastAttempt = Date.now();
+    
+    if (current.count >= MAX_FAILED_ATTEMPTS) {
+        current.lockedUntil = Date.now() + LOCKOUT_TIME_MS;
+        logger.warn(`[Auth] [${requestId}] Account locked: ${safeUser}`);
+    }
+    
+    lockouts[safeUser] = current;
+    saveLockouts(lockouts);
+
+    const remainingAttempts = MAX_FAILED_ATTEMPTS - current.count;
+    
+    if (current.lockedUntil) {
+        const minutesRemaining = Math.ceil((LOCKOUT_TIME_MS - (Date.now() - current.lastAttempt)) / 60000);
         return res.status(429).json({
-            error: 'Cuenta bloqueada por demasiados intentos fallidos. Espera 30 minutos.'
+            error: `Cuenta bloqueada. Espera ${minutesRemaining} minutos.`,
+            code: 'ACCOUNT_LOCKED',
+            lockedUntil: current.lockedUntil
         });
     }
 
     return res.status(401).json({
-        error: `${message}. Te quedan ${remainingAttempts} intentos.`
+        error: `${message}. Te quedan ${remainingAttempts} intentos.`,
+        code: 'INVALID_CREDENTIALS',
+        remainingAttempts
     });
 }
 
+function sanitizeUsername(username) {
+    return username.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
+}
+
 // =============================================================================
-// LOGIN ENDPOINT - Using VDPL1 as primary auth source
+// LOGIN ENDPOINT
 // =============================================================================
-router.post('/login', loginLimiter, async (req, res) => {
-    const requestId = Date.now().toString(36);
 
-    try {
-        const { username, password } = req.body;
+router.post('/login', 
+    loginLimiter,
+    sanitizeInput,
+    async (req, res) => {
+        const requestId = Date.now().toString(36);
+        const clientIp = getClientIP(req);
 
-        // Input validation
-        if (!username || !password) {
-            logger.warn(`[${requestId}] Login attempt with missing credentials`);
-            return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
-        }
+        try {
+            const { username, password } = req.body;
 
-        // Sanitize and normalize inputs - SECURITY FIX: strict alphanumeric + space only
-        const safeUser = username.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
-        const trimmedPwd = password.trim();
-
-        if (safeUser.length < 1 || safeUser.length > 50) {
-            logger.warn(`[${requestId}] Login attempt with invalid username length: ${safeUser.length}`);
-            return res.status(400).json({ error: 'Usuario inválido' });
-        }
-
-        // Check if account is locked out due to failed attempts
-        const lockoutInfo = failedLoginAttempts.get(safeUser);
-        if (lockoutInfo && lockoutInfo.count >= MAX_FAILED_ATTEMPTS) {
-            const timeSinceLockout = Date.now() - lockoutInfo.lastAttempt;
-            if (timeSinceLockout < LOCKOUT_TIME) {
-                const minutesRemaining = Math.ceil((LOCKOUT_TIME - timeSinceLockout) / 60000);
-                logger.warn(`[${requestId}] Locked account access attempt: ${safeUser}`);
-                return res.status(429).json({
-                    error: `Cuenta bloqueada temporalmente. Intenta de nuevo en ${minutesRemaining} minutos.`
-                });
-            } else {
-                failedLoginAttempts.delete(safeUser);
+            if (!username || !password) {
+                logger.warn(`[${requestId}] Login attempt with missing credentials`);
+                return res.status(400).json({ error: 'Usuario y contraseña requeridos', code: 'MISSING_CREDENTIALS' });
             }
-        }
 
-        let vendedorCode = null;
-        let vendedorName = null;
-        let isJefeVentas = false;
-        let tipoVendedor = null;
+            const safeUser = sanitizeUsername(username);
+            const trimmedPwd = password.trim();
 
-        // ===================================================================
-        // STEP 1: Try to find vendor by CODE directly in VDPL1
-        // ===================================================================
-        logger.info(`[${requestId}] 🔍 Attempting login for: ${safeUser}`);
+            if (safeUser.length < 1 || safeUser.length > 50) {
+                logger.warn(`[${requestId}] Invalid username length: ${safeUser.length}`);
+                return res.status(400).json({ error: 'Usuario inválido', code: 'INVALID_USERNAME' });
+            }
 
-        let pinRecord = [];
+            // Check lockout
+            const lockouts = loadLockouts();
+            const lockoutInfo = lockouts[safeUser];
+            
+            if (lockoutInfo && lockoutInfo.lockedUntil) {
+                const timeUntilUnlock = lockoutInfo.lockedUntil - Date.now();
+                if (timeUntilUnlock > 0) {
+                    const minutesRemaining = Math.ceil(timeUntilUnlock / 60000);
+                    logger.warn(`[${requestId}] Locked account access attempt: ${safeUser}`);
+                    return res.status(429).json({
+                        error: `Cuenta bloqueada. Intenta en ${minutesRemaining} minutos.`,
+                        code: 'ACCOUNT_LOCKED',
+                        lockedUntil: lockoutInfo.lockedUntil
+                    });
+                } else {
+                    delete lockouts[safeUser];
+                    saveLockouts(lockouts);
+                }
+            }
 
-        // Only try code search if input is short enough for CODIGOVENDEDOR column
-        if (safeUser.length <= 10) {
-            try {
-                pinRecord = await queryWithParams(`
-                    SELECT P.CODIGOVENDEDOR, P.CODIGOPIN, 
+            // Find vendor
+            logger.info(`[${requestId}] Login attempt for: ${safeUser}`);
+
+            let pinRecord = [];
+
+            // Try code search
+            if (safeUser.length <= 10) {
+                try {
+                    pinRecord = await queryWithParams(`
+                        SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
+                               TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
+                               V.TIPOVENDEDOR, X.JEFEVENTASSN,
+                               E.HIDE_COMMISSIONS
+                        FROM DSEDAC.VDPL1 P
+                        JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+                        JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
+                        LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+                        LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON P.CODIGOVENDEDOR = E.CODIGOVENDEDOR
+                        WHERE TRIM(P.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
+                        FETCH FIRST 1 ROWS ONLY
+                    `, [safeUser], false);
+                } catch (e) {
+                    logger.debug(`[${requestId}] Code search failed: ${e.message}`);
+                }
+            }
+
+            // Try name search
+            if (pinRecord.length === 0) {
+                const searchParam = safeUser.replace(/ /g, '');
+                const nameSearch = await queryWithParams(`
+                    SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
                            TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
                            V.TIPOVENDEDOR, X.JEFEVENTASSN,
                            E.HIDE_COMMISSIONS
-                    FROM DSEDAC.VDPL1 P
-                    JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
-                    JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
-                    LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-                    LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON P.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-                    WHERE TRIM(P.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
+                    FROM DSEDAC.VDD D
+                    JOIN DSEDAC.VDPL1 P ON D.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+                    JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
+                    LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+                    LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON D.CODIGOVENDEDOR = E.CODIGOVENDEDOR
+                    WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%' CONCAT CAST(? AS VARCHAR(100)) CONCAT '%'
                     FETCH FIRST 1 ROWS ONLY
-                `, [safeUser], false);
-            } catch (codeErr) {
-                logger.debug(`[${requestId}] Code search failed, falling through to name search`);
-                pinRecord = [];
-            }
-        }
+                `, [searchParam], false);
 
-        // ===================================================================
-        // STEP 2: If not found by code, try to find by NAME in VDD
-        // ===================================================================
-        if (pinRecord.length === 0) {
-            logger.info(`[${requestId}] 🔄 Not found by code, searching by name...`);
-
-            // Search by name - compare without spaces to handle "MARICARMEN" vs "93 MARI CARMEN"
-            const searchParam = safeUser.replace(/ /g, '');
-            const nameSearch = await queryWithParams(`
-                SELECT P.CODIGOVENDEDOR, P.CODIGOPIN,
-                       TRIM(D.NOMBREVENDEDOR) as NOMBREVENDEDOR,
-                       V.TIPOVENDEDOR, X.JEFEVENTASSN,
-                       E.HIDE_COMMISSIONS
-                FROM DSEDAC.VDD D
-                JOIN DSEDAC.VDPL1 P ON D.CODIGOVENDEDOR = P.CODIGOVENDEDOR
-                JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
-                LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
-                LEFT JOIN JAVIER.COMMISSION_EXCEPTIONS E ON D.CODIGOVENDEDOR = E.CODIGOVENDEDOR
-                WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%' CONCAT CAST(? AS VARCHAR(100)) CONCAT '%'
-                FETCH FIRST 1 ROWS ONLY
-            `, [searchParam], false);
-
-            if (nameSearch.length > 0) {
-                pinRecord = nameSearch;
-                logger.info(`[${requestId}] ✅ Found vendor by name: ${nameSearch[0].NOMBREVENDEDOR} -> Code ${nameSearch[0].CODIGOVENDEDOR}`);
-            }
-        }
-
-        // ===================================================================
-        // STEP 3: Validate credentials
-        // ===================================================================
-        if (pinRecord.length === 0) {
-            logger.warn(`[${requestId}] ❌ User not found: ${safeUser}`);
-            return failLogin(res, safeUser, requestId, 'Usuario no encontrado');
-        }
-
-        const vendor = pinRecord[0];
-        const dbPin = vendor.CODIGOPIN?.toString().trim();
-        vendedorCode = vendor.CODIGOVENDEDOR?.toString().trim();
-        // Clean vendor name - remove leading code like "93 " from "93 MARI CARMEN"
-        let rawName = vendor.NOMBREVENDEDOR || `Comercial ${vendedorCode}`;
-        vendedorName = rawName.replace(/^\d+\s+/, '').trim(); // Remove leading digits and spaces
-        isJefeVentas = vendor.JEFEVENTASSN === 'S';
-        tipoVendedor = vendor.TIPOVENDEDOR?.trim();
-
-        // Check PIN
-        if (dbPin !== trimmedPwd) {
-            logger.warn(`[${requestId}] 🚫 PIN mismatch for vendor ${vendedorCode}`);
-            return failLogin(res, safeUser, requestId, 'PIN incorrecto');
-        }
-
-        // ===================================================================
-        // NEW: Check for REPARTIDOR Role (Vehicle assigned)
-        // ===================================================================
-        let isRepartidor = false;
-        let codigoConductor = null;
-        let matriculaVehiculo = null;
-
-        try {
-            // Check VEH.CODIGOCONDUCTOR (personal vehicle assignment)
-            // OR high OPP delivery count this year (repartidor with pool vehicle)
-            const currentYear = new Date().getFullYear();
-            const vehCheck = await queryWithParams(`
-                SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA 
-                FROM DSEDAC.VEH 
-                WHERE TRIM(CODIGOCONDUCTOR) = ? 
-                  AND TRIM(CODIGOCONDUCTOR) <> '98'
-                FETCH FIRST 1 ROWS ONLY
-            `, [vendedorCode], false);
-
-            if (vehCheck.length > 0) {
-                isRepartidor = true;
-                matriculaVehiculo = vehCheck[0].MATRICULA;
-                codigoConductor = vendedorCode;
-                logger.info(`[${requestId}] 🚚 Detected Repartidor Role for ${vendedorCode} (Vehicle: ${matriculaVehiculo})`);
-            } else {
-                // Fallback: check if they have ≥100 deliveries this year in OPP
-                const oppCheck = await queryWithParams(`
-                    SELECT COUNT(*) as CNT FROM DSEDAC.OPP
-                    WHERE TRIM(CODIGOREPARTIDOR) = ?
-                      AND ANOREPARTO = ?
-                `, [vendedorCode, currentYear], false);
-                if (oppCheck.length > 0 && (oppCheck[0].CNT || 0) >= 100) {
-                    isRepartidor = true;
-                    codigoConductor = vendedorCode;
-                    logger.info(`[${requestId}] 🚚 Detected Repartidor Role for ${vendedorCode} via OPP (${oppCheck[0].CNT} deliveries in ${currentYear})`);
+                if (nameSearch.length > 0) {
+                    pinRecord = nameSearch;
+                    logger.info(`[${requestId}] Found vendor by name`);
                 }
             }
-        } catch (vehError) {
-            logger.warn(`[${requestId}] Error checking vehicle: ${vehError.message}`);
-        }
 
-        // ===================================================================
-        // STEP 4: Success! Build response
-        // ===================================================================
-        logger.info(`[${requestId}] 🔐 Login successful for ${vendedorName} (${vendedorCode})`);
-        failedLoginAttempts.delete(safeUser); // Clear failed attempts on success
+            if (pinRecord.length === 0) {
+                logger.warn(`[${requestId}] User not found: ${safeUser}`);
+                return handleFailedLogin(res, safeUser, requestId, 'Usuario no encontrado');
+            }
 
-        // Determine final role
-        let finalRole = 'COMERCIAL';
-        if (isJefeVentas) finalRole = 'JEFE_VENTAS';
-        else if (isRepartidor) finalRole = 'REPARTIDOR';
+            const vendor = pinRecord[0];
+            const dbPin = vendor.CODIGOPIN?.toString().trim();
+            const vendedorCode = vendor.CODIGOVENDEDOR?.toString().trim();
+            let rawName = vendor.NOMBREVENDEDOR || `Comercial ${vendedorCode}`;
+            const vendedorName = rawName.replace(/^\d+\s+/, '').trim();
+            const isJefeVentas = vendor.JEFEVENTASSN === 'S';
+            const tipoVendedor = vendor.TIPOVENDEDOR?.trim();
 
-        // Fetch all vendor codes for Jefe/Admin view
-        let vendedorCodes = [vendedorCode];
-        if (isJefeVentas) {
-            const allVendedores = await query(`
-                SELECT DISTINCT TRIM(CODIGOVENDEDOR) as CODE FROM DSEDAC.VDC WHERE SUBEMPRESA = 'GMP'
-            `);
-            const orphans = ['82', '20', 'UNK'];
-            const existingCodes = new Set(allVendedores.map(v => v.CODE));
-            orphans.forEach(o => existingCodes.add(o));
-            vendedorCodes = Array.from(existingCodes);
-        }
+            // Verify PIN
+            let pinValid = false;
+            
+            if (dbPin && dbPin.startsWith('$2b$')) {
+                pinValid = await verifyPassword(trimmedPwd, dbPin);
+            } else if (dbPin === trimmedPwd) {
+                pinValid = true;
+                
+                // Migrate to bcrypt
+                hashPassword(trimmedPwd, BCRYPT_ROUNDS)
+                    .then(hashedPin => {
+                        queryWithParams(`
+                            UPDATE DSEDAC.VDPL1 SET CODIGOPIN = ?
+                            WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
+                        `, [hashedPin, vendedorCode], false)
+                        .then(() => logger.info(`[${requestId}] Migrated PIN to bcrypt for ${vendedorCode}`))
+                        .catch(err => logger.warn(`[${requestId}] Failed to migrate PIN: ${err.message}`));
+                    })
+                    .catch(err => logger.warn(`[${requestId}] Failed to hash PIN: ${err.message}`));
+            }
 
-        // SECURITY: HMAC-signed token — prevents forgery
-        const token = signToken({ id: `V${vendedorCode}`, user: vendedorCode, timestamp: Date.now() });
+            if (!pinValid) {
+                logger.warn(`[${requestId}] PIN mismatch for vendor ${vendedorCode}`);
+                return handleFailedLogin(res, safeUser, requestId, 'PIN incorrecto');
+            }
 
-        const response = {
-            user: {
-                id: `V${vendedorCode}`,
-                code: vendedorCode,
-                name: vendedorName,
-                company: 'GMP',
-                delegation: '',
-                vendedorCode: vendedorCode,
-                isJefeVentas: isJefeVentas,
-                tipoVendedor: tipoVendedor || '-',
+            // Check Repartidor role
+            let isRepartidor = false;
+            let codigoConductor = null;
+            let matriculaVehiculo = null;
+
+            try {
+                const currentYear = new Date().getFullYear();
+                const vehCheck = await queryWithParams(`
+                    SELECT TRIM(CODIGOVEHICULO) as VEHICULO, TRIM(MATRICULA) as MATRICULA
+                    FROM DSEDAC.VEH
+                    WHERE TRIM(CODIGOCONDUCTOR) = ?
+                      AND TRIM(CODIGOCONDUCTOR) <> '98'
+                    FETCH FIRST 1 ROWS ONLY
+                `, [vendedorCode], false);
+
+                if (vehCheck.length > 0) {
+                    isRepartidor = true;
+                    matriculaVehiculo = vehCheck[0].MATRICULA;
+                    codigoConductor = vendedorCode;
+                } else {
+                    const oppCheck = await queryWithParams(`
+                        SELECT COUNT(*) as CNT FROM DSEDAC.OPP
+                        WHERE TRIM(CODIGOREPARTIDOR) = ?
+                          AND ANOREPARTO = ?
+                    `, [vendedorCode, currentYear], false);
+                    
+                    if (oppCheck.length > 0 && (oppCheck[0].CNT || 0) >= 100) {
+                        isRepartidor = true;
+                        codigoConductor = vendedorCode;
+                    }
+                }
+            } catch (e) {
+                logger.warn(`[${requestId}] Error checking vehicle: ${e.message}`);
+            }
+
+            // Success
+            logger.info(`[${requestId}] Login successful for ${vendedorName} (${vendedorCode})`);
+
+            // Clear lockout on success
+            const successLockouts = loadLockouts();
+            delete successLockouts[safeUser];
+            saveLockouts(successLockouts);
+
+            let finalRole = 'COMERCIAL';
+            if (isJefeVentas) finalRole = 'JEFE_VENTAS';
+            else if (isRepartidor) finalRole = 'REPARTIDOR';
+
+            let vendedorCodes = [vendedorCode];
+            if (isJefeVentas) {
+                const allVendedores = await query(`
+                    SELECT DISTINCT TRIM(CODIGOVENDEDOR) as CODE 
+                    FROM DSEDAC.VDC WHERE SUBEMPRESA = 'GMP'
+                `);
+                const orphans = ['82', '20', 'UNK'];
+                const existingCodes = new Set(allVendedores.map(v => v.CODE));
+                orphans.forEach(o => existingCodes.add(o));
+                vendedorCodes = Array.from(existingCodes);
+            }
+
+            const accessToken = signAccessToken({ 
+                id: `V${vendedorCode}`, 
+                user: vendedorCode, 
+                role: finalRole, 
+                isJefeVentas,
+                timestamp: Date.now()
+            });
+            
+            const refreshToken = signRefreshToken({ 
+                id: `V${vendedorCode}`, 
+                user: vendedorCode, 
+                role: finalRole, 
+                isJefeVentas
+            });
+
+            res.json({
+                user: {
+                    id: `V${vendedorCode}`,
+                    code: vendedorCode,
+                    name: vendedorName,
+                    company: 'GMP',
+                    vendedorCode,
+                    isJefeVentas,
+                    tipoVendedor: tipoVendedor || '-',
+                    role: finalRole,
+                    isRepartidor,
+                    codigoConductor,
+                    matricula: matriculaVehiculo,
+                    showCommissions: vendor.HIDE_COMMISSIONS !== 'Y'
+                },
                 role: finalRole,
-                // Add Repartidor specific fields
-                isRepartidor: isRepartidor,
-                codigoConductor: codigoConductor,
-                matricula: matriculaVehiculo,
-                // NEW: Commission Visibility
-                showCommissions: vendor.HIDE_COMMISSIONS !== 'Y'
-            },
-            role: finalRole, // Root level role for easier access
-            isRepartidor: isRepartidor, // Root level flag
-            showCommissions: vendor.HIDE_COMMISSIONS !== 'Y', // Root level flag
-            vendedorCodes: vendedorCodes,
-            token: token,
-            // NEW: Update Notification
-            latestVersion: '3.0.1',
-            updateMessage: 'Nueva versión disponible. ¡Actualiza para ver los nuevos objetivos!'
-        };
+                isRepartidor,
+                showCommissions: vendor.HIDE_COMMISSIONS !== 'Y',
+                vendedorCodes,
+                token: accessToken,
+                refreshToken,
+                latestVersion: '3.3.1',
+                tokenExpiresIn: 3600,
+                refreshExpiresIn: 604800
+            });
 
-        logger.info(`✅ Login successful: ${vendedorCode} - ${vendedorName} (${response.user.role})`);
-        auditLogin(req, vendedorCode, vendedorName, finalRole, true);
-        res.json(response);
+            auditLogin(req, vendedorCode, vendedorName, finalRole, true);
 
-    } catch (error) {
-        logger.error(`Login error: ${error.message}`);
-        auditLogin(req, req.body?.user || 'unknown', null, null, false);
-        res.status(401).json({ error: 'Error de autenticación. Verifique sus credenciales.' });
+        } catch (error) {
+            logger.error(`[${requestId}] Login error: ${error.message}`);
+            auditLogin(req, req.body?.username || 'unknown', null, null, false);
+            res.status(401).json({ error: 'Error de autenticación', code: 'AUTH_ERROR' });
+        }
     }
+);
+
+// =============================================================================
+// REFRESH / LOGOUT / SWITCH ROLE
+// =============================================================================
+
+router.post('/refresh', async (req, res) => {
+    await handleRefreshToken(req, res);
 });
 
-// =============================================================================
-// SWITCH ROLE ENDPOINT - For Jefes / Multi-role users
-// =============================================================================
-router.post('/switch-role', authenticateToken, async (req, res) => {
+router.post('/logout', verifyToken, async (req, res) => {
+    await handleLogout(req, res);
+});
+
+router.post('/switch-role', verifyToken, async (req, res) => {
     try {
-        const { userId, newRole, viewAs } = req.body;
-
-        logger.info(`[Auth] Role switch request: User ${userId} -> ${newRole}`);
-        auditLogin(req, userId, null, newRole, true);
-
-        // Validate role
-        if (!['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR', 'ALMACEN'].includes(newRole)) {
-            return res.status(400).json({ error: 'Rol no válido' });
+        const { userId, newRole } = req.body;
+        const validRoles = ['COMERCIAL', 'JEFE_VENTAS', 'REPARTIDOR', 'ALMACEN'];
+        
+        if (!validRoles.includes(newRole)) {
+            return res.status(400).json({ error: 'Rol no válido', code: 'INVALID_ROLE' });
+        }
+        
+        if (req.user?.code !== userId) {
+            return res.status(403).json({ error: 'No tienes permiso para cambiar este rol', code: 'FORBIDDEN' });
         }
 
-        // Verify the requesting user matches the userId
-        if (req.user.code !== userId) {
-            logger.warn(`[Auth] Role switch denied: ${req.user.code} tried to switch as ${userId}`);
-            return res.status(403).json({ error: 'No tienes permiso para cambiar este rol' });
-        }
+        const accessToken = signAccessToken({ id: userId, user: userId, role: newRole, timestamp: Date.now() });
+        const refreshToken = signRefreshToken({ id: userId, user: userId, role: newRole });
 
-        // SECURITY: HMAC-signed token
-        const token = signToken({ id: userId, user: userId, timestamp: Date.now(), role: newRole });
-
-        res.json({
-            success: true,
-            role: newRole,
-            token: token,
-            viewAs: viewAs || null
-        });
-
+        res.json({ success: true, role: newRole, token: accessToken, refreshToken, tokenExpiresIn: 3600 });
     } catch (error) {
         logger.error(`Switch role error: ${error.message}`);
-        res.status(500).json({ error: 'Error cambiando de rol' });
+        res.status(500).json({ error: 'Error cambiando de rol', code: 'SERVER_ERROR' });
     }
 });
 
-// GET /repartidores - List of all repartidores for Jefe dropdown
-// OPTIMIZED: Added in-memory cache (5 min TTL) to avoid 1.4s+ response times
+// =============================================================================
+// REPARTIDORES LIST
+// =============================================================================
+
 let _repartidoresCache = null;
 let _repartidoresCacheTime = 0;
-const REPARTIDORES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const REPARTIDORES_CACHE_TTL = 5 * 60 * 1000;
 
-router.get('/repartidores', authenticateToken, async (req, res) => {
+router.get('/repartidores', verifyToken, async (req, res) => {
     try {
-        // Check in-memory cache first
         const now = Date.now();
         if (_repartidoresCache && (now - _repartidoresCacheTime) < REPARTIDORES_CACHE_TTL) {
-            logger.info(`[Auth] Returning ${_repartidoresCache.length} cached repartidores`);
             return res.json(_repartidoresCache);
         }
 
         const currentYear = new Date().getFullYear();
         let results = [];
 
-        // ─── SOURCE 1: VEH.CODIGOCONDUCTOR (personal vehicle assignment) ───
-        // This is the most reliable indicator: if someone has a personal vehicle
-        // assigned (CODIGOCONDUCTOR != 98/pool), they are a repartidor.
+        // Source 1: VEH
         try {
             const vehRows = await query(`
                 SELECT DISTINCT TRIM(V.CODIGOCONDUCTOR) as CODE, TRIM(D.NOMBREVENDEDOR) as NAME
                 FROM DSEDAC.VEH V
                 JOIN DSEDAC.VDD D ON TRIM(D.CODIGOVENDEDOR) = TRIM(V.CODIGOCONDUCTOR)
-                WHERE TRIM(V.CODIGOCONDUCTOR) <> '98'
-                  AND TRIM(V.CODIGOCONDUCTOR) <> ''
-                  AND V.CODIGOCONDUCTOR IS NOT NULL
+                WHERE TRIM(V.CODIGOCONDUCTOR) <> '98' AND TRIM(V.CODIGOCONDUCTOR) <> ''
             `, false);
-            if (vehRows && vehRows.length > 0) {
-                logger.info(`[Auth] VEH conductors: ${vehRows.length} repartidores with personal vehicle`);
-                results.push(...vehRows.map(r => ({ code: (r.CODE || '').toString().trim(), name: (r.NAME || '').toString().trim() })));
-            }
-        } catch (e) {
-            logger.warn(`[Auth] Error querying VEH conductors: ${e.message}`);
-        }
+            if (vehRows) results.push(...vehRows.map(r => ({ code: r.CODE?.trim(), name: r.NAME?.trim() })));
+        } catch (e) { logger.warn(`Error querying VEH: ${e.message}`); }
 
-        // ─── SOURCE 2: OPP active repartidores (≥100 deliveries this year) ───
-        // Captures repartidores who use pool vehicles (no personal VEH entry)
-        // but are clearly full-time delivery personnel by volume.
-        // Excludes Jefes de Ventas (VDDX.JEFEVENTASSN = 'S').
+        // Source 2: OPP
         try {
             const repRows = await query(`
                 SELECT TRIM(OPP.CODIGOREPARTIDOR) as CODE,
                        COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR)) as NAME
                 FROM DSEDAC.OPP OPP
                 LEFT JOIN DSEDAC.VDD D ON TRIM(D.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
-                WHERE OPP.CODIGOREPARTIDOR IS NOT NULL
-                  AND TRIM(OPP.CODIGOREPARTIDOR) <> ''
-                  AND OPP.ANOREPARTO = ${currentYear}
-                  AND NOT EXISTS (
-                    SELECT 1 FROM DSEDAC.VDDX X
-                    WHERE TRIM(X.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
-                      AND TRIM(X.JEFEVENTASSN) = 'S'
-                  )
+                WHERE OPP.CODIGOREPARTIDOR IS NOT NULL AND OPP.ANOREPARTO = ${currentYear}
+                  AND NOT EXISTS (SELECT 1 FROM DSEDAC.VDDX X WHERE TRIM(X.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR) AND TRIM(X.JEFEVENTASSN) = 'S')
                 GROUP BY TRIM(OPP.CODIGOREPARTIDOR), COALESCE(TRIM(D.NOMBREVENDEDOR), TRIM(OPP.CODIGOREPARTIDOR))
                 HAVING COUNT(*) >= 100
             `, false);
-            if (repRows && repRows.length > 0) {
-                logger.info(`[Auth] OPP active repartidores (≥100 deliveries ${currentYear}): ${repRows.length}`);
-                results.push(...repRows.map(r => ({ code: (r.CODE || '').toString().trim(), name: (r.NAME || '').toString().trim() })));
-            }
-        } catch (e) {
-            logger.warn(`[Auth] Error querying OPP active repartidores: ${e.message}`);
-        }
+            if (repRows) results.push(...repRows.map(r => ({ code: r.CODE?.trim(), name: r.NAME?.trim() })));
+        } catch (e) { logger.warn(`Error querying OPP: ${e.message}`); }
 
-        // ─── DEDUPLICATE + FILTER ───
+        // Deduplicate
         const EXCLUDED_PREFIXES = ['ZZ', 'ZD', 'ZB', 'ZE', 'Z7', 'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZJ', 'ZK', 'ZL', 'ZM', 'ZN', 'ZO', 'ZP', 'ZQ', 'ZR', 'ZS', 'ZT', 'ZU', 'ZV', 'ZW', 'ZX', 'ZY', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z8', 'Z9', 'XX', 'TT', 'TEST'];
         const EXCLUDED_CODES = new Set(['UNK', '00', '0', '', 'NULL', 'NONE', 'N/A', '97', '98']);
+        
         const uniqueMap = new Map();
         results.forEach(r => {
-            if (!r.code || r.code.length === 0) return;
+            if (!r.code) return;
             const code = r.code.trim().toUpperCase();
             if (EXCLUDED_CODES.has(code)) return;
-            if (EXCLUDED_PREFIXES.some(prefix => code.startsWith(prefix))) return;
-            // Also exclude if name starts with ZZ (inactive repartidores)
-            if (r.name && r.name.trim().toUpperCase().startsWith('ZZ')) return;
-            if (code.length === 1 && !/^[0-9]$/.test(code)) return;
-            if (!r.name || r.name.trim().length === 0 || r.name.trim() === r.code.trim()) return;
+            if (EXCLUDED_PREFIXES.some(p => code.startsWith(p))) return;
+            if (r.name?.trim().toUpperCase().startsWith('ZZ')) return;
             uniqueMap.set(r.code, r);
         });
-        const deduplicated = Array.from(uniqueMap.values()).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
-
-        _repartidoresCache = deduplicated;
+        
+        _repartidoresCache = Array.from(uniqueMap.values()).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
         _repartidoresCacheTime = now;
-        logger.info(`[Auth] Repartidores list cached: ${deduplicated.length} entries (codes: ${deduplicated.map(r => r.code).join(',')})`);
-
-        res.json(deduplicated);
+        
+        res.json(_repartidoresCache);
+        
     } catch (error) {
         logger.error(`Error fetching repartidores: ${error.message}`);
-        res.status(500).json({ error: 'Error de base de datos' });
+        res.status(500).json({ error: 'Error de base de datos', code: 'DB_ERROR' });
     }
 });
 

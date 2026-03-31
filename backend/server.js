@@ -11,7 +11,7 @@ const compression = require('compression');
 const logger = require('./middleware/logger');
 const verifyToken = require('./middleware/auth');
 const { initDb, query } = require('./config/db');
-const { globalLimiter } = require('./middleware/security');
+const { globalLimiter, createSecurityHeaders, validateContentType } = require('./middleware/security');
 const { loadMetadataCache } = require('./services/metadataCache');
 const { preloadCache } = require('./services/cache-preloader');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
@@ -108,15 +108,27 @@ app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
 const PORT = process.env.PORT || 3334;
 
 // Middleware — Security
+function parseCorsOrigin(value) {
+    if (process.env.NODE_ENV === 'production') {
+        if (!value || value === 'true' || value === '*') return false;
+        return value.split(',').map(o => o.trim()).filter(Boolean);
+    }
+    if (value === 'true' || value === '*') return true;
+    if (value) return value.split(',').map(o => o.trim()).filter(Boolean);
+    return true;
+}
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? false : true), // SECURITY: block all origins in production unless explicitly configured
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400 // Cache preflight for 24h
+    origin: parseCorsOrigin(process.env.CORS_ORIGIN),
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 86400
 }));
+app.use(createSecurityHeaders());
 app.use(helmet());
 app.use(compression());
 app.use(express.json({ limit: '2mb' }));
+app.use(validateContentType);
 
 // ==================== OPTIMIZATION MIDDLEWARE ====================
 app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers
@@ -159,7 +171,7 @@ app.get('/api/health', async (req, res) => {
       dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' }
     });
   } catch (error) {
-    res.status(500).json({ status: 'error', error: error.message });
+    res.status(500).json({ status: 'error', error: 'Internal server error' });
   }
 });
 
@@ -334,7 +346,7 @@ app.get('/api/optimization/cache-stats', verifyToken, (req, res) => {
       cacheStats: stats,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -351,7 +363,7 @@ app.get('/api/optimization/query-stats', verifyToken, (req, res) => {
       indexSuggestions: optimizedQuery.suggestIndexes(),
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -371,7 +383,7 @@ app.get('/api/optimization/audit-log', verifyToken, (req, res) => {
       entries: filtered.slice(-parseInt(limit)).reverse() // Most recent first
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -386,7 +398,7 @@ app.get('/api/optimization/active-sessions', verifyToken, (req, res) => {
       sessions
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -409,6 +421,7 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error(`🔥 UNHANDLED REJECTION: ${reason}`);
+  process.exit(1);
 });
 
 startServer();

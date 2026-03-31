@@ -208,16 +208,16 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE OPP.ANOREPARTO = ${selectedYear}
-              AND OPP.MESREPARTO = ${selectedMonth}
-              AND TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
+            WHERE OPP.ANOREPARTO = ?
+              AND OPP.MESREPARTO = ?
+              AND TRIM(OPP.CODIGOREPARTIDOR) = ?
             GROUP BY OPP.DIAREPARTO
             ORDER BY OPP.DIAREPARTO
         `;
 
         let rows = [];
         try {
-            rows = await query(sql, false) || [];
+            rows = await queryWithParams(sql, [selectedYear, selectedMonth, cleanRepartidorId], false) || [];
         } catch (queryError) {
             logger.warn(`[REPARTIDOR] Query error in collections/daily: ${queryError.message}`);
             return res.json({ success: true, daily: [] });
@@ -537,13 +537,16 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
         logger.info(`[REPARTIDOR] Getting objectives for ${repartidorId}${clientId ? ` client ${clientId}` : ''}`);
 
         // Handle comma-separated repartidor IDs
-        const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const cleanRepartidorIds = repartidorId.split(',').map(id => id.trim());
         let clientFilter = '';
+        const queryParams = [...cleanRepartidorIds];
         if (clientId) {
-            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'`;
+            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?`;
+            queryParams.push(clientId.trim());
         }
 
         // SENIOR: No date restriction, no row limit - fetch all historical data
+        const placeholders = cleanRepartidorIds.map(() => '?').join(',');
         const sql = `
             SELECT 
                 OPP.ANOREPARTO as ANO,
@@ -562,14 +565,14 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${placeholders})
               ${clientFilter}
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO
             ORDER BY OPP.ANOREPARTO DESC, OPP.MESREPARTO DESC
             FETCH FIRST 500 ROWS ONLY
         `;
 
-        const rows = await cachedQuery(query, sql, `repartidor:objectives:${cleanRepartidorId}`, TTL.REALTIME);
+        const rows = await cachedQuery(queryWithParams, sql, `repartidor:objectives:${cleanRepartidorIds.join(',')}`, TTL.REALTIME, queryParams);
 
         const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -883,9 +886,9 @@ router.get('/history/signature', async (req, res) => {
         // 1. Check DELIVERY_STATUS for FIRMA_PATH
         let firmaPath = null;
         try {
-            const dsRows = await query(`
-                SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'
-            `, false);
+        const dsRows = await queryWithParams(`
+            SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?
+        `, [albId], false);
             logger.info(`[REPARTIDOR] Step 1 DELIVERY_STATUS: ${dsRows.length} rows for ID='${albId}'`);
             if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
                 firmaPath = dsRows[0].FIRMA_PATH;
@@ -899,15 +902,15 @@ router.get('/history/signature', async (req, res) => {
         let firmante = null;
         let fechaFirma = null;
         try {
-            const firmaRows = await query(`
+            const firmaRows = await queryWithParams(`
                 SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE, RF.FECHA_FIRMA
                 FROM JAVIER.REPARTIDOR_FIRMAS RF
                 INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                WHERE RE.NUMERO_ALBARAN = ${numero}
-                  AND RE.EJERCICIO_ALBARAN = ${ejercicio}
-                  AND TRIM(RE.SERIE_ALBARAN) = '${(serie || 'A').trim()}'
+                WHERE RE.NUMERO_ALBARAN = ?
+                  AND RE.EJERCICIO_ALBARAN = ?
+                  AND TRIM(RE.SERIE_ALBARAN) = ?
                 FETCH FIRST 1 ROW ONLY
-            `, false);
+            `, [parseInt(numero), parseInt(ejercicio), (serie || 'A').trim()], false);
             if (firmaRows.length > 0) {
                 firmaBase64 = firmaRows[0].FIRMA_BASE64;
                 firmante = firmaRows[0].FIRMANTE_NOMBRE;
@@ -966,16 +969,16 @@ router.get('/history/signature', async (req, res) => {
         if (!firmaBase64) {
             try {
                 // Query ALL CACFIRMAS rows for this albaran (no FIRMABASE64 filter)
-                const cacRows = await query(`
+                const cacRows = await queryWithParams(`
                     SELECT FIRMABASE64, TRIM(FIRMANOMBRE) as FIRMANOMBRE, DIA, MES, ANO, HORA,
                            LENGTH(FIRMABASE64) as FIRMA_LEN
                     FROM DSEDAC.CACFIRMAS
-                    WHERE EJERCICIOALBARAN = ${ejercicio}
-                      AND TRIM(SERIEALBARAN) = '${(serie || 'A').trim()}'
-                      AND TERMINALALBARAN = ${terminal || 0}
-                      AND NUMEROALBARAN = ${numero}
+                    WHERE EJERCICIOALBARAN = ?
+                      AND TRIM(SERIEALBARAN) = ?
+                      AND TERMINALALBARAN = ?
+                      AND NUMEROALBARAN = ?
                     FETCH FIRST 5 ROWS ONLY
-                `, false);
+                `, [parseInt(ejercicio), (serie || 'A').trim(), parseInt(terminal || 0), parseInt(numero)], false);
                 logger.info(`[REPARTIDOR] Step 4 CACFIRMAS: ${cacRows.length} rows for ej=${ejercicio}, serie='${(serie || 'A').trim()}', term=${terminal || 0}, num=${numero}`);
 
                 // Try to find one with actual base64 data

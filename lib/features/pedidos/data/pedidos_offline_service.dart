@@ -5,6 +5,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'pedidos_service.dart';
 
 class PedidosOfflineService {
@@ -16,8 +18,16 @@ class PedidosOfflineService {
 
   /// Initialize Hive boxes
   static Future<void> init() async {
-    _draftsBox = await Hive.openBox(_draftsBoxName);
-    _syncQueueBox = await Hive.openBox(_syncQueueBoxName);
+    final key = _generateEncryptionKey();
+    final cipher = HiveAesCipher(key);
+    _draftsBox = await Hive.openBox(_draftsBoxName, encryptionCipher: cipher);
+    _syncQueueBox =
+        await Hive.openBox(_syncQueueBoxName, encryptionCipher: cipher);
+  }
+
+  static List<int> _generateEncryptionKey() {
+    final seed = 'gmp_app_pedidos_offline_key_v1';
+    return sha256.convert(utf8.encode(seed)).bytes;
   }
 
   // ── Draft Orders ──
@@ -32,7 +42,8 @@ class PedidosOfflineService {
     String? draftKey,
   }) async {
     final box = _draftsBox ?? await Hive.openBox(_draftsBoxName);
-    final key = draftKey ?? 'draft_${clientCode}_${DateTime.now().millisecondsSinceEpoch}';
+    final key = draftKey ??
+        'draft_${clientCode}_${DateTime.now().millisecondsSinceEpoch}';
     final data = {
       'clientCode': clientCode,
       'clientName': clientName,
@@ -83,7 +94,8 @@ class PedidosOfflineService {
       }
     }
     // Sort by savedAt descending
-    drafts.sort((a, b) => (b['savedAt']?.toString() ?? '').compareTo(a['savedAt']?.toString() ?? ''));
+    drafts.sort((a, b) => (b['savedAt']?.toString() ?? '')
+        .compareTo(a['savedAt']?.toString() ?? ''));
     return drafts;
   }
 
@@ -172,7 +184,8 @@ class PedidosOfflineService {
         debugPrint('[PedidosOffline] Sync failed for ${item['syncKey']}: $e');
         // Mark as failed
         final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
-        final data = jsonDecode(box.get(item['syncKey']) as String) as Map<String, dynamic>;
+        final data = jsonDecode(box.get(item['syncKey']) as String)
+            as Map<String, dynamic>;
         data['status'] = 'failed';
         data['error'] = e.toString();
         await box.put(item['syncKey'], jsonEncode(data));

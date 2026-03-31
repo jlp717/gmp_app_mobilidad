@@ -269,7 +269,7 @@ function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L',
     return `AND (${oldFilter} OR ${newFilter})`;
 }
 
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 
 // ... (previous helper functions)
 
@@ -280,8 +280,7 @@ async function getVendorName(vendorCode) {
     const trimmed = vendorCode.trim();
     if (_vendorNameCache.has(trimmed)) return _vendorNameCache.get(trimmed);
     try {
-        // PERF: Removed TRIM() - DB2 CHAR blank-padded comparison works without it
-        const rows = await query(`SELECT NOMBREVENDEDOR FROM DSEDAC.VDD WHERE CODIGOVENDEDOR = '${trimmed}'`, false);
+        const rows = await queryWithParams(`SELECT NOMBREVENDEDOR FROM DSEDAC.VDD WHERE CODIGOVENDEDOR = ?`, [trimmed], false);
         const name = (rows && rows.length > 0) ? rows[0].NOMBREVENDEDOR : vendorCode;
         _vendorNameCache.set(trimmed, name);
         return name;
@@ -316,12 +315,12 @@ async function getBSales(vendorCode, year) {
     try {
         const safeRaw = rawCode.replace(/[^a-zA-Z0-9]/g, '');
         const safeUnpadded = unpaddedCode.replace(/[^a-zA-Z0-9]/g, '');
-        const rows = await query(`
+        const rows = await queryWithParams(`
             SELECT MES, IMPORTE
             FROM JAVIER.VENTAS_B
-            WHERE (CODIGOVENDEDOR = '${safeRaw}' OR CODIGOVENDEDOR = '${safeUnpadded}')
-              AND EJERCICIO = ${parseInt(year)}
-        `, false, false);
+            WHERE (CODIGOVENDEDOR = ? OR CODIGOVENDEDOR = ?)
+              AND EJERCICIO = ?
+        `, [safeRaw, safeUnpadded, parseInt(year)], false, false);
 
         const monthlyMap = {};
         rows.forEach(r => {

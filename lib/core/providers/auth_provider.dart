@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../cache/cache_service.dart';
 import '../services/cache_prewarmer.dart';
+import '../services/secure_storage.dart';
 
 /// Authentication provider with role detection
 class AuthProvider with ChangeNotifier {
@@ -15,7 +16,8 @@ class AuthProvider with ChangeNotifier {
   String? _error;
   bool _initialized = false;
   bool _isMandatoryUpdate = false;
-  String _playStoreUrl = 'https://play.google.com/store/apps/details?id=com.jlp.gmp_mobilidad';
+  String _playStoreUrl =
+      'https://play.google.com/store/apps/details?id=com.jlp.gmp_mobilidad';
   bool _updateAvailable = false;
   String _updateMessage = '';
   List<String> _vendedorCodes = [];
@@ -39,24 +41,28 @@ class AuthProvider with ChangeNotifier {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = int.parse(packageInfo.buildNumber);
-      
+
       // SENIOR APPROACH: Fetch minimum required version from server
       // For now, we mock the check. In a real scenario, this comes from /health or /config
       final response = await ApiClient.get('/health/version-check');
-      
+
       if (response != null && response['success'] == true) {
-        final minRequiredVersion = int.tryParse(response['minVersion']?.toString() ?? '0') ?? 0;
-        final latestVersion = int.tryParse(response['latestVersion']?.toString() ?? '0') ?? 0;
-        
+        final minRequiredVersion =
+            int.tryParse(response['minVersion']?.toString() ?? '0') ?? 0;
+        final latestVersion =
+            int.tryParse(response['latestVersion']?.toString() ?? '0') ?? 0;
+
         if (currentVersion < minRequiredVersion) {
           _updateAvailable = true;
           _isMandatoryUpdate = true;
-          _updateMessage = (response['message'] as String?) ?? 'Es necesaria una nueva versión para continuar.';
+          _updateMessage = (response['message'] as String?) ??
+              'Es necesaria una nueva versión para continuar.';
           notifyListeners();
         } else if (currentVersion < latestVersion) {
           _updateAvailable = true;
           _isMandatoryUpdate = false;
-          _updateMessage = (response['message'] as String?) ?? 'Hay una nueva versión disponible.';
+          _updateMessage = (response['message'] as String?) ??
+              'Hay una nueva versión disponible.';
           notifyListeners();
         }
       }
@@ -71,52 +77,57 @@ class AuthProvider with ChangeNotifier {
       debugPrint('[AuthProvider] 401 Detected - Logging out...');
       logout();
     };
-    
+
     // Initial update check
     checkForUpdates();
   }
 
   /// Login with username and password
   Future<bool> login(String username, String password) async {
-    debugPrint('[AuthProvider] login() called with user: $username');
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
       if (kDebugMode) debugPrint('[AuthProvider] Calling API login...');
-      
+
       final response = await ApiClient.post(
         ApiConfig.login,
         {'username': username, 'password': password},
       );
 
-      debugPrint('[AuthProvider] Response received: ${response.keys}');
+      if (kDebugMode)
+        debugPrint('[AuthProvider] Response received: ${response.keys}');
 
       if (response != null && response['user'] != null) {
-        _currentUser = UserModel.fromJson(response['user'] as Map<String, dynamic>);
-        
+        _currentUser =
+            UserModel.fromJson(response['user'] as Map<String, dynamic>);
+
         // Handle vendedor codes
         if (response['vendedorCodes'] != null) {
-          _vendedorCodes = List<String>.from(response['vendedorCodes'] as Iterable);
+          _vendedorCodes =
+              List<String>.from(response['vendedorCodes'] as Iterable);
         }
-        
+
         ApiClient.setAuthToken(response['token'] as String);
 
-        // Save to persistent storage
+        // Save sensitive data to secure storage
+        await SecureStorage.writeSecureData(
+            'user_token', response['token'] as String);
+        await SecureStorage.writeSecureData(
+            'user_data', jsonEncode(response['user']));
+        // Non-sensitive data stays in SharedPreferences
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_token', response['token'] as String);
-        await prefs.setString('user_data', jsonEncode(response['user']));
         await prefs.setStringList('vendedor_codes', _vendedorCodes);
 
         _isLoading = false;
         notifyListeners();
         if (kDebugMode) debugPrint('[AuthProvider] Login SUCCESS');
-        
+
         // OPTIMIZATION: Pre-warm cache for instant data access
         // Run in background without awaiting to not block UI
         CachePreWarmer.preWarmCache(this);
-        
+
         return true;
       } else {
         throw Exception('Respuesta inválida del servidor');
@@ -134,20 +145,21 @@ class AuthProvider with ChangeNotifier {
   Future<bool> tryAutoLogin() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('user_token');
-      final userDataStr = prefs.getString('user_data');
+      final token = await SecureStorage.readSecureData('user_token');
+      final userDataStr = await SecureStorage.readSecureData('user_data');
       final codes = prefs.getStringList('vendedor_codes');
 
       if (token != null && userDataStr != null) {
         ApiClient.setAuthToken(token);
-        _currentUser = UserModel.fromJson(jsonDecode(userDataStr) as Map<String, dynamic>);
+        _currentUser =
+            UserModel.fromJson(jsonDecode(userDataStr) as Map<String, dynamic>);
         if (codes != null) _vendedorCodes = codes;
-        
+
         notifyListeners();
-        
+
         // OPTIMIZATION: Pre-warm cache on auto-login too
         CachePreWarmer.preWarmCache(this);
-        
+
         return true;
       }
       return false;
@@ -163,10 +175,12 @@ class AuthProvider with ChangeNotifier {
     _vendedorCodes = [];
     ApiClient.clearAuthToken();
 
-    // Clear auth tokens from SharedPreferences
+    // Clear sensitive data from secure storage
+    await SecureStorage.deleteSecureData('user_token');
+    await SecureStorage.deleteSecureData('user_data');
+
+    // Clear non-sensitive data from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('user_token');
-    await prefs.remove('user_data');
     await prefs.remove('vendedor_codes');
 
     // CRITICAL: Clear ALL cached API data (Hive + memory)
@@ -175,9 +189,9 @@ class AuthProvider with ChangeNotifier {
       await CacheService.clearAll();
       CacheService.clearMemoryCache();
       CachePreWarmer.reset();
-      debugPrint('[AuthProvider] 🧹 All caches cleared on logout');
+      debugPrint('[AuthProvider] All caches cleared on logout');
     } catch (e) {
-      debugPrint('[AuthProvider] ⚠️ Cache clear error: $e');
+      debugPrint('[AuthProvider] Cache clear error: $e');
     }
 
     notifyListeners();
@@ -192,34 +206,27 @@ class AuthProvider with ChangeNotifier {
     try {
       final response = await ApiClient.post(
         '/auth/switch-role',
-        {
-          'userId': _currentUser?.code,
-          'newRole': newRole,
-          'viewAs': viewAs
-        },
+        {'userId': _currentUser?.code, 'newRole': newRole, 'viewAs': viewAs},
       );
 
       if (response != null && response['success'] == true) {
         // Update token
         if (response['token'] != null) {
           ApiClient.setAuthToken(response['token'] as String);
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('user_token', response['token'] as String);
-          
+          await SecureStorage.writeSecureData(
+              'user_token', response['token'] as String);
+
           // Update local user model with new role
           if (_currentUser != null) {
-             _currentUser = _currentUser!.copyWith(role: newRole);
-             
-             // If debugging, print to verify
-             debugPrint('[AuthProvider] Local user role updated to: ${_currentUser!.userRole}');
+            _currentUser = _currentUser!.copyWith(role: newRole);
           }
         }
-        
+
         _isLoading = false;
         notifyListeners();
         return true;
       }
-      
+
       throw Exception('Failed to switch role');
     } catch (e) {
       _error = e.toString();
