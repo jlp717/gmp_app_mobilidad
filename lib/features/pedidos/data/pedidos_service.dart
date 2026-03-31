@@ -26,6 +26,8 @@ class Product {
   final double precioTarifa1;
   final double precioMinimo;
   final double precioCliente;
+  final int codigoTarifaCliente;
+  final double precioTarifaCliente;
   // Extended fields from ART table
   final String nameExt;
   final String familyName;
@@ -69,6 +71,8 @@ class Product {
     this.precioTarifa1 = 0,
     this.precioMinimo = 0,
     this.precioCliente = 0,
+    this.codigoTarifaCliente = 1,
+    this.precioTarifaCliente = 0,
     this.nameExt = '',
     this.familyName = '',
     this.prefamilia = '',
@@ -113,6 +117,10 @@ class Product {
       precioTarifa1: _toDouble(json['precioTarifa1']),
       precioMinimo: _toDouble(json['precioMinimo']),
       precioCliente: _toDouble(json['precioCliente']),
+      codigoTarifaCliente: json['codigoTarifaCliente'] is int
+          ? json['codigoTarifaCliente'] as int
+          : int.tryParse(json['codigoTarifaCliente']?.toString() ?? '1') ?? 1,
+      precioTarifaCliente: _toDouble(json['precioTarifaCliente']),
       nameExt: (json['nameExt'] ?? '').toString().trim(),
       familyName: (json['familyName'] ?? '').toString().trim(),
       prefamilia: (json['prefamilia'] ?? '').toString().trim(),
@@ -409,20 +417,17 @@ class Product {
   /// Simple boxes: CAJAS only
   List<String> get availableUnits {
     final norm = _normalizedUnit;
-    if (norm == 'KILOGRAMOS') {
-      return ['CAJAS', 'KILOGRAMOS'];
-    }
-    if (norm == 'LITROS') {
-      return ['CAJAS', 'LITROS'];
-    }
+    if (norm == 'KILOGRAMOS') return ['CAJAS', 'KILOGRAMOS'];
+    if (norm == 'LITROS') return ['CAJAS', 'LITROS'];
 
     final dUnit = displayUnit;
 
-    if (isDualFieldProduct) {
-      return ['CAJAS', 'UNIDADES'];
-    }
+    if (isDualFieldProduct) return ['CAJAS', 'UNIDADES'];
 
-    // For single-field non-weight items (e.g. PIEZAS, BANDEJAS, CAJAS)
+    // Explicit sub-unit (BANDEJAS, ESTUCHES, BOLSAS…) with UC > 1 →
+    // can sell by full box OR by individual unit
+    if (dUnit != 'CAJAS' && unitsPerBox > 1) return ['CAJAS', dUnit];
+
     return [dUnit];
   }
 
@@ -441,15 +446,21 @@ class TariffEntry {
   final int code;
   final String description;
   final double price;
+  final double precioUnitario;
 
-  TariffEntry(
-      {required this.code, required this.description, required this.price});
+  TariffEntry({
+    required this.code,
+    required this.description,
+    required this.price,
+    this.precioUnitario = 0,
+  });
 
   factory TariffEntry.fromJson(Map<String, dynamic> json) {
     return TariffEntry(
       code: _toInt(json['code']),
       description: (json['description'] ?? '').toString().trim(),
       price: _toDouble(json['price']),
+      precioUnitario: _toDouble(json['precioUnitario']),
     );
   }
 }
@@ -569,13 +580,15 @@ class ProductDetail {
   final List<TariffEntry> tariffs;
   final List<StockEntry> stockByWarehouse;
   final double clientPrice;
+  final int codigoTarifaCliente;
 
   ProductDetail({
     required this.product,
     required this.tariffs,
     required this.stockByWarehouse,
     this.clientPrice = 0,
-  });
+    int? codigoTarifaCliente,
+  }) : codigoTarifaCliente = codigoTarifaCliente ?? product.codigoTarifaCliente;
 
   factory ProductDetail.fromJson(Map<String, dynamic> json) {
     // Backend nests tariffs/stock inside 'product', so look in both places
@@ -624,6 +637,7 @@ class OrderLine {
   double porcentajeMargen;
   double ivaRate; // e.g. 0.21, 0.10, 0.04, 0.0
   double unidadesFraccion; // Support for dual-field unit logic
+  String claseLinea; // 'VT' = Venta, 'SC' = Sin Cargo
 
   OrderLine({
     this.id,
@@ -644,6 +658,7 @@ class OrderLine {
     this.porcentajeMargen = 0,
     this.ivaRate = 0.21,
     this.unidadesFraccion = 0,
+    this.claseLinea = 'VT',
   });
 
   factory OrderLine.fromJson(Map<String, dynamic> json) {
@@ -677,6 +692,7 @@ class OrderLine {
           fallback: 0.21),
       unidadesFraccion:
           _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
+      claseLinea: (json['claseLinea'] ?? json['CLASELINEA'] ?? 'VT').toString().trim(),
     );
   }
 
@@ -694,6 +710,7 @@ class OrderLine {
         'precioTarifaCliente': precioTarifaCliente,
         'precioMinimo': precioMinimo,
         'ivaRate': ivaRate,
+        'claseLinea': claseLinea,
       };
 
   /// Recalculate amounts based on current qty and price.

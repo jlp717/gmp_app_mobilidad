@@ -55,6 +55,8 @@ class PedidosProvider with ChangeNotifier {
   // ── Last Qty per Product (B3) ──
   final Map<String, double> _lastQtyByProduct = {};
   final Map<String, String> _lastUnitByProduct = {};
+  // ── Last selected tariff price per product (override from TarifaSelectorModal) ──
+  final Map<String, double> _lastPriceByProduct = {};
 
   // ── Global Discount (C5) ──
   double _globalDiscountPct = 0.0;
@@ -130,6 +132,13 @@ class PedidosProvider with ChangeNotifier {
       return _lastUnitByProduct[key];
     }
     return _lastUnitByProduct[code.trim()];
+  }
+
+  double? lastPriceForProduct(String code) =>
+      _lastPriceByProduct[code.trim()];
+
+  void setLastPriceForProduct(String code, double price) {
+    _lastPriceByProduct[code.trim()] = price;
   }
 
   double get globalDiscountPct => _globalDiscountPct;
@@ -535,6 +544,29 @@ class PedidosProvider with ChangeNotifier {
     if (_lines.isEmpty) {
       _globalDiscountPct = 0;
       _complementaryProducts = [];
+    }
+    _isDirty = true;
+    notifyListeners();
+  }
+
+  void updateLineClaseLinea(int index, String clase) {
+    if (index < 0 || index >= _lines.length) return;
+    if (!['VT', 'SC'].contains(clase)) return;
+    final line = _lines[index];
+    line.claseLinea = clase;
+    if (clase == 'SC') {
+      // SC lines don't contribute to total
+      line.precioVenta = 0;
+      line.importeVenta = 0;
+      line.importeMargen = -line.importeCosto;
+      line.porcentajeMargen = 0;
+    } else {
+      // Restore price from tariff cache if available
+      final cached = lastPriceForProduct(line.codigoArticulo);
+      if (cached != null && cached > 0) {
+        line.precioVenta = cached;
+      }
+      line.recalculate();
     }
     _isDirty = true;
     notifyListeners();

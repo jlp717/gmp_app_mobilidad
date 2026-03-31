@@ -18,6 +18,8 @@ class OrderLineTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
+  // Called with the new claseLinea value ('VT' or 'SC') when badge is tapped
+  final void Function(String)? onClaseLineaToggle;
 
   const OrderLineTile({
     Key? key,
@@ -27,29 +29,67 @@ class OrderLineTile extends StatelessWidget {
     required this.onTap,
     required this.onIncrement,
     required this.onDecrement,
+    this.onClaseLineaToggle,
   }) : super(key: key);
 
   String _getQtyLabel() {
-    bool isWeight = line.unidadMedida == 'KILOGRAMOS' || line.unidadMedida == 'LITROS';
+    final unit = line.unidadMedida.toUpperCase().trim();
+    final isWeight = unit == 'KILOGRAMOS' || unit == 'LITROS';
+
     if (isWeight && line.cantidadUnidades > 0) {
-      return '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} ${Product.unitLabel(line.unidadMedida)}';
-    }
-    
-    // Check if it's a dual-field product by calculating: U/F > 0 and U/F < U/C 
-    // AND it actually has envases && unidades in the line
-    bool isDualField = line.unidadesCaja > 1 && line.unidadesFraccion > 0 && line.unidadesFraccion < line.unidadesCaja;
-    
-    if (isDualField && line.cantidadEnvases > 0 && line.cantidadUnidades > 0 && line.unidadMedida == 'CAJAS') {
-      return '${PedidosFormatters.number(line.cantidadEnvases)} cj (${PedidosFormatters.number(line.cantidadUnidades)} ud)';
+      final abbr = unit == 'LITROS' ? 'L' : 'kg';
+      return '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} $abbr';
     }
 
-    if (line.cantidadEnvases > 0 && line.unidadMedida == 'CAJAS') {
+    // Dual-field: cajas + loose units
+    final isDualField = line.unidadesCaja > 1 &&
+        line.unidadesFraccion > 0 &&
+        line.unidadesFraccion < line.unidadesCaja;
+    if (isDualField &&
+        unit == 'CAJAS' &&
+        line.cantidadEnvases > 0 &&
+        line.cantidadUnidades > 0) {
+      return '${PedidosFormatters.number(line.cantidadEnvases)} cj'
+          ' (${PedidosFormatters.number(line.cantidadUnidades)} ud)';
+    }
+
+    if (unit == 'CAJAS' && line.cantidadEnvases > 0) {
+      if (line.unidadesCaja > 1) {
+        final total = line.cantidadEnvases * line.unidadesCaja;
+        return '${PedidosFormatters.number(line.cantidadEnvases)} cj'
+            ' (${PedidosFormatters.number(total)} uds)';
+      }
       return '${PedidosFormatters.number(line.cantidadEnvases)} cj';
     }
-    
-    // For single-field units like BANDEJAS, ESTUCHE, PIEZAS, UNIDADES
-    final label = Product.unitLabel(line.unidadMedida);
+
+    // Explicit sub-unit: BANDEJAS, ESTUCHES, PIEZAS, etc.
+    final label = Product.unitLabel(unit);
+    if (line.unidadesCaja > 1 && line.cantidadUnidades > 0) {
+      final pzTotal = line.cantidadUnidades * line.unidadesCaja;
+      return '${PedidosFormatters.number(line.cantidadUnidades)} $label'
+          ' (${PedidosFormatters.number(pzTotal)} pz)';
+    }
     return '${PedidosFormatters.number(line.cantidadUnidades)} $label';
+  }
+
+  String _priceLabel() {
+    if (line.precioVenta <= 0) return '';
+    final abbr = _unitAbbr(line.unidadMedida);
+    return '@ ${PedidosFormatters.money(line.precioVenta, decimals: 3)} €/$abbr';
+  }
+
+  static String _unitAbbr(String unit) {
+    switch (unit.toUpperCase().trim()) {
+      case 'CAJAS': return 'cj';
+      case 'KILOGRAMOS': return 'kg';
+      case 'LITROS': return 'L';
+      case 'BANDEJAS': return 'band';
+      case 'ESTUCHES': case 'ESTUCHE': return 'est';
+      case 'BOLSAS': case 'BOLSA': return 'bol';
+      case 'UNIDADES': return 'uds';
+      case 'PIEZAS': return 'pzs';
+      default: return unit.toLowerCase();
+    }
   }
 
   @override
@@ -109,7 +149,7 @@ class OrderLineTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Product name + VT badge
+                // Product name + VT/SC badge + stepper
                 Expanded(
                   flex: 3,
                   child: Column(
@@ -129,21 +169,38 @@ class OrderLineTile extends StatelessWidget {
                       const SizedBox(height: 3),
                       Row(
                         children: [
-                          // VT badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: AppTheme.neonPurple.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'VT',
-                              style: TextStyle(
-                                color: AppTheme.neonPurple,
-                                fontSize: Responsive.fontSize(context,
-                                    small: 9, large: 10),
-                                fontWeight: FontWeight.w600,
+                          // Tappable VT / SC badge
+                          GestureDetector(
+                            onTap: onClaseLineaToggle == null
+                                ? null
+                                : () => onClaseLineaToggle!(
+                                    line.claseLinea == 'SC' ? 'VT' : 'SC'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: line.claseLinea == 'SC'
+                                    ? Colors.blueGrey.withValues(alpha: 0.25)
+                                    : AppTheme.neonPurple
+                                        .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: line.claseLinea == 'SC'
+                                      ? Colors.blueGrey
+                                      : Colors.transparent,
+                                  width: 0.5,
+                                ),
+                              ),
+                              child: Text(
+                                line.claseLinea == 'SC' ? 'SC' : 'VT',
+                                style: TextStyle(
+                                  color: line.claseLinea == 'SC'
+                                      ? Colors.blueGrey.shade200
+                                      : AppTheme.neonPurple,
+                                  fontSize: Responsive.fontSize(context,
+                                      small: 9, large: 10),
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
@@ -151,7 +208,7 @@ class OrderLineTile extends StatelessWidget {
                           // Qty Stepper
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.05),
+                              color: Colors.white.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Row(
@@ -160,21 +217,31 @@ class OrderLineTile extends StatelessWidget {
                                 Material(
                                   color: Colors.transparent,
                                   child: InkWell(
-                                    onTap: line.cantidadEnvases > 0 || line.cantidadUnidades > 0 ? onDecrement : null,
-                                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(6)),
+                                    onTap: line.cantidadEnvases > 0 ||
+                                            line.cantidadUnidades > 0
+                                        ? onDecrement
+                                        : null,
+                                    borderRadius:
+                                        const BorderRadius.horizontal(
+                                            left: Radius.circular(6)),
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                      child: Icon(Icons.remove, size: 14, color: Colors.white70),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 3),
+                                      child: Icon(Icons.remove,
+                                          size: 14,
+                                          color: Colors.white70),
                                     ),
                                   ),
                                 ),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4),
                                   child: Text(
                                     _getQtyLabel(),
                                     style: TextStyle(
                                       color: Colors.white,
-                                      fontSize: Responsive.fontSize(context, small: 11, large: 12),
+                                      fontSize: Responsive.fontSize(context,
+                                          small: 11, large: 12),
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -183,10 +250,15 @@ class OrderLineTile extends StatelessWidget {
                                   color: Colors.transparent,
                                   child: InkWell(
                                     onTap: onIncrement,
-                                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
+                                    borderRadius:
+                                        const BorderRadius.horizontal(
+                                            right: Radius.circular(6)),
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                      child: Icon(Icons.add, size: 14, color: AppTheme.neonBlue),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 3),
+                                      child: Icon(Icons.add,
+                                          size: 14,
+                                          color: AppTheme.neonBlue),
                                     ),
                                   ),
                                 ),
@@ -195,31 +267,61 @@ class OrderLineTile extends StatelessWidget {
                           ),
                         ],
                       ),
+                      // Price per unit sub-label
+                      if (_priceLabel().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          _priceLabel(),
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 10),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                // Price
+                // Importe
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      PedidosFormatters.money(line.precioVenta, decimals: 3),
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: Responsive.fontSize(context,
-                            small: 11, large: 12),
+                    if (line.importeVenta == 0) ...[
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.warning_amber_rounded,
+                              color: AppTheme.warning, size: 13),
+                          const SizedBox(width: 3),
+                          Text(
+                            '0,00 €',
+                            style: TextStyle(
+                              color: AppTheme.error,
+                              fontWeight: FontWeight.bold,
+                              fontSize: Responsive.fontSize(context,
+                                  small: 13, large: 15),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      PedidosFormatters.money(line.importeVenta),
-                      style: TextStyle(
-                        color: AppTheme.neonGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: Responsive.fontSize(context,
-                            small: 13, large: 15),
+                    ] else ...[
+                      Text(
+                        PedidosFormatters.money(line.precioVenta,
+                            decimals: 3),
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: Responsive.fontSize(context,
+                              small: 11, large: 12),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 2),
+                      Text(
+                        PedidosFormatters.money(line.importeVenta),
+                        style: TextStyle(
+                          color: AppTheme.neonGreen,
+                          fontWeight: FontWeight.bold,
+                          fontSize: Responsive.fontSize(context,
+                              small: 13, large: 15),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(width: 8),

@@ -237,6 +237,8 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
                 cantidadEnvases: isBoxes ? qty : null,
                 cantidadUnidades: isBoxes ? null : qty);
           },
+          onClaseLineaToggle: (clase) =>
+              provider.updateLineClaseLinea(i, clase),
         );
       },
     );

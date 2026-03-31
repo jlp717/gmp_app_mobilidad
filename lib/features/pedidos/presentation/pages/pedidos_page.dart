@@ -28,6 +28,7 @@ import '../widgets/complementary_products.dart';
 import '../widgets/order_pdf_generator.dart';
 import '../widgets/product_detail_sheet.dart';
 import '../widgets/stock_alternatives_sheet.dart';
+import '../widgets/tarifa_selector_modal.dart';
 import '../widgets/unit_selector_modal.dart';
 import '../utils/pedidos_formatters.dart';
 import '../dialogs/client_search_dialog.dart';
@@ -302,6 +303,7 @@ class _PedidosPageState extends State<PedidosPage>
         TextEditingController(text: _formatPriceForInput(initialPrice));
     List<TariffEntry> tariffs = [];
     List<StockEntry> stockByWarehouse = [];
+    int clientTarifaCode = 1;
     bool showWarehouseStock = false;
     bool loadingTariffs = true;
 
@@ -344,6 +346,7 @@ class _PedidosPageState extends State<PedidosPage>
                   setModalState(() {
                     tariffs = detail.tariffs;
                     stockByWarehouse = detail.stockByWarehouse;
+                    clientTarifaCode = detail.codigoTarifaCliente;
                     if (detail.clientPrice > 0) {
                       priceController.text =
                           _formatPriceForInput(detail.clientPrice);
@@ -543,6 +546,50 @@ class _PedidosPageState extends State<PedidosPage>
                           ),
                       ],
                     ),
+                    // ── Precio button (opens TarifaSelectorModal) ──
+                    if (tariffs.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            final prov = context.read<PedidosProvider>();
+                            final selected = await TarifaSelectorModal.show(
+                              ctx,
+                              product: product,
+                              tariffs: tariffs,
+                              codigoTarifaCliente: clientTarifaCode,
+                              initialPrice: _parseInputNumber(
+                                  priceController.text),
+                            );
+                            if (selected != null) {
+                              setModalState(() {
+                                priceController.text =
+                                    _formatPriceForInput(selected);
+                                selectedUnit = product.availableUnits
+                                    .contains(selectedUnit)
+                                    ? selectedUnit
+                                    : product.availableUnits.first;
+                              });
+                              prov.setLastPriceForProduct(
+                                  product.code, selected);
+                            }
+                          },
+                          icon: const Icon(Icons.euro_rounded, size: 16),
+                          label: const Text('Precio',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.warning,
+                            foregroundColor: AppTheme.darkBase,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
                     // â”€â”€ Tariff chips â”€â”€
                     if (tariffs.isNotEmpty) ...[
                       const SizedBox(height: 12),

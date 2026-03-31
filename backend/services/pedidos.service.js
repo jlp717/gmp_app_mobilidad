@@ -201,7 +201,10 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
             COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS stockEnvases,
             COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS stockUnidades,
             COALESCE(T1.PRECIOTARIFA, 0) AS precioTarifa1,
-            COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo
+            COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo,
+            COALESCE(TC.PRECIOTARIFA, 0) AS precioCliente,
+            TRIM(COALESCE(A.FORMATO, '')) AS formato,
+            COALESCE(A.PRODUCTOPESADOSN, '') AS productoPesado
         FROM DSEDAC.ART A
         LEFT JOIN (
             SELECT CODIGOARTICULO,
@@ -221,17 +224,26 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
         ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
         LEFT JOIN DSEDAC.ARA T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
         LEFT JOIN DSEDAC.ARA T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
+        LEFT JOIN DSEDAC.ARA TC ON A.CODIGOARTICULO = TC.CODIGOARTICULO
+            AND TC.CODIGOTARIFA = (
+                SELECT COALESCE(CLI.CODIGOTARIFA, 1)
+                FROM DSEDAC.CLI CLI
+                WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+                FETCH FIRST 1 ROW ONLY
+            )
         ${where}
         ORDER BY A.DESCRIPCIONARTICULO
         OFFSET ? ROWS FETCH FIRST ? ROWS ONLY`;
 
-    params.push(offset, limit);
+    // TC JOIN subquery param must come first (appears before WHERE in SQL text)
+    const clientCodeTrimmed = (clientCode || '').trim();
+    const finalParams = [clientCodeTrimmed, ...params, offset, limit];
 
-    const cacheKey = `pedidos:products:${search || ''}:${family || ''}:${marca || ''}:${offset}:${limit}`;
+    const cacheKey = `pedidos:products:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${offset}:${limit}`;
 
     try {
         const rows = await cachedQuery(
-            (sql) => queryWithParams(sql, params),
+            (sql) => queryWithParams(sql, finalParams),
             sql,
             cacheKey,
             TTL.SHORT // 5 min
@@ -251,6 +263,9 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
             stockUnidades: parseFloat(r.STOCKUNIDADES) || 0,
             precioTarifa1: parseFloat(r.PRECIOTARIFA1) || 0,
             precioMinimo: parseFloat(r.PRECIOMINIMO) || 0,
+            precioCliente: parseFloat(r.PRECIOCLIENTE) || 0,
+            formato: (r.FORMATO || '').trim(),
+            productoPesado: (r.PRODUCTOPESADO || '').trim() === 'S',
         }));
     } catch (error) {
         logger.error(`[PEDIDOS] getProducts error: ${error.message}`);
@@ -378,11 +393,17 @@ async function getProductDetail(code, clientCode) {
             anoBaja: parseInt(raw.ANOBAJA) || 0,
             mesBaja: parseInt(raw.MESBAJA) || 0,
         };
-        product.tariffs = (tariffRows || []).map(t => ({
-            code: t.CODIGOTARIFA,
-            description: (t.TARIFADESC || '').trim(),
-            price: parseFloat(t.PRECIOTARIFA) || 0,
-        }));
+        product.tariffs = (tariffRows || []).map(t => {
+            const price = parseFloat(t.PRECIOTARIFA) || 0;
+            return {
+                code: t.CODIGOTARIFA,
+                description: (t.TARIFADESC || '').trim(),
+                price,
+                precioUnitario: product.unitsPerBox > 1
+                    ? +(price / product.unitsPerBox).toFixed(4)
+                    : price,
+            };
+        });
         product.stock = (stockRows || []).map(s => ({
             almacen: s.CODIGOALMACEN,
             almacenDesc: (s.ALMACENDESC || '').trim(),
@@ -390,7 +411,7 @@ async function getProductDetail(code, clientCode) {
             unidades: parseFloat(s.UNIDADES) || 0,
         }));
 
-        // Client-specific price from most recent sale
+        // Client-specific price from most recent sale (historical, not tariff)
         if (clientCode) {
             const clientPriceSql = `
                 SELECT L.PRECIOVENTA AS PRECIOCLIENTE
@@ -406,6 +427,24 @@ async function getProductDetail(code, clientCode) {
             product.precioCliente = priceRows && priceRows.length > 0
                 ? parseFloat(priceRows[0].PRECIOCLIENTE) || 0
                 : null;
+        }
+
+        // Client assigned tariff code + tariff-based price for popup PT
+        if (clientCode) {
+            const cliTarifaSql = `
+                SELECT COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA
+                FROM DSEDAC.CLI
+                WHERE TRIM(CODIGOCLIENTE) = ?
+                FETCH FIRST 1 ROW ONLY`;
+            const cliRows = await queryWithParams(cliTarifaSql, [clientCode.trim()]);
+            const clientTarifaCode = cliRows && cliRows.length > 0
+                ? parseInt(cliRows[0].CODIGOTARIFA) || 1
+                : 1;
+            product.codigoTarifaCliente = clientTarifaCode;
+            product.precioTarifaCliente = product.tariffs.find(t => t.code === clientTarifaCode)?.price ?? 0;
+        } else {
+            product.codigoTarifaCliente = 1;
+            product.precioTarifaCliente = product.tariffs.find(t => t.code === 1)?.price ?? 0;
         }
 
         return product;
@@ -925,13 +964,17 @@ async function addOrderLine(pedidoId, lineData) {
     return getOrderDetail(id);
 }
 
-async function updateOrderLine(lineId, { cantidad, precio, unidadMedida, precioCosto }) {
+async function updateOrderLine(lineId, { cantidad, precio, unidadMedida, precioCosto, claseLinea }) {
     const id = parseInt(lineId);
     if (isNaN(id)) throw new Error('Invalid lineId');
 
+    if (claseLinea !== undefined && !['VT', 'SC'].includes(claseLinea)) {
+        throw new Error('claseLinea inválida');
+    }
+
     // Fetch current line to get pedidoId and defaults
     const currentRows = await queryWithParams(
-        `SELECT PEDIDO_ID, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA FROM JAVIER.PEDIDOS_LIN WHERE ID = ?`,
+        `SELECT PEDIDO_ID, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA, CLASELINEA FROM JAVIER.PEDIDOS_LIN WHERE ID = ?`,
         [id]
     );
     if (!currentRows || currentRows.length === 0) throw new Error('Line not found');
@@ -939,12 +982,15 @@ async function updateOrderLine(lineId, { cantidad, precio, unidadMedida, precioC
     const current = currentRows[0];
     const pedidoId = current.PEDIDO_ID;
 
+    const newClase = claseLinea !== undefined ? claseLinea : (current.CLASELINEA || 'VT');
     const newCantidad = cantidad != null ? parseFloat(cantidad) : parseFloat(current.CANTIDADUNIDADES) || 0;
-    const newPrecio = precio != null ? parseFloat(precio) : parseFloat(current.PRECIOVENTA) || 0;
+    // SC lines always have 0 price and importe
+    const newPrecio = newClase === 'SC' ? 0
+        : (precio != null ? parseFloat(precio) : parseFloat(current.PRECIOVENTA) || 0);
     const newCosto = precioCosto != null ? parseFloat(precioCosto) : parseFloat(current.PRECIOCOSTO) || 0;
     const newUM = unidadMedida || current.UNIDADMEDIDA;
 
-    const importeVenta = newCantidad * newPrecio;
+    const importeVenta = newClase === 'SC' ? 0 : newCantidad * newPrecio;
     const importeCosto = newCantidad * newCosto;
     const importeMargen = importeVenta - importeCosto;
     const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
@@ -952,10 +998,11 @@ async function updateOrderLine(lineId, { cantidad, precio, unidadMedida, precioC
     await queryWithParams(
         `UPDATE JAVIER.PEDIDOS_LIN SET
             CANTIDADUNIDADES = ?, PRECIOVENTA = ?, PRECIOCOSTO = ?, UNIDADMEDIDA = ?,
-            IMPORTEVENTA = ?, IMPORTECOSTO = ?, IMPORTEMARGEN = ?, PORCENTAJEMARGEN = ?
+            IMPORTEVENTA = ?, IMPORTECOSTO = ?, IMPORTEMARGEN = ?, PORCENTAJEMARGEN = ?,
+            CLASELINEA = ?
         WHERE ID = ?`,
         [newCantidad, newPrecio, newCosto, newUM, importeVenta, importeCosto, importeMargen,
-            Math.round(pctMargen * 100) / 100, id],
+            Math.round(pctMargen * 100) / 100, newClase, id],
         false
     );
 

@@ -523,11 +523,15 @@ router.put('/:id/lines', async (req, res) => {
             cantidadEnvases, cantidadUnidades,
             unidadMedida, unidadesCaja,
             precioVenta, precioCosto, precioTarifa,
-            precioTarifaCliente, precioMinimo
+            precioTarifaCliente, precioMinimo,
+            claseLinea = 'VT'
         } = req.body;
 
         if (!codigoArticulo) {
             return res.status(400).json({ success: false, error: 'codigoArticulo is required' });
+        }
+        if (!['VT', 'SC'].includes(claseLinea)) {
+            return res.status(400).json({ success: false, error: 'claseLinea inválida' });
         }
 
         const line = await pedidosService.addOrderLine(id, {
@@ -541,7 +545,8 @@ router.put('/:id/lines', async (req, res) => {
             precioCosto: parseFloat(precioCosto) || 0,
             precioTarifa: parseFloat(precioTarifa) || 0,
             precioTarifaCliente: parseFloat(precioTarifaCliente) || 0,
-            precioMinimo: parseFloat(precioMinimo) || 0
+            precioMinimo: parseFloat(precioMinimo) || 0,
+            claseLinea,
         });
 
         res.json({ success: true, line });
@@ -564,13 +569,18 @@ router.put('/:id/lines/:lineId', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order or line id' });
         }
 
-        const { cantidadEnvases, cantidadUnidades, precioVenta, unidadMedida } = req.body;
+        const { cantidadEnvases, cantidadUnidades, precioVenta, unidadMedida, claseLinea } = req.body;
+
+        if (claseLinea !== undefined && !['VT', 'SC'].includes(claseLinea)) {
+            return res.status(400).json({ success: false, error: 'claseLinea inválida' });
+        }
 
         const line = await pedidosService.updateOrderLine(id, lineId, {
             cantidadEnvases: cantidadEnvases !== undefined ? parseIntSafe(cantidadEnvases, 0) : undefined,
             cantidadUnidades: cantidadUnidades !== undefined ? parseIntSafe(cantidadUnidades, 0) : undefined,
             precioVenta: precioVenta !== undefined ? parseFloat(precioVenta) || 0 : undefined,
-            unidadMedida: unidadMedida !== undefined ? String(unidadMedida).trim() : undefined
+            unidadMedida: unidadMedida !== undefined ? String(unidadMedida).trim() : undefined,
+            claseLinea: claseLinea !== undefined ? String(claseLinea).trim() : undefined,
         });
 
         res.json({ success: true, line });

@@ -13,6 +13,8 @@ class UnitSelectorModal extends StatefulWidget {
   final double? initialQuantity;
   final List<String> availableUnits;
   final Product? product;
+  // Override price per displayUnit (from TarifaSelectorModal). null = use product.bestPrice
+  final double? initialPrice;
 
   const UnitSelectorModal({
     Key? key,
@@ -20,6 +22,7 @@ class UnitSelectorModal extends StatefulWidget {
     this.initialQuantity,
     this.availableUnits = const ['CAJAS'],
     this.product,
+    this.initialPrice,
   }) : super(key: key);
 
   /// Show the modal as a centered dialog and return { 'unit': String, 'quantity': double } or null
@@ -29,6 +32,7 @@ class UnitSelectorModal extends StatefulWidget {
     double? initialQuantity,
     List<String>? availableUnits,
     Product? product,
+    double? initialPrice,
   }) {
     final units = availableUnits ??
         product?.availableUnits ??
@@ -42,6 +46,7 @@ class UnitSelectorModal extends StatefulWidget {
         initialQuantity: initialQuantity,
         availableUnits: units,
         product: product,
+        initialPrice: initialPrice,
       ),
     );
   }
@@ -131,13 +136,44 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     }
   }
 
-  /// Get price for the selected unit
+  /// Get price for the given unit, using override if available.
+  /// [widget.initialPrice] is per product.displayUnit.
   String _priceForUnit(String unit) {
     final p = widget.product;
     if (p == null) return '';
-    final price = p.priceForUnit(unit);
+    double price;
+    final override = widget.initialPrice;
+    if (override != null && override > 0) {
+      // override is per displayUnit; adapt per requested unit
+      if (unit == 'CAJAS') {
+        price = override * (p.unitsPerBox > 0 ? p.unitsPerBox : 1);
+      } else {
+        price = override;
+      }
+    } else {
+      price = p.priceForUnit(unit);
+    }
     if (price <= 0) return '';
     return '${price.toStringAsFixed(3)} €/${_unitAbbr(unit)}';
+  }
+
+  /// Content description per unit button.
+  /// CAJAS: "1 cj = 10 band" — non-CAJAS: "1 band = 0.1 cj"
+  String? _subtitleForUnit(String unit) {
+    final p = widget.product;
+    if (p == null || p.unitsPerBox <= 1) return null;
+    final abbr = _unitAbbr(p.displayUnit);
+    if (unit == 'CAJAS') {
+      final n = p.unitsPerBox;
+      final nStr = n == n.roundToDouble()
+          ? n.toInt().toString()
+          : n.toStringAsFixed(2);
+      return '1 cj = $nStr $abbr';
+    }
+    // Inverse: how many boxes per 1 unit
+    final frac = 1.0 / p.unitsPerBox;
+    final fracStr = frac.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+    return '1 $abbr = $fracStr cj';
   }
 
   /// Get Neto U/R price if applicable
@@ -235,54 +271,93 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
               final selected = _selectedUnit == unit;
               final stockStr = _stockForUnit(unit);
               final priceStr = _priceForUnit(unit);
+              final subtitle = _subtitleForUnit(unit);
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Material(
-                  color: selected ? AppTheme.neonBlue.withOpacity(0.15) : AppTheme.darkCard,
+                  color: selected
+                      ? AppTheme.neonBlue.withValues(alpha: 0.15)
+                      : AppTheme.darkCard,
                   borderRadius: BorderRadius.circular(10),
                   child: InkWell(
                     onTap: () => setState(() => _selectedUnit = unit),
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: selected ? AppTheme.neonBlue : AppTheme.borderColor,
+                          color: selected
+                              ? AppTheme.neonBlue
+                              : AppTheme.borderColor,
                           width: selected ? 1.5 : 1,
                         ),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            selected ? Icons.radio_button_checked : Icons.radio_button_off,
-                            color: selected ? AppTheme.neonBlue : Colors.white38,
+                            selected
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_off,
+                            color: selected
+                                ? AppTheme.neonBlue
+                                : Colors.white38,
                             size: 20,
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: Text(
-                              _unitLabel(unit),
-                              style: TextStyle(
-                                color: selected ? Colors.white : Colors.white70,
-                                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                                fontSize: 14,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _unitLabel(unit),
+                                  style: TextStyle(
+                                    color: selected
+                                        ? Colors.white
+                                        : Colors.white70,
+                                    fontWeight: selected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                if (subtitle != null)
+                                  Text(
+                                    subtitle,
+                                    style: const TextStyle(
+                                      color: Colors.white38,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                           if (stockStr.isNotEmpty)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: AppTheme.neonGreen.withOpacity(0.1),
+                                color: AppTheme.neonGreen
+                                    .withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: Text(stockStr, style: const TextStyle(color: AppTheme.neonGreen, fontSize: 11, fontWeight: FontWeight.w600)),
+                              child: Text(
+                                stockStr,
+                                style: const TextStyle(
+                                    color: AppTheme.neonGreen,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600),
+                              ),
                             ),
                           if (priceStr.isNotEmpty) ...[
                             const SizedBox(width: 8),
-                            Text(priceStr, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                            Text(
+                              priceStr,
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 11),
+                            ),
                           ],
                         ],
                       ),
