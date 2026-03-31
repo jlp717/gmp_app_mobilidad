@@ -207,23 +207,19 @@ router.post('/login',
 
             // Verify PIN
             let pinValid = false;
-            
+
             if (dbPin && dbPin.startsWith('$2b$')) {
+                // Bcrypt hash - use compare
                 pinValid = await verifyPassword(trimmedPwd, dbPin);
             } else if (dbPin === trimmedPwd) {
+                // Plaintext PIN (legacy) - VALID ONLY, don't migrate
                 pinValid = true;
                 
-                // Migrate to bcrypt
-                hashPassword(trimmedPwd, BCRYPT_ROUNDS)
-                    .then(hashedPin => {
-                        queryWithParams(`
-                            UPDATE DSEDAC.VDPL1 SET CODIGOPIN = ?
-                            WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
-                        `, [hashedPin, vendedorCode], false)
-                        .then(() => logger.info(`[${requestId}] Migrated PIN to bcrypt for ${vendedorCode}`))
-                        .catch(err => logger.warn(`[${requestId}] Failed to migrate PIN: ${err.message}`));
-                    })
-                    .catch(err => logger.warn(`[${requestId}] Failed to hash PIN: ${err.message}`));
+                // MIGRATION DISABLED: DB2 field CODIGOPIN is too small for bcrypt hashes
+                // Bcrypt produces ~60 char hashes, DB2 field is likely VARCHAR(20-30)
+                // To migrate, DBA must first: ALTER TABLE DSEDAC.VDPL1 ALTER COLUMN CODIGOPIN SET DATA TYPE VARCHAR(100)
+                // For now, plaintext PINs work but are NOT stored as hashes
+                logger.info(`[${requestId}] ⚠️ Vendor ${vendedorCode} has plaintext PIN (migration pending DB schema change)`);
             }
 
             if (!pinValid) {
