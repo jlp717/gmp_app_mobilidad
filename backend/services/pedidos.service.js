@@ -170,7 +170,7 @@ async function initPedidosTables() {
 
 async function getProducts({ search, clientCode, family, marca, limit = 50, offset = 0 }) {
     const params = [];
-    let where = 'WHERE A.ANOBAJA = 0';
+    let where = "WHERE A.ANOBAJA = 0 AND TRIM(A.CODIGOARTICULO) <> ''";
 
     if (search) {
         const s = `%${search.toUpperCase()}%`;
@@ -226,9 +226,9 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
         LEFT JOIN DSEDAC.ARA T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
         LEFT JOIN DSEDAC.ARA TC ON A.CODIGOARTICULO = TC.CODIGOARTICULO
             AND TC.CODIGOTARIFA = (
-                SELECT COALESCE(CLI.CODIGOTARIFA, 1)
-                FROM DSEDAC.CLI CLI
-                WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+                SELECT CLC.CODIGOTARIFA
+                FROM DSEDAC.CLC CLC
+                WHERE TRIM(CLC.CODIGOCLIENTE) = ?
                 FETCH FIRST 1 ROW ONLY
             )
         ${where}
@@ -433,7 +433,7 @@ async function getProductDetail(code, clientCode) {
         if (clientCode) {
             const cliTarifaSql = `
                 SELECT COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA
-                FROM DSEDAC.CLI
+                FROM DSEDAC.CLC
                 WHERE TRIM(CODIGOCLIENTE) = ?
                 FETCH FIRST 1 ROW ONLY`;
             const cliRows = await queryWithParams(cliTarifaSql, [clientCode.trim()]);
@@ -1645,10 +1645,17 @@ async function searchProducts(params) { const products = await getProducts(param
 async function getProductStock(code) { return getStock(code); }
 async function getClientPricing(clientCode) {
     // Get client tariff code + client-specific prices from last purchases
-    const sql = `SELECT CODIGOTARIFA, CODIGOTARIFAVENTADIRECTA,
-        PORCENTAJEDESCUENTO1, PORCENTAJEDESCUENTO2, PORCENTAJEDESCUENTO3
-        FROM DSEDAC.CLI WHERE CODIGOCLIENTE = ?`;
-    const rows = await queryWithParams(sql, [clientCode]);
+    const sql = `
+        SELECT
+            COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA,
+            COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFAVENTADIRECTA,
+            COALESCE(PORCENTAJEDECUENTO1, 0) AS PORCENTAJEDESCUENTO1,
+            COALESCE(PORCENTAJEDECUENTO21, 0) AS PORCENTAJEDESCUENTO2,
+            COALESCE(PORCENTAJEDECUENTO3, 0) AS PORCENTAJEDESCUENTO3
+        FROM DSEDAC.CLC
+        WHERE TRIM(CODIGOCLIENTE) = ?
+        FETCH FIRST 1 ROW ONLY`;
+    const rows = await queryWithParams(sql, [String(clientCode || '').trim()]);
     return rows.length > 0 ? rows[0] : null;
 }
 async function getProductFamilies() { return getFamilies(); }

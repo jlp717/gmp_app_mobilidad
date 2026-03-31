@@ -32,6 +32,9 @@ class ProductHistorySheet extends StatefulWidget {
     required String clientCode,
     required String clientName,
   }) {
+    if (productCode.trim().isEmpty || clientCode.trim().isEmpty) {
+      return Future.value();
+    }
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -89,9 +92,14 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
   Future<void> _loadHistory() async {
     setState(() { _loading = true; _error = null; });
     try {
+      final productCode = widget.productCode.trim();
+      final clientCode = widget.clientCode.trim();
+      if (productCode.isEmpty || clientCode.isEmpty) {
+        throw Exception('Codigo de producto o cliente vacio');
+      }
       final resp = await ApiClient.get(
         '/pedidos/product-history/'
-        '${widget.productCode}/${widget.clientCode}',
+        '${Uri.encodeComponent(productCode)}/${Uri.encodeComponent(clientCode)}',
       );
       final yearsRaw = resp['years'] as Map<String, dynamic>? ?? {};
       final years = <String, _YearData>{};

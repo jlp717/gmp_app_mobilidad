@@ -287,8 +287,26 @@ class _PedidosPageState extends State<PedidosPage>
     final initUds = existingLine?.cantidadUnidades ??
         (isDual ? initQty * product.unitsPerBox : 0.0);
 
-    final initialPrice =
-        existingLine?.precioVenta ?? product.priceForUnit(selectedUnit);
+    double? selectedTariffUnitPrice = prov0.lastPriceForProduct(product.code);
+    if (selectedTariffUnitPrice == null && existingLine != null) {
+      selectedTariffUnitPrice =
+          selectedUnit == 'CAJAS' && product.unitsPerBox > 0
+              ? existingLine.precioVenta / product.unitsPerBox
+              : existingLine.precioVenta;
+    }
+
+    double unitPriceForSelection(String unit) {
+      if (selectedTariffUnitPrice != null && selectedTariffUnitPrice! > 0) {
+        if (unit == 'CAJAS') {
+          return selectedTariffUnitPrice! *
+              (product.unitsPerBox > 0 ? product.unitsPerBox : 1);
+        }
+        return selectedTariffUnitPrice!;
+      }
+      return product.priceForUnit(unit);
+    }
+
+    final initialPrice = existingLine?.precioVenta ?? unitPriceForSelection(selectedUnit);
 
     final qtyController = TextEditingController(
       text: _formatQtyForInput(initQty, selectedUnit),
@@ -560,20 +578,20 @@ class _PedidosPageState extends State<PedidosPage>
                               product: product,
                               tariffs: tariffs,
                               codigoTarifaCliente: clientTarifaCode,
-                              initialPrice: _parseInputNumber(
-                                  priceController.text),
+                              initialPrice: selectedTariffUnitPrice,
                             );
                             if (selected != null) {
                               setModalState(() {
+                                selectedTariffUnitPrice = selected;
                                 priceController.text =
-                                    _formatPriceForInput(selected);
+                                    _formatPriceForInput(unitPriceForSelection(selectedUnit));
                                 selectedUnit = product.availableUnits
                                     .contains(selectedUnit)
                                     ? selectedUnit
                                     : product.availableUnits.first;
                               });
                               prov.setLastPriceForProduct(
-                                  product.code, selected);
+                                  product.code, unitPriceForSelection(selectedUnit));
                             }
                           },
                           icon: const Icon(Icons.euro_rounded, size: 16),
@@ -608,16 +626,24 @@ class _PedidosPageState extends State<PedidosPage>
                           separatorBuilder: (_, __) => const SizedBox(width: 6),
                           itemBuilder: (_, i) {
                             final t = tariffs[i];
+                            final tariffUnitPrice = t.precioUnitario > 0
+                                ? t.precioUnitario
+                                : (product.unitsPerBox > 0
+                                    ? t.price / product.unitsPerBox
+                                    : t.price);
                             final isSelected =
                                 (_parseInputNumber(priceController.text) -
-                                            t.price)
+                                            (selectedUnit == 'CAJAS'
+                                                ? tariffUnitPrice * (product.unitsPerBox > 0 ? product.unitsPerBox : 1)
+                                                : tariffUnitPrice))
                                         .abs() <
                                     0.0005;
                             return GestureDetector(
                               onTap: () {
                                 setModalState(() {
+                                  selectedTariffUnitPrice = tariffUnitPrice;
                                   priceController.text =
-                                      _formatPriceForInput(t.price);
+                                      _formatPriceForInput(unitPriceForSelection(selectedUnit));
                                 });
                               },
                               child: Container(
@@ -797,7 +823,7 @@ class _PedidosPageState extends State<PedidosPage>
                           runSpacing: 6,
                           children: product.availableUnits.map((unit) {
                             final selected = selectedUnit == unit;
-                            final unitPrice = product.priceForUnit(unit);
+                            final unitPrice = unitPriceForSelection(unit);
                             final unitStock = product.stockForUnit(unit);
                             final stockLabel = Product.unitLabel(unit);
                             return SizedBox(
@@ -808,7 +834,7 @@ class _PedidosPageState extends State<PedidosPage>
                                   setModalState(() {
                                     selectedUnit = unit;
                                     priceController.text =
-                                        _formatPriceForInput(unitPrice);
+                                        _formatPriceForInput(unitPriceForSelection(unit));
                                     final currentQty =
                                         _parseInputNumber(qtyController.text);
                                     qtyController.text = _formatQtyForInput(
@@ -876,13 +902,13 @@ class _PedidosPageState extends State<PedidosPage>
                       Builder(
                         builder: (_) {
                           final selectedUnitPrice =
-                              product.priceForUnit(selectedUnit);
+                              unitPriceForSelection(selectedUnit);
                           final selectedStock =
                               product.stockForUnit(selectedUnit);
                           final selectedLabel = Product.unitLabel(selectedUnit);
                           final qtyPerBox =
                               product.quantityPerBoxForUnit(selectedUnit);
-                          final boxPrice = product.priceForUnit('CAJAS');
+                          final boxPrice = unitPriceForSelection('CAJAS');
 
                           return Container(
                             width: double.infinity,
@@ -1964,6 +1990,12 @@ class _PedidosPageState extends State<PedidosPage>
                 if (result != null && mounted) {
                   final prov = context.read<PedidosProvider>();
                   prov.setClient(result['code']!, result['name']!);
+                  prov.loadProducts(
+                    vendedorCodes: _vendedorCodes,
+                    search: prov.productSearch,
+                    reset: true,
+                    forceRefresh: true,
+                  );
                   // Load recommendations + balance for the selected client
                   prov.loadRecommendations(
                     clientCode: result['code']!,

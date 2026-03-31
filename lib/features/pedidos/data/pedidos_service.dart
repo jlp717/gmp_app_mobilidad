@@ -376,36 +376,52 @@ class Product {
 
   /// Unit label abbreviation for display
   static String unitLabel(String unit) {
-    switch (unit) {
+    switch (unit.toUpperCase().trim()) {
       case 'UNIDADES':
+      case 'UNIDAD':
         return 'uds';
       case 'PIEZAS':
+      case 'PIEZA':
         return 'uds';
       case 'KILOGRAMOS':
+      case 'KILO':
+      case 'KG':
         return 'kg';
       case 'LITROS':
+      case 'LITRO':
         return 'L';
       case 'BOLSAS':
+      case 'BOLSA':
         return 'bolsas';
       case 'ESTUCHES':
+      case 'ESTUCHE':
         return 'est.';
       case 'BANDEJAS':
+      case 'BANDEJA':
         return 'band.';
       case 'BOTELLAS':
+      case 'BOTELLA':
         return 'bot.';
       case 'PAQUETES':
+      case 'PAQUETE':
         return 'paq.';
       case 'BOTES':
+      case 'BOTE':
         return 'botes';
       case 'LATAS':
+      case 'LATA':
         return 'latas';
       case 'GARRAFAS':
+      case 'GARRAFA':
         return 'garr.';
       case 'SACOS':
+      case 'SACO':
         return 'sacos';
       case 'ROLLOS':
+      case 'ROLLO':
         return 'rollos';
       case 'CAJAS':
+      case 'CAJA':
       default:
         return 'cajas';
     }
@@ -871,7 +887,7 @@ class PedidosService {
     if (marca != null && marca.isNotEmpty) params['marca'] = marca;
 
     final cacheKey =
-        'pedidos:products:${search ?? ''}:${family ?? ''}:${marca ?? ''}:$offset';
+        'pedidos:products:${clientCode ?? ''}:${search ?? ''}:${family ?? ''}:${marca ?? ''}:$offset';
     try {
       final response = await ApiClient.get(
         '$_base/products',
@@ -892,14 +908,18 @@ class PedidosService {
 
   static Future<ProductDetail> getProductDetail(String code,
       {String? clientCode}) async {
+    final trimmedCode = code.trim();
+    if (trimmedCode.isEmpty) {
+      throw Exception('Product code is required');
+    }
     final params = <String, dynamic>{};
     if (clientCode != null) params['clientCode'] = clientCode;
 
     try {
       final response = await ApiClient.get(
-        '$_base/products/$code',
+        '$_base/products/$trimmedCode',
         queryParameters: params,
-        cacheKey: 'pedidos:detail:$code:${clientCode ?? ''}',
+        cacheKey: 'pedidos:detail:$trimmedCode:${clientCode ?? ''}',
         cacheTTL: const Duration(minutes: 10),
       );
       return ProductDetail.fromJson(response);

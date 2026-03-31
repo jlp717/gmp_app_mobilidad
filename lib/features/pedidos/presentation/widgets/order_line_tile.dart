@@ -81,13 +81,20 @@ class OrderLineTile extends StatelessWidget {
   static String _unitAbbr(String unit) {
     switch (unit.toUpperCase().trim()) {
       case 'CAJAS': return 'cj';
+      case 'CAJA': return 'cj';
       case 'KILOGRAMOS': return 'kg';
+      case 'KILO': return 'kg';
+      case 'KG': return 'kg';
       case 'LITROS': return 'L';
+      case 'LITRO': return 'L';
       case 'BANDEJAS': return 'band';
+      case 'BANDEJA': return 'band';
       case 'ESTUCHES': case 'ESTUCHE': return 'est';
       case 'BOLSAS': case 'BOLSA': return 'bol';
       case 'UNIDADES': return 'uds';
+      case 'UNIDAD': return 'uds';
       case 'PIEZAS': return 'pzs';
+      case 'PIEZA': return 'pzs';
       default: return unit.toLowerCase();
     }
   }

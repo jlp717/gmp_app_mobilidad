@@ -25,6 +25,11 @@ function parseIntSafe(value, defaultVal) {
     return isNaN(parsed) ? defaultVal : parsed;
 }
 
+function parseFloatSafe(value, defaultVal) {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? defaultVal : parsed;
+}
+
 // =============================================================================
 // PRODUCT CATALOG
 // =============================================================================
@@ -537,10 +542,10 @@ router.put('/:id/lines', async (req, res) => {
         const line = await pedidosService.addOrderLine(id, {
             codigoArticulo: String(codigoArticulo).trim(),
             descripcion: descripcion ? String(descripcion).trim() : '',
-            cantidadEnvases: parseIntSafe(cantidadEnvases, 0),
-            cantidadUnidades: parseIntSafe(cantidadUnidades, 0),
+            cantidadEnvases: parseFloatSafe(cantidadEnvases, 0),
+            cantidadUnidades: parseFloatSafe(cantidadUnidades, 0),
             unidadMedida: unidadMedida ? String(unidadMedida).trim() : undefined,
-            unidadesCaja: parseIntSafe(unidadesCaja, 0),
+            unidadesCaja: parseFloatSafe(unidadesCaja, 0),
             precioVenta: parseFloat(precioVenta) || 0,
             precioCosto: parseFloat(precioCosto) || 0,
             precioTarifa: parseFloat(precioTarifa) || 0,
@@ -576,8 +581,8 @@ router.put('/:id/lines/:lineId', async (req, res) => {
         }
 
         const line = await pedidosService.updateOrderLine(id, lineId, {
-            cantidadEnvases: cantidadEnvases !== undefined ? parseIntSafe(cantidadEnvases, 0) : undefined,
-            cantidadUnidades: cantidadUnidades !== undefined ? parseIntSafe(cantidadUnidades, 0) : undefined,
+            cantidadEnvases: cantidadEnvases !== undefined ? parseFloatSafe(cantidadEnvases, 0) : undefined,
+            cantidadUnidades: cantidadUnidades !== undefined ? parseFloatSafe(cantidadUnidades, 0) : undefined,
             precioVenta: precioVenta !== undefined ? parseFloat(precioVenta) || 0 : undefined,
             unidadMedida: unidadMedida !== undefined ? String(unidadMedida).trim() : undefined,
             claseLinea: claseLinea !== undefined ? String(claseLinea).trim() : undefined,
