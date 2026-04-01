@@ -142,7 +142,7 @@ class ApiConfig {
   static const String objectives = '/objectives';
   static const String objectivesByClient = '/objectives/by-client';
   static const String objectivesEvolution = '/objectives/evolution';
-  static const String clientMatrix = '/objectives/client-matrix';
+  static const String clientMatrix = '/objectives/matrix'; // Backend usa /matrix, no /client-matrix
   static const String objectivesPopulations = '/objectives/populations';
 
   // Analytics Endpoints

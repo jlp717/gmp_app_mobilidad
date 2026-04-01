@@ -1103,6 +1103,16 @@ router.post('/pay', async (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
         `, [safePayVendor, parseInt(year), parseInt(month) || 0, parseFloat(ventaComision) || 0, parseFloat(objetivoMesNum) || 0, parseFloat(ventasSobreObjetivoNum) || 0, parseFloat(generatedNum) || 0, parseFloat(amountNum) || 0, safePayObs, safePayAdmin]);
 
+        // INVALIDATE CACHE: Clear summary cache for this vendor/year so next request fetches fresh data
+        try {
+            const { invalidateCachePattern } = require('../services/redis-cache');
+            await invalidateCachePattern(`comm:summary:${vendedorCode.trim()}:${year}`);
+            await invalidateCachePattern(`comm:summary:ALL:${year}`); // Also invalidate ALL view
+            logger.info(`[COMMISSIONS] Cache invalidated for ${vendedorCode}:${year}`);
+        } catch (cacheErr) {
+            logger.warn(`[COMMISSIONS] Cache invalidation failed: ${cacheErr.message}`);
+        }
+
         logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${adminCode}${observaciones ? ' [with observaciones]' : ''}`);
         res.json({ success: true, message: 'Pago registrado correctamente' });
     } catch (e) {
