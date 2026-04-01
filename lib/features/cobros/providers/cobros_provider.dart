@@ -270,16 +270,41 @@ class CobrosProvider extends ChangeNotifier {
   // ============================================
 
   /// Carga resumen de pendientes por cliente para un vendedor
-  Future<void> cargarPendingSummary(String vendedorCode) async {
+  /// Soporta múltiples vendedores (jefe de ventas) o vendedor individual
+  Future<void> cargarPendingSummary(String? vendedorCode, {List<String>? vendedorCodes}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
     try {
-      final response = await ApiClient.get('/cobros/pending-summary/$vendedorCode');
+      // Build URL: individual vendor vs multiple vendors
+      String endpoint;
+      if (vendedorCodes != null && vendedorCodes.isNotEmpty) {
+        // Multiple vendors: pass as comma-separated list
+        endpoint = '/cobros/pending-summary/${vendedorCodes.join(',')}';
+      } else if (vendedorCode != null && vendedorCode.isNotEmpty) {
+        // Single vendor
+        endpoint = '/cobros/pending-summary/$vendedorCode';
+      } else {
+        // No vendor specified - use ALL
+        endpoint = '/cobros/pending-summary/ALL';
+      }
+
+      final response = await ApiClient.get(endpoint);
       if (response['success'] == true) {
         final raw = response['summary'] as Map<String, dynamic>? ?? {};
         _pendingSummary = raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
         _grandTotal = (response['grandTotal'] as num?)?.toDouble() ?? 0;
-        notifyListeners();
+        _error = null;
+      } else {
+        _error = 'Error al cargar resumen de pendientes';
       }
-    } catch (_) {}
+    } catch (e) {
+      _error = 'Error de conexión: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   double pendingForClient(String code) {

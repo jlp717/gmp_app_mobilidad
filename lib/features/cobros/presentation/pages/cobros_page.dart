@@ -6,6 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/providers/filter_provider.dart';
+import '../../../../core/providers/auth_provider.dart';
 import '../../providers/cobros_provider.dart';
 import '../../../clients/data/clients_service.dart';
 import 'cobro_detail_screen.dart';
@@ -64,9 +65,24 @@ class _CobrosPageState extends State<CobrosPage> {
   }
 
   void _loadPendingSummary() {
-    final currentFilterVendor = context.read<FilterProvider>().selectedVendor;
-    final vendorCode = currentFilterVendor ?? widget.employeeCode;
-    _cobrosProvider.cargarPendingSummary(vendorCode);
+    final filterProvider = context.read<FilterProvider>();
+    final selectedVendor = filterProvider.selectedVendor;
+    
+    // Get all vendor codes from auth provider
+    final authProvider = context.read<AuthProvider>();
+    final allVendorCodes = authProvider.vendedorCodes;
+    
+    // Determine which vendors to use
+    if (selectedVendor != null && selectedVendor.isNotEmpty) {
+      // Single vendor selected
+      _cobrosProvider.cargarPendingSummary(selectedVendor);
+    } else if (allVendorCodes.isNotEmpty) {
+      // Multiple vendors (jefe de ventas) - pass all codes
+      _cobrosProvider.cargarPendingSummary(null, vendedorCodes: allVendorCodes);
+    } else {
+      // No vendors - use ALL
+      _cobrosProvider.cargarPendingSummary(null);
+    }
   }
 
   void _onSearchChanged(String query) {

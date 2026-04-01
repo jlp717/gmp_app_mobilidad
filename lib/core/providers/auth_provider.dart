@@ -9,6 +9,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../cache/cache_service.dart';
 import '../services/cache_prewarmer.dart';
 import '../services/secure_storage.dart';
+import 'filter_provider.dart';
 
 /// Authentication provider with role detection
 class AuthProvider with ChangeNotifier {
@@ -211,6 +212,8 @@ class AuthProvider with ChangeNotifier {
   Future<void> logout() async {
     _currentUser = null;
     _vendedorCodes = [];
+    _isLoading = false;
+    _error = null;
     ApiClient.clearAuthToken();
 
     // Clear sensitive data from secure storage
@@ -220,6 +223,7 @@ class AuthProvider with ChangeNotifier {
     // Clear non-sensitive data from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('vendedor_codes');
+    await prefs.remove('global_filter_vendor');
 
     // CRITICAL: Clear ALL cached API data (Hive + memory)
     // This prevents data from leaking between users on shared tablets
@@ -232,7 +236,19 @@ class AuthProvider with ChangeNotifier {
       debugPrint('[AuthProvider] Cache clear error: $e');
     }
 
+    // Notify listeners IMMEDIATELY so UI can navigate to login
     notifyListeners();
+    
+    // Small delay to allow UI to react before clearing filters
+    await Future.delayed(const Duration(milliseconds: 100));
+    
+    // Clear global filters
+    try {
+      // Fire-and-forget - don't await to avoid blocking
+      unawaited(FilterProvider().clear());
+    } catch (e) {
+      debugPrint('[AuthProvider] Filter clear error: $e');
+    }
   }
 
   /// Switch user role (Jefe / Repartidor)
