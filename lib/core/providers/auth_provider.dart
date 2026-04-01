@@ -76,8 +76,8 @@ class AuthProvider with ChangeNotifier {
   AuthProvider() {
     // Bind global 401 unauthorized event to logout
     ApiClient.onUnauthorized = () {
-      debugPrint('[AuthProvider] 401 Detected - Logging out...');
-      logout();
+      debugPrint('[AuthProvider] 401 Detected - Logging out (session expired)...');
+      logout(sessionExpired: true);
     };
 
     // Initial update check
@@ -209,11 +209,12 @@ class AuthProvider with ChangeNotifier {
 
   /// Logout — clears auth data AND all cached data (defense-in-depth)
   /// Ensures no data from a previous user leaks to the next user on shared devices
-  Future<void> logout() async {
+  /// [sessionExpired] - if true, shows session expired message to user
+  Future<void> logout({bool sessionExpired = false}) async {
     _currentUser = null;
     _vendedorCodes = [];
     _isLoading = false;
-    _error = null;
+    _error = sessionExpired ? 'Tu sesión ha expirado. Por favor, inicia sesión de nuevo.' : null;
     ApiClient.clearAuthToken();
 
     // Clear sensitive data from secure storage

@@ -211,11 +211,25 @@ router.post('/:codigoCliente/registrar', async (req, res) => {
 /**
  * GET /api/cobros/pending-summary/:vendedorCode
  * Returns total pending amounts grouped by client for a given vendor
+ * Supports single vendor, multiple vendors (comma-separated), or ALL
  */
 router.get('/pending-summary/:vendedorCode', async (req, res) => {
     try {
-        const vendedorCode = sanitizeCode(req.params.vendedorCode);
-        logger.info(`[COBROS] Pending summary for vendor: ${vendedorCode}`);
+        const vendedorCodeParam = req.params.vendedorCode;
+        logger.info(`[COBROS] Pending summary for vendor: ${vendedorCodeParam}`);
+
+        // Parse vendor codes - support single, multiple (comma-separated), or ALL
+        const isAll = vendedorCodeParam.toUpperCase() === 'ALL';
+        const vendorCodes = isAll 
+            ? [] 
+            : vendedorCodeParam.split(',').map(v => v.trim()).filter(v => v.length > 0);
+        
+        const isSingleVendor = vendorCodes.length === 1;
+        const vendorFilter = isAll ? '' : (isSingleVendor 
+            ? `AND TRIM(PC.CODIGOVENDEDOR) = ?`
+            : `AND TRIM(PC.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`
+        );
+        const vendorParams = isAll ? [] : vendorCodes;
 
         // Check if COBROS table exists
         let cobrosTableExists = false;
@@ -236,11 +250,6 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             `);
             origenExists = colCheck && colCheck.length > 0;
         } catch(e) { /* column doesn't exist */ }
-
-        // Build vendor filter
-        const isAll = vendedorCode.toUpperCase() === 'ALL';
-        let vendorFilter = isAll ? '' : `AND TRIM(PC.CODIGOVENDEDOR) = ?`;
-        const vendorParams = isAll ? [] : [vendedorCode];
 
         let sql = `
             SELECT

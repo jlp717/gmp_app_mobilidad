@@ -49,6 +49,32 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+  AuthProvider? _authProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen for auth changes (logout/session expired)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _authProvider = context.read<AuthProvider>();
+      // Note: Can't add listener here as context is not available in initState
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Listen for auth state changes
+    final auth = context.watch<AuthProvider>();
+    if (!auth.isAuthenticated && mounted) {
+      // User logged out or session expired - navigate to login
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.go('/login');
+        }
+      });
+    }
+  }
   DashboardProvider? _dashboardProvider;
   bool _isNavExpanded = true; 
   

@@ -21,7 +21,11 @@ class ApiClient {
   static final Map<String, Future<dynamic>> _pendingRequests = {};
 
   /// Callback for 401 Unauthorized events (Global Logout)
+  /// This is called when the server returns 401, indicating session expired
   static VoidCallback? onUnauthorized;
+
+  /// Flag to prevent duplicate logout calls
+  static bool _isLoggingOut = false;
 
   /// Initialize the API client with automatic server detection
   static Future<void> initialize() async {
@@ -386,8 +390,12 @@ class ApiClient {
 
       if (statusCode == 401) {
         final isLoginRequest = e.requestOptions.path.contains('/auth/login');
-        if (!isLoginRequest) {
+        if (!isLoginRequest && !_isLoggingOut) {
+          _isLoggingOut = true;
+          debugPrint('[ApiClient] 401 detected - triggering logout');
           onUnauthorized?.call();
+          // Reset flag after short delay to allow re-login
+          Future.delayed(const Duration(seconds: 2), () => _isLoggingOut = false);
         }
         return ApiException(
           serverMessage ?? 'Credenciales inválidas. Verifica usuario y PIN.',
