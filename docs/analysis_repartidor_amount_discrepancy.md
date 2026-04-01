@@ -307,8 +307,8 @@ When `SHOW_IVA_BREAKDOWN = true`: response includes `importe`, `netoSum`, `ivaSu
 - `test/integration/invoice_amounts_test.dart`: Compare UI displayed values with script-generated JSON
 
 ### Node Validation Scripts
-- `backend/scripts/validate_invoice_amounts.js` — bulk validation (100+ records)
-- `backend/scripts/analyze_factura_219.js` — deep analysis of specific factura
+- ~~`backend/scripts/validate_invoice_amounts.js`~~ — **Archived** (moved to `backend/scripts/validation/`)
+- ~~`backend/scripts/analyze_factura_219.js`~~ — **Archived** (moved to `backend/scripts/validation/`)
 
 ### Run commands
 ```bash
@@ -317,9 +317,8 @@ flutter test test/helpers/
 flutter test test/widgets/
 flutter test test/models/
 
-# Node validation
-cd backend && node scripts/validate_invoice_amounts.js --limit 100
-cd backend && node scripts/analyze_factura_219.js
+# Node validation scripts have been archived to backend/scripts/validation/
+# They are preserved for reference but not part of the active codebase.
 ```
 
 ---

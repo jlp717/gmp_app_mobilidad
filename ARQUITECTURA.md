@@ -1,38 +1,49 @@
 # 🏗️ ARQUITECTURA TÉCNICA - GMP APP MOVILIDAD
 
+**Última actualización**: 1 Abril 2026
+**Versión de la app**: 3.3.2+37
+**Arquitectura**: Clean Architecture + DDD + Riverpod + V3 Integration
+
+---
+
 ## 📋 Tabla de Contenidos
 
 1. [Visión General](#visión-general)
 2. [Arquitectura de Alto Nivel](#arquitectura-de-alto-nivel)
-3. [Patrones de Diseño](#patrones-de-diseño)
+3. [Backend DDD Architecture](#backend-ddd-architecture)
 4. [Estructura de Carpetas](#estructura-de-carpetas)
 5. [State Management](#state-management)
-6. [Dependency Injection](#dependency-injection)
-7. [Flujos de Datos](#flujos-de-datos)
-8. [Decisiones Técnicas](#decisiones-técnicas)
+6. [Security Layer](#security-layer)
+7. [Performance & Caching](#performance--caching)
+8. [Memory & Offline](#memory--offline)
+9. [Flujos de Datos](#flujos-de-datos)
+10. [Decisiones Técnicas](#decisiones-técnicas)
 
 ---
 
 ## Visión General
 
-GMP App Movilidad es una aplicación **offline-first** para comerciales de campo, construida con Flutter 3.24+ y siguiendo principios de **Clean Architecture**, **DDD** y **SOLID**.
+GMP App Movilidad es una aplicación **offline-first** para comerciales de campo, construida con Flutter 3.24+ y Node.js backend con DB2/ODBC. Sigue principios de **Clean Architecture**, **DDD** y **SOLID**.
 
 ### Stack Tecnológico
 
-- **State Management**: Riverpod 2.5+ (único patrón oficial)
-- **Dependency Injection**: GetIt + Riverpod
-- **Arquitectura**: Clean Architecture + DDD
-- **Local Storage**: Hive + SharedPreferences
-- **Network**: Dio + ApiClient
-- **Navigation**: go_router
+| Capa | Tecnología |
+|---|---|
+| **Frontend** | Flutter 3.24+, Riverpod 2.5+, go_router |
+| **Backend** | Node.js, Express, TypeScript (src/), JavaScript (routes/) |
+| **Database** | DB2 vía ODBC (DSN='GMP'), schema JAVIER |
+| **Cache** | Redis (L2) + In-memory Map (L1) |
+| **Auth** | HMAC-signed JWT, bcrypt 12 rounds, refresh token rotation |
+| **Security** | Helmet, CORS, Rate Limiting, Zod validation, SQL injection detection |
+| **Local Storage** | Hive + SharedPreferences |
 
 ### Características Clave
 
-- ✅ **Clean Architecture real**: Domain, Data, Presentation layers separados
-- ✅ **DDD**: Entities, Value Objects, Repositories, Use Cases
+- ✅ **DDD Backend**: Entity, ValueObject, Repository, UseCase patterns en `backend/src/modules/`
+- ✅ **Clean Architecture**: Domain, Data, Presentation layers separados
 - ✅ **Riverpod puro**: Eliminado Provider/ChangeNotifier mixto
-- ✅ **Repository Pattern**: Implementado en todas las features
-- ✅ **DI con GetIt**: Inyección centralizada de dependencias
+- ✅ **Security-first**: Input validation (Zod), path sanitization, rate limiting, bcrypt, HMAC JWT
+- ✅ **Performance**: Connection pooling, L1/L2 caching, response coalescing
 - ✅ **Offline-first**: Hive para caché y operaciones pendientes
 - ✅ **Type-safe**: Entities con Equatable, DTOs para transferencia
 
@@ -52,226 +63,136 @@ GMP App Movilidad es una aplicación **offline-first** para comerciales de campo
 │  │  Pages & Widgets (ConsumerWidget)                   ││
 │  └─────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────┘
-                            ↕ (solo interfaces)
+                            ↕ (HTTP/Dio)
 ┌─────────────────────────────────────────────────────────┐
-│                     DOMAIN LAYER                         │
+│                  BACKEND API (Express)                   │
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  Entities (puros, sin dependencias)                 ││
-│  │  - User, Product, Order, OrderLine, Cobro, etc.     ││
+│  │  Middleware: Auth, Rate Limit, Validation, Audit    ││
 │  └─────────────────────────────────────────────────────┘│
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  Value Objects                                      ││
-│  │  - Money, Quantity                                  ││
+│  │  DDD Modules: auth, pedidos, cobros, entregas,      ││
+│  │               rutero (domain/application/infra)     ││
 │  └─────────────────────────────────────────────────────┘│
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  Repository Interfaces (contratos)                  ││
-│  │  - AuthRepository, PedidosRepository, etc.          ││
-│  └─────────────────────────────────────────────────────┘│
-│  ┌─────────────────────────────────────────────────────┐│
-│  │  Use Cases (lógica de negocio pura)                 ││
-│  │  - LoginUseCase, ConfirmOrderUseCase, etc.          ││
+│  │  Core: Entity, ValueObject, Repository, UseCase     ││
 │  └─────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────┘
-                            ↕ (implementaciones)
+                            ↕ (ODBC)
 ┌─────────────────────────────────────────────────────────┐
-│                      DATA LAYER                          │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │  Repository Implementations                         ││
-│  │  - AuthRepositoryImpl, PedidosRepositoryImpl        ││
-│  └─────────────────────────────────────────────────────┘│
-│  ┌─────────────────────────────────────────────────────┐│
-│  │  Data Sources (Remote & Local)                      ││
-│  │  - AuthRemoteDatasource, PedidosLocalDatasource     ││
-│  └─────────────────────────────────────────────────────┘│
-│  ┌─────────────────────────────────────────────────────┐│
-│  │  DTOs (Data Transfer Objects)                       ││
-│  │  - UserDto, ProductoDto                             ││
-│  └─────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────┘
-                            ↕
-┌─────────────────────────────────────────────────────────┐
-│                    INFRASTRUCTURE                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │
-│  │  Dio     │  │  Hive    │  │  Shared │  │  GetIt  │ │
-│  │  (API)   │  │ (Cache)  │  │ Prefs   │  │  (DI)   │ │
-│  └──────────┘  └──────────┘  └──────────┘  └─────────┘ │
+│                    DATABASE (DB2)                        │
+│  Schema JAVIER: APP_USUARIOS, LACLAE, CACFIRMAS,       │
+│  RUTERO_CONFIG, DELIVERY_STATUS, etc.                   │
 └─────────────────────────────────────────────────────────┘
 ```
-
-### Principios Aplicados
-
-1. **Clean Architecture**: Separación estricta de capas
-2. **Dependency Inversion**: Domain no depende de Data
-3. **Single Responsibility**: Cada clase una responsabilidad
-4. **Open/Closed**: Extendible sin modificar
-5. **Interface Segregation**: Repositories específicos por feature
 
 ---
 
-## Patrones de Diseño
+## Backend DDD Architecture
 
-### 1. Repository Pattern (Completo)
+### Estructura de Módulos DDD
 
-```dart
-// DOMAIN LAYER - Interfaz (contrato)
-abstract class PedidosRepository {
-  Future<PedidosResult<ProductList>> getProducts({...});
-  Future<void> addToCart({...});
-  Future<PedidosResult<String>> confirmOrder();
-  // ...
-}
+```
+backend/src/
+├── core/                          # Shared kernel
+│   ├── domain/
+│   │   ├── entity.js              # Base Entity class
+│   │   ├── value-object.js        # Base ValueObject class
+│   │   └── repository.js          # Base Repository interface
+│   ├── application/
+│   │   └── use-case.js            # Base UseCase class
+│   └── infrastructure/
+│       ├── database/
+│       │   └── db2-connection-pool.js  # DB2 pool wrapper
+│       ├── cache/
+│       │   └── response-cache.js       # L1/L2 caching
+│       └── security/
+│           ├── input-validator.js      # Zod schemas
+│           └── path-sanitizer.js       # Directory traversal protection
+│
+├── modules/                       # Bounded contexts
+│   ├── auth/
+│   │   ├── domain/
+│   │   │   ├── user.js                 # User entity
+│   │   │   └── auth-repository.js      # Repository interface
+│   │   ├── application/
+│   │   │   └── login-usecase.js        # Login use case
+│   │   └── infrastructure/
+│   │       └── db2-auth-repository.js  # DB2 implementation
+│   ├── pedidos/
+│   │   ├── domain/
+│   │   │   └── product.js              # Product, OrderLine, Cart
+│   │   ├── application/
+│   │   └── infrastructure/
+│   ├── cobros/
+│   │   ├── domain/
+│   │   │   └── cobro.js                # Cobro entity
+│   │   ├── application/
+│   │   └── infrastructure/
+│   ├── entregas/
+│   │   ├── domain/
+│   │   │   └── albaran.js              # Albaran entity
+│   │   ├── application/
+│   │   └── infrastructure/
+│   └── rutero/
+│       ├── domain/
+│       │   └── ruta-config.js          # RutaConfig entity
+│       ├── application/
+│       └── infrastructure/
+│
+└── shared/
+    └── middleware/
+        └── index.js               # Shared middleware exports
+```
 
-// DATA LAYER - Implementación
-class PedidosRepositoryImpl implements PedidosRepository {
-  final PedidosRemoteDatasource _remoteDatasource;
-  final PedidosLocalDatasource _localDatasource;
+### Patrones DDD Implementados
 
-  PedidosRepositoryImpl({
-    required PedidosRemoteDatasource remoteDatasource,
-    required PedidosLocalDatasource localDatasource,
-  }) : _remoteDatasource = remoteDatasource,
-       _localDatasource = localDatasource;
+**Entity Pattern**:
+```javascript
+class User extends Entity {
+  constructor({ id, code, name, role, ... }) {
+    super(id);
+    this._code = code;
+    // ...
+  }
 
-  @override
-  Future<PedidosResult<ProductList>> getProducts({...}) async {
-    try {
-      final response = await _remoteDatasource.getProducts(...);
-      // Transformar DTOs a Entities
-      return PedidosResult.success(...);
-    } catch (e) {
-      return PedidosResult.failure('Error: $e');
-    }
+  hasRole(role) { return this._role === role; }
+
+  deactivate() {
+    this._active = false;
+    this.addDomainEvent({ type: 'USER_DEACTIVATED', userId: this._id });
   }
 }
 ```
 
-### 2. State Management con Riverpod
-
-```dart
-// Notifier (reemplaza ChangeNotifier)
-class CartNotifier extends AutoDisposeAsyncNotifier<CartState> {
-  @override
-  Future<CartState> build() async => const CartState();
-
-  Future<void> addToCart({...}) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      final useCase = AddToCartUseCase(ref.read(pedidosRepositoryProvider));
-      await useCase(...);
-      // Retornar nuevo estado
-    });
-  }
+**Repository Pattern**:
+```javascript
+class AuthRepository extends Repository {
+  async findByCode(code) { throw new Error('Not implemented'); }
 }
 
-// Provider
-final cartNotifierProvider = AutoDisposeAsyncNotifierProvider<CartNotifier, CartState>(() {
-  return CartNotifier();
-});
-
-// Uso en UI
-class ProductCard extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return ElevatedButton(
-      onPressed: () => ref.read(cartNotifierProvider.notifier).addToCart(...),
-      child: Text('Añadir'),
-    );
+class Db2AuthRepository extends AuthRepository {
+  async findByCode(code) {
+    const result = await this._db.executeParams(sql, [code]);
+    return result.length ? User.fromDbRow(result[0]) : null;
   }
 }
 ```
 
-### 3. Use Cases (Domain Layer)
-
-```dart
-// Use Case puro - solo lógica de negocio
-class ConfirmOrderUseCase {
-  final PedidosRepository _repository;
-
-  ConfirmOrderUseCase(this._repository);
-
-  Future<OrderConfirmResult> call() async {
-    final result = await _repository.confirmOrder();
-    
-    if (result.isSuccess) {
-      // Lógica adicional si es necesaria
-      return OrderConfirmResult.success(result.data!);
-    } else {
-      return OrderConfirmResult.failure(result.error ?? 'Error');
-    }
+**Use Case Pattern**:
+```javascript
+class LoginUseCase extends UseCase {
+  constructor(authRepository, hashUtils, tokenUtils) {
+    super();
+    // inject dependencies
   }
-}
-```
 
-### 4. Value Objects (DDD)
-
-```dart
-// Value Object inmutable
-class Money extends Equatable {
-  final int _cents;
-
-  const Money._(this._cents);
-
-  factory Money.fromDouble(double amount) => Money._((amount * 100).round());
-
-  double toDouble() => _cents / 100;
-
-  Money operator +(Money other) => Money._(_cents + other._cents);
-
-  Money percentage(double percent) => Money._((_cents * percent / 100).round());
-
-  bool get isZero => _cents == 0;
-
-  @override
-  List<Object?> get props => [_cents];
-}
-```
-
-### 5. Entity Pattern
-
-```dart
-// Entity de Domain - sin dependencias de framework
-class Order extends Equatable {
-  final String? id;
-  final String clientCode;
-  final String clientName;
-  final String saleType;
-  final List<OrderLine> lines;
-  final DateTime createdAt;
-  final double globalDiscount;
-  final String status;
-
-  const Order({...});
-
-  // Métodos de dominio puros
-  double get subtotal => lines.fold(0, (sum, line) => sum + line.totalPrice);
-  
-  double get total => subtotal * (1 - globalDiscount / 100);
-
-  bool get isConfirmed => status == 'confirmed';
-
-  @override
-  List<Object?> get props => [...];
-}
-```
-
-### 6. DTO Pattern
-
-```dart
-// DTO para transferencia de datos
-class ProductoDto {
-  final String code;
-  final String name;
-  final double price;
-  final double? stock;
-
-  factory ProductoDto.fromJson(Map<String, dynamic> json) => ...;
-
-  Product toEntity() => Product(
-    code: code,
-    name: name,
-    price: price,
-    stock: stock,
-  );
+  async execute({ username, password, ip, userAgent }) {
+    // 1. Validate input
+    // 2. Load aggregate
+    // 3. Apply business logic
+    // 4. Persist
+    // 5. Return result
+  }
 }
 ```
 
@@ -279,235 +200,67 @@ class ProductoDto {
 
 ## Estructura de Carpetas
 
+### Frontend (Flutter)
+
 ```
 lib/
 ├── main.dart                          # Entry point con ProviderScope
-│
 ├── core/                              # Código core compartido
-│   ├── api/
-│   │   ├── api_client.dart            # Cliente HTTP (Dio)
-│   │   └── api_config.dart            # Configuración endpoints
-│   │
-│   ├── cache/
-│   │   ├── cache_service.dart         # Servicio de caché (Hive)
-│   │   └── cache_keys.dart            # Keys para caché
-│   │
-│   ├── config/
-│   │   └── feature_flags.dart         # Feature flags
-│   │
-│   ├── models/                        # Modelos legacy (migrar)
-│   │
-│   ├── providers/                     # ⚠️ ChangeNotifier legacy
-│   │   ├── auth_provider.dart         # TODO: Migrar a Riverpod
-│   │   └── dashboard_provider.dart    # TODO: Migrar a Riverpod
-│   │
-│   ├── router/
-│   │   └── app_router.dart            # go_router configuración
-│   │
-│   ├── services/                      # Servicios core
-│   │   ├── analytics_service.dart
-│   │   ├── network_service.dart
-│   │   └── secure_storage.dart
-│   │
-│   ├── theme/
-│   │   ├── app_colors.dart
-│   │   └── app_theme.dart
-│   │
-│   ├── utils/                         # Utilidades
-│   │   ├── formatters.dart
-│   │   └── responsive.dart
-│   │
-│   └── widgets/                       # Widgets reutilizables
-│       ├── empty_state_widget.dart
-│       ├── error_state_widget.dart
-│       └── shimmer_skeleton.dart
-│
-├── src/                               # Clean Architecture
-│   ├── core/
-│   │   └── error/
-│   │       ├── exceptions.dart
-│   │       └── failures.dart
-│   │
-│   ├── data/                          # Data Layer
-│   │   ├── auth/
-│   │   │   ├── datasources/
-│   │   │   │   ├── auth_remote_datasource.dart
-│   │   │   │   └── auth_local_datasource.dart
-│   │   │   ├── dtos/
-│   │   │   │   └── user_dto.dart
-│   │   │   └── repositories/
-│   │   │       └── auth_repository_impl.dart
-│   │   │
-│   │   ├── cobros/
-│   │   │   ├── datasources/
-│   │   │   │   └── cobros_remote_datasource.dart
-│   │   │   └── repositories/
-│   │   │       └── cobros_repository_impl.dart
-│   │   │
-│   │   ├── dashboard/
-│   │   │   ├── datasources/
-│   │   │   │   └── dashboard_remote_datasource.dart
-│   │   │   └── repositories/
-│   │   │       └── dashboard_repository_impl.dart
-│   │   │
-│   │   ├── entregas/
-│   │   │   ├── datasources/
-│   │   │   │   └── entregas_remote_datasource.dart
-│   │   │   └── repositories/
-│   │   │       └── entregas_repository_impl.dart
-│   │   │
-│   │   ├── pedidos/
-│   │   │   ├── datasources/
-│   │   │   │   ├── pedidos_remote_datasource.dart
-│   │   │   │   └── pedidos_local_datasource.dart
-│   │   │   ├── dtos/
-│   │   │   │   └── producto_dto.dart
-│   │   │   └── repositories/
-│   │   │       └── pedidos_repository_impl.dart
-│   │   │
-│   │   └── warehouse/
-│   │       ├── datasources/
-│   │       │   └── warehouse_remote_datasource.dart
-│   │       └── repositories/
-│   │           └── warehouse_repository_impl.dart
-│   │
-│   ├── di/
-│   │   └── injection_container.dart   # GetIt setup + Riverpod integration
-│   │
-│   ├── domain/                        # Domain Layer (puro, sin dependencias)
-│   │   ├── auth/
-│   │   │   ├── entities/
-│   │   │   │   ├── user.dart
-│   │   │   │   └── auth_state.dart
-│   │   │   ├── repositories/
-│   │   │   │   └── auth_repository.dart
-│   │   │   └── usecases/
-│   │   │       ├── login_usecase.dart
-│   │   │       ├── logout_usecase.dart
-│   │   │       └── ...
-│   │   │
-│   │   ├── cobros/
-│   │   │   ├── entities/
-│   │   │   │   ├── cobro.dart
-│   │   │   │   └── estado_cobro.dart
-│   │   │   ├── repositories/
-│   │   │   │   └── cobros_repository.dart
-│   │   │   └── usecases/
-│   │   │       ├── cargar_cobros_usecase.dart
-│   │   │       ├── registrar_cobro_usecase.dart
-│   │   │       └── verificar_estado_usecase.dart
-│   │   │
-│   │   ├── dashboard/
-│   │   │   ├── entities/
-│   │   │   │   └── dashboard_metrics.dart
-│   │   │   ├── repositories/
-│   │   │   │   └── dashboard_repository.dart
-│   │   │   └── usecases/
-│   │   │       └── fetch_dashboard_usecase.dart
-│   │   │
-│   │   ├── entregas/
-│   │   │   ├── entities/
-│   │   │   │   ├── albaran.dart
-│   │   │   │   └── entrega.dart
-│   │   │   ├── repositories/
-│   │   │   │   └── entregas_repository.dart
-│   │   │   └── usecases/
-│   │   │       ├── cargar_albaranes_usecase.dart
-│   │   │       ├── marcar_entregado_usecase.dart
-│   │   │       └── ...
-│   │   │
-│   │   ├── pedidos/
-│   │   │   ├── entities/
-│   │   │   │   ├── product.dart
-│   │   │   │   ├── order.dart
-│   │   │   │   ├── order_line.dart
-│   │   │   │   ├── order_summary.dart
-│   │   │   │   ├── order_stats.dart
-│   │   │   │   ├── recommendation.dart
-│   │   │   │   └── promotion_item.dart
-│   │   │   ├── repositories/
-│   │   │   │   └── pedidos_repository.dart
-│   │   │   └── usecases/
-│   │   │       ├── get_products_usecase.dart
-│   │   │       ├── add_to_cart_usecase.dart
-│   │   │       ├── confirm_order_usecase.dart
-│   │   │       └── ...
-│   │   │
-│   │   ├── shared/
-│   │   │   ├── repositories/
-│   │   │   │   └── filter_repository.dart
-│   │   │   └── value_objects/
-│   │   │       ├── money.dart
-│   │   │       └── quantity.dart
-│   │   │
-│   │   └── warehouse/
-│   │       ├── entities/
-│   │       │   └── load_plan.dart
-│   │       ├── repositories/
-│   │       │   └── warehouse_repository.dart
-│   │       └── usecases/
-│   │           ├── load_plan_usecase.dart
-│   │           ├── optimize_load_usecase.dart
-│   │           └── save_layout_usecase.dart
-│   │
-│   └── presentation/                  # Presentation Layer
-│       └── providers/                 # Riverpod Notifiers
-│           ├── auth_provider.dart
-│           ├── pedidos_provider.dart
-│           ├── dashboard_provider.dart
-│           ├── cobros_provider.dart
-│           ├── entregas_provider.dart
-│           ├── warehouse_provider.dart
-│           └── filter_provider.dart
-│
-└── features/                          # Feature-based (UI)
-    ├── analytics/
-    ├── auth/
-    │   └── presentation/
-    │       └── pages/
-    │           └── login_page.dart
-    │
-    ├── cobros/
-    │   ├── data/
-    │   │   └── models/
-    │   │       └── cobros_models.dart
-    │   └── presentation/
-    │       ├── pages/
-    │       └── widgets/
-    │
-    ├── dashboard/
-    │   └── presentation/
-    │       ├── pages/
-    │       │   ├── dashboard_content.dart
-    │       │   └── main_shell.dart
-    │       └── widgets/
-    │
-    ├── entregas/
-    │   └── presentation/
-    │       ├── pages/
-    │       └── widgets/
-    │
-    ├── pedidos/
-    │   ├── data/
-    │   │   ├── pedidos_service.dart       # ⚠️ Legacy - migrar a datasources
-    │   │   ├── pedidos_offline_service.dart
-    │   │   └── pedidos_favorites_service.dart
-    │   ├── presentation/
-    │   │   ├── dialogs/
-    │   │   ├── pages/
-    │   │   │   └── pedidos_page.dart
-    │   │   ├── widgets/
-    │   │   └── utils/
-    │   └── providers/
-    │       └── pedidos_provider.dart      # ⚠️ ChangeNotifier legacy
-    │
-    ├── warehouse/
-    │   ├── application/
-    │   ├── data/
-    │   ├── domain/
-    │   └── presentation/
-    │
-    └── ...
+│   ├── api/                           # Dio client, endpoints config
+│   ├── cache/                         # Hive cache service
+│   ├── config/                        # Feature flags
+│   ├── memory/                        # Memory management
+│   ├── models/                        # Modelos legacy
+│   ├── providers/                     # ⚠️ ChangeNotifier legacy (migrar)
+│   ├── router/                        # go_router
+│   ├── services/                      # Analytics, network, secure storage
+│   ├── theme/                         # Colors, theme
+│   ├── utils/                         # Formatters, responsive
+│   └── widgets/                       # Reusable widgets
+├── features/                          # Feature-based (UI)
+│   ├── analytics/
+│   ├── auth/ & authentication/
+│   ├── chatbot/
+│   ├── clients/
+│   ├── cobros/
+│   ├── commissions/
+│   ├── dashboard/ & real_dashboard/
+│   ├── entregas/
+│   ├── facturas/
+│   ├── kpi_alerts/
+│   ├── objectives/
+│   ├── pedidos/
+│   ├── repartidor/
+│   ├── rutero/
+│   ├── sales_history/
+│   ├── settings/
+│   └── warehouse/
+└── src/                               # Clean Architecture (legacy)
+    ├── core/                          # Error handling
+    ├── data/                          # Datasources, DTOs, Repos impl
+    ├── di/                            # GetIt injection
+    ├── domain/                        # Entities, Repos, UseCases
+    └── presentation/                  # Riverpod providers
+```
+
+### Backend (Node.js)
+
+```
+backend/
+├── server.js                          # Express entry point
+├── routes/                            # Legacy JS routes (15 modules)
+├── services/                          # Business logic services
+├── middleware/                        # Auth, security, logging, audit
+├── config/                            # DB config, environment
+├── utils/                             # Common utilities
+├── kpi/                               # KPI Glacius module
+├── migrations/                        # DB migrations
+├── src/                               # TypeScript/DDD modules (V3)
+│   ├── core/                          # Shared kernel (Entity, VO, Repo)
+│   ├── modules/                       # Bounded contexts (DDD)
+│   └── shared/                        # Shared middleware
+├── scripts/sql/                       # SQL migrations
+└── __tests__/                         # Jest tests
 ```
 
 ---
@@ -516,284 +269,142 @@ lib/
 
 ### Riverpod (Único patrón oficial)
 
-La aplicación usa **exclusivamente Riverpod** para state management. Los antiguos `ChangeNotifier` con Provider han sido eliminados/migrados.
+La aplicación usa **exclusivamente Riverpod** para state management.
 
 #### Tipos de Providers
 
 ```dart
-// 1. AsyncNotifier (para estado asíncrono complejo)
-class CartNotifier extends AutoDisposeAsyncNotifier<CartState> {
-  @override
-  Future<CartState> build() async => const CartState();
+// AsyncNotifier (estado asíncrono complejo)
+class CartNotifier extends AutoDisposeAsyncNotifier<CartState> { ... }
 
-  Future<void> addToCart({...}) async {
-    state = await AsyncValue.guard(() async {
-      // Lógica con Use Cases
-    });
-  }
-}
+// Provider (valores simples)
+final authRepositoryProvider = Provider<AuthRepository>((ref) => getIt());
 
-final cartNotifierProvider = AutoDisposeAsyncNotifierProvider<CartNotifier, CartState>(() {
-  return CartNotifier();
-});
+// StreamProvider (streams)
+final filtersStreamProvider = StreamProvider<Map<String, dynamic>>(...);
 
-// 2. Provider (para valores simples)
-final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return getIt<AuthRepository>();
-});
-
-// 3. StreamProvider (para streams)
-final filtersStreamProvider = StreamProvider<Map<String, dynamic>>((ref) {
-  return ref.watch(filterRepositoryProvider).filters;
-});
-
-// 4. StateNotifier (para estado síncrono)
-class FilterNotifier extends StateNotifier<FilterState> {
-  FilterNotifier() : super(const FilterState());
-
-  void setFilter(String key, dynamic value) {
-    state = state.copyWith(filters: {...state.filters, key: value});
-  }
-}
-```
-
-#### Uso en UI
-
-```dart
-// Con ConsumerWidget
-class ProductCard extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cartState = ref.watch(cartNotifierProvider);
-    
-    return AsyncValueWidget<CartState>(
-      value: cartState,
-      data: (state) => Text('Total: ${state.total}'),
-      loading: () => CircularProgressIndicator(),
-      error: (e, st) => Text('Error: $e'),
-    );
-  }
-}
-
-// Con ConsumerStatefulWidget
-class ProductList extends ConsumerStatefulWidget {
-  @override
-  ConsumerState<ProductList> createState() => _ProductListState();
-}
-
-class _ProductListState extends ConsumerState<ProductList> {
-  @override
-  void initState() {
-    super.initState();
-    // Cargar datos al iniciar
-    ref.read(productsNotifierProvider.notifier).loadProducts();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final productsState = ref.watch(productsNotifierProvider);
-    
-    return productsState.when(
-      data: (state) => ListView.builder(...),
-      loading: () => Center(child: CircularProgressIndicator()),
-      error: (e, st) => Center(child: Text('Error: $e')),
-    );
-  }
-}
+// StateNotifier (estado síncrono)
+class FilterNotifier extends StateNotifier<FilterState> { ... }
 ```
 
 ---
 
-## Dependency Injection
+## Security Layer
 
-### GetIt + Riverpod Integration
+### Implementación Actual
 
-```dart
-// 1. Registrar en GetIt (injection_container.dart)
-void configureDependencies() {
-  _registerAuth();
-  _registerPedidos();
-  // ...
-}
+| Componente | Implementación |
+|---|---|
+| **Password Hashing** | bcrypt 12 rounds |
+| **Token Auth** | HMAC SHA-256 signed JWT (custom, sin dependencia externa) |
+| **Token TTL** | Access: 1h, Refresh: 7d |
+| **Session Management** | In-memory con max 5 sesiones por usuario, cleanup automático |
+| **Rate Limiting** | Global: 100 req/15min, Login: 5 req/15min, API: 500 req/15min |
+| **CORS** | Configuración por entorno (producción: orígenes específicos) |
+| **Headers** | Helmet (CSP, HSTS, X-Frame-Options, XSS, etc.) |
+| **Input Validation** | Zod schemas para login, clientCode, vendorCode, productCode |
+| **SQL Injection** | Detección de patrones SQL en query params y body |
+| **Path Traversal** | Path sanitizer en `src/core/infrastructure/security/` |
+| **Audit** | Middleware de auditoría (IP, usuario, acción, timestamp) |
+| **Content-Type** | Validación estricta (solo JSON y multipart) |
 
-void _registerPedidos() {
-  // Datasources
-  getIt.registerLazySingleton<PedidosRemoteDatasource>(
-    () => PedidosRemoteDatasourceImpl(),
-  );
-  getIt.registerLazySingleton<PedidosLocalDatasource>(
-    () => PedidosLocalDatasourceImpl(),
-  );
+### Nuevos Componentes V3 (1 Abril 2026)
 
-  // Repository
-  getIt.registerLazySingleton<PedidosRepository>(
-    () => PedidosRepositoryImpl(
-      remoteDatasource: getIt(),
-      localDatasource: getIt(),
-    ),
-  );
+- `backend/src/core/infrastructure/security/input-validator.js` - Validación centralizada con Zod
+- `backend/src/core/infrastructure/security/path-sanitizer.js` - Protección contra directory traversal
+- `backend/src/core/infrastructure/cache/response-cache.js` - Cache L1/L2 unificado
+- `backend/src/core/infrastructure/database/db2-connection-pool.js` - Wrapper DDD para DB2
 
-  // Use Cases
-  getIt.registerLazySingleton(() => GetProductsUseCase(getIt()));
-  getIt.registerLazySingleton(() => AddToCartUseCase(getIt()));
-  // ...
-}
+---
 
-// 2. Exponer a Riverpod
-final pedidosRepositoryProvider = Provider<PedidosRepository>((ref) {
-  return getIt<PedidosRepository>();
-});
+## Performance & Caching
 
-// 3. Usar en Notifiers
-class ProductsNotifier extends AutoDisposeAsyncNotifier<ProductsState> {
-  @override
-  Future<ProductsState> build() async => const ProductsState();
+### Estrategia de Cache
 
-  Future<void> loadProducts() async {
-    final useCase = GetProductsUseCase(ref.read(pedidosRepositoryProvider));
-    final result = await useCase();
-    // ...
-  }
-}
-```
+| Nivel | Tecnología | TTL | Uso |
+|---|---|---|---|
+| **L1** | In-memory Map | 5 min | Respuestas de API por proceso |
+| **L2** | Redis | Configurable | Cache compartido entre procesos |
+| **Preload** | Cache preloader | Startup | LACLAE + Metadata al iniciar |
+
+### Optimizaciones Activas
+
+- **Connection Pooling**: Pool DB2 con keepalive cada 2 min
+- **Auto-recovery**: Recreación automática del pool ante errores de conexión
+- **Response Coalescing**: Combina requests concurrentes idénticos
+- **Compression**: gzip responses
+- **Query Optimization**: Slow query detection y sugerencias de índices
+- **Network Optimizer**: HTTP/2 hints, ETag, cache headers
+
+---
+
+## Memory & Offline
+
+### Frontend Storage Strategy
+
+| Storage | Uso |
+|---|---|
+| **Hive** | Caché de productos, pedidos pendientes, configuración |
+| **SharedPreferences** | Flags, preferencias de usuario, última sesión |
+| **Secure Storage** | Tokens JWT, credenciales |
+
+### Offline Operations
+
+- Pedidos pendientes guardados en Hive
+- Sincronización al reconectar
+- Cola de operaciones con reconciliación
 
 ---
 
 ## Flujos de Datos
 
-### Flujo de Creación de Pedido (Nuevo)
+### Flujo de Login (V3 DDD)
 
 ```
-┌──────────────┐
-│   Usuario    │
-│  añade prod  │
-└──────┬───────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ ProductCard (ConsumerWidget)    │
-│ ref.read(cartNotifierProvider   │
-│       .notifier).addToCart()    │
-└──────┬──────────────────────────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ CartNotifier.addToCart()        │
-│ - state = AsyncValue.loading()  │
-│ - AsyncValue.guard(() async {}) │
-└──────┬──────────────────────────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ AddToCartUseCase(repository)    │
-│ - Lógica de negocio             │
-└──────┬──────────────────────────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ PedidosRepositoryImpl.addToCart │
-│ - Actualiza estado en memoria   │
-│ - Aplica reglas de negocio      │
-└──────┬──────────────────────────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ CartState actualizado           │
-│ - UI se reconstruye             │
-│ - AsyncValue.data(newState)     │
-└─────────────────────────────────┘
+UI → AuthNotifier → LoginUseCase → Db2AuthRepository → DB2
+                                    ↓
+                            User Entity
+                                    ↓
+                        HMAC JWT (Access + Refresh)
+                                    ↓
+                              UI Response
 ```
 
-### Flujo de Confirmación de Pedido
+### Flujo de Pedido
 
 ```
-┌──────────────┐
-│   Usuario    │
-│  confirma    │
-└──────┬───────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ CartNotifier.confirmOrder()     │
-└──────┬──────────────────────────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ ConfirmOrderUseCase             │
-└──────┬──────────────────────────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ PedidosRepositoryImpl.confirm   │
-│ - Valida carrito                │
-│ - Llama RemoteDatasource        │
-│ - Guarda en Local si offline    │
-└──────┬──────────────────────────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ PedidosRemoteDatasourceImpl     │
-│ - POST /pedidos/confirmar       │
-└──────┬──────────────────────────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ PedidosLocalDatasourceImpl      │
-│ - Hive: savePendingOrder()      │
-│ (si está offline)               │
-└──────┬──────────────────────────┘
-       │
-       ↓
-┌─────────────────────────────────┐
-│ CartState limpiado              │
-│ - state = AsyncValue.data(      │
-│     CartState())                │
-└─────────────────────────────────┘
+UI → CartNotifier → PedidosRepository → RemoteDatasource → POST /api/pedidos
+                     ↓
+              Hive (si offline) → Cola de sincronización
 ```
 
 ---
 
 ## Decisiones Técnicas
 
+### ¿Por qué DDD en el backend?
+
+**Problema anterior**: Lógica de negocio dispersa en routes y services sin estructura clara
+
+**Solución**: Módulos DDD con domain/application/infrastructure separados
+
+**Beneficios**:
+- ✅ Domain puro (sin dependencias de Express)
+- ✅ Testeable (mocks de repositories)
+- ✅ Mantenible (cada módulo tiene responsabilidad clara)
+- ✅ Escalable (nuevos módulos siguen el mismo patrón)
+
 ### ¿Por qué Riverpod en lugar de Provider + Bloc?
 
-**Problema anterior**: Mezcla de Provider (ChangeNotifier) + Bloc (solo analytics)
-
-**Solución**: Riverpod unificado
-
-**Razones**:
 - ✅ Sin dependencias de BuildContext
-- ✅ Compile-safe (errors en tiempo de compilación)
+- ✅ Compile-safe
 - ✅ AutoDispose para limpieza automática
-- ✅ AsyncValue para manejo de estados asíncronos
-- ✅ Mejor integración con code generation
-- ✅ Testing más simple
-
-**Trade-offs**:
-- ❌ Curva de aprendizaje para el equipo
-- ✅ BENEFICIO: Código más mantenible y type-safe
+- ✅ AsyncValue para estados asíncronos
 
 ### ¿Por qué GetIt + Riverpod?
 
-**GetIt**: Para inyección de dependencias de servicios y repositories
-**Riverpod**: Para state management y DI de UI
-
-**Razones**:
-- ✅ GetIt: Singletons globales, fácil de configurar
-- ✅ Riverpod: State management reactivo
-- ✅ Separación clara: GetIt para infra, Riverpod para UI
-
-### ¿Por qué Clean Architecture estricta?
-
-**Problema anterior**: `pedidos_provider.dart` de 1218 líneas con toda la lógica
-
-**Solución**: Separación en capas
-
-**Beneficios**:
-- ✅ Domain puro (sin dependencias de Flutter)
-- ✅ Testeable (mocks de repositories)
-- ✅ Mantenible (cada capa tiene responsabilidad clara)
-- ✅ Escalable (nuevas features siguen el mismo patrón)
+- **GetIt**: Para inyección de dependencias de servicios y repositories
+- **Riverpod**: Para state management y DI de UI
 
 ---
 
@@ -802,20 +413,12 @@ class ProductsNotifier extends AutoDisposeAsyncNotifier<ProductsState> {
 ### Archivos Legacy (pendientes de migrar)
 
 | Archivo | Estado | Acción |
-|---------|--------|--------|
-| `features/pedidos/providers/pedidos_provider.dart` | ⚠️ ChangeNotifier | Migrar a Riverpod Notifiers |
-| `core/providers/auth_provider.dart` | ⚠️ ChangeNotifier | Usar `src/presentation/providers/auth_provider.dart` |
-| `core/providers/dashboard_provider.dart` | ⚠️ ChangeNotifier | Usar `src/presentation/providers/dashboard_provider.dart` |
-| `features/pedidos/data/pedidos_service.dart` | ⚠️ Servicio directo | Migrar lógica a `PedidosRepositoryImpl` |
-
-### Guía de Migración
-
-1. **Identificar lógica de negocio** en el ChangeNotifier
-2. **Crear Use Case** en `domain/usecases/`
-3. **Mover acceso a datos** al Repository
-4. **Crear Notifier** en `presentation/providers/`
-5. **Actualizar UI** a ConsumerWidget
-6. **Eliminar** el ChangeNotifier antiguo
+|---|---|---|
+| `features/pedidos/providers/pedidos_provider.dart` | ⚠️ ChangeNotifier | Migrar a Riverpod |
+| `core/providers/auth_provider.dart` | ⚠️ ChangeNotifier | Usar `src/presentation/providers/` |
+| `core/providers/dashboard_provider.dart` | ⚠️ ChangeNotifier | Usar `src/presentation/providers/` |
+| `backend/routes/` (legacy JS) | ⚠️ Sin DDD | Migrar a `backend/src/modules/` |
+| `backend/services/` | ⚠️ Sin estructura | Migrar a módulos DDD |
 
 ---
 
@@ -824,12 +427,11 @@ class ProductsNotifier extends AutoDisposeAsyncNotifier<ProductsState> {
 - [Riverpod Documentation](https://riverpod.dev/)
 - [Clean Architecture (Uncle Bob)](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 - [DDD Starter Guide](https://github.com/ddd-by-examples/ddd-by-examples)
-- [GetIt Documentation](https://pub.dev/packages/get_it)
-- [go_router Documentation](https://pub.dev/packages/go_router)
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 
 ---
 
-**Última actualización**: Marzo 2026
-**Versión de la app**: 3.3.1+36
-**Arquitectura**: Clean Architecture + DDD + Riverpod
-**Autor**: Equipo GMP - Refactorización V3 Core Implementation
+**Última actualización**: 1 Abril 2026
+**Versión de la app**: 3.3.2+37
+**Arquitectura**: Clean Architecture + DDD + Riverpod + V3 Integration
+**Autor**: Equipo GMP - V3 Swarm Coordination

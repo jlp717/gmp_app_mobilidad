@@ -90,7 +90,5 @@ echo    - Never commit to version control
 echo    - Backup to secure secret manager
 echo    - Rotate secrets periodically
 echo.
-echo 📖 For more information, see SECURITY_REPORT.md
-echo.
 
 endlocal

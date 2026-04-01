@@ -7,6 +7,30 @@
 - Cambio de cliente con carrito: **confirmar y vaciar** para evitar mezcla de tarifas/clientes (decisión tomada).
 - Fecha de referencia para validación numérica: **31/03/2026**.
 
+### V3 Integration Status (1 Abril 2026)
+
+#### ✅ Completado
+- [x] Limpieza total del root (~420 archivos temp/debug eliminados)
+- [x] .gitignore actualizado con patrones de exclusión
+- [x] Estructura DDD creada en `backend/src/`
+- [x] Core domain: Entity, ValueObject, Repository, UseCase
+- [x] Módulos DDD: auth, pedidos, cobros, entregas, rutero
+- [x] Security: input-validator, path-sanitizer centralizados
+- [x] Performance: response-cache L1/L2, db2-connection-pool wrapper
+- [x] ARQUITECTURA.md actualizado
+- [x] PLAN.md actualizado
+
+#### 🔄 En Progreso
+- [ ] Migrar routes legacy JS a módulos DDD TypeScript
+- [ ] Migrar services a application layer DDD
+- [ ] Implementar repositories DB2 para pedidos, cobros, entregas
+- [ ] Unificar Hive + SharedPreferences en Flutter
+
+#### 📋 Pendiente
+- [ ] V3 CLI Modernization (comandos interactivos, hooks)
+- [ ] Verification & Quality Assurance (truth scoring, auto-rollback)
+- [ ] V3 Deep Integration (eliminar duplicación routes/src)
+
 ### Cambios de API e Interfaces
 - `GET /api/pedidos/products` en [pedidos.js](/c:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/routes/pedidos.js):
   - Requerirá `clientCode` (400 si falta), para hacer efectivo el bloqueo total.
@@ -57,6 +81,6 @@
   - Confirmar que precios/stock mostrados salen de BD actual (no de fórmula legacy no trazable).
 
 ### Supuestos y decisiones por defecto
-- Se toma como verdad operativa la BD actual (no “paridad visual Android”).
+- Se toma como verdad operativa la BD actual (no "paridad visual Android").
 - Las diferencias Android no reproducibles (precio mínimo/stock) se tratan como **lógica legacy pendiente de traza**, no como base de cálculo actual.
 - Si luego quieres paridad exacta Android, el siguiente paso será capturar respuesta real de su endpoint legacy para mapear fórmula cerrada.
