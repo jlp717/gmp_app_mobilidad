@@ -30,6 +30,14 @@ const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('.
 // =============================================================================
 const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
 
+// =============================================================================
+// FEATURE TOGGLE: USE_DDD_ROUTES
+// Set USE_DDD_ROUTES=true to use DDD module routes (from src/modules/)
+// Set USE_DDD_ROUTES=false (default) to use legacy JavaScript routes
+// This toggle is independent of USE_TS_ROUTES
+// =============================================================================
+const USE_DDD_ROUTES = process.env.USE_DDD_ROUTES === 'true';
+
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
@@ -103,6 +111,25 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   }
 }
 
+// ==================== DDD MODULE ROUTES ====================
+let dddAuthRoutes, dddPedidosRoutes, dddCobrosRoutes, dddEntregasRoutes, dddRuteroRoutes;
+
+if (USE_DDD_ROUTES) {
+  try {
+    const dddAdapters = require('./src/shared/routes/ddd-adapters');
+    dddAuthRoutes = dddAdapters.createAuthRoutes();
+    dddPedidosRoutes = dddAdapters.createPedidosRoutes();
+    dddCobrosRoutes = dddAdapters.createCobrosRoutes();
+    dddEntregasRoutes = dddAdapters.createEntregasRoutes();
+    dddRuteroRoutes = dddAdapters.createRuteroRoutes();
+    logger.info('✅ DDD module routes loaded (src/modules/)');
+  } catch (err) {
+    logger.error(`❌ Failed to load DDD routes: ${err.message}`);
+    logger.warn('⚠️ Falling back to legacy JavaScript routes');
+    process.env.USE_DDD_ROUTES = 'false';
+  }
+}
+
 const app = express();
 app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
 const PORT = process.env.PORT || 3334;
@@ -156,7 +183,12 @@ app.use('/api/', globalLimiter);
 // =============================================================================
 // PUBLIC ROUTES (No Auth Required)
 // =============================================================================
-app.use('/api/auth', authRoutes);
+if (process.env.USE_DDD_ROUTES === 'true' && dddAuthRoutes) {
+  app.use('/api/auth', dddAuthRoutes);
+  logger.info('✅ DDD auth routes mounted (public)');
+} else {
+  app.use('/api/auth', authRoutes);
+}
 
 // Health check (Public for monitoring)
 app.get('/api/health', async (req, res) => {
@@ -198,14 +230,26 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/chatbot', chatbotRoutes);
   app.use('/api/commissions', commissionsRoutes);
   app.use('/api/filters', filtersRoutes);
-  app.use('/api/entregas', entregasRoutes);
   app.use('/api/repartidor', repartidorRoutes);
   app.use('/api/logs', userActionsRoutes);
   app.use('/api/facturas', facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);
-  app.use('/api/products', productsRoutes);
-  app.use('/api/pedidos', pedidosRoutes);
-  app.use('/api/cobros', cobrosRoutes);
+
+  // DDD routes (mount before legacy — Express first-match wins)
+  if (process.env.USE_DDD_ROUTES === 'true') {
+    app.use('/api/auth', dddAuthRoutes);
+    app.use('/api/pedidos', dddPedidosRoutes);
+    app.use('/api/cobros', dddCobrosRoutes);
+    app.use('/api/entregas', dddEntregasRoutes);
+    app.use('/api/rutero', dddRuteroRoutes);
+    logger.info('✅ DDD routes mounted at /api/{auth,pedidos,cobros,entregas,rutero}');
+  } else {
+    // Legacy fallback
+    app.use('/api/entregas', entregasRoutes);
+    app.use('/api/products', productsRoutes);
+    app.use('/api/pedidos', pedidosRoutes);
+    app.use('/api/cobros', cobrosRoutes);
+  }
   // KPI Glacius module (DB2/ODBC-backed alerts)
   if (kpiModule) {
     app.use('/api/kpi', kpiModule.kpiRoutes);
@@ -317,13 +361,33 @@ async function startServer() {
     }
   }
 
+  // ─── PHASE 3.7: Initialize DDD modules (if enabled) ───
+  if (process.env.USE_DDD_ROUTES === 'true') {
+    try {
+      const { Db2ConnectionPool } = require('./src/core/infrastructure/database/db2-connection-pool');
+      const { ResponseCache } = require('./src/core/infrastructure/cache/response-cache');
+      const dddDb = new Db2ConnectionPool();
+      await dddDb.initialize();
+      logger.info('✅ DDD connection pool initialized');
+
+      const dddCache = new ResponseCache();
+      logger.info('✅ DDD response cache initialized');
+    } catch (dddErr) {
+      logger.error(`❌ DDD module init error: ${dddErr.message}`);
+      logger.warn('⚠️ Falling back to legacy routes');
+      process.env.USE_DDD_ROUTES = 'false';
+    }
+  }
+
   // ─── PHASE 4: Start server (schema ready + caches warm) ───────────────
   app.listen(PORT, '0.0.0.0', () => {
+    const dddStatus = process.env.USE_DDD_ROUTES === 'true' ? 'DDD Routes ✅' : 'Legacy Routes';
     logger.info('═'.repeat(60));
     logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);
     logger.info(`  Listening on ALL interfaces (0.0.0.0:${PORT})`);
     logger.info(`  Connected to DB2 via ODBC - Real Data`);
     logger.info(`  Security: HMAC TOKEN AUTH 🔒`);
+    logger.info(`  Route Mode: ${dddStatus}`);
     logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
     logger.info(`  Caches: LACLAE + Metadata pre-loaded ✅`);
     logger.info('═'.repeat(60));
