@@ -8,9 +8,10 @@ const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL } = require('../utils/common');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 
+const router = express.Router();
 
 // =============================================================================
-// CONFIGURATION & CONSTANTS
+// ROUTES & HELPER FUNCTIONS
 // =============================================================================
 // FIX #1: Dynamic excluded vendors - loaded from DB with safety fallback
 const DEFAULT_EXCLUDED = ['3', '13', '93', '80'];
