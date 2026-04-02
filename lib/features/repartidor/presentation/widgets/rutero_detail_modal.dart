@@ -768,7 +768,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   /// Descargar el PDF y abrirlo con share sheet
   Future<void> _downloadReceiptPdf() async {
-    final modal = AsyncOperationModal.show(context, text: 'Descargando...');
+    final modal = AsyncOperationModal.show(context, text: 'Preparando PDF...');
     try {
       final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) {
@@ -784,10 +784,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final file = File('${tempDir.path}/Nota_Entrega_${docLabel}_$dlTs.pdf');
       await file.writeAsBytes(base64Decode(pdfData));
 
-      modal.success('Guardado en Descargas');
-      await OpenFilex.open(file.path);
+      modal.close();
+      if (!mounted) return;
+
+      // Use Share sheet - user can save or open in any app
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: 'Guardar $docLabel',
+        subject: docLabel,
+      );
     } catch (e) {
-      modal.error('Error descargando PDF: $e');
+      if (mounted) {
+        modal.error('Error descargando PDF: $e');
+      }
     }
   }
 

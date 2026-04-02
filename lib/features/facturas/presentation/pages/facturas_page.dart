@@ -599,23 +599,27 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   }
 
   Future<void> _downloadFactura(Factura factura) async {
-    final modal = AsyncOperationModal.show(context, text: 'Descargando factura...');
+    final modal = AsyncOperationModal.show(context, text: 'Preparando factura...');
     try {
-      final tempFile = await FacturasService.downloadFacturaPdf(
+      final file = await FacturasService.downloadFacturaPdf(
         factura.serie, factura.numero, factura.ejercicio,
       );
 
-      final downloadsDir = Directory('/storage/emulated/0/Download');
-      if (!await downloadsDir.exists()) {
-        await downloadsDir.create(recursive: true);
-      }
+      modal.close();
+      if (!mounted) return;
 
+      // Use Share sheet which works on all Android versions
+      // User can then "Save to Files" or open in PDF viewer
       final fileName = 'Factura_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
-      final savedFile = await tempFile.copy('${downloadsDir.path}/$fileName');
-
-      modal.success('✓ Guardado en Descargas: $fileName');
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: 'Guardar $fileName',
+        subject: fileName,
+      );
     } catch (e) {
-      modal.error('Error al descargar: $e', onRetry: () => _downloadFactura(factura));
+      if (mounted) {
+        modal.error('Error al descargar: $e', onRetry: () => _downloadFactura(factura));
+      }
     }
   }
 
@@ -771,11 +775,14 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       if (!mounted) return;
 
       await Share.shareXFiles(
-        [XFile(file.path)],
+        [XFile(file.path, mimeType: 'application/pdf')],
         text: result.message,
+        subject: 'Factura ${factura.numeroFormateado}',
       );
     } catch (e) {
-      modal.error('Error al compartir: $e', onRetry: () => _whatsAppFactura(factura));
+      if (mounted) {
+        modal.error('Error al compartir: $e', onRetry: () => _whatsAppFactura(factura));
+      }
     }
   }
   
