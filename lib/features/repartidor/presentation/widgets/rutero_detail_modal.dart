@@ -11,6 +11,8 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/api/api_client.dart';
@@ -3170,6 +3172,29 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (pdfData == null) throw Exception('Error generando PDF para WhatsApp');
       _cachedPdfBase64 = pdfData;
 
+      // Request storage permission for Android 10 and below
+      if (Platform.isAndroid) {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        if (androidInfo.version.sdkInt <= 29) {
+          var status = await Permission.storage.status;
+          if (!status.isGranted) {
+            status = await Permission.storage.request();
+            if (!status.isGranted) {
+              modal.close();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Permiso de almacenamiento denegado'),
+                    backgroundColor: AppTheme.error,
+                  ),
+                );
+              }
+              return;
+            }
+          }
+        }
+      }
+
       // Save PDF temporarily
       final tempDir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
@@ -3188,9 +3213,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         subject: result.message,
+        text: result.message,
       );
     } catch (e) {
-      modal.error('Error al compartir: $e');
+      if (mounted) {
+        modal.close();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al compartir: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
     }
   }
 

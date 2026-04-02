@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../theme/app_theme.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -94,14 +96,35 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
 
   Future<void> _downloadPdf() async {
     if (_tempPath == null) return;
-    
+
     try {
-      // On modern Android (11+), we cannot write directly to /storage/emulated/0/Download
-      // The best practice is to "Share" the file, which allows the user to "Save to Files"
-      // or open it in a PDF viewer that can save it.
+      // Request storage permission for Android 10 and below
+      if (Platform.isAndroid) {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        if (androidInfo.version.sdkInt <= 29) {
+          var status = await Permission.storage.status;
+          if (!status.isGranted) {
+            status = await Permission.storage.request();
+            if (!status.isGranted) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Permiso de almacenamiento denegado'),
+                    backgroundColor: AppTheme.error,
+                  ),
+                );
+              }
+              return;
+            }
+          }
+        }
+      }
+
+      // Use Share.shareXFiles which works on all Android versions
       await Share.shareXFiles(
-        [XFile(_tempPath!)],
+        [XFile(_tempPath!, mimeType: 'application/pdf')],
         text: 'Guardar ${widget.fileName}',
+        subject: widget.fileName,
       );
     } catch (e) {
       if (mounted) {
