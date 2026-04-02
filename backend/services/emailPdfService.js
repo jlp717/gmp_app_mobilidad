@@ -22,17 +22,20 @@ const logger = require('../middleware/logger');
 const SMTP_CONFIG = {
     host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
     port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: false,
+    secure: false, // STARTTLS
     auth: {
         user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
         pass: process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
     },
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
+    connectionTimeout: 20000, // 20s para conexión
+    greetingTimeout: 15000,   // 15s para greeting
+    socketTimeout: 30000,     // 30s para operaciones
     tls: {
         rejectUnauthorized: false
-    }
+    },
+    pool: true, // Usar connection pooling
+    maxConnections: 5,
+    maxMessages: 100
 };
 
 const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
@@ -135,69 +138,92 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
         throw new Error('Nombre del archivo PDF es requerido');
     }
 
-    try {
-        const transport = getTransporter();
+    const maxRetries = 3;
+    let lastError;
 
-        const defaultHtml = `
-            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background: linear-gradient(135deg, #003d7a 0%, #1a5490 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 22px;">Documento Adjunto</h1>
-                    <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
-                </div>
-                <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
-                    <p style="font-size: 15px; color: #333; line-height: 1.6;">
-                        Estimado/a cliente,
-                    </p>
-                    <p style="font-size: 14px; color: #555; line-height: 1.6;">
-                        Adjunto encontrará el documento <strong>${pdfFilename}</strong>.
-                    </p>
-                    <div style="background: #e3f2fd; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center; border-left: 4px solid #1a5490;">
-                        <p style="font-size: 13px; color: #1a5490; font-weight: 600; margin: 0;">
-                            ${pdfFilename} (${(pdfBuffer.length / 1024).toFixed(0)} KB)
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const transport = getTransporter();
+
+            const defaultHtml = `
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: linear-gradient(135deg, #003d7a 0%, #1a5490 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 22px;">Documento Adjunto</h1>
+                        <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
+                        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+                            Estimado/a cliente,
+                        </p>
+                        <p style="font-size: 14px; color: #555; line-height: 1.6;">
+                            Adjunto encontrará el documento <strong>${pdfFilename}</strong>.
+                        </p>
+                        <div style="background: #e3f2fd; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center; border-left: 4px solid #1a5490;">
+                            <p style="font-size: 13px; color: #1a5490; font-weight: 600; margin: 0;">
+                                ${pdfFilename} (${(pdfBuffer.length / 1024).toFixed(0)} KB)
+                            </p>
+                        </div>
+                        <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
+                        <p style="font-size: 11px; color: #999; margin: 0;">
+                            Este email ha sido enviado desde la aplicación de gestión de Granja Mari Pepa.<br>
+                            Teléfono: 639 77 86 56 | www.mari-pepa.com
                         </p>
                     </div>
-                    <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
-                    <p style="font-size: 11px; color: #999; margin: 0;">
-                        Este email ha sido enviado desde la aplicación de gestión de Granja Mari Pepa.<br>
-                        Teléfono: 639 77 86 56 | www.mari-pepa.com
-                    </p>
                 </div>
-            </div>
-        `;
+            `;
 
-        const mailOptions = {
-            from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
-            to: to,
-            subject: subject || `Documento - ${FROM_NAME}`,
-            html: htmlBody || defaultHtml,
-            text: textBody || `Adjunto: ${pdfFilename}`,
-            attachments: [{
-                filename: pdfFilename,
-                content: pdfBuffer,
-                contentType: 'application/pdf'
-            }]
-        };
+            const mailOptions = {
+                from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+                to: to,
+                subject: subject || `Documento - ${FROM_NAME}`,
+                html: htmlBody || defaultHtml,
+                text: textBody || `Adjunto: ${pdfFilename}`,
+                attachments: [{
+                    filename: pdfFilename,
+                    content: pdfBuffer,
+                    contentType: 'application/pdf'
+                }]
+            };
 
-        const info = await transport.sendMail(mailOptions);
+            logger.info(`Enviando email a ${to} (intento ${attempt}/${maxRetries})...`);
+            
+            const info = await transport.sendMail(mailOptions);
 
-        logger.info('Email con PDF enviado correctamente', {
-            to,
-            subject,
-            pdfFilename,
-            pdfSize: `${(pdfBuffer.length / 1024).toFixed(1)} KB`,
-            messageId: info.messageId
-        });
+            logger.info('Email con PDF enviado correctamente', {
+                to,
+                subject,
+                pdfFilename,
+                pdfSize: `${(pdfBuffer.length / 1024).toFixed(1)} KB`,
+                messageId: info.messageId
+            });
 
-        return { success: true, messageId: info.messageId };
-    } catch (error) {
-        logger.error('Error enviando email con PDF', {
-            to,
-            pdfFilename,
-            error: error.message,
-            code: error.code
-        });
-        throw error;
+            return { success: true, messageId: info.messageId };
+        } catch (error) {
+            lastError = error;
+            logger.warn(`Error enviando email (intento ${attempt}/${maxRetries}): ${error.message}`, {
+                to,
+                code: error.code,
+                command: error.command
+            });
+            
+            // Esperar antes de reintentar (exponential backoff)
+            if (attempt < maxRetries) {
+                const delay = attempt * 2000; // 2s, 4s, 6s...
+                logger.info(`Esperando ${delay}ms antes de reintentar...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
     }
+
+    // Todos los reintentos fallaron
+    logger.error('Error enviando email con PDF después de ${maxRetries} intentos', {
+        to,
+        pdfFilename,
+        error: lastError?.message,
+        code: lastError?.code
+    });
+    
+    throw lastError || new Error('Error enviando email después de múltiples intentos');
 }
 
 /**
