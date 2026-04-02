@@ -6,12 +6,14 @@
 
 const express = require('express');
 const router = express.Router();
+const https = require('https');
 const logger = require('../middleware/logger');
 const { query, queryWithParams, getPool } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const { sanitizeForSQL } = require('../utils/common');
 const loadPlanner = require('../services/loadPlanner');
+const estimateBoxDimensions = loadPlanner.estimateBoxDimensions;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // AUTO-CREATE JAVIER.* WAREHOUSE TABLES (safe, idempotent)
@@ -787,7 +789,7 @@ router.put('/personnel/:id', async (req, res) => {
 router.post('/personnel/:id/delete', async (req, res) => {
     try {
         const id = parseInt(req.params.id);
-        await query(`UPDATE JAVIER.ALMACEN_PERSONAL SET ACTIVO = 'N', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ${id}`);
+        await queryWithParams(`UPDATE JAVIER.ALMACEN_PERSONAL SET ACTIVO = 'N', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`, [id]);
         res.json({ success: true });
     } catch (error) {
         logger.error(`Delete personnel error: ${error.message}`);
@@ -870,7 +872,7 @@ router.get('/articles', async (req, res) => {
             FETCH FIRST ${parseInt(limit)} ROWS ONLY
         `);
 
-        const estimateFn = require('../services/loadPlanner').estimateBoxDimensions;
+        const estimateFn = estimateBoxDimensions;
 
         res.json({
             articles: rows.map(r => {
@@ -1048,7 +1050,6 @@ router.get('/vehicle-photo/:code', async (req, res) => {
         }
 
         // Fetch from Wikimedia with proper User-Agent
-        const https = require('https');
         const url = new URL(photoUrl);
         const proxyReq = https.get({
             hostname: url.hostname,
@@ -1119,7 +1120,7 @@ router.post('/personnel/cleanup-test', async (req, res) => {
  */
 router.post('/articles/bulk-estimate', async (req, res) => {
     try {
-        const estimateFn = require('../services/loadPlanner').estimateBoxDimensions;
+        const estimateFn = estimateBoxDimensions;
         const rows = await query(`
             SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
                    COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA
@@ -1445,7 +1446,7 @@ router.post('/manual-layout/:id/delete', async (req, res) => {
         const id = parseInt(req.params.id);
         if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
 
-        await query(`DELETE FROM JAVIER.ALMACEN_CARGA_MANUAL WHERE ID = ${id}`);
+        await queryWithParams(`DELETE FROM JAVIER.ALMACEN_CARGA_MANUAL WHERE ID = ?`, [id]);
         res.json({ success: true });
     } catch (error) {
         if (isTableNotFound(error)) {

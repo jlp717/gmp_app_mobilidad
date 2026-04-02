@@ -1265,6 +1265,18 @@ class PedidosService {
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
       return response;
+    } on ApiException catch (e) {
+      // Capture 409 errors (stock insufficient) and return the data
+      if (e.statusCode == 409) {
+        debugPrint('[PedidosService] Order blocked due to stock: ${e.message}');
+        return {
+          'blocked': true,
+          'message': e.message,
+          'statusCode': e.statusCode,
+        };
+      }
+      debugPrint('[PedidosService] Error confirmOrder: $e');
+      rethrow;
     } catch (e) {
       debugPrint('[PedidosService] Error confirmOrder: $e');
       rethrow;

@@ -239,14 +239,14 @@ class AuthProvider with ChangeNotifier {
 
     // Notify listeners IMMEDIATELY so UI can navigate to login
     notifyListeners();
-    
+
     // Small delay to allow UI to react before clearing filters
     await Future.delayed(const Duration(milliseconds: 100));
-    
+
     // Clear global filters
     try {
-      // Fire-and-forget - don't await to avoid blocking
-      unawaited(FilterProvider().clear());
+      // Clear filter provider directly (method is void, not Future)
+      FilterProvider().clear();
     } catch (e) {
       debugPrint('[AuthProvider] Filter clear error: $e');
     }

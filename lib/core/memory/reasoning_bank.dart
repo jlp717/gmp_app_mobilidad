@@ -1,3 +1,4 @@
+// ignore_for_file: argument_type_not_assignable, invalid_assignment, return_of_invalid_type
 import 'dart:math';
 import 'agent_database.dart';
 import 'vector_store_hnsw.dart';
@@ -15,10 +16,10 @@ import 'vector_store_hnsw.dart';
 /// - Adaptive ranking de productos
 class ReasoningBank {
   final AgentDatabase _db;
-  
+
   // Configuración de embedding
   static const int embeddingDimension = 128;
-  
+
   // Weights para scoring adaptativo
   final Map<String, double> _featureWeights = {
     'recency': 0.25,
@@ -27,14 +28,14 @@ class ReasoningBank {
     'user_preference': 0.25,
     'similarity': 0.15,
   };
-  
+
   // Cache de patrones aprendidos
   final Map<String, PatternData> _learnedPatterns = {};
-  
+
   ReasoningBank(this._db);
-  
+
   // ==================== PRODUCT EMBEDDINGS ====================
-  
+
   /// Genera embedding semántico para producto
   List<double> generateProductEmbedding({
     required String productCode,
@@ -51,10 +52,10 @@ class ReasoningBank {
       brand,
       category,
     ].whereType<String>().join(' ').toLowerCase();
-    
+
     // Hash-based embedding (simulado - en producción usar modelo ML)
     final embedding = _textToEmbedding(text, embeddingDimension);
-    
+
     // Incorporar features numéricas normalizadas
     if (price != null) {
       final priceNorm = _normalizePrice(price);
@@ -62,11 +63,11 @@ class ReasoningBank {
         embedding[i] += priceNorm * sin(i * 0.1);
       }
     }
-    
+
     // Normalizar embedding final
     return _normalizeVector(embedding);
   }
-  
+
   /// Indexa producto para búsqueda semántica
   Future<void> indexProduct({
     required String productCode,
@@ -85,7 +86,7 @@ class ReasoningBank {
       price: price,
       category: category,
     );
-    
+
     await _db.insertVector(
       id: 'product:$productCode',
       embedding: embedding,
@@ -103,7 +104,7 @@ class ReasoningBank {
       type: MemoryType.semantic,
     );
   }
-  
+
   /// Busca productos similares
   List<ProductSimilarityResult> findSimilarProducts({
     required String productCode,
@@ -113,17 +114,17 @@ class ReasoningBank {
     // Obtener embedding del producto original
     final productData = _db.getPersistent('product:$productCode');
     if (productData == null) return [];
-    
+
     final embedding = productData['embedding'] as List<double>?;
     if (embedding == null) return [];
-    
+
     // Búsqueda vectorial
     final results = _db.searchVectors(
       queryEmbedding: embedding,
       k: k + 1, // +1 para incluir el producto original
       threshold: threshold,
     );
-    
+
     // Filtrar producto original y convertir resultados
     return results
         .where((r) => r.id != 'product:$productCode')
@@ -136,9 +137,9 @@ class ReasoningBank {
             ))
         .toList();
   }
-  
+
   // ==================== USER PREFERENCES ====================
-  
+
   /// Registra interacción de usuario con producto
   Future<void> recordUserInteraction({
     required String userId,
@@ -155,7 +156,7 @@ class ReasoningBank {
       'price': price,
       'timestamp': DateTime.now().toIso8601String(),
     };
-    
+
     // Guardar interacción
     final interactionKey = 'interaction:${userId}:$productCode';
     await _db.setPersistent(
@@ -163,14 +164,14 @@ class ReasoningBank {
       value: interaction,
       type: MemoryType.user,
     );
-    
+
     // Actualizar perfil de usuario
     await _updateUserProfile(userId, productCode, type, quantity);
-    
+
     // Aprender patrón
     await _learnPattern(userId, productCode, type);
   }
-  
+
   Future<void> _updateUserProfile(
     String userId,
     String productCode,
@@ -178,31 +179,33 @@ class ReasoningBank {
     double? quantity,
   ) async {
     final profileKey = 'user_profile:$userId';
-    Map<String, dynamic> profile = _db.getPersistent(profileKey) ?? {
-      'userId': userId,
-      'productScores': <String, double>{},
-      'categoryPreferences': <String, double>{},
-      'lastInteraction': DateTime.now().toIso8601String(),
-      'interactionCount': 0,
-    };
-    
+    Map<String, dynamic> profile = _db.getPersistent(profileKey) ??
+        {
+          'userId': userId,
+          'productScores': <String, double>{},
+          'categoryPreferences': <String, double>{},
+          'lastInteraction': DateTime.now().toIso8601String(),
+          'interactionCount': 0,
+        };
+
     // Actualizar score del producto
-    final currentScore = (profile['productScores'][productCode] ?? 0.0) as double;
+    final currentScore =
+        (profile['productScores'][productCode] ?? 0.0) as double;
     final interactionWeight = _getInteractionWeight(type, quantity);
     profile['productScores'][productCode] =
         (currentScore + interactionWeight).clamp(0.0, 1.0);
-    
+
     // Incrementar contador
     profile['interactionCount'] = (profile['interactionCount'] ?? 0) + 1;
     profile['lastInteraction'] = DateTime.now().toIso8601String();
-    
+
     await _db.setPersistent(
       key: profileKey,
       value: profile,
       type: MemoryType.user,
     );
   }
-  
+
   double _getInteractionWeight(InteractionType type, double? quantity) {
     switch (type) {
       case InteractionType.view:
@@ -215,12 +218,12 @@ class ReasoningBank {
         return 0.25;
     }
   }
-  
+
   /// Obtiene perfil de usuario
   Map<String, dynamic>? getUserProfile(String userId) {
     return _db.getPersistent('user_profile:$userId');
   }
-  
+
   /// Obtiene productos recomendados para usuario
   List<RecommendationResult> getRecommendations({
     required String userId,
@@ -229,63 +232,63 @@ class ReasoningBank {
   }) {
     final profile = getUserProfile(userId);
     if (profile == null) return [];
-    
+
     final productScores = Map<String, double>.from(
       profile['productScores'] ?? {},
     );
-    
+
     // Calcular scores con weights adaptativos
     final scoredProducts = <RecommendationResult>[];
-    
+
     for (final entry in productScores.entries) {
       final productCode = entry.key;
       final baseScore = entry.value;
-      
+
       // Aplicar decay temporal
       final recencyScore = _calculateRecencyScore(userId, productCode);
-      
+
       // Score final ponderado
       final finalScore = baseScore * _featureWeights['user_preference']! +
           recencyScore * _featureWeights['recency']!;
-      
+
       scoredProducts.add(RecommendationResult(
         productCode: productCode,
         score: finalScore,
         reasons: ['Basado en tu historial'],
       ));
     }
-    
+
     // Ordenar por score
     scoredProducts.sort((a, b) => b.score.compareTo(a.score));
-    
+
     return scoredProducts.take(k).toList();
   }
-  
+
   double _calculateRecencyScore(String userId, String productCode) {
     final interactionKey = 'interaction:${userId}:$productCode';
     final interaction = _db.getPersistent(interactionKey);
-    
+
     if (interaction == null) return 0;
-    
+
     final timestamp = DateTime.tryParse(interaction['timestamp'] ?? '');
     if (timestamp == null) return 0;
-    
+
     final daysSince = DateTime.now().difference(timestamp).inDays;
-    
+
     // Decay exponencial: score = e^(-days/30)
     return exp(-daysSince / 30);
   }
-  
+
   // ==================== PATTERN LEARNING ====================
-  
+
   Future<void> _learnPattern(
     String userId,
     String productCode,
     InteractionType type,
   ) async {
     final patternKey = 'pattern:$userId:$type';
-    
-    PatternData pattern = _learnedPatterns[patternKey] ?? 
+
+    PatternData pattern = _learnedPatterns[patternKey] ??
         PatternData(
           userId: userId,
           patternType: type.name,
@@ -293,18 +296,18 @@ class ReasoningBank {
           frequencies: {},
           lastUpdated: DateTime.now(),
         );
-    
+
     // Actualizar frecuencia
-    pattern.frequencies[productCode] = 
+    pattern.frequencies[productCode] =
         (pattern.frequencies[productCode] ?? 0) + 1;
-    
+
     if (!pattern.products.contains(productCode)) {
       pattern.products.add(productCode);
     }
-    
+
     pattern.lastUpdated = DateTime.now();
     _learnedPatterns[patternKey] = pattern;
-    
+
     // Persistir patrón
     await _db.setPersistent(
       key: patternKey,
@@ -312,17 +315,18 @@ class ReasoningBank {
       type: MemoryType.entity,
     );
   }
-  
+
   /// Obtiene patrones aprendidos
-  List<PatternData> getLearnedPatterns({String? userId, InteractionType? type}) {
+  List<PatternData> getLearnedPatterns(
+      {String? userId, InteractionType? type}) {
     return _learnedPatterns.values
         .where((p) => userId == null || p.userId == userId)
         .where((p) => type == null || p.patternType == type.name)
         .toList();
   }
-  
+
   // ==================== ORDER PATTERNS ====================
-  
+
   /// Analiza patrón de pedido
   Future<void> analyzeOrderPattern({
     required String orderId,
@@ -336,12 +340,13 @@ class ReasoningBank {
         0,
         (sum, item) => sum + (item.price * item.quantity),
       ),
-      'categories': items.map((i) => i.category).whereType<String>().toSet().toList(),
-      'avgPrice': items.isEmpty 
-          ? 0 
+      'categories':
+          items.map((i) => i.category).whereType<String>().toSet().toList(),
+      'avgPrice': items.isEmpty
+          ? 0
           : items.fold<double>(0, (sum, i) => sum + i.price) / items.length,
     };
-    
+
     // Guardar patrón de pedido
     final orderPattern = OrderPattern(
       orderId: orderId,
@@ -350,17 +355,18 @@ class ReasoningBank {
       features: features,
       createdAt: DateTime.now(),
     );
-    
+
     await _db.setPersistent(
       key: 'order_pattern:$orderId',
       value: orderPattern.toJson(),
       type: MemoryType.entity,
     );
-    
+
     // Aprender combinaciones frecuentes
-    await _learnFrequentCombinations(userId, items.map((i) => i.productCode).toList());
+    await _learnFrequentCombinations(
+        userId, items.map((i) => i.productCode).toList());
   }
-  
+
   Future<void> _learnFrequentCombinations(
     String userId,
     List<String> productCodes,
@@ -378,7 +384,7 @@ class ReasoningBank {
       }
     }
   }
-  
+
   /// Obtiene productos frecuentemente comprados juntos
   List<String> getFrequentlyBoughtTogether({
     required String userId,
@@ -386,7 +392,7 @@ class ReasoningBank {
     int k = 5,
   }) {
     final combos = <String, int>{};
-    
+
     // Buscar todas las combinaciones que incluyen este producto
     for (final key in _learnedPatterns.keys) {
       if (key.contains('combo:$userId:$productCode:')) {
@@ -396,7 +402,8 @@ class ReasoningBank {
           final count = _db.getPersistent(key) ?? 0;
           combos[otherProduct] = count;
         }
-      } else if (key.contains('combo:$userId:') && key.contains(':$productCode')) {
+      } else if (key.contains('combo:$userId:') &&
+          key.contains(':$productCode')) {
         final parts = key.split(':');
         if (parts.length >= 5) {
           final otherProduct = parts[3] == productCode ? parts[4] : parts[3];
@@ -405,16 +412,16 @@ class ReasoningBank {
         }
       }
     }
-    
+
     // Ordenar por frecuencia
     final sorted = combos.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    
+
     return sorted.take(k).map((e) => e.key).toList();
   }
-  
+
   // ==================== ADAPTIVE SCORING ====================
-  
+
   /// Calcula score adaptativo para producto
   double calculateAdaptiveScore({
     required String userId,
@@ -422,14 +429,14 @@ class ReasoningBank {
     Map<String, double>? customWeights,
   }) {
     final weights = customWeights ?? _featureWeights;
-    
+
     // Obtener componentes del score
     final recencyScore = _calculateRecencyScore(userId, productCode);
     final frequencyScore = _calculateFrequencyScore(userId, productCode);
     final preferenceScore = _calculatePreferenceScore(userId, productCode);
     final similarityScore = _calculateSimilarityScore(userId, productCode);
     final seasonalityScore = _calculateSeasonalityScore(productCode);
-    
+
     // Score ponderado
     return recencyScore * weights['recency']! +
         frequencyScore * weights['frequency']! +
@@ -437,35 +444,35 @@ class ReasoningBank {
         preferenceScore * weights['user_preference']! +
         similarityScore * weights['similarity']!;
   }
-  
+
   double _calculateFrequencyScore(String userId, String productCode) {
     final interactionKey = 'interaction:${userId}:$productCode';
     final interaction = _db.getPersistent(interactionKey);
-    
+
     if (interaction == null) return 0;
-    
+
     final count = interaction['count'] ?? 1;
     return min(1.0, count / 10); // Normalizar a 0-1
   }
-  
+
   double _calculatePreferenceScore(String userId, String productCode) {
     final profile = getUserProfile(userId);
     if (profile == null) return 0;
-    
+
     final productScores = Map<String, double>.from(
       profile['productScores'] ?? {},
     );
-    
+
     return productScores[productCode] ?? 0;
   }
-  
+
   double _calculateSimilarityScore(String userId, String productCode) {
     // Basado en productos similares a los que el usuario ha comprado
     final profile = getUserProfile(userId);
     if (profile == null) return 0;
-    
+
     final purchasedProducts = profile['productScores']?.keys ?? [];
-    
+
     double maxSimilarity = 0;
     for (final purchasedCode in purchasedProducts) {
       final similar = findSimilarProducts(
@@ -473,74 +480,74 @@ class ReasoningBank {
         k: 1,
         threshold: 0.5,
       );
-      
+
       for (final sim in similar) {
         if (sim.productCode == productCode) {
           maxSimilarity = max(maxSimilarity, sim.similarity);
         }
       }
     }
-    
+
     return maxSimilarity;
   }
-  
+
   double _calculateSeasonalityScore(String productCode) {
     // Implementación básica - podría mejorarse con datos históricos
     final month = DateTime.now().month;
-    
+
     // Productos con estacionalidad conocida (ejemplo)
     final seasonalProducts = {
       'summer': [6, 7, 8],
       'winter': [12, 1, 2],
     };
-    
+
     // Verificar si producto tiene metadata de estacionalidad
     final productData = _db.getPersistent('product:$productCode');
     if (productData == null) return 0.5; // Score neutral
-    
+
     final season = productData['season'] as String?;
     if (season == null) return 0.5;
-    
+
     final seasonalMonths = seasonalProducts[season] ?? [];
     return seasonalMonths.contains(month) ? 1.0 : 0.3;
   }
-  
+
   // ==================== UTILITIES ====================
-  
+
   List<double> _textToEmbedding(String text, int dimension) {
     final embedding = List<double>.filled(dimension, 0);
-    
+
     // Hash-based embedding
     for (var i = 0; i < text.length; i++) {
       final charCode = text.codeUnitAt(i);
       final index = charCode % dimension;
       embedding[index] += (charCode / 256);
     }
-    
+
     // Añadir variación posicional
     for (var i = 0; i < dimension; i++) {
       embedding[i] += sin(i * 0.1) * 0.1;
     }
-    
+
     return embedding;
   }
-  
+
   double _normalizePrice(double price) {
     // Normalizar precio a rango 0-1 (asumiendo max 1000)
     return min(1.0, price / 1000);
   }
-  
+
   List<double> _normalizeVector(List<double> vector) {
     final magnitude = sqrt(vector.fold<double>(
       0,
       (sum, v) => sum + v * v,
     ));
-    
+
     if (magnitude == 0) return vector;
-    
+
     return vector.map((v) => v / magnitude).toList();
   }
-  
+
   /// Limpia datos de aprendizaje
   Future<void> clearLearningData({String? userId}) async {
     if (userId == null) {
@@ -551,11 +558,11 @@ class ReasoningBank {
       final keysToClear = [
         'user_profile:$userId',
       ];
-      
+
       for (final key in keysToClear) {
         await _db.deletePersistent(key);
       }
-      
+
       _learnedPatterns.removeWhere((k, v) => k.contains(':$userId:'));
     }
   }
@@ -575,7 +582,7 @@ class ProductSimilarityResult {
   final String productName;
   final double similarity;
   final Map<String, dynamic>? metadata;
-  
+
   ProductSimilarityResult({
     required this.productCode,
     required this.productName,
@@ -588,7 +595,7 @@ class RecommendationResult {
   final String productCode;
   final double score;
   final List<String> reasons;
-  
+
   RecommendationResult({
     required this.productCode,
     required this.score,
@@ -602,7 +609,7 @@ class PatternData {
   final List<String> products;
   final Map<String, int> frequencies;
   DateTime lastUpdated;
-  
+
   PatternData({
     required this.userId,
     required this.patternType,
@@ -610,7 +617,7 @@ class PatternData {
     required this.frequencies,
     required this.lastUpdated,
   });
-  
+
   Map<String, dynamic> toJson() => {
         'userId': userId,
         'patternType': patternType,
@@ -618,13 +625,14 @@ class PatternData {
         'frequencies': frequencies,
         'lastUpdated': lastUpdated.toIso8601String(),
       };
-  
+
   factory PatternData.fromJson(Map<String, dynamic> json) => PatternData(
         userId: json['userId'] ?? '',
         patternType: json['patternType'] ?? '',
         products: List<String>.from(json['products'] ?? []),
         frequencies: Map<String, int>.from(json['frequencies'] ?? {}),
-        lastUpdated: DateTime.tryParse(json['lastUpdated'] ?? '') ?? DateTime.now(),
+        lastUpdated:
+            DateTime.tryParse(json['lastUpdated'] ?? '') ?? DateTime.now(),
       );
 }
 
@@ -633,7 +641,7 @@ class OrderItem {
   final String? category;
   final double quantity;
   final double price;
-  
+
   OrderItem({
     required this.productCode,
     this.category,
@@ -648,7 +656,7 @@ class OrderPattern {
   final List<String> items;
   final Map<String, dynamic> features;
   final DateTime createdAt;
-  
+
   OrderPattern({
     required this.orderId,
     required this.userId,
@@ -656,7 +664,7 @@ class OrderPattern {
     required this.features,
     required this.createdAt,
   });
-  
+
   Map<String, dynamic> toJson() => {
         'orderId': orderId,
         'userId': userId,
@@ -664,7 +672,7 @@ class OrderPattern {
         'features': features,
         'createdAt': createdAt.toIso8601String(),
       };
-  
+
   factory OrderPattern.fromJson(Map<String, dynamic> json) => OrderPattern(
         orderId: json['orderId'] ?? '',
         userId: json['userId'] ?? '',

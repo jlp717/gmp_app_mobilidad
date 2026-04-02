@@ -385,14 +385,14 @@ router.post('/rutero/move_clients', async (req, res) => {
             logger.info(`📋 Move: Cliente ${clientTrimmed} de "${previousDay || 'ninguno'}" a "${dayLower}"`);
 
             // Delete ALL existing entries for this client (positives + blocks)
-            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'`);
+            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND TRIM(CLIENTE) = ?`, [vendedor, clientTrimmed]);
 
             // Insert BLOCKING entry for source day (ORDEN = -1) so client no longer appears there
             if (previousDay && previousDay !== dayLower) {
                 await conn.query(`
                     INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
-                    VALUES ('${vendedor}', '${previousDay}', '${clientTrimmed}', -1)
-                `);
+                    VALUES (?, ?, ?, -1)
+                `, [vendedor, previousDay, clientTrimmed]);
                 logger.info(`🚫 Block entry created: ${clientTrimmed} blocked from ${previousDay}`);
             }
 
@@ -403,22 +403,22 @@ router.post('/rutero/move_clients', async (req, res) => {
                 await conn.query(`
                     UPDATE JAVIER.RUTERO_CONFIG
                     SET ORDEN = ORDEN + 10
-                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= 0
-                `);
+                    WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
+                `, [vendedor, dayLower]);
                 targetOrder = 0;
             } else if (typeof effectivePosition === 'number' && effectivePosition > 0) {
                 targetOrder = effectivePosition * 10;
                 await conn.query(`
                     UPDATE JAVIER.RUTERO_CONFIG
                     SET ORDEN = ORDEN + 10
-                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= ${targetOrder}
-                `);
+                    WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= ?
+                `, [vendedor, dayLower, targetOrder]);
             } else {
                 const maxOrderRes = await conn.query(`
                     SELECT MAX(ORDEN) as MAX_ORD
                     FROM JAVIER.RUTERO_CONFIG
-                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= 0
-                `);
+                    WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
+                `, [vendedor, dayLower]);
 
                 // Si movemos al final, y no hay overrides (MAX_ORD is null), debemos ponerlo después de los naturales.
                 // Los naturales asumen orden 20000+natOrder o 99999 si no tienen.
@@ -429,8 +429,8 @@ router.post('/rutero/move_clients', async (req, res) => {
 
             await conn.query(`
                 INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
-                VALUES ('${vendedor}', '${dayLower}', '${clientTrimmed}', ${targetOrder})
-            `);
+                VALUES (?, ?, ?, ?)
+            `, [vendedor, dayLower, clientTrimmed, targetOrder]);
 
             movedClientsInfo.push({
                 client: clientTrimmed,
@@ -456,11 +456,8 @@ router.post('/rutero/move_clients', async (req, res) => {
                 await conn.query(`
                     INSERT INTO JAVIER.RUTERO_LOG 
                     (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES)
-                    VALUES ('${vendedor}', 'CAMBIO_DIA', '${moved.fromDay}', '${moved.toDay}', '${moved.client}', 
-                            '${sanitizeForSQL(moved.clientName || '')}', 
-                            ${moved.previousPosition ?? 'NULL'}, ${moved.newPosition}, 
-                            'Movido de ${moved.fromDay} a ${moved.toDay}')
-                `);
+                    VALUES (?, 'CAMBIO_DIA', ?, ?, ?, ?, ?, ?, ?)
+                `, [vendedor, moved.fromDay, moved.toDay, moved.client, sanitizeForSQL(moved.clientName || ''), moved.previousPosition, moved.newPosition, `Movido de ${moved.fromDay} a ${moved.toDay}`]);
             }
         } catch (logErr) {
             logger.warn(`Log insert failed (non-blocking): ${logErr.message}`);
@@ -474,8 +471,8 @@ router.post('/rutero/move_clients', async (req, res) => {
         for (const day of affectedDays) {
             const countRes = await conn.query(`
                 SELECT COUNT(*) as CNT FROM JAVIER.RUTERO_CONFIG
-                WHERE VENDEDOR = '${vendedor}' AND DIA = '${day}' AND ORDEN >= 0
-            `);
+                WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
+            `, [vendedor, day]);
             updatedCounts[day] = countRes[0]?.CNT || 0;
         }
 
@@ -541,11 +538,11 @@ router.post('/rutero/config', async (req, res) => {
 
         // Helper to run SQL with detailed error logging.
         // Gets a FRESH connection each time to avoid DB2 dirty-connection issues.
-        async function execSql(label, sql) {
+        async function execSql(label, sql, params) {
             let c;
             try {
                 c = await pool.connect();
-                const result = await c.query(sql);
+                const result = params ? await c.query(sql, params) : await c.query(sql);
                 return result;
             } catch (err) {
                 const odbcDetail = (err.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
@@ -560,7 +557,8 @@ router.post('/rutero/config', async (req, res) => {
         let previousPositions = {};
         try {
             const prevRows = await execSql('fetch-previous',
-                `SELECT CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}'`
+                `SELECT CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ?`,
+                [vendedor, dia]
             );
             prevRows.forEach(row => {
                 previousPositions[row.CLIENTE?.trim()] = row.ORDEN;
@@ -572,15 +570,17 @@ router.post('/rutero/config', async (req, res) => {
         // Delete ALL POSITIVE overrides for this day, so the new `orden` array becomes the absolute truth
         // BUT we MUST preserve blocking entries (ORDEN = -1)!
         await execSql('delete-positive',
-            `DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND ORDEN >= 0`
+            `DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0`,
+            [vendedor, dia]
         );
 
         if (orden.length > 0) {
-            // Also explicitly delete any existing blocking entries for the clients we are trying to insert
-            const updatingClients = orden.filter(o => o.cliente).map(o => `'${o.cliente.trim()}'`).join(',');
-            if (updatingClients) {
+            const updatingClients = orden.filter(o => o.cliente).map(o => o.cliente.trim());
+            if (updatingClients.length > 0) {
+                const placeholders = updatingClients.map(() => '?').join(',');
                 await execSql('delete-blocks-for-updating',
-                    `DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND TRIM(CLIENTE) IN (${updatingClients})`
+                    `DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ? AND TRIM(CLIENTE) IN (${placeholders})`,
+                    [vendedor, dia, ...updatingClients]
                 );
             }
 
@@ -598,7 +598,8 @@ router.post('/rutero/config', async (req, res) => {
 
                 if (hayCambio || hadPreviousOverride) {
                     await execSql(`insert-client-${item.cliente}`,
-                        `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES ('${vendedor}', '${dia}', '${item.cliente}', ${posNueva})`
+                        `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES (?, ?, ?, ?)`,
+                        [vendedor, dia, item.cliente, posNueva]
                     );
                 }
             }
@@ -613,7 +614,8 @@ router.post('/rutero/config', async (req, res) => {
                     if (previousOrder >= 0) {
                         logger.info(`🚫 Smart Merge blocking previously-managed client ${clientCode} on day ${dia} (removed from reorder)`);
                         await execSql(`block-ghost-${clientCode}`,
-                            `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES ('${vendedor}', '${dia}', '${clientCode}', -1)`
+                            `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES (?, ?, ?, -1)`,
+                            [vendedor, dia, clientCode]
                         );
                     } else if (previousOrder === -1) {
                         // Block already exists in DB (step 1 only deletes ORDEN >= 0)
@@ -647,7 +649,8 @@ router.post('/rutero/config', async (req, res) => {
                 if (item.cliente) {
                     try {
                         await execSql(`log-${item.cliente}`,
-                            `INSERT INTO JAVIER.RUTERO_LOG (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES) VALUES ('${vendedor}', 'REORDENAMIENTO', '${dia}', '${dia}', '${item.cliente}', '', NULL, ${parseInt(item.posicion) || 0}, '${logDetail} a posicion ${item.posicion}')`
+                            `INSERT INTO JAVIER.RUTERO_LOG (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES) VALUES (?, 'REORDENAMIENTO', ?, ?, ?, '', NULL, ?, ?)`,
+                            [vendedor, dia, dia, item.cliente, parseInt(item.posicion) || 0, `${logDetail} a posicion ${item.posicion}`]
                         );
                     } catch (_) { /* non-blocking */ }
                 }
@@ -715,12 +718,12 @@ router.get('/rutero/config', async (req, res) => {
         const { vendedor, dia } = req.query;
         if (!vendedor || !dia) return res.status(400).json({ error: 'Vendedor y dia requeridos' });
 
-        const rows = await query(`
+        const rows = await queryWithParams(`
       SELECT CLIENTE, ORDEN
       FROM JAVIER.RUTERO_CONFIG
-      WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' AND ORDEN >= 0
+      WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
       ORDER BY ORDEN ASC
-    `);
+    `, [vendedor, dia]);
 
         res.json({ config: rows });
     } catch (error) {
@@ -1357,7 +1360,7 @@ router.get('/diagnose/client/:code', async (req, res) => {
 
         // 1. Get client info from DSEDAC.CLI
         try {
-            const clientData = await query(`
+            const clientData = await queryWithParams(`
                 SELECT 
                     TRIM(CODIGOCLIENTE) as CODE,
                     TRIM(COALESCE(NOMBREALTERNATIVO, NOMBRECLIENTE)) as NAME,
@@ -1366,9 +1369,9 @@ router.get('/diagnose/client/:code', async (req, res) => {
                     TRIM(POBLACION) as CITY,
                     TRIM(CODIGORUTA) as ROUTE
                 FROM DSEDAC.CLI
-                WHERE CODIGOCLIENTE = '${clientCode}'
+                WHERE CODIGOCLIENTE = ?
                 FETCH FIRST 1 ROWS ONLY
-            `);
+            `, [clientCode]);
             if (clientData.length > 0) {
                 results.clientInfo = clientData[0];
                 results.analysis.push(`✓ Cliente encontrado en CLI: ${clientData[0].NAME}`);
@@ -1383,17 +1386,17 @@ router.get('/diagnose/client/:code', async (req, res) => {
 
         // 2. Get sales history from DSED.LACLAE to see which vendors have sold to this client
         try {
-            const laclaeData = await query(`
+            const laclaeData = await queryWithParams(`
                 SELECT DISTINCT
                     TRIM(L.R1_T8CDVD) as VENDOR_LACLAE,
                     L.LCYEAB as YEAR,
                     L.R1_T8DIVL as VIS_L, L.R1_T8DIVM as VIS_M, L.R1_T8DIVX as VIS_X,
                     L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S
                 FROM DSED.LACLAE L
-                WHERE L.LCCDCL = '${clientCode}'
+                WHERE L.LCCDCL = ?
                 ORDER BY L.LCYEAB DESC
                 FETCH FIRST 10 ROWS ONLY
-            `);
+            `, [clientCode]);
             results.laclaeHistory = laclaeData;
 
             const vendors = [...new Set(laclaeData.map(r => r.VENDOR_LACLAE))];
@@ -1416,12 +1419,12 @@ router.get('/diagnose/client/:code', async (req, res) => {
 
         // 3. Check RUTERO_CONFIG for overrides
         try {
-            const configData = await query(`
+            const configData = await queryWithParams(`
                 SELECT TRIM(VENDEDOR) as VENDEDOR, TRIM(DIA) as DIA, ORDEN
                 FROM JAVIER.RUTERO_CONFIG
-                WHERE TRIM(CLIENTE) = '${clientCode}'
+                WHERE TRIM(CLIENTE) = ?
                 FETCH FIRST 10 ROWS ONLY
-            `);
+            `, [clientCode]);
             if (configData.length > 0) {
                 results.ruteroConfig = configData;
                 results.analysis.push(`⚠ OVERRIDE en RUTERO_CONFIG:`);
@@ -1438,12 +1441,12 @@ router.get('/diagnose/client/:code', async (req, res) => {
         // 4. Get vendor info for CLI vendor
         if (results.clientInfo?.VENDOR_CLI) {
             try {
-                const vendorData = await query(`
+                const vendorData = await queryWithParams(`
                     SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME
                     FROM DSEDAC.VDD
-                    WHERE CODIGOVENDEDOR = '${results.clientInfo.VENDOR_CLI}'
+                    WHERE CODIGOVENDEDOR = ?
                     FETCH FIRST 1 ROWS ONLY
-                `);
+                `, [results.clientInfo.VENDOR_CLI]);
                 if (vendorData.length > 0) {
                     results.vendorInfo = vendorData[0];
                     results.analysis.push(`✓ Vendedor CLI: ${vendorData[0].CODE} - ${vendorData[0].NAME}`);
@@ -1540,7 +1543,7 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         };
 
         // Get monthly sales for current and previous year
-        const monthlySalesSql = `
+        const monthlySales = await queryWithParams(`
             SELECT 
                 L.LCYEAB as YEAR,
                 L.LCMMDC as MONTH,
@@ -1548,13 +1551,12 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 SUM(L.LCIMCT) as COST,
                 SUM(L.LCIMVT - L.LCIMCT) as MARGIN
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL = '${clientCode}'
-              AND L.LCYEAB IN (${currentYear}, ${previousYear})
+            WHERE L.LCCDCL = ?
+              AND L.LCYEAB IN (?, ?)
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCYEAB, L.LCMMDC
             ORDER BY L.LCYEAB DESC, L.LCMMDC ASC
-        `;
-        const monthlySales = await query(monthlySalesSql, false, false);
+        `, [clientCode, currentYear, previousYear], false, false);
 
         // Group by month and calculate comparisons
         const monthMap = {};
@@ -1602,18 +1604,17 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         const isNewClient = totalLastYear < 0.01 && totalCurrentYear > 0;
 
         // Get multi-year history
-        const yearlyHistorySql = `
+        const yearlyHistory = await queryWithParams(`
             SELECT 
                 L.LCYEAB as YEAR,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL = '${clientCode}'
-              AND L.LCYEAB >= ${currentYear - 5}
+            WHERE L.LCCDCL = ?
+              AND L.LCYEAB >= ?
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCYEAB
             ORDER BY L.LCYEAB DESC
-        `;
-        const yearlyHistory = await query(yearlyHistorySql, false, false);
+        `, [clientCode, currentYear - 5], false, false);
         const yearlyTotals = yearlyHistory.map(row => ({
             year: row.YEAR,
             sales: formatCurrencyLocal(row.SALES),
@@ -1621,17 +1622,16 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         }));
 
         // Calculate purchase frequency (orders in current year)
-        const frequencySql = `
+        const frequencyResult = await queryWithParams(`
             SELECT 
                 COUNT(DISTINCT L.LCDIDL || '-' || L.LCMIDL || '-' || L.LCAIDL) as ORDER_COUNT,
                 COUNT(*) as LINE_COUNT,
                 MAX(L.LCAIDL * 10000 + L.LCMIDL * 100 + L.LCDIDL) as LAST_ORDER_DATE
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL = '${clientCode}'
-              AND L.LCYEAB = ${currentYear}
+            WHERE L.LCCDCL = ?
+              AND L.LCYEAB = ?
               AND ${LACLAE_SALES_FILTER}
-        `;
-        const frequencyResult = await query(frequencySql, false, false);
+        `, [clientCode, currentYear], false, false);
         const freq = frequencyResult[0] || {};
         const orderCount = parseInt(freq.ORDER_COUNT) || 0;
         const monthsWithData = monthlyData.filter(m => m.currentYear > 0).length;

@@ -8,6 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const facturasService = require('../services/facturas.service');
+const pdfService = require('../services/pdf.service');
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
 
@@ -140,7 +141,6 @@ router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
                 return res.status(404).json({ success: false, error: 'Factura no encontrada' });
             }
 
-            const pdfService = require('../services/pdf.service');
             pdfBuffer = await pdfService.generateInvoicePDF(factura);
 
             // Cache for reuse
@@ -148,14 +148,16 @@ router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
         }
 
         const filename = `Factura_${serie}_${numero}_${ejercicio}.pdf`;
+        const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
         const disposition = preview ? 'inline' : 'attachment';
 
         const wasCached = !!getCachedPdf(cacheKey);
         logger.info(`[FACTURAS] PDF serving: ${filename} (${pdfBuffer.length} bytes, cache: ${wasCached ? 'HIT' : 'MISS'})`);
 
         res.set('Content-Type', 'application/pdf');
-        res.set('Content-Disposition', `${disposition}; filename=${filename}`);
+        res.set('Content-Disposition', `${disposition}; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`);
         res.set('Content-Length', pdfBuffer.length);
+        res.set('Accept-Ranges', 'bytes');
         // FIX: no-store prevents Flutter HTTP client from caching stale/truncated PDF
         // Server-side cache in emailPdfService.js (5min TTL) handles reuse
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -170,6 +172,7 @@ router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
 
 /**
  * POST /api/facturas/share/whatsapp
+ * WhatsApp share with PDF base64 for Flutter to share as document
  */
 router.post('/share/whatsapp', async (req, res, next) => {
     try {
@@ -177,6 +180,19 @@ router.post('/share/whatsapp', async (req, res, next) => {
 
         if (!serie || !numero || !ejercicio || !telefono) {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+
+        // Get or generate PDF (with cache)
+        const cacheKey = `factura_${serie}_${numero}_${ejercicio}`;
+        let pdfBuffer = getCachedPdf(cacheKey);
+
+        if (!pdfBuffer) {
+            const factura = await facturasService.getFacturaDetail(serie, numero, ejercicio);
+            if (!factura) {
+                return res.status(404).json({ success: false, error: 'Factura no encontrada' });
+            }
+            pdfBuffer = await pdfService.generateInvoicePDF(factura);
+            cachePdf(cacheKey, pdfBuffer);
         }
 
         const factura = await facturasService.getFacturaDetail(serie, numero, ejercicio);
@@ -192,10 +208,19 @@ router.post('/share/whatsapp', async (req, res, next) => {
         const phoneClean = telefono.replace(/\D/g, '');
         const whatsappUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`;
 
+        // Convert PDF to base64 for Flutter to share as document
+        const pdfBase64 = pdfBuffer.toString('base64');
+        const pdfFilename = `Factura_${serie}_${numero}_${ejercicio}.pdf`;
+
+        logger.info(`[FACTURAS] WhatsApp generated: Factura ${serie}-${numero} to ${phoneClean}`);
+
         res.json({
             success: true,
             whatsappUrl,
-            message
+            message,
+            pdfBase64,
+            pdfFilename,
+            mimeType: 'application/pdf'
         });
     } catch (error) {
         logger.error(`Error en POST /facturas/share/whatsapp: ${error.message}`);
@@ -230,7 +255,6 @@ router.post('/send-email', async (req, res, next) => {
                 return res.status(404).json({ success: false, error: 'Factura no encontrada' });
             }
 
-            const pdfService = require('../services/pdf.service');
             pdfBuffer = await pdfService.generateInvoicePDF(factura);
             cachePdf(cacheKey, pdfBuffer);
         }

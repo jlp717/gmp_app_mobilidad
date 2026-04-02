@@ -83,7 +83,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
             FROM JAVIER.PEDIDOS_CAB PC
             WHERE TRIM(PC.CODIGOCLIENTE) = ?
               AND PC.ORIGEN = 'A'
-              AND PC.ESTADO = 'CONFIRMADO'
+              AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
               AND PC.IMPORTETOTAL > 0`;
         } else {
             sql = `
@@ -93,7 +93,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
             FROM JAVIER.PEDIDOS_CAB PC
             WHERE TRIM(PC.CODIGOCLIENTE) = ?
-              AND PC.ESTADO = 'CONFIRMADO'
+              AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
               AND PC.IMPORTETOTAL > 0`;
         }
 
@@ -257,7 +257,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                 SUM(PC.IMPORTETOTAL) AS TOTAL_PENDIENTE,
                 COUNT(*) AS NUM_PEDIDOS
             FROM JAVIER.PEDIDOS_CAB PC
-            WHERE PC.ESTADO = 'CONFIRMADO'
+            WHERE PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
               AND PC.IMPORTETOTAL > 0
               ${vendorFilter}
               ${origenExists ? "AND PC.ORIGEN = 'A'" : ''}`;

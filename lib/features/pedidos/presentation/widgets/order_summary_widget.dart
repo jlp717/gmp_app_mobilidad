@@ -976,7 +976,16 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
 
     final result = await provider.confirmOrder(widget.vendedorCode,
         observaciones: _obsCtrl.text.trim());
+    
     if (result != null && context.mounted) {
+      // Check if order was blocked due to stock issues
+      if (result['blocked'] == true) {
+        // Show stock alternatives sheet
+        _showStockAlternatives(context, result);
+        return;
+      }
+      
+      // Success - clear forms and show success message
       _obsCtrl.clear();
       _discountCtrl.clear();
       await provider.loadPromotions();
@@ -997,6 +1006,70 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
         ),
       );
     }
+  }
+
+  // Show stock alternatives when order is blocked
+  void _showStockAlternatives(BuildContext context, Map<String, dynamic> result) {
+    final stockWarnings = result['stockWarnings'] as List? ?? [];
+    final alternatives = result['alternatives'] as List? ?? [];
+
+    showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => _AlternativesDialog(
+        stockWarnings: stockWarnings,
+        alternatives: alternatives,
+        onAddToCart: (productCode, productName, quantity, unit) async {
+          Navigator.pop(context, {'code': productCode, 'qty': quantity, 'unit': unit});
+        },
+      ),
+    ).then((selected) async {
+      if (selected != null && selected['code'] != null) {
+        final provider = context.read<PedidosProvider>();
+        final productCode = selected['code'] as String;
+        final quantity = selected['qty'] as double;
+        final unit = selected['unit'] as String;
+
+        try {
+          final productDetail = await PedidosService.getProductDetail(productCode);
+          final product = productDetail.product;
+
+          final isBoxes = unit == 'CAJAS';
+          final error = provider.addLine(
+            product,
+            isBoxes ? quantity : 0,
+            isBoxes ? 0 : quantity,
+            unit,
+            product.bestPrice,
+          );
+
+          if (error != null && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(error, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                backgroundColor: AppTheme.error,
+              ),
+            );
+          } else if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ ${product.name} añadido al carrito'),
+                backgroundColor: AppTheme.neonGreen,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error al añadir producto: $e'),
+                backgroundColor: AppTheme.error,
+              ),
+            );
+          }
+        }
+      }
+    });
   }
 
   // E1 — Preview sheet before confirm (Amazon-style DraggableScrollableSheet)
@@ -1024,7 +1097,6 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
           _obsCtrl.clear();
           _discountCtrl.clear();
           await provider.loadPromotions();
-          // Refresh orders list + KPIs
           provider.loadOrders(
             vendedorCodes: widget.vendedorCode,
             forceRefresh: true,
@@ -1043,6 +1115,387 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
         }
         return result;
       },
+    );
+  }
+}
+
+// ============================================================================
+// ALTERNATIVES DIALOG - Stock alternatives selector
+// ============================================================================
+
+class _AlternativesDialog extends StatefulWidget {
+  final List<dynamic> stockWarnings;
+  final List<dynamic> alternatives;
+  final Function(String productCode, String productName, double quantity, String unit) onAddToCart;
+
+  const _AlternativesDialog({
+    Key? key,
+    required this.stockWarnings,
+    required this.alternatives,
+    required this.onAddToCart,
+  }) : super(key: key);
+
+  @override
+  State<_AlternativesDialog> createState() => _AlternativesDialogState();
+}
+
+class _AlternativesDialogState extends State<_AlternativesDialog> {
+  String? _selectedProductCode;
+  double _quantity = 1;
+  String _unit = 'CAJAS';
+  Map<String, dynamic>? _selectedProduct;
+  final _qtyController = TextEditingController();
+
+  @override
+  void dispose() {
+    _qtyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_selectedProduct != null && _qtyController.text.isEmpty) {
+      _qtyController.text = (_selectedProduct!['stockEnvases'] ?? 1).toString();
+    }
+
+    return Dialog(
+      backgroundColor: AppTheme.darkSurface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: AppTheme.error,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.white, size: 28),
+                  SizedBox(width: 12),
+                  Text(
+                    'Stock Insuficiente',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Content
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Products without stock
+                    if (widget.stockWarnings.isNotEmpty) ...[
+                      const Text(
+                        'Productos sin stock:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...widget.stockWarnings.map((w) => Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.error.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: AppTheme.error, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    w['description'] ?? w['product'] ?? 'Producto',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 13,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Solicitado: ${w['requested']} ${w['unit'] ?? ''} | Disponible: ${w['available']} ${w['unit'] ?? ''}',
+                                    style: const TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                      const SizedBox(height: 16),
+                    ],
+                    // Alternatives
+                    if (widget.alternatives.isNotEmpty) ...[
+                      const Text(
+                        'Alternativas con stock:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...widget.alternatives.expand((alt) {
+                        final alternativesList = alt['alternatives'] as List? ?? [];
+                        return alternativesList.map((prod) {
+                          final isSelected = _selectedProductCode == prod['code'];
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedProductCode = prod['code'];
+                                _selectedProduct = prod;
+                                _quantity = (prod['stockEnvases'] ?? 1).toDouble();
+                                _unit = 'CAJAS';
+                                _qtyController.text = _quantity.toStringAsFixed(0);
+                              });
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppTheme.neonGreen.withOpacity(0.15)
+                                    : AppTheme.darkCard,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.borderColor,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        isSelected
+                                            ? Icons.check_circle
+                                            : Icons.circle_outlined,
+                                        color: isSelected
+                                            ? AppTheme.neonGreen
+                                            : Colors.white54,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          prod['name'] ?? prod['code'] ?? 'Producto',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: isSelected
+                                                ? FontWeight.bold
+                                                : FontWeight.w500,
+                                            fontSize: 13,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.neonBlue.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '${(prod['stockEnvases'] ?? 0).toStringAsFixed(0)} cajas',
+                                          style: const TextStyle(
+                                            color: AppTheme.neonBlue,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (prod['precio'] != null && (prod['precio'] as num).toDouble() > 0)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 6, left: 28),
+                                      child: Text(
+                                        '${(prod['precio'] as num).toDouble().toStringAsFixed(2)} €/caja',
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        });
+                      }),
+                      // Add to cart section
+                      if (_selectedProduct != null) ...[
+                        const SizedBox(height: 16),
+                        const Divider(color: AppTheme.borderColor),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Cantidad a añadir:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _qtyController,
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(color: Colors.white, fontSize: 16),
+                                textAlign: TextAlign.center,
+                                decoration: InputDecoration(
+                                  labelText: 'Cajas',
+                                  labelStyle: const TextStyle(color: Colors.white70),
+                                  filled: true,
+                                  fillColor: AppTheme.darkCard,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(color: AppTheme.borderColor),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(color: AppTheme.borderColor),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(color: AppTheme.neonGreen),
+                                  ),
+                                ),
+                                onChanged: (val) {
+                                  final qty = double.tryParse(val) ?? 1;
+                                  final maxStock = (_selectedProduct!['stockEnvases'] ?? 1).toDouble();
+                                  setState(() {
+                                    _quantity = qty.clamp(1, maxStock).toDouble();
+                                    _unit = 'CAJAS';
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ] else ...[
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Column(
+                            children: [
+                              Icon(Icons.inventory_2_outlined, color: Colors.white54, size: 48),
+                              SizedBox(height: 16),
+                              Text(
+                                'No hay alternativas disponibles',
+                                style: TextStyle(color: Colors.white54, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            // Actions
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: AppTheme.darkCard,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: const BorderSide(color: AppTheme.borderColor),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cerrar',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ),
+                  if (_selectedProduct != null) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: _quantity > 0
+                            ? () => widget.onAddToCart(
+                                  _selectedProductCode!,
+                                  _selectedProduct!['name'] ?? _selectedProductCode!,
+                                  _quantity,
+                                  _unit,
+                                )
+                            : null,
+                        icon: const Icon(Icons.add_shopping_cart, size: 18),
+                        label: const Text(
+                          'AÑADIR AL CARRITO',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.neonGreen,
+                          foregroundColor: AppTheme.darkBase,
+                          disabledBackgroundColor: AppTheme.neonGreen.withOpacity(0.3),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

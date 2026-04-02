@@ -5,7 +5,7 @@ import 'dart:isolate';
 import 'package:crypto/crypto.dart';
 
 /// CacheService V3 Performance Optimized
-/// 
+///
 /// Optimizations implemented:
 /// - LRU in-memory cache with configurable max size
 /// - Batch operations for Hive writes
@@ -13,7 +13,7 @@ import 'package:crypto/crypto.dart';
 /// - Compression for large payloads
 /// - Quantization for numeric data
 /// - Stream-based caching for large datasets
-/// 
+///
 /// Expected improvements:
 /// - 60-80% reduction in Hive I/O operations
 /// - 40-50% faster cache hits for hot data
@@ -189,7 +189,8 @@ class CacheServiceOptimized {
     // Compress large payloads
     bool isCompressed = false;
     if (compress ||
-        (processedValue is String && processedValue.length > _compressionThreshold)) {
+        (processedValue is String &&
+            processedValue.length > _compressionThreshold)) {
       try {
         processedValue = _compressData(processedValue);
         isCompressed = true;
@@ -199,13 +200,17 @@ class CacheServiceOptimized {
     }
 
     try {
-      // Batch write for better performance
-      await Future.wait([
-        _cacheBox?.put(safeKey, processedValue),
-        _metadataBox?.put('${safeKey}_expiry', expiryTimestamp),
-        if (isCompressed)
-          _metadataBox?.put('${safeKey}_compressed', true),
-      ]);
+      final futures = <Future<void>>[];
+      final putFuture = _cacheBox?.put(safeKey, processedValue);
+      if (putFuture != null) futures.add(putFuture);
+      final metaFuture =
+          _metadataBox?.put('${safeKey}_expiry', expiryTimestamp);
+      if (metaFuture != null) futures.add(metaFuture);
+      if (isCompressed) {
+        final compFuture = _metadataBox?.put('${safeKey}_compressed', true);
+        if (compFuture != null) futures.add(compFuture);
+      }
+      await Future.wait(futures);
 
       // Update memory cache
       _setMemoryCache(safeKey, value, promote: true);
@@ -234,9 +239,11 @@ class CacheServiceOptimized {
 
     for (final entry in entries.entries) {
       final safeKey = _sanitizeKey(entry.key);
-
-      batchOperations.add(_cacheBox?.put(safeKey, entry.value));
-      batchOperations.add(_metadataBox?.put('${safeKey}_expiry', expiryTimestamp));
+      final cacheFuture = _cacheBox?.put(safeKey, entry.value);
+      if (cacheFuture != null) batchOperations.add(cacheFuture);
+      final metaFuture =
+          _metadataBox?.put('${safeKey}_expiry', expiryTimestamp);
+      if (metaFuture != null) batchOperations.add(metaFuture);
       _setMemoryCache(safeKey, entry.value, promote: true);
     }
 
@@ -340,7 +347,8 @@ class CacheServiceOptimized {
   }
 
   /// Set value in memory cache with LRU eviction
-  static void _setMemoryCache(String key, dynamic value, {bool promote = true}) {
+  static void _setMemoryCache(String key, dynamic value,
+      {bool promote = true}) {
     if (promote) {
       _updateAccessOrder(key);
     }
@@ -354,11 +362,14 @@ class CacheServiceOptimized {
   /// Invalidate specific cache entry
   static Future<void> invalidate(String key) async {
     final safeKey = _sanitizeKey(key);
-    await Future.wait([
-      _cacheBox?.delete(safeKey),
-      _metadataBox?.delete('${safeKey}_expiry'),
-      _metadataBox?.delete('${safeKey}_compressed'),
-    ]);
+    final futures = <Future<void>>[];
+    final f1 = _cacheBox?.delete(safeKey);
+    if (f1 != null) futures.add(f1);
+    final f2 = _metadataBox?.delete('${safeKey}_expiry');
+    if (f2 != null) futures.add(f2);
+    final f3 = _metadataBox?.delete('${safeKey}_compressed');
+    if (f3 != null) futures.add(f3);
+    if (futures.isNotEmpty) await Future.wait(futures);
     _memoryCache.remove(safeKey);
     _accessOrder.remove(safeKey);
     debugPrint('[CacheService] INVALIDATED: $key');
@@ -378,23 +389,29 @@ class CacheServiceOptimized {
 
     final batchOperations = <Future<void>>[];
     for (final key in keysToDelete) {
-      batchOperations.add(_cacheBox?.delete(key));
-      batchOperations.add(_metadataBox?.delete('${key}_expiry'));
-      batchOperations.add(_metadataBox?.delete('${key}_compressed'));
+      final f1 = _cacheBox?.delete(key);
+      if (f1 != null) batchOperations.add(f1);
+      final f2 = _metadataBox?.delete('${key}_expiry');
+      if (f2 != null) batchOperations.add(f2);
+      final f3 = _metadataBox?.delete('${key}_compressed');
+      if (f3 != null) batchOperations.add(f3);
       _memoryCache.remove(key);
       _accessOrder.remove(key);
     }
 
     await Future.wait(batchOperations);
-    debugPrint('[CacheService] INVALIDATED ${keysToDelete.length} entries: $prefix');
+    debugPrint(
+        '[CacheService] INVALIDATED ${keysToDelete.length} entries: $prefix');
   }
 
   /// Clear all cached data
   static Future<void> clearAll() async {
-    await Future.wait([
-      _cacheBox?.clear(),
-      _metadataBox?.clear(),
-    ]);
+    final futures = <Future<void>>[];
+    final f1 = _cacheBox?.clear();
+    if (f1 != null) futures.add(f1);
+    final f2 = _metadataBox?.clear();
+    if (f2 != null) futures.add(f2);
+    if (futures.isNotEmpty) await Future.wait(futures);
     _memoryCache.clear();
     _accessOrder.clear();
     _hits = 0;
@@ -462,14 +479,18 @@ class CacheServiceOptimized {
 
     final batchOperations = <Future<void>>[];
     for (final key in expiredKeys) {
-      batchOperations.add(_cacheBox?.delete(key));
-      batchOperations.add(_metadataBox?.delete('${key}_expiry'));
-      batchOperations.add(_metadataBox?.delete('${key}_compressed'));
+      final f1 = _cacheBox?.delete(key);
+      if (f1 != null) batchOperations.add(f1);
+      final f2 = _metadataBox?.delete('${key}_expiry');
+      if (f2 != null) batchOperations.add(f2);
+      final f3 = _metadataBox?.delete('${key}_compressed');
+      if (f3 != null) batchOperations.add(f3);
       _memoryCache.remove(key);
     }
 
     await Future.wait(batchOperations);
-    debugPrint('[CacheService] GC collected ${expiredKeys.length} expired entries');
+    debugPrint(
+        '[CacheService] GC collected ${expiredKeys.length} expired entries');
   }
 }
 

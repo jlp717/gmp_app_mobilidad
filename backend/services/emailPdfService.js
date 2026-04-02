@@ -1,11 +1,11 @@
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * 📧 EMAIL PDF SERVICE - Envío de PDFs por email server-side
+ * EMAIL PDF SERVICE - Envío de PDFs por email server-side
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * 
+ *
  * Servicio reutilizable para enviar emails con PDFs adjuntos
  * usando Nodemailer. Comparte infraestructura SMTP con emailService.
- * 
+ *
  * Usado por:
  *   - Facturas de Clientes
  *   - Histórico de Repartidores
@@ -47,7 +47,7 @@ let transporter = null;
 function getTransporter() {
     if (!transporter) {
         transporter = nodemailer.createTransport(SMTP_CONFIG);
-        logger.info('📧 EmailPdfService: Transporter SMTP inicializado', {
+        logger.info(`EmailPdfService: Transporter SMTP inicializado`, {
             host: SMTP_CONFIG.host,
             port: SMTP_CONFIG.port
         });
@@ -80,7 +80,7 @@ function cachePdf(key, buffer) {
         }
     }
 
-    logger.info(`📧 PDF cached: ${key} (${(buffer.length / 1024).toFixed(1)} KB, ${pdfCache.size} items in cache)`);
+    logger.info(`PDF cached: ${key} (${(buffer.length / 1024).toFixed(1)} KB, ${pdfCache.size} items in cache)`);
 }
 
 /**
@@ -97,7 +97,7 @@ function getCachedPdf(key) {
         return null;
     }
 
-    logger.info(`📧 PDF cache HIT: ${key}`);
+    logger.info(`PDF cache HIT: ${key}`);
     return entry.buffer;
 }
 
@@ -141,7 +141,7 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
         const defaultHtml = `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background: linear-gradient(135deg, #003d7a 0%, #1a5490 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 22px;">📄 Documento Adjunto</h1>
+                    <h1 style="color: white; margin: 0; font-size: 22px;">Documento Adjunto</h1>
                     <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
                 </div>
                 <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
@@ -153,13 +153,13 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
                     </p>
                     <div style="background: #e3f2fd; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center; border-left: 4px solid #1a5490;">
                         <p style="font-size: 13px; color: #1a5490; font-weight: 600; margin: 0;">
-                            📎 ${pdfFilename} (${(pdfBuffer.length / 1024).toFixed(0)} KB)
+                            ${pdfFilename} (${(pdfBuffer.length / 1024).toFixed(0)} KB)
                         </p>
                     </div>
                     <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
                     <p style="font-size: 11px; color: #999; margin: 0;">
                         Este email ha sido enviado desde la aplicación de gestión de Granja Mari Pepa.<br>
-                        📞 639 77 86 56 | 🌐 www.mari-pepa.com
+                        Teléfono: 639 77 86 56 | www.mari-pepa.com
                     </p>
                 </div>
             </div>
@@ -180,7 +180,7 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
 
         const info = await transport.sendMail(mailOptions);
 
-        logger.info('📧 Email con PDF enviado correctamente', {
+        logger.info('Email con PDF enviado correctamente', {
             to,
             subject,
             pdfFilename,
@@ -190,7 +190,7 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
 
         return { success: true, messageId: info.messageId };
     } catch (error) {
-        logger.error('📧 Error enviando email con PDF', {
+        logger.error('Error enviando email con PDF', {
             to,
             pdfFilename,
             error: error.message,
@@ -208,14 +208,14 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
         return `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background: linear-gradient(135deg, #003d7a 0%, #1a5490 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 22px;">📄 Factura ${serie}-${numero}</h1>
+                    <h1 style="color: white; margin: 0; font-size: 22px;">Factura ${serie}-${numero}</h1>
                     <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
                 </div>
                 <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
                     <p style="font-size: 14px; color: #555; line-height: 1.8; white-space: pre-line;">${customBody}</p>
                     <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
                     <p style="font-size: 11px; color: #999; margin: 0;">
-                        Granja Mari Pepa | 📞 639 77 86 56 | 🌐 www.mari-pepa.com
+                        Granja Mari Pepa | Teléfono: 639 77 86 56 | www.mari-pepa.com
                     </p>
                 </div>
             </div>
@@ -225,7 +225,7 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
     return `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background: linear-gradient(135deg, #003d7a 0%, #1a5490 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 22px;">📄 Factura ${serie}-${numero}</h1>
+                <h1 style="color: white; margin: 0; font-size: 22px;">Factura ${serie}-${numero}</h1>
                 <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
             </div>
             <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
@@ -237,7 +237,7 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
                 </p>
                 ${fecha ? `<p style="font-size: 13px; color: #777;">Fecha: <strong>${fecha}</strong></p>` : ''}
                 ${total ? `
-                <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center; border: 1px solid #c8e6c9;">
                     <p style="font-size: 22px; color: #2c5530; font-weight: bold; margin: 0;">
                         Total: ${typeof total === 'number' ? total.toFixed(2) : total} €
                     </p>
@@ -247,7 +247,7 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
                 </p>
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
                 <p style="font-size: 11px; color: #999; margin: 0;">
-                    <strong>Granja Mari Pepa</strong> | 📞 639 77 86 56 | 🌐 www.mari-pepa.com
+                    <strong>Granja Mari Pepa</strong> | Teléfono: 639 77 86 56 | www.mari-pepa.com
                 </p>
             </div>
         </div>
@@ -262,14 +262,14 @@ function generateDeliveryEmailHtml({ numero, serie, fecha, total, clienteNombre,
         return `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 22px;">📦 Albarán ${serie}-${numero}</h1>
+                    <h1 style="color: white; margin: 0; font-size: 22px;">Albarán ${serie}-${numero}</h1>
                     <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
                 </div>
                 <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
                     <p style="font-size: 14px; color: #555; line-height: 1.8; white-space: pre-line;">${customBody}</p>
                     <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
                     <p style="font-size: 11px; color: #999; margin: 0;">
-                        Granja Mari Pepa | 📞 639 77 86 56 | 🌐 www.mari-pepa.com
+                        Granja Mari Pepa | Teléfono: 639 77 86 56 | www.mari-pepa.com
                     </p>
                 </div>
             </div>
@@ -279,7 +279,7 @@ function generateDeliveryEmailHtml({ numero, serie, fecha, total, clienteNombre,
     return `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 22px;">📦 Albarán ${serie}-${numero}</h1>
+                <h1 style="color: white; margin: 0; font-size: 22px;">Albarán ${serie}-${numero}</h1>
                 <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
             </div>
             <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
@@ -290,14 +290,14 @@ function generateDeliveryEmailHtml({ numero, serie, fecha, total, clienteNombre,
                     Adjunto le remitimos el albarán <strong>${serie}-${numero}</strong>${fecha ? ` con fecha <strong>${fecha}</strong>` : ''}.
                 </p>
                 ${total ? `
-                <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center; border: 1px solid #c8e6c9;">
                     <p style="font-size: 22px; color: #2c5530; font-weight: bold; margin: 0;">
                         Total: ${typeof total === 'number' ? total.toFixed(2) : total} €
                     </p>
                 </div>` : ''}
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
                 <p style="font-size: 11px; color: #999; margin: 0;">
-                    <strong>Granja Mari Pepa</strong> | 📞 639 77 86 56 | 🌐 www.mari-pepa.com
+                    <strong>Granja Mari Pepa</strong> | Teléfono: 639 77 86 56 | www.mari-pepa.com
                 </p>
             </div>
         </div>

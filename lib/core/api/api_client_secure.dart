@@ -6,11 +6,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'isolate_transformer.dart';
 import 'api_config.dart';
 import '../cache/cache_service.dart';
-import '../services/network_service.dart';
 import '../services/device_fingerprint.dart';
 
 /// Secure API Client for all backend communications
-/// 
+///
 /// Security enhancements:
 /// - Certificate pinning for production
 /// - Secure token storage with flutter_secure_storage
@@ -22,12 +21,11 @@ class ApiClient {
   static int _maxRetries = 3;
   static Duration _retryDelay = const Duration(seconds: 1);
   static bool _isInitialized = false;
-  
+
   // Secure storage for tokens
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(
       encryptedSharedPreferences: true,
-      preferencesName: 'gmp_secure_prefs',
     ),
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock_this_device,
@@ -80,21 +78,29 @@ class ApiClient {
         ...DeviceFingerprint.headers,
       },
       responseType: ResponseType.json,
-      validateStatus: (status) => status != null && status >= 200 && status < 300,
+      validateStatus: (status) =>
+          status != null && status >= 200 && status < 300,
     ));
 
     // Configure certificate pinning for production
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
       final client = HttpClient();
-      client.badCertificateCallback = (X509Certificate cert, String host, int port) {
+      client.badCertificateCallback =
+          (X509Certificate cert, String host, int port) {
         // Allow development IPs without pinning
-        const devHosts = ['127.0.0.1', '10.0.2.2', '192.168.1.52', '172.31.192.1', 'localhost'];
+        const devHosts = [
+          '127.0.0.1',
+          '10.0.2.2',
+          '192.168.1.52',
+          '172.31.192.1',
+          'localhost'
+        ];
         if (devHosts.contains(host)) return true;
 
         // Production: Validate certificate
         // TODO: Add actual production certificate SHA256 fingerprint
         const pinnedCertSha256 = '';
-        
+
         if (pinnedCertSha256.isNotEmpty) {
           // Strict pinning in production
           return _verifyCertificateFingerprint(cert, pinnedCertSha256);
@@ -119,10 +125,14 @@ class ApiClient {
   }
 
   /// Verify certificate fingerprint against pinned value
-  static bool _verifyCertificateFingerprint(X509Certificate cert, String pinnedFingerprint) {
-    // Compare SHA256 fingerprint
-    final certFingerprint = cert.sha256;
-    return certFingerprint == pinnedFingerprint;
+  static bool _verifyCertificateFingerprint(
+      X509Certificate cert, String pinnedFingerprint) {
+    final certBytes = cert.der;
+    final hexFingerprint = certBytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join(':')
+        .toUpperCase();
+    return hexFingerprint == pinnedFingerprint.toUpperCase();
   }
 
   /// Reinitialize Dio (useful when base URL changes)
@@ -188,7 +198,8 @@ class ApiClient {
   }
 
   /// Store both access and refresh tokens
-  static Future<void> storeTokens({required String accessToken, required String refreshToken}) async {
+  static Future<void> storeTokens(
+      {required String accessToken, required String refreshToken}) async {
     await setAuthToken(accessToken);
     await setRefreshToken(refreshToken);
   }
@@ -214,8 +225,8 @@ class ApiClient {
 
       if (response.data is Map && response.data['accessToken'] != null) {
         await storeTokens(
-          accessToken: response.data['accessToken'],
-          refreshToken: response.data['refreshToken'] ?? refreshTok,
+          accessToken: response.data['accessToken'] as String,
+          refreshToken: (response.data['refreshToken'] ?? refreshTok) as String,
         );
         debugPrint('[ApiClient] ✅ Access token refreshed successfully');
         return true;
@@ -276,7 +287,11 @@ class ApiClient {
           final refreshed = await refreshAccessToken();
           if (refreshed) {
             // Retry the request with new token
-            return get(endpoint, queryParameters: queryParameters, cacheKey: cacheKey, cacheTTL: cacheTTL, forceRefresh: true);
+            return get(endpoint,
+                queryParameters: queryParameters,
+                cacheKey: cacheKey,
+                cacheTTL: cacheTTL,
+                forceRefresh: true);
           }
           onUnauthorized?.call();
         }

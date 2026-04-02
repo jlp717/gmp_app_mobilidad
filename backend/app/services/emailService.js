@@ -30,7 +30,7 @@ let transporter = null;
 function initializeTransporter() {
     if (!transporter) {
         transporter = nodemailer.createTransport(SMTP_CONFIG);
-        logger.info('✅ Email service initialized', { host: SMTP_CONFIG.host, port: SMTP_CONFIG.port });
+        logger.info('Email service initialized', { host: SMTP_CONFIG.host, port: SMTP_CONFIG.port });
     }
     return transporter;
 }
@@ -54,7 +54,7 @@ async function sendDeliveryReceipt(to, pdfBuffer, deliveryInfo) {
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                     <div style="background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%); padding: 20px; border-radius: 10px 10px 0 0;">
-                        <h1 style="color: white; margin: 0; text-align: center;">📦 Nota de Entrega</h1>
+                        <h1 style="color: white; margin: 0; text-align: center;">Nota de Entrega</h1>
                     </div>
                     <div style="background: #f8f9fa; padding: 25px; border-radius: 0 0 10px 10px;">
                         <p style="font-size: 16px; color: #333;">
@@ -64,16 +64,16 @@ async function sendDeliveryReceipt(to, pdfBuffer, deliveryInfo) {
                             Adjunto encontrará el comprobante de entrega del albarán <strong>${albaranNum}</strong>
                             con fecha <strong>${fecha}</strong>.
                         </p>
-                        
-                        <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center;">
+
+                        <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; border: 1px solid #c8e6c9;">
                             <p style="font-size: 24px; color: #2c5530; font-weight: bold; margin: 0;">
                                 Total: ${total} €
                             </p>
                         </div>
-                        
+
                         <p style="font-size: 12px; color: #999; margin-top: 30px;">
                             Este email se ha generado automáticamente tras la entrega.<br>
-                            <strong>Granja Mari Pepa</strong> | 📞 639 77 86 56
+                            <strong>Granja Mari Pepa</strong> | Teléfono: 639 77 86 56
                         </p>
                     </div>
                 </div>
@@ -86,11 +86,11 @@ async function sendDeliveryReceipt(to, pdfBuffer, deliveryInfo) {
         };
 
         const info = await transporter.sendMail(mailOptions);
-        logger.info('✅ Email de entrega enviado', { to, albaranNum, messageId: info.messageId });
+        logger.info('Email de entrega enviado', { to, albaranNum, messageId: info.messageId });
 
         return { success: true, messageId: info.messageId };
     } catch (error) {
-        logger.error('❌ Error enviando email de entrega', { error: error.message, to });
+        logger.error('Error enviando email de entrega', { error: error.message, to });
         throw error;
     }
 }
@@ -102,10 +102,10 @@ async function verifyConnection() {
     try {
         const transporter = initializeTransporter();
         await transporter.verify();
-        logger.info('✅ Conexión SMTP verificada');
+        logger.info('Conexión SMTP verificada');
         return { success: true };
     } catch (error) {
-        logger.error('❌ Error SMTP', { error: error.message });
+        logger.error('Error SMTP', { error: error.message });
         return { success: false, message: error.message };
     }
 }

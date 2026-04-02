@@ -1,12 +1,12 @@
 const express = require('express');
-const router = express.Router();
+const crypto = require('crypto');
 const { query, queryWithParams, getPool } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL } = require('../utils/common');
-const { redisCache, TTL } = require('../services/redis-cache');
+const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 
 
 // =============================================================================
@@ -207,26 +207,24 @@ async function initCommissionTables() {
 async function getVendorCurrentClients(vendorCode, currentYear) {
     const safeCode = vendorCode.replace(/[^a-zA-Z0-9]/g, '');
     const safeYear = parseInt(currentYear);
-    // Uses getVendorColumn(year) for date-aware column (LCCDVD before March 2026, R1_T8CDVD after)
     const col = getVendorColumn(safeYear);
-    const rows = await query(`
+    const rows = await queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.${col} = '${safeCode}'
-          AND L.LCAADC = ${safeYear}
+        WHERE L.${col} = ?
+          AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
-    `, false);
+    `, [safeCode, safeYear], false);
 
-    // If no clients in current year, try previous year
     if (rows.length === 0) {
         const prevCol = getVendorColumn(safeYear - 1);
-        const prevRows = await query(`
+        const prevRows = await queryWithParams(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.${prevCol} = '${safeCode}'
-              AND L.LCAADC = ${safeYear - 1}
+            WHERE L.${prevCol} = ?
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
-        `, false);
+        `, [safeCode, safeYear - 1], false);
         return prevRows.map(r => r.CLIENT_CODE);
     }
 
@@ -240,20 +238,19 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
 async function getClientsMonthlySales(clientCodes, year) {
     if (!clientCodes || clientCodes.length === 0) return {};
 
-    // Build safe IN-clause with sanitized values
-    const safeInClause = clientCodes.map(c => `'${String(c).replace(/[^a-zA-Z0-9]/g, '')}'`).join(',');
+    const placeholders = clientCodes.map(() => '?').join(',');
+    const safeCodes = clientCodes.map(c => String(c).replace(/[^a-zA-Z0-9]/g, ''));
 
-    // PERF: Removed TRIM(L.LCCDCL) - DB2 CHAR comparison handles trailing spaces
-    const rows = await query(`
+    const rows = await queryWithParams(`
         SELECT 
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES
         FROM DSED.LACLAE L
-        WHERE L.LCCDCL IN (${safeInClause})
-          AND L.LCAADC = ${parseInt(year)}
+        WHERE L.LCCDCL IN (${placeholders})
+          AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
-    `, false);
+    `, [...safeCodes, parseInt(year)], false);
 
     // Build map: month -> total sales
     const monthlyMap = {};
@@ -283,10 +280,9 @@ async function getVendorPayments(vendorCode, year) {
     const normalizedCode = vendorCode.trim().replace(/^0+/, '') || vendorCode.trim();
 
     try {
-        // Get all payment records with new columns
         const safeVCode = vendorCode.trim().replace(/[^a-zA-Z0-9]/g, '');
         const safeNCode = normalizedCode.replace(/[^a-zA-Z0-9]/g, '');
-        const rows = await query(`
+        const rows = await queryWithParams(`
             SELECT
                 MES,
                 IMPORTE_PAGADO,
@@ -296,10 +292,10 @@ async function getVendorPayments(vendorCode, year) {
                 OBSERVACIONES,
                 FECHA_PAGO
             FROM JAVIER.COMMISSION_PAYMENTS
-            WHERE (VENDEDOR_CODIGO = '${safeVCode}' OR VENDEDOR_CODIGO = '${safeNCode}')
-              AND ANIO = ${parseInt(year)}
+            WHERE (VENDEDOR_CODIGO = ? OR VENDEDOR_CODIGO = ?)
+              AND ANIO = ?
             ORDER BY MES, FECHA_PAGO
-        `, false, false);
+        `, [safeVCode, safeNCode, parseInt(year)], false, false);
 
         rows.forEach(r => {
             const amount = parseFloat(r.IMPORTE_PAGADO) || 0;
@@ -739,7 +735,7 @@ router.get('/summary', async (req, res) => {
         // A. Load Config
         let config = DEFAULT_CONFIG_2026;
         try {
-            const dbConfig = await query(`SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ${selectedYear} FETCH FIRST 1 ROWS ONLY`, false, false);
+            const dbConfig = await queryWithParams(`SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`, [selectedYear], false, false);
             if (dbConfig && dbConfig.length > 0) {
                 // Map DB columns to config object
                 const row = dbConfig[0];
@@ -896,13 +892,13 @@ router.get('/summary', async (req, res) => {
                 // Uses getVendorColumn for date-aware vendor discovery
                 const safeYr = parseInt(yr);
                 const col = getVendorColumn(safeYr);
-                const vendorRows = await query(`
+                const vendorRows = await queryWithParams(`
                     SELECT DISTINCT RTRIM(L.${col}) as VENDOR_CODE
                     FROM DSED.LACLAE L
-                    WHERE L.LCAADC IN (${safeYr}, ${safeYr - 1})
+                    WHERE L.LCAADC IN (?, ?)
                       AND L.${col} IS NOT NULL
                       AND L.${col} <> ''
-                `, false);
+                `, [safeYr, safeYr - 1], false);
                 const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
                 const settled = await Promise.allSettled(promises);
@@ -986,7 +982,6 @@ router.get('/summary', async (req, res) => {
         }
 
         // AUDIT: Log what data the server actually returned (proof of response)
-        const crypto = require('crypto');
         const responsePayload = { success: true, ...aggregatedResult };
         const responseHash = crypto.createHash('sha256')
             .update(JSON.stringify(responsePayload))
@@ -1018,13 +1013,13 @@ router.post('/pay', async (req, res) => {
     // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or is specifically authorized (code 98 = DIEGO)
     try {
         const trimmedAdmin = adminCode ? adminCode.trim() : '';
-        const adminRows = await query(`
+        const adminRows = await queryWithParams(`
             SELECT TIPOVENDEDOR
             FROM DSEDAC.VDC
-            WHERE TRIM(CODIGOVENDEDOR) = '${trimmedAdmin.replace(/[^a-zA-Z0-9]/g, '')}'
+            WHERE TRIM(CODIGOVENDEDOR) = ?
               AND SUBEMPRESA = 'GMP'
             FETCH FIRST 1 ROWS ONLY
-        `, false);
+        `, [trimmedAdmin.replace(/[^a-zA-Z0-9]/g, '')], false);
 
         const adminTipo = (adminRows && adminRows.length > 0)
             ? (adminRows[0].TIPOVENDEDOR || '').trim()
@@ -1105,7 +1100,6 @@ router.post('/pay', async (req, res) => {
 
         // INVALIDATE CACHE: Clear summary cache for this vendor/year so next request fetches fresh data
         try {
-            const { invalidateCachePattern } = require('../services/redis-cache');
             await invalidateCachePattern(`comm:summary:${vendedorCode.trim()}:${year}`);
             await invalidateCachePattern(`comm:summary:ALL:${year}`); // Also invalidate ALL view
             logger.info(`[COMMISSIONS] Cache invalidated for ${vendedorCode}:${year}`);

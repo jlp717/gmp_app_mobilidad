@@ -8,6 +8,8 @@
 
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
@@ -15,6 +17,10 @@ const logger = require('../middleware/logger');
 const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
+const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
+const facturasService = require('../services/facturas.service');
+const pdfService = require('../services/pdf.service');
 
 // Commission configuration (30% threshold for repartidores)
 const REPARTIDOR_CONFIG = {
@@ -927,8 +933,6 @@ router.get('/history/signature', async (req, res) => {
         // 3. If no base64, try reading from FIRMA_PATH file
         if (!firmaBase64 && firmaPath) {
             try {
-                const fs = require('fs');
-                const path = require('path');
                 const pathsToTry = [];
 
                 // If FIRMA_PATH is an absolute path, try it directly first
@@ -1221,7 +1225,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         logger.info(`[PDF] Generating Albaran PDF: ${year}-${serie}-${terminal}-${number}`);
 
         // 1. Fetch Header from CAC + IVA breakdown from CPC
-        const headerSql = `
+        const headers = await queryWithParams(`
             SELECT 
                 CAC.EJERCICIOALBARAN, CAC.SERIEALBARAN, CAC.NUMEROALBARAN, CAC.TERMINALALBARAN,
                 CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
@@ -1235,13 +1239,12 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-            WHERE CAC.NUMEROALBARAN = ${number} 
-              AND TRIM(CAC.SERIEALBARAN) = '${(serie || '').trim()}' 
-              AND CAC.EJERCICIOALBARAN = ${year}
-              AND CAC.TERMINALALBARAN = ${terminal}
+            WHERE CAC.NUMEROALBARAN = ? 
+              AND TRIM(CAC.SERIEALBARAN) = ? 
+              AND CAC.EJERCICIOALBARAN = ?
+              AND CAC.TERMINALALBARAN = ?
             FETCH FIRST 1 ROW ONLY
-        `;
-        const headers = await query(headerSql, false);
+        `, [number, (serie || '').trim(), year, terminal], false);
 
         if (!headers || headers.length === 0) {
             return res.status(404).json({ success: false, error: 'Albarán no encontrado' });
@@ -1250,20 +1253,19 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
 
         // Fetch IVA breakdown from CPC (header-level, LAC has no IVA columns)
         try {
-            const ivaSql = `
+            const ivaRows = await queryWithParams(`
                 SELECT 
                     IMPORTEBASEIMPONIBLE1 as BI1, PORCENTAJEIVA1 as IVA1_PCT, IMPORTEIVA1 as IVA1_IMP,
                     IMPORTEBASEIMPONIBLE2 as BI2, PORCENTAJEIVA2 as IVA2_PCT, IMPORTEIVA2 as IVA2_IMP,
                     IMPORTEBASEIMPONIBLE3 as BI3, PORCENTAJEIVA3 as IVA3_PCT, IMPORTEIVA3 as IVA3_IMP,
                     IMPORTETOTAL
                 FROM DSEDAC.CPC
-                WHERE EJERCICIOALBARAN = ${year}
-                  AND TRIM(SERIEALBARAN) = '${(serie || '').trim()}'
-                  AND TERMINALALBARAN = ${terminal}
-                  AND NUMEROALBARAN = ${number}
+                WHERE EJERCICIOALBARAN = ?
+                  AND TRIM(SERIEALBARAN) = ?
+                  AND TERMINALALBARAN = ?
+                  AND NUMEROALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
-            `;
-            const ivaRows = await query(ivaSql, false);
+            `, [year, (serie || '').trim(), terminal, number], false);
             if (ivaRows.length > 0) {
                 header.IVA_BREAKDOWN = ivaRows[0];
             }
@@ -1272,7 +1274,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         }
 
         // 2. Fetch Lines from LAC
-        const linesSql = `
+        const lines = await queryWithParams(`
             SELECT 
                 LAC.CODIGOARTICULO,
                 LAC.DESCRIPCION as DESCRIPCIONARTICULO,
@@ -1285,31 +1287,28 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
                 LAC.PRECIOVENTA as PRECIOARTICULO
             FROM DSEDAC.LAC LAC
-            WHERE LAC.EJERCICIOALBARAN = ${year}
-              AND TRIM(LAC.SERIEALBARAN) = '${(serie || '').trim()}'
-              AND LAC.TERMINALALBARAN = ${terminal}
-              AND LAC.NUMEROALBARAN = ${number}
+            WHERE LAC.EJERCICIOALBARAN = ?
+              AND TRIM(LAC.SERIEALBARAN) = ?
+              AND LAC.TERMINALALBARAN = ?
+              AND LAC.NUMEROALBARAN = ?
             ORDER BY LAC.SECUENCIA
-        `;
-        const lines = await query(linesSql, false) || [];
+        `, [year, (serie || '').trim(), terminal, number], false) || [];
 
         // 3. Try to get signature - comprehensive cascade lookup
         let signatureBase64 = null;
         let signatureSource = null;
         const albId = `${year}-${serie.trim()}-${terminal}-${number}`;
-        const fs = require('fs');
-        const pathModule = require('path');
 
         // Step 3a: Check DELIVERY_STATUS for FIRMA_PATH
         try {
-            const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
+            const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
             if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
                 const basePaths = [
-                    pathModule.join(__dirname, '../../uploads'),
-                    pathModule.join(__dirname, '../../uploads/photos')
+                    path.join(__dirname, '../../uploads'),
+                    path.join(__dirname, '../../uploads/photos')
                 ];
                 for (const basePath of basePaths) {
-                    const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
+                    const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
                     if (fs.existsSync(fullPath)) {
                         signatureBase64 = fs.readFileSync(fullPath).toString('base64');
                         signatureSource = 'FILE';
@@ -1325,14 +1324,14 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         // Step 3b: Try REPARTIDOR_FIRMAS if no file signature
         if (!signatureBase64) {
             try {
-                const firmaRows = await query(`
+                const firmaRows = await queryWithParams(`
                     SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
                     INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                    WHERE RE.NUMERO_ALBARAN = ${number}
-                      AND RE.EJERCICIO_ALBARAN = ${year}
-                      AND RE.SERIE_ALBARAN = '${serie.trim()}'
+                    WHERE RE.NUMERO_ALBARAN = ?
+                      AND RE.EJERCICIO_ALBARAN = ?
+                      AND TRIM(RE.SERIE_ALBARAN) = ?
                     FETCH FIRST 1 ROW ONLY
-                `, false);
+                `, [number, year, serie.trim()], false);
                 if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
                     signatureBase64 = firmaRows[0].FIRMA_BASE64;
                     signatureSource = 'REPARTIDOR_FIRMAS';
@@ -1346,14 +1345,14 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         // Step 3c: Try CACFIRMAS (legacy ERP signatures) as last resort
         if (!signatureBase64) {
             try {
-                const cacRows = await query(`
+                const cacRows = await queryWithParams(`
                     SELECT FIRMABASE64 FROM DSEDAC.CACFIRMAS
-                    WHERE EJERCICIOALBARAN = ${year}
-                      AND TRIM(SERIEALBARAN) = '${serie.trim()}'
-                      AND TERMINALALBARAN = ${terminal}
-                      AND NUMEROALBARAN = ${number}
+                    WHERE EJERCICIOALBARAN = ?
+                      AND TRIM(SERIEALBARAN) = ?
+                      AND TERMINALALBARAN = ?
+                      AND NUMEROALBARAN = ?
                     FETCH FIRST 1 ROW ONLY
-                `, false);
+                `, [year, serie.trim(), terminal, number], false);
                 if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
                     let b64 = cacRows[0].FIRMABASE64;
                     b64 = b64.replace(/^data:image\/\w+;base64,/, '');
@@ -1371,10 +1370,13 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         // 4. Generate PDF with optional signature (documentType = albaran)
         const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource, documentType: 'albaran' });
 
+        const safeFilename = `Albaran_${year}_${serie}_${number}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_');
         res.set({
             'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename=Albaran_${year}_${serie}_${number}.pdf`,
-            'Content-Length': buffer.length
+            'Content-Disposition': `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`,
+            'Content-Length': buffer.length,
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
         });
         res.send(buffer);
 
@@ -1680,14 +1682,12 @@ router.get('/entregas/:entregaId/firma', async (req, res) => {
     try {
         const { entregaId } = req.params;
 
-        const sql = `
+        const rows = await queryWithParams(`
             SELECT FIRMA_BASE64, FIRMANTE_NOMBRE, FECHA_FIRMA
             FROM JAVIER.REPARTIDOR_FIRMAS 
-            WHERE ENTREGA_ID = ${entregaId}
+            WHERE ENTREGA_ID = ?
             FETCH FIRST 1 ROW ONLY
-        `;
-
-        const rows = await query(sql, false);
+        `, [entregaId], false);
 
         if (rows.length === 0) {
             return res.json({ success: true, hasSignature: false });
@@ -1924,46 +1924,43 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
                 TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA`;
 
         // 1A. Primary: Try by NUMEROFACTURA/SERIEFACTURA/EJERCICIOFACTURA
-        let headerSql = `
+        let headers = await queryWithParams(`
             SELECT ${headerCols}
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-            WHERE CAC.NUMEROFACTURA = ${number} 
-              AND TRIM(CAC.SERIEFACTURA) = '${(serie || '').trim()}' 
-              AND CAC.EJERCICIOFACTURA = ${year}
+            WHERE CAC.NUMEROFACTURA = ? 
+              AND TRIM(CAC.SERIEFACTURA) = ? 
+              AND CAC.EJERCICIOFACTURA = ?
             FETCH FIRST 1 ROW ONLY
-        `;
-        let headers = await query(headerSql, false);
+        `, [number, (serie || '').trim(), year], false);
 
         // 1B. Fallback: Try by albaran fields if factura query failed
         if ((!headers || headers.length === 0) && albaranNumber) {
             logger.info(`[PDF] Factura query returned 0 rows, trying albaran fallback: ${albaranYear || year}-${albaranSerie || serie}-${albaranTerminal || 0}-${albaranNumber}`);
-            headerSql = `
+            headers = await queryWithParams(`
                 SELECT ${headerCols}
                 FROM DSEDAC.CAC CAC
                 LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-                WHERE CAC.NUMEROALBARAN = ${albaranNumber} 
-                  AND TRIM(CAC.SERIEALBARAN) = '${(albaranSerie || serie || '').trim()}'
-                  AND CAC.EJERCICIOALBARAN = ${albaranYear || year}
-                  AND CAC.TERMINALALBARAN = ${albaranTerminal || 0}
+                WHERE CAC.NUMEROALBARAN = ? 
+                  AND TRIM(CAC.SERIEALBARAN) = ?
+                  AND CAC.EJERCICIOALBARAN = ?
+                  AND CAC.TERMINALALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
-            `;
-            headers = await query(headerSql, false);
+            `, [albaranNumber, (albaranSerie || serie || '').trim(), albaranYear || year, albaranTerminal || 0], false);
         }
 
         // 1C. Last resort: Try factura number as albaran number (Flutter may pass albaran number)
         if (!headers || headers.length === 0) {
             logger.info(`[PDF] Both queries failed, trying albaran-as-number fallback: ${year}-${serie}-${number}`);
-            headerSql = `
+            headers = await queryWithParams(`
                 SELECT ${headerCols}
                 FROM DSEDAC.CAC CAC
                 LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-                WHERE CAC.NUMEROALBARAN = ${number}
-                  AND TRIM(CAC.SERIEALBARAN) = '${(serie || '').trim()}'
-                  AND CAC.EJERCICIOALBARAN = ${year}
+                WHERE CAC.NUMEROALBARAN = ?
+                  AND TRIM(CAC.SERIEALBARAN) = ?
+                  AND CAC.EJERCICIOALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
-            `;
-            headers = await query(headerSql, false);
+            `, [number, (serie || '').trim(), year], false);
         }
 
         if (!headers || headers.length === 0) {
@@ -1980,20 +1977,19 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 
         // Fetch IVA breakdown from CPC
         try {
-            const ivaSql = `
+            const ivaRows = await queryWithParams(`
                 SELECT 
                     IMPORTEBASEIMPONIBLE1 as BI1, PORCENTAJEIVA1 as IVA1_PCT, IMPORTEIVA1 as IVA1_IMP,
                     IMPORTEBASEIMPONIBLE2 as BI2, PORCENTAJEIVA2 as IVA2_PCT, IMPORTEIVA2 as IVA2_IMP,
                     IMPORTEBASEIMPONIBLE3 as BI3, PORCENTAJEIVA3 as IVA3_PCT, IMPORTEIVA3 as IVA3_IMP,
                     IMPORTETOTAL
                 FROM DSEDAC.CPC
-                WHERE EJERCICIOALBARAN = ${actualEjAlb}
-                  AND TRIM(SERIEALBARAN) = '${actualSerieAlb}'
-                  AND TERMINALALBARAN = ${actualTermAlb}
-                  AND NUMEROALBARAN = ${actualNumAlb}
+                WHERE EJERCICIOALBARAN = ?
+                  AND TRIM(SERIEALBARAN) = ?
+                  AND TERMINALALBARAN = ?
+                  AND NUMEROALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
-            `;
-            const ivaRows = await query(ivaSql, false);
+            `, [actualEjAlb, actualSerieAlb, actualTermAlb, actualNumAlb], false);
             if (ivaRows.length > 0) {
                 header.IVA_BREAKDOWN = ivaRows[0];
             }
@@ -2002,7 +1998,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         }
 
         // 2. Fetch Lines - use albaran fields from found header for reliable join
-        const linesSql = `
+        const lines = await queryWithParams(`
             SELECT 
                 LAC.CODIGOARTICULO,
                 LAC.DESCRIPCION as DESCRIPCIONARTICULO,
@@ -2015,13 +2011,12 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
                 LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
                 LAC.PRECIOVENTA as PRECIOARTICULO
             FROM DSEDAC.LAC LAC
-            WHERE LAC.EJERCICIOALBARAN = ${actualEjAlb}
-              AND TRIM(LAC.SERIEALBARAN) = '${actualSerieAlb}'
-              AND LAC.TERMINALALBARAN = ${actualTermAlb}
-              AND LAC.NUMEROALBARAN = ${actualNumAlb}
+            WHERE LAC.EJERCICIOALBARAN = ?
+              AND TRIM(LAC.SERIEALBARAN) = ?
+              AND LAC.TERMINALALBARAN = ?
+              AND LAC.NUMEROALBARAN = ?
             ORDER BY LAC.SECUENCIA
-        `;
-        const lines = await query(linesSql, false) || [];
+        `, [actualEjAlb, actualSerieAlb, actualTermAlb, actualNumAlb], false) || [];
 
         // 3. Try to get signature - comprehensive cascade (same as albaran PDF)
         let signatureBase64 = null;
@@ -2030,16 +2025,14 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 
         // Step 3a: DELIVERY_STATUS
         try {
-            const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
+            const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
             if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
-                const fs = require('fs');
-                const pathModule = require('path');
                 const basePaths = [
-                    pathModule.join(__dirname, '../../uploads'),
-                    pathModule.join(__dirname, '../../uploads/photos')
+                    path.join(__dirname, '../../uploads'),
+                    path.join(__dirname, '../../uploads/photos')
                 ];
                 for (const basePath of basePaths) {
-                    const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
+                    const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
                     if (fs.existsSync(fullPath)) {
                         signatureBase64 = fs.readFileSync(fullPath).toString('base64');
                         signatureSource = 'FILE';
@@ -2052,14 +2045,14 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         // Step 3b: REPARTIDOR_FIRMAS
         if (!signatureBase64) {
             try {
-                const firmaRows = await query(`
+                const firmaRows = await queryWithParams(`
                     SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
                     INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                    WHERE RE.NUMERO_ALBARAN = ${actualNumAlb}
-                      AND RE.EJERCICIO_ALBARAN = ${actualEjAlb}
-                      AND TRIM(RE.SERIE_ALBARAN) = '${actualSerieAlb}'
+                    WHERE RE.NUMERO_ALBARAN = ?
+                      AND RE.EJERCICIO_ALBARAN = ?
+                      AND TRIM(RE.SERIE_ALBARAN) = ?
                     FETCH FIRST 1 ROW ONLY
-                `, false);
+                `, [actualNumAlb, actualEjAlb, actualSerieAlb], false);
                 if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
                     signatureBase64 = firmaRows[0].FIRMA_BASE64;
                     signatureSource = 'REPARTIDOR_FIRMAS';
@@ -2070,14 +2063,14 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         // Step 3c: CACFIRMAS legacy
         if (!signatureBase64) {
             try {
-                const cacRows = await query(`
+                const cacRows = await queryWithParams(`
                     SELECT FIRMABASE64 FROM DSEDAC.CACFIRMAS
-                    WHERE EJERCICIOALBARAN = ${actualEjAlb}
-                      AND TRIM(SERIEALBARAN) = '${actualSerieAlb}'
-                      AND TERMINALALBARAN = ${actualTermAlb}
-                      AND NUMEROALBARAN = ${actualNumAlb}
+                    WHERE EJERCICIOALBARAN = ?
+                      AND TRIM(SERIEALBARAN) = ?
+                      AND TERMINALALBARAN = ?
+                      AND NUMEROALBARAN = ?
                     FETCH FIRST 1 ROW ONLY
-                `, false);
+                `, [actualEjAlb, actualSerieAlb, actualTermAlb, actualNumAlb], false);
                 if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
                     let b64 = cacRows[0].FIRMABASE64.toString();
                     b64 = b64.replace(/^data:image\/\w+;base64,/, '');
@@ -2095,10 +2088,13 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         // 5. Send Response
         const factNum = header.NUMEROFACTURA || number;
         const factSerie = (header.SERIEFACTURA || serie || '').toString().trim();
+        const safeFilename = `Factura_${year}_${factSerie}_${factNum}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_');
         res.set({
             'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename=Factura_${year}_${factSerie}_${factNum}.pdf`,
-            'Content-Length': buffer.length
+            'Content-Disposition': `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`,
+            'Content-Length': buffer.length,
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
         });
         res.send(buffer);
 
@@ -2216,16 +2212,14 @@ router.get('/history/legacy-signature/:id', async (req, res) => {
 
         const [year, series, terminal, number] = parts;
 
-        const sql = `
+        const rows = await queryWithParams(`
             SELECT FIRMABASE64
             FROM DSEDAC.CACFIRMAS
-            WHERE EJERCICIOALBARAN = ${year}
-              AND TRIM(SERIEALBARAN) = '${(series || '').trim()}'
-              AND TERMINALALBARAN = ${terminal}
-              AND NUMEROALBARAN = ${number}
-        `;
-
-        const rows = await query(sql, false);
+            WHERE EJERCICIOALBARAN = ?
+              AND TRIM(SERIEALBARAN) = ?
+              AND TERMINALALBARAN = ?
+              AND NUMEROALBARAN = ?
+        `, [year, (series || '').trim(), terminal, number], false);
         if (rows.length === 0 || !rows[0].FIRMABASE64) {
             return res.status(404).send('Signature not found');
         }
@@ -2267,7 +2261,6 @@ router.post('/document/send-email', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Email destinatario inválido' });
         }
 
-        const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
         const docType = (type || 'albaran').toLowerCase();
         const isFactura = docType === 'factura';
         const typeLabel = isFactura ? 'Factura' : 'Albarán';
@@ -2279,8 +2272,6 @@ router.post('/document/send-email', async (req, res) => {
         if (!pdfBuffer) {
             if (isFactura) {
                 // Generate invoice PDF
-                const facturasService = require('../services/facturas.service');
-                const pdfService = require('../services/pdf.service');
                 const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
                 if (!factura) {
                     return res.status(404).json({ success: false, error: 'Factura no encontrada' });
@@ -2288,7 +2279,6 @@ router.post('/document/send-email', async (req, res) => {
                 pdfBuffer = await pdfService.generateInvoicePDF(factura);
             } else {
                 // Generate albaran/delivery receipt PDF
-                const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
                 try {
                     pdfBuffer = await generateDeliveryReceipt({
                         ejercicio: parseInt(ejercicio),
@@ -2299,8 +2289,6 @@ router.post('/document/send-email', async (req, res) => {
                 } catch (pdfErr) {
                     logger.warn(`[REPARTIDOR] DeliveryReceipt generation failed, trying invoice PDF: ${pdfErr.message}`);
                     // Fallback: try generating as invoice
-                    const facturasService = require('../services/facturas.service');
-                    const pdfService = require('../services/pdf.service');
                     try {
                         const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
                         pdfBuffer = await pdfService.generateInvoicePDF(factura);
@@ -2347,6 +2335,98 @@ router.post('/document/send-email', async (req, res) => {
         if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
             return res.status(503).json({ success: false, error: 'Error de conexión con servidor de email. Inténtelo de nuevo.' });
         }
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// POST /document/share/whatsapp
+// WhatsApp share with PDF base64 for repartidor documents (albaranes/facturas)
+// =============================================================================
+router.post('/document/share/whatsapp', async (req, res) => {
+    try {
+        const { ejercicio, serie, terminal, numero, type, telefono, clienteNombre } = req.body;
+
+        // Validate required fields
+        if (!ejercicio || !serie || !numero || !telefono) {
+            return res.status(400).json({
+                success: false,
+                error: 'Campos requeridos: ejercicio, serie, numero, telefono'
+            });
+        }
+
+        const docType = (type || 'albaran').toLowerCase();
+        const isFactura = docType === 'factura';
+        const typeLabel = isFactura ? 'Factura' : 'Albarán';
+
+        // Generate or retrieve cached PDF
+        const cacheKey = `${docType}_${serie}_${numero}_${ejercicio}`;
+        let pdfBuffer = getCachedPdf(cacheKey);
+
+        if (!pdfBuffer) {
+            if (isFactura) {
+                // Generate invoice PDF
+                const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+                if (!factura) {
+                    return res.status(404).json({ success: false, error: 'Factura no encontrada' });
+                }
+                pdfBuffer = await pdfService.generateInvoicePDF(factura);
+            } else {
+                // Generate albaran/delivery receipt PDF
+                try {
+                    pdfBuffer = await generateDeliveryReceipt({
+                        ejercicio: parseInt(ejercicio),
+                        serie: serie,
+                        terminal: parseInt(terminal) || 0,
+                        numero: parseInt(numero)
+                    });
+                } catch (pdfErr) {
+                    logger.warn(`[REPARTIDOR] DeliveryReceipt generation failed, trying invoice PDF: ${pdfErr.message}`);
+                    // Fallback: try generating as invoice
+                    try {
+                        const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+                        pdfBuffer = await pdfService.generateInvoicePDF(factura);
+                    } catch (invErr) {
+                        return res.status(500).json({ success: false, error: `No se pudo generar el PDF: ${pdfErr.message}` });
+                    }
+                }
+            }
+
+            if (pdfBuffer) {
+                cachePdf(cacheKey, pdfBuffer);
+            }
+        }
+
+        if (!pdfBuffer) {
+            return res.status(500).json({ success: false, error: 'No se pudo generar el PDF del documento' });
+        }
+
+        // Convert PDF to base64 for Flutter to share
+        const pdfBase64 = pdfBuffer.toString('base64');
+        const pdfFilename = `${typeLabel}_${serie}_${numero}_${ejercicio}.pdf`;
+
+        // Generate WhatsApp message
+        const message = `Granja Mari Pepa\n\n` +
+            `${typeLabel}: ${serie}-${numero}\n` +
+            `Ejercicio: ${ejercicio}\n` +
+            `Cliente: ${clienteNombre || 'Cliente'}\n\n` +
+            `Gracias por su confianza.`;
+
+        const phoneClean = telefono.replace(/\D/g, '');
+        const whatsappUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`;
+
+        logger.info(`[REPARTIDOR] WhatsApp generated: ${typeLabel} ${serie}-${numero} to ${phoneClean}`);
+
+        res.json({
+            success: true,
+            whatsappUrl,
+            message,
+            pdfBase64,
+            pdfFilename,
+            mimeType: 'application/pdf'
+        });
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in document/share/whatsapp: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });

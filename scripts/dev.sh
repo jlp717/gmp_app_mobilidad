@@ -154,8 +154,165 @@ show_help() {
     echo "  build     - Build release APK"
     echo "  health    - Check backend health endpoint"
     echo "  clean     - Clean build artifacts and node_modules"
+    echo "  lint      - Run flutter analyze + backend lint (no tests)"
+    echo "  fix       - Auto-fix common Dart issues (dart fix + pub get)"
+    echo "  docker    - Start development environment with Docker Compose"
+    echo "  docs      - Generate or open API documentation"
+    echo "  migrate   - Run database migrations from backend/migrations/"
+    echo "  seed      - Seed the database with test data"
     echo "  help      - Show this help message"
     echo ""
+}
+
+run_lint() {
+    header "GMP App - Lint (Analysis Only)"
+    cd "$ROOT_DIR"
+
+    echo -e "${YELLOW}[1/2] Flutter analyze...${NC}"
+    flutter analyze
+    flutter_ok=$?
+
+    cd "$ROOT_DIR/backend"
+    echo -e "${YELLOW}[2/2] Backend lint...${NC}"
+    if npm run lint 2>/dev/null; then
+        backend_ok=0
+    else
+        echo -e "${GRAY}  No lint script found, skipping.${NC}"
+        backend_ok=0
+    fi
+
+    if [[ $flutter_ok -eq 0 && $backend_ok -eq 0 ]]; then
+        echo -e "\n${GREEN}✅ Lint complete - no issues found${NC}"
+    else
+        echo -e "\n${RED}❌ Lint found issues${NC}"
+        [[ $flutter_ok -ne 0 ]] && echo -e "${RED}   - Flutter analysis failed${NC}"
+        [[ $backend_ok -ne 0 ]] && echo -e "${RED}   - Backend lint failed${NC}"
+        exit 1
+    fi
+}
+
+run_fix() {
+    header "GMP App - Auto-Fix Dart Issues"
+    cd "$ROOT_DIR"
+
+    echo -e "${YELLOW}[1/2] Running dart fix --apply...${NC}"
+    dart fix --apply || echo -e "${YELLOW}⚠️  dart fix encountered issues. Continuing...${NC}"
+
+    echo -e "${YELLOW}[2/2] Running flutter pub get...${NC}"
+    flutter pub get
+
+    if [[ $? -eq 0 ]]; then
+        echo -e "\n${GREEN}✅ Dart fix complete${NC}"
+    else
+        echo -e "\n${RED}❌ flutter pub get failed${NC}"
+        exit 1
+    fi
+}
+
+run_docker() {
+    header "GMP App - Docker Development Environment"
+    cd "$ROOT_DIR"
+
+    if [[ ! -f "docker-compose.yml" ]]; then
+        echo -e "${RED}❌ docker-compose.yml not found at project root.${NC}"
+        echo -e "${GRAY}   Run the docker command after creating docker-compose.yml${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}Checking Docker availability...${NC}"
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}❌ Docker is not installed or not in PATH${NC}"
+        exit 1
+    fi
+
+    echo -e "${GREEN}Starting Docker Compose services...${NC}"
+    docker compose up -d
+
+    echo -e "\n${GREEN}✅ Docker services started${NC}"
+    echo -e "${GRAY}  Backend: http://localhost:3334${NC}"
+    echo -e "${GRAY}  Redis:   localhost:6379${NC}"
+    echo -e "\n${YELLOW}  Note: DB2 requires external connection (see docker-compose.yml)${NC}"
+    echo -e "${GRAY}  View logs: docker compose logs -f${NC}"
+    echo -e "${GRAY}  Stop:      ./scripts/dev.sh docker-down${NC}"
+}
+
+run_docs() {
+    header "GMP App - API Documentation"
+    cd "$ROOT_DIR"
+
+    if [[ -d "$ROOT_DIR/backend/node_modules/swagger-jsdoc" ]] || ls "$ROOT_DIR/backend/src/swagger"* &>/dev/null; then
+        echo -e "${YELLOW}Starting backend to serve Swagger docs...${NC}"
+        echo -e "${GREEN}  Docs will be available at: http://localhost:3334/api-docs${NC}"
+        echo -e "${GRAY}  Press Ctrl+C to stop.${NC}"
+        cd "$ROOT_DIR/backend"
+        node server.js
+    elif [[ -d "$ROOT_DIR/docs" ]]; then
+        echo -e "${GREEN}Opening docs/ directory...${NC}"
+        if command -v xdg-open &>/dev/null; then
+            xdg-open "$ROOT_DIR/docs"
+        elif command -v open &>/dev/null; then
+            open "$ROOT_DIR/docs"
+        else
+            echo "  Please open: $ROOT_DIR/docs"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  No documentation tool found.${NC}"
+        echo -e "${GRAY}  Options:${NC}"
+        echo -e "${GRAY}  - Add swagger-jsdoc to backend for auto-generated API docs${NC}"
+        echo -e "${GRAY}  - Create a docs/ folder for manual documentation${NC}"
+        echo -e "${GRAY}  - Backend already serves Swagger at /api-docs when running${NC}"
+    fi
+}
+
+run_migrate() {
+    header "GMP App - Database Migration"
+    cd "$ROOT_DIR"
+
+    MIGRATION_DIR="$ROOT_DIR/backend/migrations"
+    if [[ ! -d "$MIGRATION_DIR" ]]; then
+        echo -e "${RED}❌ Migrations directory not found: backend/migrations/${NC}"
+        exit 1
+    fi
+
+    MIGRATIONS=$(find "$MIGRATION_DIR" -name '*.sql' -type f | sort)
+    if [[ -z "$MIGRATIONS" ]]; then
+        echo -e "${YELLOW}⚠️  No SQL migration files found.${NC}"
+        exit 0
+    fi
+
+    echo -e "${CYAN}Found migration file(s):${NC}"
+    echo "$MIGRATIONS" | while read -r mig; do
+        echo -e "${GRAY}  - $(basename "$mig")${NC}"
+    done
+    echo ""
+
+    cd "$ROOT_DIR/backend"
+    if grep -q '"db:migrate"' package.json; then
+        echo -e "${GREEN}Running migrations via npm script...${NC}"
+        npm run db:migrate
+    else
+        echo -e "${YELLOW}Running SQL migrations manually...${NC}"
+        echo -e "${YELLOW}⚠️  Ensure DB2 connection is configured in .env${NC}"
+        echo "$MIGRATIONS" | while read -r mig; do
+            echo -e "${YELLOW}  Applying: $(basename "$mig")${NC}"
+            echo -e "${GRAY}    (Manual execution required for DB2 - see backend/migrations/DEPLOYMENT_GUIDE.md)${NC}"
+        done
+        echo -e "\n${CYAN}  See backend/migrations/DEPLOYMENT_GUIDE.md for instructions${NC}"
+    fi
+}
+
+run_seed() {
+    header "GMP App - Database Seed"
+    cd "$ROOT_DIR/backend"
+
+    if grep -q '"db:seed"' package.json; then
+        echo -e "${GREEN}Running database seed...${NC}"
+        npm run db:seed
+    else
+        echo -e "${YELLOW}⚠️  No seed script configured in package.json${NC}"
+        echo -e "${GRAY}  Add a db:seed script or create seed files in backend/seeders/${NC}"
+        exit 1
+    fi
 }
 
 case "${1:-help}" in
@@ -166,6 +323,12 @@ case "${1:-help}" in
     build)   build_release ;;
     health)  check_health ;;
     clean)   clean_project ;;
+    lint)    run_lint ;;
+    fix)     run_fix ;;
+    docker)  run_docker ;;
+    docs)    run_docs ;;
+    migrate) run_migrate ;;
+    seed)    run_seed ;;
     help)    show_help ;;
     *)       show_help ;;
 esac

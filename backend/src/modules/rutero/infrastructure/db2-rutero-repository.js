@@ -60,7 +60,7 @@ class Db2RuteroRepository extends RuteroRepository {
   }
 
   async getCommissions({ vendorCode, date, role }) {
-    const dateFilter = date ? `AND DATE(LAC.FECHA) = DATE('${date}')` : '';
+    const dateFilter = date ? `AND DATE(LAC.FECHA) = DATE(?)` : '';
 
     const sql = `
       SELECT
@@ -75,14 +75,18 @@ class Db2RuteroRepository extends RuteroRepository {
         ${dateFilter}
       GROUP BY LAC.CODIGOCLIENTE, CL.NOMBRE
       ORDER BY TOTAL_VENTAS DESC
+      FETCH FIRST 100 ROWS ONLY
     `;
 
-    const result = await this._db.executeParams(sql, [vendorCode]);
+    const params = [vendorCode];
+    if (date) params.push(date);
+
+    const result = await this._db.executeParams(sql, params);
     return result;
   }
 
   async getDaySummary({ vendorCode, date }) {
-    const dateFilter = date ? `AND DATE(LAC.FECHA) = DATE('${date}')` : '';
+    const dateFilter = date ? `AND DATE(LAC.FECHA) = DATE(?)` : '';
 
     const sql = `
       SELECT
@@ -95,7 +99,10 @@ class Db2RuteroRepository extends RuteroRepository {
         ${dateFilter}
     `;
 
-    const result = await this._db.executeParams(sql, [vendorCode]);
+    const params = [vendorCode];
+    if (date) params.push(date);
+
+    const result = await this._db.executeParams(sql, params);
     return result[0] || {};
   }
 }

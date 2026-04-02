@@ -11,7 +11,16 @@ const compression = require('compression');
 const logger = require('./middleware/logger');
 const { verifyToken } = require('./middleware/auth');
 const { initDb, query } = require('./config/db');
-const { globalLimiter, createSecurityHeaders, validateContentType } = require('./middleware/security');
+const { 
+    globalLimiter, 
+    createSecurityHeaders, 
+    validateContentType, 
+    cobrosLimiter, 
+    pedidosLimiter,
+    detectSuspiciousAgents,
+    validateContentLength,
+    addRequestId
+} = require('./middleware/security');
 const { loadMetadataCache } = require('./services/metadataCache');
 const { preloadCache } = require('./services/cache-preloader');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
@@ -147,10 +156,15 @@ function parseCorsOrigin(value) {
 
 app.use(cors({
     origin: parseCorsOrigin(process.env.CORS_ORIGIN),
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Request-ID'],
+    exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+    credentials: true,
     maxAge: 86400
 }));
+app.use(addRequestId);
+app.use(detectSuspiciousAgents);
+app.use(validateContentLength);
 app.use(createSecurityHeaders());
 app.use(helmet());
 app.use(compression());
@@ -238,8 +252,8 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   // DDD routes (mount before legacy — Express first-match wins)
   if (process.env.USE_DDD_ROUTES === 'true') {
     app.use('/api/auth', dddAuthRoutes);
-    app.use('/api/pedidos', dddPedidosRoutes);
-    app.use('/api/cobros', dddCobrosRoutes);
+    app.use('/api/pedidos', pedidosLimiter, dddPedidosRoutes);
+    app.use('/api/cobros', cobrosLimiter, dddCobrosRoutes);
     app.use('/api/entregas', dddEntregasRoutes);
     app.use('/api/rutero', dddRuteroRoutes);
     logger.info('✅ DDD routes mounted at /api/{auth,pedidos,cobros,entregas,rutero}');
@@ -247,8 +261,8 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
     // Legacy fallback
     app.use('/api/entregas', entregasRoutes);
     app.use('/api/products', productsRoutes);
-    app.use('/api/pedidos', pedidosRoutes);
-    app.use('/api/cobros', cobrosRoutes);
+    app.use('/api/pedidos', pedidosLimiter, pedidosRoutes);
+    app.use('/api/cobros', cobrosLimiter, cobrosRoutes);
   }
   // KPI Glacius module (DB2/ODBC-backed alerts)
   if (kpiModule) {

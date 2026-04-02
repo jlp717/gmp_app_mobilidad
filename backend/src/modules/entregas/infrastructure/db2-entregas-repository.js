@@ -12,8 +12,8 @@ class Db2EntregasRepository extends EntregasRepository {
   }
 
   async getAlbaranes({ repartidorId, date, status }) {
-    const dateFilter = date ? `AND DATE(CPC.FECHAENTREGA) = DATE('${date}')` : '';
-    const statusFilter = status ? `AND DS.STATUS = '${status}'` : '';
+    const dateFilter = date ? `AND DATE(CPC.FECHAENTREGA) = DATE(?)` : '';
+    const statusFilter = status ? `AND DS.STATUS = ?` : '';
 
     const sql = `
       SELECT DISTINCT
@@ -34,9 +34,14 @@ class Db2EntregasRepository extends EntregasRepository {
         ${dateFilter}
         ${statusFilter}
       ORDER BY CPC.FECHAENTREGA
+      FETCH FIRST 200 ROWS ONLY
     `;
 
-    const result = await this._db.executeParams(sql, [repartidorId]);
+    const params = [repartidorId];
+    if (date) params.push(date);
+    if (status) params.push(status);
+
+    const result = await this._db.executeParams(sql, params);
     return result.map(row => Albaran.fromDbRow({
       ID: row.NUMERO,
       NUMERO: row.NUMERO,
@@ -128,7 +133,7 @@ class Db2EntregasRepository extends EntregasRepository {
   }
 
   async getRouteSummary({ repartidorId, date }) {
-    const dateFilter = date ? `AND DATE(CPC.FECHAENTREGA) = DATE('${date}')` : '';
+    const dateFilter = date ? `AND DATE(CPC.FECHAENTREGA) = DATE(?)` : '';
 
     const sql = `
       SELECT
@@ -142,7 +147,10 @@ class Db2EntregasRepository extends EntregasRepository {
         ${dateFilter}
     `;
 
-    const result = await this._db.executeParams(sql, [repartidorId]);
+    const params = [repartidorId];
+    if (date) params.push(date);
+
+    const result = await this._db.executeParams(sql, params);
     return result[0] || {};
   }
 }

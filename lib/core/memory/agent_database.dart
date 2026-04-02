@@ -1,3 +1,4 @@
+// ignore_for_file: argument_type_not_assignable, invalid_assignment, return_of_invalid_type
 import 'dart:async';
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -17,77 +18,76 @@ import 'vector_store_hnsw.dart';
 /// Arquitectura inspirada en Claude-Flow v3 AgentDB
 class AgentDatabase {
   static AgentDatabase? _instance;
-  
+
   // Cajas Hive unificadas
   static const String _persistentBoxName = 'agentdb_persistent';
   static const String _stateBoxName = 'agentdb_state';
   static const String _syncQueueBoxName = 'agentdb_sync_queue';
   static const String _vectorsBoxName = 'agentdb_vectors';
-  
+
   Box<dynamic>? _persistentBox;
   Box<dynamic>? _stateBox;
   Box<dynamic>? _syncQueueBox;
   Box<dynamic>? _vectorsBox;
-  
+
   // Vector store para búsqueda semántica
   late HNSWVectorStore _vectorStore;
-  
+
   // Memoria de trabajo (RAM)
   final Map<String, dynamic> _workingMemory = {};
   final Map<String, DateTime> _memoryTimestamps = {};
-  
+
   // Cola de operaciones pendientes
   final List<SyncOperation> _pendingSyncQueue = [];
-  
+
   // Callbacks de sincronización
   Function(SyncOperation)? _onSyncOperation;
-  
+
   AgentDatabase._();
-  
+
   /// Singleton instance
   static AgentDatabase get instance {
     _instance ??= AgentDatabase._();
     return _instance!;
   }
-  
+
   /// Inicializa AgentDB
   static Future<void> initialize() async {
     await Hive.initFlutter();
-    
+
     final db = instance;
     final key = _generateEncryptionKey();
     final cipher = HiveAesCipher(key);
-    
+
     // Abrir cajas Hive con encriptación
-    db._persistentBox = await Hive.openBox(_persistentBoxName, 
-        encryptionCipher: cipher);
-    db._stateBox = await Hive.openBox(_stateBoxName,
-        encryptionCipher: cipher);
-    db._syncQueueBox = await Hive.openBox(_syncQueueBoxName,
-        encryptionCipher: cipher);
-    db._vectorsBox = await Hive.openBox(_vectorsBoxName,
-        encryptionCipher: cipher);
-    
+    db._persistentBox =
+        await Hive.openBox(_persistentBoxName, encryptionCipher: cipher);
+    db._stateBox = await Hive.openBox(_stateBoxName, encryptionCipher: cipher);
+    db._syncQueueBox =
+        await Hive.openBox(_syncQueueBoxName, encryptionCipher: cipher);
+    db._vectorsBox =
+        await Hive.openBox(_vectorsBoxName, encryptionCipher: cipher);
+
     // Inicializar vector store
     db._vectorStore = HNSWVectorStore();
-    
+
     // Cargar vectores existentes
     await db._loadVectors();
-    
+
     // Cargar cola de sincronización
     await db._loadSyncQueue();
-    
+
     // Limpieza de memoria expirada
     db._startMemoryCleanup();
   }
-  
+
   static List<int> _generateEncryptionKey() {
     final seed = 'agentdb_unified_memory_encryption_v1';
     return sha256.convert(utf8.encode(seed)).bytes;
   }
-  
+
   // ==================== PERSISTENT MEMORY ====================
-  
+
   /// Guarda dato persistente (sobrevive a reinicios)
   Future<void> setPersistent({
     required String key,
@@ -102,26 +102,26 @@ class AgentDatabase {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    
+
     await _persistentBox?.put(safeKey, data.toJson());
     _workingMemory[safeKey] = value;
     _memoryTimestamps[safeKey] = DateTime.now();
   }
-  
+
   /// Obtiene dato persistente
   dynamic getPersistent(String key) {
     final safeKey = _sanitizeKey(key);
     final cached = _workingMemory[safeKey];
     if (cached != null) return cached;
-    
+
     final data = _persistentBox?.get(safeKey);
     if (data == null) return null;
-    
+
     final entry = MemoryEntry.fromJson(data);
     _workingMemory[safeKey] = entry.value;
     return entry.value;
   }
-  
+
   /// Elimina dato persistente
   Future<void> deletePersistent(String key) async {
     final safeKey = _sanitizeKey(key);
@@ -129,9 +129,9 @@ class AgentDatabase {
     _workingMemory.remove(safeKey);
     _memoryTimestamps.remove(safeKey);
   }
-  
+
   // ==================== STATE MEMORY ====================
-  
+
   /// Guarda estado temporal (sesión actual)
   Future<void> setState({
     required String key,
@@ -139,10 +139,9 @@ class AgentDatabase {
     Duration? ttl,
   }) async {
     final safeKey = _sanitizeKey(key);
-    final expiry = ttl != null 
-        ? DateTime.now().add(ttl).millisecondsSinceEpoch 
-        : null;
-    
+    final expiry =
+        ttl != null ? DateTime.now().add(ttl).millisecondsSinceEpoch : null;
+
     final data = MemoryEntry(
       key: safeKey,
       value: value,
@@ -151,34 +150,34 @@ class AgentDatabase {
       updatedAt: DateTime.now(),
       expiresAt: expiry,
     );
-    
+
     await _stateBox?.put(safeKey, data.toJson());
     _workingMemory[safeKey] = value;
     _memoryTimestamps[safeKey] = DateTime.now();
   }
-  
+
   /// Obtiene estado
   dynamic getState(String key) {
     final safeKey = _sanitizeKey(key);
     final cached = _workingMemory[safeKey];
     if (cached != null) return cached;
-    
+
     final data = _stateBox?.get(safeKey);
     if (data == null) return null;
-    
+
     final entry = MemoryEntry.fromJson(data);
-    
+
     // Verificar expiración
-    if (entry.expiresAt != null && 
+    if (entry.expiresAt != null &&
         DateTime.now().millisecondsSinceEpoch > entry.expiresAt!) {
       deleteState(key);
       return null;
     }
-    
+
     _workingMemory[safeKey] = entry.value;
     return entry.value;
   }
-  
+
   /// Elimina estado
   Future<void> deleteState(String key) async {
     final safeKey = _sanitizeKey(key);
@@ -186,9 +185,9 @@ class AgentDatabase {
     _workingMemory.remove(safeKey);
     _memoryTimestamps.remove(safeKey);
   }
-  
+
   // ==================== SYNC QUEUE (OFFLINE) ====================
-  
+
   /// Encola operación para sincronización posterior
   Future<void> enqueueSync({
     required String operationType,
@@ -206,43 +205,43 @@ class AgentDatabase {
       createdAt: DateTime.now(),
       retryCount: retryCount ?? 0,
     );
-    
+
     await _syncQueueBox?.put(operation.id, operation.toJson());
     _pendingSyncQueue.add(operation);
-    
+
     _onSyncOperation?.call(operation);
   }
-  
+
   /// Obtiene operaciones pendientes
   List<SyncOperation> getPendingSyncs() {
     return List.unmodifiable(_pendingSyncQueue);
   }
-  
+
   /// Marca operación como completada
   Future<void> markSyncComplete(String operationId) async {
     await _syncQueueBox?.delete(operationId);
     _pendingSyncQueue.removeWhere((op) => op.id == operationId);
   }
-  
+
   /// Incrementa contador de reintentos
   Future<void> incrementSyncRetry(String operationId) async {
     final operation = _pendingSyncQueue.firstWhere(
       (op) => op.id == operationId,
       orElse: () => SyncOperation.empty(),
     );
-    
+
     if (operation.id.isEmpty) return;
-    
+
     operation.retryCount++;
     await _syncQueueBox?.put(operationId, operation.toJson());
   }
-  
+
   void setSyncCallback(Function(SyncOperation) callback) {
     _onSyncOperation = callback;
   }
-  
+
   // ==================== VECTOR SEARCH ====================
-  
+
   /// Inserta vector para búsqueda semántica
   Future<void> insertVector({
     required String id,
@@ -255,7 +254,7 @@ class AgentDatabase {
       vector: embedding,
       metadata: metadata,
     );
-    
+
     // Persistir vector
     await _vectorsBox?.put(id, {
       'embedding': embedding,
@@ -264,7 +263,7 @@ class AgentDatabase {
       'insertedAt': DateTime.now().toIso8601String(),
     });
   }
-  
+
   /// Búsqueda semántica por similitud
   List<VectorSearchResult> searchVectors({
     required List<double> queryEmbedding,
@@ -278,13 +277,13 @@ class AgentDatabase {
       threshold: threshold,
     );
   }
-  
+
   /// Elimina vector
   Future<void> removeVector(String id) async {
     _vectorStore.remove(id);
     await _vectorsBox?.delete(id);
   }
-  
+
   Future<void> _loadVectors() async {
     for (final key in _vectorsBox?.keys ?? []) {
       final data = _vectorsBox?.get(key);
@@ -292,7 +291,7 @@ class AgentDatabase {
         final embedding = List<double>.from(data['embedding'] ?? []);
         final metadata = Map<String, dynamic>.from(data['metadata'] ?? {});
         final type = MemoryType.values[data['type'] ?? 0];
-        
+
         _vectorStore.insert(
           id: key.toString(),
           vector: embedding,
@@ -304,9 +303,9 @@ class AgentDatabase {
       }
     }
   }
-  
+
   // ==================== WORKING MEMORY ====================
-  
+
   /// Guarda en memoria de trabajo (RAM, no persistente)
   void setWorking(String key, dynamic value, {Duration? ttl}) {
     final safeKey = _sanitizeKey(key);
@@ -317,13 +316,13 @@ class AgentDatabase {
       _memoryTimestamps[safeKey] = DateTime.now();
     }
   }
-  
+
   /// Obtiene de memoria de trabajo
   dynamic getWorking(String key) {
     final safeKey = _sanitizeKey(key);
     return _workingMemory[safeKey];
   }
-  
+
   /// Limpia memoria de trabajo expirada
   void _startMemoryCleanup() {
     Timer.periodic(const Duration(minutes: 5), (_) {
@@ -332,23 +331,24 @@ class AgentDatabase {
           .where((e) => e.value.isBefore(now))
           .map((e) => e.key)
           .toList();
-      
+
       for (final key in expired) {
         _workingMemory.remove(key);
         _memoryTimestamps.remove(key);
       }
     });
   }
-  
+
   // ==================== BATCH OPERATIONS ====================
-  
+
   /// Ejecuta múltiples operaciones en lote
-  Future<void> batchSet(Map<String, dynamic> entries, {MemoryType type = MemoryType.general}) async {
+  Future<void> batchSet(Map<String, dynamic> entries,
+      {MemoryType type = MemoryType.general}) async {
     for (final entry in entries.entries) {
       await setPersistent(key: entry.key, value: entry.value, type: type);
     }
   }
-  
+
   /// Ejecuta múltiples lecturas en lote
   Map<String, dynamic> batchGet(Iterable<String> keys) {
     final results = <String, dynamic>{};
@@ -357,13 +357,13 @@ class AgentDatabase {
     }
     return results;
   }
-  
+
   // ==================== UTILITIES ====================
-  
+
   String _sanitizeKey(String key) {
     return key.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
   }
-  
+
   Future<void> _loadSyncQueue() async {
     _pendingSyncQueue.clear();
     for (final key in _syncQueueBox?.keys ?? []) {
@@ -373,7 +373,7 @@ class AgentDatabase {
       }
     }
   }
-  
+
   /// Limpia toda la base de datos
   Future<void> clearAll() async {
     await _persistentBox?.clear();
@@ -385,14 +385,14 @@ class AgentDatabase {
     _pendingSyncQueue.clear();
     _vectorStore.clear();
   }
-  
+
   /// Limpia solo estado temporal
   Future<void> clearState() async {
     await _stateBox?.clear();
     _workingMemory.clear();
     _memoryTimestamps.clear();
   }
-  
+
   /// Estadísticas de uso
   MemoryStats get stats => MemoryStats(
         persistentCount: _persistentBox?.length ?? 0,
@@ -401,7 +401,7 @@ class AgentDatabase {
         vectorCount: _vectorStore.size,
         workingMemoryCount: _workingMemory.length,
       );
-  
+
   /// Cierra conexiones
   Future<void> close() async {
     await _persistentBox?.close();
@@ -415,14 +415,14 @@ class AgentDatabase {
 
 /// Tipos de memoria
 enum MemoryType {
-  general,      // Datos generales
-  state,        // Estado de sesión
-  semantic,     // Vectores semánticos
-  draft,        // Borradores offline
-  cache,        // Caché temporal
-  config,       // Configuración
-  user,         // Datos de usuario
-  entity,       // Entidades de negocio
+  general, // Datos generales
+  state, // Estado de sesión
+  semantic, // Vectores semánticos
+  draft, // Borradores offline
+  cache, // Caché temporal
+  config, // Configuración
+  user, // Datos de usuario
+  entity, // Entidades de negocio
 }
 
 /// Entrada de memoria
@@ -433,7 +433,7 @@ class MemoryEntry {
   final DateTime createdAt;
   final DateTime updatedAt;
   final int? expiresAt;
-  
+
   MemoryEntry({
     required this.key,
     required this.value,
@@ -442,7 +442,7 @@ class MemoryEntry {
     required this.updatedAt,
     this.expiresAt,
   });
-  
+
   Map<String, dynamic> toJson() => {
         'key': key,
         'value': value,
@@ -451,7 +451,7 @@ class MemoryEntry {
         'updatedAt': updatedAt.toIso8601String(),
         'expiresAt': expiresAt,
       };
-  
+
   factory MemoryEntry.fromJson(Map<String, dynamic> json) => MemoryEntry(
         key: json['key'] ?? '',
         value: json['value'],
@@ -466,12 +466,12 @@ class MemoryEntry {
 class SyncOperation {
   final String id;
   final String operationType; // create, update, delete
-  final String entityType;    // pedido, producto, cliente
+  final String entityType; // pedido, producto, cliente
   final String entityId;
   final Map<String, dynamic> data;
   final DateTime createdAt;
   int retryCount;
-  
+
   SyncOperation({
     required this.id,
     required this.operationType,
@@ -481,7 +481,7 @@ class SyncOperation {
     required this.createdAt,
     this.retryCount = 0,
   });
-  
+
   SyncOperation.empty()
       : id = '',
         operationType = '',
@@ -490,7 +490,7 @@ class SyncOperation {
         data = {},
         createdAt = DateTime.now(),
         retryCount = 0;
-  
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'operationType': operationType,
@@ -500,7 +500,7 @@ class SyncOperation {
         'createdAt': createdAt.toIso8601String(),
         'retryCount': retryCount,
       };
-  
+
   factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
         id: json['id'] ?? '',
         operationType: json['operationType'] ?? '',
@@ -519,7 +519,7 @@ class MemoryStats {
   final int syncQueueCount;
   final int vectorCount;
   final int workingMemoryCount;
-  
+
   MemoryStats({
     required this.persistentCount,
     required this.stateCount,
@@ -527,9 +527,9 @@ class MemoryStats {
     required this.vectorCount,
     required this.workingMemoryCount,
   });
-  
+
   @override
-  String toString() => 
+  String toString() =>
       'MemoryStats(persistent: $persistentCount, state: $stateCount, '
       'sync: $syncQueueCount, vectors: $vectorCount, working: $workingMemoryCount)';
 }

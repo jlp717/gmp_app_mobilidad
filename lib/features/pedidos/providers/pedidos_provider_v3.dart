@@ -735,7 +735,14 @@ class PedidosProviderV3 with ChangeNotifier {
         _saleType,
       );
 
-      // Clear cart
+      // Check if confirmation was blocked due to stock issues
+      if (confirmedResult != null && confirmedResult['blocked'] == true) {
+        // Stock validation failed - return the blocked result so UI can show alternatives
+        _error = confirmedResult['message'] ?? 'Stock insuficiente';
+        return confirmedResult;
+      }
+
+      // Clear cart only if confirmation was successful
       _lines.clear();
       _clientCode = null;
       _clientName = null;

@@ -343,12 +343,12 @@ class FacturasService {
     }
 
     generateWhatsAppMessage(serie, numero, fecha, total, clienteNombre) {
-        return `🧺 *Granja Mari Pepa*\n\n` +
-            `📄 Factura: *${serie}-${numero}*\n` +
-            `📅 Fecha: ${fecha}\n` +
-            `💰 Total: *${total.toFixed(2)} €*\n\n` +
+        return `Granja Mari Pepa\n\n` +
+            `Factura: ${serie}-${numero}\n` +
+            `Fecha: ${fecha}\n` +
+            `Total: ${total.toFixed(2)} EUR\n\n` +
             `Cliente: ${clienteNombre}\n\n` +
-            `_Gracias por su confianza_ 🐔`;
+            `Gracias por su confianza.`;
     }
 }
 

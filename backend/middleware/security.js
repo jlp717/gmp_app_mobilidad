@@ -97,6 +97,30 @@ exports.emailLimiter = rateLimit({
     legacyHeaders: false
 });
 
+exports.cobrosLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { 
+        error: 'Demasiadas solicitudes de cobros. Intente más tarde.',
+        retryAfter: 900
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
+});
+
+exports.pedidosLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    message: { 
+        error: 'Demasiadas solicitudes de pedidos. Intente más tarde.',
+        retryAfter: 900
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
+});
+
 // =============================================================================
 // SECURITY HEADERS
 // =============================================================================
@@ -308,6 +332,98 @@ exports.detectSqlInjection = (req, res, next) => {
         }
     }
     
+    next();
+};
+
+// =============================================================================
+// SUSPICIOUS USER-AGENT DETECTION
+// =============================================================================
+
+const suspiciousUserAgents = [
+    /sqlmap/i,
+    /nikto/i,
+    /nmap/i,
+    /masscan/i,
+    /dirbuster/i,
+    /gobuster/i,
+    /wfuzz/i,
+    /hydra/i,
+    /burpsuite/i,
+    /zap/i,
+    /nessus/i,
+    /openvas/i,
+    /acunetix/i,
+    /w3af/i,
+    /arachni/i,
+    /skipfish/i,
+    /whatweb/i,
+    /nuclei/i,
+    /httpx/i,
+    /subfinder/i,
+    /curl\/[0-9]/i,
+    /python-requests\/[0-9]/i,
+    /python-urllib/i,
+    /wget\//i,
+    /libwww-perl/i,
+    /java\//i,
+    /go-http-client/i,
+    /scrapy/i,
+];
+
+exports.detectSuspiciousAgents = (req, res, next) => {
+    const userAgent = req.get('user-agent') || '';
+    
+    if (!userAgent) {
+        logger.warn(`[Security] Blocked request with empty User-Agent from IP: ${req.ip}`);
+        return res.status(403).json({ error: 'User-Agent header required' });
+    }
+    
+    for (const pattern of suspiciousUserAgents) {
+        if (pattern.test(userAgent)) {
+            logger.warn(`[Security] Blocked suspicious User-Agent "${userAgent}" from IP: ${req.ip}`);
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+    }
+    
+    next();
+};
+
+// =============================================================================
+// CONTENT-LENGTH VALIDATION (prevent large payload attacks)
+// =============================================================================
+
+const MAX_CONTENT_LENGTH = parseInt(process.env.MAX_CONTENT_LENGTH || '5242880', 10);
+
+exports.validateContentLength = (req, res, next) => {
+    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+        const contentLength = parseInt(req.headers['content-length'], 10);
+        
+        if (isNaN(contentLength)) {
+            return res.status(411).json({ error: 'Content-Length header required' });
+        }
+        
+        if (contentLength > MAX_CONTENT_LENGTH) {
+            logger.warn(`[Security] Blocked large payload (${contentLength} bytes) from IP: ${req.ip} on ${req.path}`);
+            return res.status(413).json({ 
+                error: 'Payload too large',
+                maxAllowed: MAX_CONTENT_LENGTH
+            });
+        }
+    }
+    
+    next();
+};
+
+// =============================================================================
+// X-REQUEST-ID TRACEABILITY
+// =============================================================================
+
+const { randomUUID } = require('crypto');
+
+exports.addRequestId = (req, res, next) => {
+    const requestId = req.headers['x-request-id'] || randomUUID();
+    req.requestId = requestId;
+    res.setHeader('X-Request-ID', requestId);
     next();
 };
 

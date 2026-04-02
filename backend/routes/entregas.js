@@ -63,19 +63,18 @@ async function getGamificationStats(repartidorId) {
 
         // Parallelize level + streak queries (independent) with cache
         const [levelResult, streakResult] = await Promise.all([
-            cachedQuery(query, `
+            cachedQuery(queryWithParams, `
             SELECT COUNT(*) as TOTAL
             FROM DSEDAC.CPC
-            WHERE TRIM(CODIGOREPARTIDOR) = '${repartidorId}'
-              AND ANODOCUMENTO = ${currentYear}
-        `, `entregas:gamification:level:${repartidorId}:${currentYear}`, TTL.SHORT),
-            cachedQuery(query, `
+            WHERE TRIM(CODIGOREPARTIDOR) = ?
+              AND ANODOCUMENTO = ?
+        `, `entregas:gamification:level:${repartidorId}:${currentYear}`, TTL.SHORT, [repartidorId, currentYear]),
+            cachedQuery(queryWithParams, `
             SELECT DISTINCT DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
             FROM DSEDAC.CPC
-            WHERE TRIM(CODIGOREPARTIDOR) = '${repartidorId}'
-              AND CONCAT(ANODOCUMENTO, CONCAT(RIGHT('0' || MESDOCUMENTO, 2), RIGHT('0' || DIADOCUMENTO, 2))) >= 
-                  '${moment().subtract(7, 'days').format('YYYYMMDD')}'
-        `, `entregas:gamification:streak:${repartidorId}`, TTL.SHORT)
+            WHERE TRIM(CODIGOREPARTIDOR) = ?
+              AND CONCAT(ANODOCUMENTO, CONCAT(RIGHT('0' || MESDOCUMENTO, 2), RIGHT('0' || DIADOCUMENTO, 2))) >= ?
+        `, `entregas:gamification:streak:${repartidorId}`, TTL.SHORT, [repartidorId, moment().subtract(7, 'days').format('YYYYMMDD')])
         ]);
         const totalDeliveries = levelResult[0]?.TOTAL || 0;
         const streakDays = streakResult.length; // Approximate active days in last week
@@ -944,14 +943,13 @@ router.post('/uploads/signature', async (req, res) => {
 router.get('/signers/:clientCode', async (req, res) => {
     try {
         const { clientCode } = req.params;
-        const safeCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
-        const rows = await query(`
+        const rows = await queryWithParams(`
             SELECT DNI, NOMBRE
             FROM JAVIER.CLIENT_SIGNERS
-            WHERE CODIGOCLIENTE = '${safeCode}'
+            WHERE CODIGOCLIENTE = ?
             ORDER BY LAST_USED DESC
             FETCH FIRST 5 ROWS ONLY
-        `);
+        `, [clientCode.replace(/[^a-zA-Z0-9]/g, '')]);
 
         res.json({ success: true, signers: rows });
     } catch (error) {
@@ -1028,7 +1026,7 @@ router.post('/receipt/:entregaId', async (req, res) => {
             try {
                 const albId = `${ejercicio}-${(serie || '').trim()}-${terminal || 0}-${numero}`;
                 // Try DELIVERY_STATUS
-                const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
+                const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
                 if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
                     const fpTest = path.join(photosDir, dsRows[0].FIRMA_PATH);
                     if (fs.existsSync(fpTest)) {
@@ -1038,14 +1036,14 @@ router.post('/receipt/:entregaId', async (req, res) => {
                 }
                 // Try REPARTIDOR_FIRMAS for base64 
                 if (!fullSignaturePath) {
-                    const firmaRows = await query(`
+                    const firmaRows = await queryWithParams(`
                         SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE FROM JAVIER.REPARTIDOR_FIRMAS RF
                         INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                        WHERE RE.NUMERO_ALBARAN = ${numero}
-                          AND RE.EJERCICIO_ALBARAN = ${ejercicio}
-                          AND RE.SERIE_ALBARAN = '${(serie || '').trim()}'
+                        WHERE RE.NUMERO_ALBARAN = ?
+                          AND RE.EJERCICIO_ALBARAN = ?
+                          AND TRIM(RE.SERIE_ALBARAN) = ?
                         FETCH FIRST 1 ROW ONLY
-                    `, false);
+                    `, [numero, ejercicio, (serie || '').trim()], false);
                     if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
                         deliveryData.signatureBase64 = firmaRows[0].FIRMA_BASE64;
                         deliveryData.firmante = firmaRows[0].FIRMANTE_NOMBRE || null;
@@ -1143,6 +1141,107 @@ router.post('/receipt/:entregaId/email', async (req, res) => {
         res.json({ success: true, messageId: emailResult.messageId });
     } catch (error) {
         logger.error(`[RECEIPT] Email error: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ===================================
+// POST /receipt/:entregaId/whatsapp - WhatsApp share with PDF base64
+// ===================================
+router.post('/receipt/:entregaId/whatsapp', async (req, res) => {
+    try {
+        const { entregaId } = req.params;
+        const { telefono, signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor, ordenPreparacion, firmante, firmanteDni } = req.body;
+
+        if (!telefono) {
+            return res.status(400).json({ success: false, error: 'Telefono is required' });
+        }
+
+        const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
+        const { cachePdf, getCachedPdf } = require('../services/emailPdfService');
+
+        // Parse entregaId for DB lookup
+        const parts = entregaId.split('-');
+        const ejercicio = parts[0] ? parseInt(parts[0]) : null;
+        const serie = parts[1] || '';
+        const terminal = parts[2] ? parseInt(parts[2]) : null;
+        const numero = parts[3] ? parseInt(parts[3]) : null;
+
+        const deliveryData = {
+            ejercicio, serie, terminal, numero,
+            albaranNum: albaranNum || `${serie}-${terminal}-${numero}`,
+            facturaNum,
+            clientCode,
+            clientName,
+            fecha,
+            items: items || [],
+            subtotal: subtotal || 0,
+            iva: iva || 0,
+            total: total || 0,
+            formaPago,
+            repartidor: stripVendorCode(repartidor),
+            ordenPreparacion,
+            firmante,
+            firmanteDni
+        };
+
+        // Generate or retrieve cached PDF
+        const cacheKey = `receipt_${entregaId}`;
+        let pdfBuffer = getCachedPdf(cacheKey);
+
+        if (!pdfBuffer) {
+            // Resolve signature path
+            let fullSignaturePath = null;
+            if (signaturePath) {
+                fullSignaturePath = path.join(photosDir, signaturePath);
+                if (!fs.existsSync(fullSignaturePath)) {
+                    if (fs.existsSync(signaturePath)) {
+                        fullSignaturePath = signaturePath;
+                    } else {
+                        fullSignaturePath = null;
+                        logger.warn(`[RECEIPT-WHATSAPP] Signature not found: ${signaturePath}`);
+                    }
+                }
+            }
+
+            pdfBuffer = await generateDeliveryReceipt(deliveryData, fullSignaturePath);
+            if (pdfBuffer) {
+                cachePdf(cacheKey, pdfBuffer);
+            }
+        }
+
+        if (!pdfBuffer) {
+            return res.status(500).json({ success: false, error: 'No se pudo generar el PDF de la entrega' });
+        }
+
+        // Convert PDF to base64 for Flutter to share as document
+        const pdfBase64 = pdfBuffer.toString('base64');
+        const docNum = facturaNum || albaranNum || `${serie}-${terminal}-${numero}`;
+        const pdfFilename = `Nota_Entrega_${docNum}.pdf`;
+
+        // Generate WhatsApp message
+        const message = `Granja Mari Pepa - Entrega\n\n` +
+            `Albaran: ${docNum}\n` +
+            `Fecha: ${fecha || 'N/A'}\n` +
+            `Total: ${(total || 0).toFixed(2)} EUR\n\n` +
+            `Cliente: ${clientName || 'Cliente'}\n\n` +
+            `Gracias por su confianza.`;
+
+        const phoneClean = telefono.replace(/\D/g, '');
+        const whatsappUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`;
+
+        logger.info(`[RECEIPT] WhatsApp generated: ${docNum} to ${phoneClean}`);
+
+        res.json({
+            success: true,
+            whatsappUrl,
+            message,
+            pdfBase64,
+            pdfFilename,
+            mimeType: 'application/pdf'
+        });
+    } catch (error) {
+        logger.error(`[RECEIPT] WhatsApp error: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });

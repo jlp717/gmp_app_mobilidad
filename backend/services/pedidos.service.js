@@ -2307,7 +2307,7 @@ function analyzeProductEssence(name) {
 
 /**
  * Calculates semantic compatibility score between two products
- * Uses intelligent matching based on product essence
+ * Uses intelligent 3-level matching: Family > Attributes > Format
  */
 function calculateSemanticScore(origProduct, candidate) {
     let score = 0;
@@ -2315,35 +2315,28 @@ function calculateSemanticScore(origProduct, candidate) {
 
     const origName = (origProduct.NAME || '').trim();
     const candName = (candidate.NAME || '').trim();
-    
+
     // Analyze product essences
     const origEssence = analyzeProductEssence(origName);
     const candEssence = analyzeProductEssence(candName);
 
     // ========================================
-    // LEVEL 3: ADVANCED - Semantic Incompatibility Check
+    // LEVEL 3: ADVANCED - Semantic Compatibility Check
     // ========================================
-    
-    // Check if candidate's main ingredient appears in original (for "empanadilla de pollo" case)
-    // If original is processed (like empanadilla) and contains an ingredient that matches 
-    // candidate's main ingredient, this could be incompatible
-    const origHasCandidateIngredient = origEssence.mainIngredient && 
-        origEssence.isProcessed && 
-        candEssence.mainIngredient === origEssence.mainIngredient;
-    
-    if (origHasCandidateIngredient) {
-        // Original is something "made of" candidate's ingredient
-        // Example: "Empanadilla de pollo" vs "Pollo entero" -> INCOMPATIBLE
-        score -= 80;
-        reasons.push(`⚠️ Producto diferente (el original contiene ${candEssence.mainIngredient})`);
-        return { score, reasons, level: 'advanced', compatible: false };
+
+    // BONUS: If original is processed and candidate has the same main ingredient
+    // Example: "Empanadillas de pollo" -> "Pollo entero" is a GOOD recommendation
+    if (origEssence.isProcessed && candEssence.mainIngredient &&
+        origEssence.mainIngredient === candEssence.mainIngredient) {
+        score += 50;
+        reasons.push(`Ingrediente principal compatible: ${candEssence.mainIngredient}`);
     }
-    
+
     // Check category incompatibility
-    if (origEssence.category !== 'otro' && candEssence.category !== 'otro' && 
+    if (origEssence.category !== 'otro' && candEssence.category !== 'otro' &&
         origEssence.category !== candEssence.category) {
-        
-        // If both have categories but they're different, heavy penalty
+
+        // If both have categories but they're different, moderate penalty
         // But allow some category crossovers
         const allowedCrossovers = [
             ['carne', 'precocinado'],
@@ -2351,33 +2344,47 @@ function calculateSemanticScore(origProduct, candidate) {
             ['marisco', 'precocinado'],
             ['verdura', 'congelado'],
             ['fruta', 'congelado'],
+            ['carne', 'congelado'],
+            ['pescado', 'congelado'],
         ];
-        
-        const isAllowed = allowedCrossovers.some(([a, b]) => 
+
+        const isAllowed = allowedCrossovers.some(([a, b]) =>
             (origEssence.category === a && candEssence.category === b) ||
             (origEssence.category === b && candEssence.category === a)
         );
-        
+
         if (!isAllowed) {
-            score -= 60;
-            reasons.push(`⚠️ Categoría diferente: ${candEssence.category}`);
-            // Don't return immediately - give chance for same family match
+            score -= 30;
+            reasons.push(`Categoria diferente: ${candEssence.category}`);
+        } else {
+            score += 15;
+            reasons.push(`Categoria compatible: ${origEssence.category} -> ${candEssence.category}`);
         }
     }
-    
-    // Raw vs Processed conflict (most important!)
-    // If looking for RAW but candidate is PROCESSED -> MAJOR INCOMPATIBILITY
-    if (!origEssence.isProcessed && candEssence.isProcessed) {
-        // User wants a raw product but candidate is processed
-        score -= 50;
-        reasons.push('⚠️ Producto elaborado (buscabas producto fresco/crudo)');
+
+    // Raw vs Processed relationship (IMPORTANT: they can be complementary!)
+    // If looking for PROCESSED and candidate is RAW with same ingredient -> GOOD MATCH
+    if (origEssence.isProcessed && !candEssence.isProcessed &&
+        origEssence.mainIngredient && candEssence.mainIngredient &&
+        origEssence.mainIngredient === candEssence.mainIngredient) {
+        score += 40;
+        reasons.push(`Ingrediente base para producto elaborado`);
     }
-    
-    // If looking for PROCESSED but candidate is very RAW (like "pollo vivo")
-    if (origEssence.isProcessed && candEssence.isProcessed === false && 
-        candEssence.format === 'vivo') {
+
+    // If looking for RAW but candidate is PROCESSED with same ingredient -> also good
+    if (!origEssence.isProcessed && candEssence.isProcessed &&
+        origEssence.mainIngredient && candEssence.mainIngredient &&
+        origEssence.mainIngredient === candEssence.mainIngredient) {
+        score += 30;
+        reasons.push(`Producto elaborado con mismo ingrediente`);
+    }
+
+    // Only penalize if formats are completely incompatible
+    if (origEssence.format === 'vivo' && candEssence.format !== 'vivo' &&
+        (!origEssence.mainIngredient || !candEssence.mainIngredient ||
+         origEssence.mainIngredient !== candEssence.mainIngredient)) {
         score -= 40;
-        reasons.push('⚠️ Producto vivo (no está procesado)');
+        reasons.push('Formato incompatible');
     }
 
     // ========================================
@@ -2630,8 +2637,14 @@ async function getSimilarProducts(productCode) {
             };
             
             const { score, reasons, compatible } = calculateSemanticScore(origProduct, candidate);
+
+            // Improved threshold: accept products with score > -30 or same family
+            const sameFamily = candidate.FAMILIA === origProduct.FAMILIA;
+            const sameSubfamily = candidate.SUBFAMILIA && origProduct.SUBFAMILIA &&
+                                  candidate.SUBFAMILIA === origProduct.SUBFAMILIA;
             
-            if (compatible || score > -50) {
+            // Always include if same subfamily, otherwise check score
+            if (sameSubfamily || sameFamily || score > -30) {
                 scored.push({
                     code: (r.CODE || '').trim(),
                     name: (r.NAME || '').trim(),
@@ -2642,7 +2655,7 @@ async function getSimilarProducts(productCode) {
                     stockUnidades: Math.max(0, parseFloat(r.STOCK_UNIDADES) || 0),
                     precio: parseFloat(r.PRECIO) || 0,
                     similarityScore: Math.max(0, score),
-                    matchReasons: reasons.length > 0 ? reasons : ['Misma familia']
+                    matchReasons: reasons.length > 0 ? reasons : (sameSubfamily ? ['Misma subfamilia'] : ['Misma familia'])
                 });
             }
         }

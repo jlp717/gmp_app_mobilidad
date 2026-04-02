@@ -693,6 +693,7 @@ router.put('/:id/confirm', async (req, res) => {
 
         // P0-C: If stock validation blocked the order, return 409 with alternatives
         if (order.blocked) {
+            logger.warn(`[PEDIDOS] Order #${id} blocked due to stock: ${order.message}`);
             return res.status(409).json({
                 success: false,
                 blocked: true,
@@ -703,6 +704,7 @@ router.put('/:id/confirm', async (req, res) => {
             });
         }
 
+        logger.info(`[PEDIDOS] Order #${id} confirmed successfully`);
         res.json({ success: true, order });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/confirm: ${error.message}`);

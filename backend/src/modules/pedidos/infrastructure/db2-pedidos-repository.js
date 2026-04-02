@@ -5,7 +5,7 @@
 const { PedidosRepository } = require('../domain/pedidos-repository');
 const { Product } = require('../domain/product');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
-const { getCurrentDate, VENDOR_COLUMN, LACLAE_SALES_FILTER } = require('../../../../utils/common');
+const { getCurrentDate, VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList } = require('../../../../utils/common');
 
 class Db2PedidosRepository extends PedidosRepository {
   constructor(dbPool) {
@@ -17,12 +17,12 @@ class Db2PedidosRepository extends PedidosRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`;
+      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
 
     const dateFilter = LACLAE_SALES_FILTER;
-    const familyFilter = family ? `AND TRIM(FL.FAMILIA) = '${family}'` : '';
-    const marcaFilter = marca ? `AND TRIM(FL.MARCA) = '${marca}'` : '';
-    const searchFilter = search ? `AND (TRIM(FL.DESART) LIKE '%${search}%' OR TRIM(FL.CODART) LIKE '%${search}%')` : '';
+    const familyFilter = family ? `AND TRIM(FL.FAMILIA) = ?` : '';
+    const marcaFilter = marca ? `AND TRIM(FL.MARCA) = ?` : '';
+    const searchFilter = search ? `AND (TRIM(FL.DESART) LIKE ? OR TRIM(FL.CODART) LIKE ?)` : '';
 
     const sql = `
       SELECT DISTINCT
@@ -45,7 +45,12 @@ class Db2PedidosRepository extends PedidosRepository {
       FETCH FIRST ${limit} ROWS ONLY OFFSET ${offset} ROWS
     `;
 
-    const result = await this._db.executeParams(sql, []);
+    const params = [];
+    if (family) params.push(family);
+    if (marca) params.push(marca);
+    if (search) { params.push(`%${search}%`, `%${search}%`); }
+
+    const result = await this._db.executeParams(sql, params);
     const products = result.map(row => Product.fromDbRow(row));
     return { products, count: result.length };
   }
@@ -54,7 +59,7 @@ class Db2PedidosRepository extends PedidosRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`;
+      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
 
     const sql = `
       SELECT
@@ -98,6 +103,7 @@ class Db2PedidosRepository extends PedidosRepository {
         AND PMRL1.FECHAINICIO <= CURRENT_DATE
         AND PMRL1.FECHAFIN >= CURRENT_DATE
       ORDER BY PMRL1.IDPROMO, PMPL1.CODART
+      FETCH FIRST 100 ROWS ONLY
     `;
 
     const result = await this._db.executeParams(sql, [clientCode]);
@@ -117,6 +123,7 @@ class Db2PedidosRepository extends PedidosRepository {
       FROM JAVIER.CART_CONTENT CC
       WHERE CC.USER_ID = ?
       ORDER BY CC.FECHA_CREACION DESC
+      FETCH FIRST 100 ROWS ONLY
     `;
 
     const result = await this._db.executeParams(sql, [userId]);
@@ -137,34 +144,41 @@ class Db2PedidosRepository extends PedidosRepository {
     return { id, userId, clientCode, productCode, quantity, unit };
   }
 
+  /**
+   * Confirm order with transactional integrity.
+   * Wraps cabecera + all líneas inserts in a single transaction.
+   * If any line insert fails, everything is rolled back.
+   */
   async confirmOrder({ userId, clientCode, lines, observations = '' }) {
     const { v4: uuidv4 } = require('uuid');
     const orderId = uuidv4();
     const currentDate = getCurrentDate();
     const year = currentDate.substring(0, 4);
 
-    const cabSql = `
-      INSERT INTO JAVIER.PEDIDOS_CAB (
-        ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO, CODIGOCLIENTE,
-        FECHAPEDIDO, ESTADO, OBSERVACIONES, CODIGO_USUARIO, ORIGEN
-      ) VALUES (?, ?, 1, 'M', ?, CURRENT_TIMESTAMP, 'PENDIENTE', ?, ?, 'APP')
-    `;
-
-    await this._db.executeParams(cabSql, [orderId, year, clientCode, observations, userId]);
-
-    for (const line of lines) {
-      const lineId = uuidv4();
-      const linSql = `
-        INSERT INTO JAVIER.PEDIDOS_LIN (
-          ID, PEDIDO_ID, CODIGOARTICULO, CANTIDAD, UNIDAD, PRECIO
-        ) VALUES (?, ?, ?, ?, ?, ?)
+    return this._db.transaction(async (conn) => {
+      const cabSql = `
+        INSERT INTO JAVIER.PEDIDOS_CAB (
+          ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO, CODIGOCLIENTE,
+          FECHAPEDIDO, ESTADO, OBSERVACIONES, CODIGO_USUARIO, ORIGEN
+        ) VALUES (?, ?, 1, 'M', ?, CURRENT_TIMESTAMP, 'PENDIENTE', ?, ?, 'APP')
       `;
-      await this._db.executeParams(linSql, [
-        lineId, orderId, line.productCode, line.quantity, line.unit || 'UD', line.unitPrice || 0
-      ]);
-    }
 
-    return { orderId, status: 'PENDIENTE', linesCount: lines.length };
+      await conn.query(cabSql, [orderId, year, clientCode, observations, userId]);
+
+      for (const line of lines) {
+        const lineId = uuidv4();
+        const linSql = `
+          INSERT INTO JAVIER.PEDIDOS_LIN (
+            ID, PEDIDO_ID, CODIGOARTICULO, CANTIDAD, UNIDAD, PRECIO
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `;
+        await conn.query(linSql, [
+          lineId, orderId, line.productCode, line.quantity, line.unit || 'UD', line.unitPrice || 0
+        ]);
+      }
+
+      return { orderId, status: 'PENDIENTE', linesCount: lines.length };
+    });
   }
 
   async getOrderHistory({ userId, limit = 20, offset = 0 }) {

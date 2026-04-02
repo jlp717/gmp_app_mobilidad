@@ -1,0 +1,88 @@
+# GMP App Mobilidad - Development Docker Compose
+# Usage: docker compose up -d
+# Note: DB2 cannot be containerized easily. Configure external DB2 connection via .env
+
+services:
+  # Node.js Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: gmp-backend
+    ports:
+      - "3334:3334"
+    environment:
+      - NODE_ENV=development
+      - PORT=3334
+      - DB2_DSN=${DB2_DSN:-GMP}
+      - DB2_HOST=${DB2_HOST:-}
+      - DB2_PORT=${DB2_PORT:-}
+      - DB2_DATABASE=${DB2_DATABASE:-}
+      - DB2_USER=${DB2_USER:-}
+      - DB2_PASSWORD=${DB2_PASSWORD:-}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET:-dev-secret-change-me}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-dev-secret-change-me}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3334/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - gmp-network
+
+  # Redis for caching and session storage
+  redis:
+    image: redis:7-alpine
+    container_name: gmp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - gmp-network
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  gmp-network:
+    driver: bridge
+
+# ============================================================================
+# IMPORTANT: DB2 Database Configuration
+# ============================================================================
+# DB2 cannot be easily containerized due to licensing and image size.
+# You must have an external DB2 instance running and configure the connection
+# via environment variables in .env file:
+#
+#   DB2_DSN=GMP
+#   DB2_HOST=your-db2-host
+#   DB2_PORT=50000
+#   DB2_DATABASE=GMP
+#   DB2_USER=your-user
+#   DB2_PASSWORD=your-password
+#
+# Alternatively, use a local DB2 DSN configured via ODBC driver.
+# See backend/migrations/DEPLOYMENT_GUIDE.md for database setup instructions.
+# ============================================================================
