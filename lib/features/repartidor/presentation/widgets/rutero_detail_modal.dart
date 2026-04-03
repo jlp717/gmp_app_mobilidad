@@ -788,10 +788,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (!mounted) return;
 
       // Use Share sheet - user can save or open in any app
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: 'Guardar $docLabel',
         subject: docLabel,
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (mounted) {
@@ -3219,10 +3230,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       // Note: on Android, sending text + file to WhatsApp often causes
       // WhatsApp to ignore the file. Use subject for the message text
       // so the file attachment is reliably included.
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         subject: result.message,
         text: result.message,
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (mounted) {

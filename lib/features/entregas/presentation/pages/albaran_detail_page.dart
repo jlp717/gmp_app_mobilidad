@@ -966,9 +966,20 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: 'Nota de entrega - Albarán ${widget.albaran.numeroAlbaran}',
+        sharePositionOrigin: origin,
       );
 
       if (mounted) {
@@ -1020,12 +1031,23 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       // Usar share sheet que permite seleccionar WhatsApp
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: 'Nota de entrega - Albarán ${widget.albaran.numeroAlbaran}\n'
             'Cliente: ${widget.albaran.nombreCliente}\n'
             'Total: ${widget.albaran.importeTotal.toStringAsFixed(2)} EUR',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (mounted) {

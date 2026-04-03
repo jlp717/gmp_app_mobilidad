@@ -1685,10 +1685,21 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
       if (!mounted) return;
 
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       // Use Share to "Save to..."
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: 'Guardar $typeLabel ${doc.serie}-${doc.terminal}-${doc.number}',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       modal.error('Error al descargar: $e',
@@ -1788,9 +1799,20 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
       if (!mounted) return;
 
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: result.message,
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       modal.error('Error preparando WhatsApp: $e',
@@ -1833,9 +1855,20 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
       if (!mounted) return;
 
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: '$typeLabel ${doc.number} - GMP',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       modal.error('Error al compartir: $e',

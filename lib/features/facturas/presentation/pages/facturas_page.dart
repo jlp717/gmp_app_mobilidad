@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
@@ -643,15 +644,15 @@ class _FacturasPageState extends State<FacturasPage>
       modal.close();
       if (!mounted) return;
 
-      // Use Share sheet which works on all Android versions
-      // User can then "Save to Files" or open in PDF viewer
-      final fileName =
-          'Factura_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Guardar $fileName',
-        subject: fileName,
-      );
+      final result = await OpenFilex.open(file.path);
+      if (result.type != ResultType.done && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo abrir el PDF: ${result.message}'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         modal.error('Error al descargar: $e',
@@ -675,10 +676,19 @@ class _FacturasPageState extends State<FacturasPage>
       final text = 'Adjunto: Factura ${factura.numeroFormateado} - '
           '${factura.total.toStringAsFixed(2)} € - Granja Mari Pepa';
 
+      final renderBox = context.findRenderObject() as RenderBox;
+      final size = renderBox.size;
+      final origin = Rect.fromCenter(
+        center: Offset(size.width / 2, size.height / 2),
+        width: 1,
+        height: 1,
+      );
+
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: text,
         subject: 'Factura ${factura.numeroFormateado} - Granja Mari Pepa',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       modal.error('Error al compartir: $e',
@@ -824,10 +834,19 @@ class _FacturasPageState extends State<FacturasPage>
 
       if (!mounted) return;
 
+      final renderBox = context.findRenderObject() as RenderBox;
+      final size = renderBox.size;
+      final origin = Rect.fromCenter(
+        center: Offset(size.width / 2, size.height / 2),
+        width: 1,
+        height: 1,
+      );
+
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: result.message,
         subject: 'Factura ${factura.numeroFormateado}',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (mounted) {

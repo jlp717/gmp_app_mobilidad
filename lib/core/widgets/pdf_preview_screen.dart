@@ -122,10 +122,21 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       }
 
       // Use Share.shareXFiles which works on all Android versions
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       await Share.shareXFiles(
         [XFile(_tempPath!, mimeType: 'application/pdf')],
         text: 'Guardar ${widget.fileName}',
         subject: widget.fileName,
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (mounted) {
@@ -142,9 +153,20 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
   Future<void> _sharePdf() async {
     try {
       if (_tempPath == null) return;
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       await Share.shareXFiles(
         [XFile(_tempPath!, mimeType: 'application/pdf')],
         text: '${widget.title} - ${widget.fileName}',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (mounted) {
