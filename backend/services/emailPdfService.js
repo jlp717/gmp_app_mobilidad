@@ -22,18 +22,18 @@ const logger = require('../middleware/logger');
 const SMTP_CONFIG = {
     host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
     port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: false, // STARTTLS
+    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1',
     auth: {
         user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
-        pass: process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
+        pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
     },
-    connectionTimeout: 20000, // 20s para conexión
-    greetingTimeout: 15000,   // 15s para greeting
-    socketTimeout: 30000,     // 30s para operaciones
+    connectionTimeout: 20000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
     tls: {
         rejectUnauthorized: false
     },
-    pool: true, // Usar connection pooling
+    pool: true,
     maxConnections: 5,
     maxMessages: 100
 };
@@ -216,7 +216,7 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
     }
 
     // Todos los reintentos fallaron
-    logger.error('Error enviando email con PDF después de ${maxRetries} intentos', {
+    logger.error(`Error enviando email con PDF después de ${maxRetries} intentos`, {
         to,
         pdfFilename,
         error: lastError?.message,

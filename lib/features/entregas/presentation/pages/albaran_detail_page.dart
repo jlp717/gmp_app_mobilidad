@@ -20,7 +20,8 @@ class AlbaranDetailPage extends StatefulWidget {
 }
 
 class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
-  final TextEditingController _observacionesController = TextEditingController();
+  final TextEditingController _observacionesController =
+      TextEditingController();
   final List<String> _fotos = [];
   String? _firmaBase64;
   bool _isProcessing = false;
@@ -52,11 +53,12 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
                 children: [
                   Icon(Icons.check_circle, size: 16, color: Colors.white),
                   SizedBox(width: 4),
-                  Text('ENTREGADO', style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    fontSize: 12,
-                  )),
+                  Text('ENTREGADO',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 12,
+                      )),
                 ],
               ),
             )
@@ -73,10 +75,11 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
                 children: [
                   Icon(Icons.euro, size: 16, color: Colors.black87),
                   SizedBox(width: 4),
-                  Text('COBRAR', style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  )),
+                  Text('COBRAR',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      )),
                 ],
               ),
             ),
@@ -134,9 +137,10 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                  child: Icon(Icons.store, 
-                              color: Theme.of(context).primaryColor),
+                  backgroundColor:
+                      Theme.of(context).primaryColor.withOpacity(0.1),
+                  child:
+                      Icon(Icons.store, color: Theme.of(context).primaryColor),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -170,7 +174,7 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
               _buildInfoRow(Icons.phone, widget.albaran.telefono),
             if (widget.albaran.codigoVendedor.isNotEmpty)
               _buildInfoRow(
-                Icons.person, 
+                Icons.person,
                 'Comercial: ${widget.albaran.codigoVendedor}',
               ),
           ],
@@ -300,13 +304,13 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.albaran.esCTR 
-                        ? 'COBRAR EN EFECTIVO' 
+                    widget.albaran.esCTR
+                        ? 'COBRAR EN EFECTIVO'
                         : 'Forma de pago: ${widget.albaran.formaPago}',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: widget.albaran.esCTR 
-                          ? Colors.amber.shade900 
+                      color: widget.albaran.esCTR
+                          ? Colors.amber.shade900
                           : Colors.grey.shade700,
                     ),
                   ),
@@ -323,8 +327,8 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: widget.albaran.esCTR 
-                    ? Colors.amber.shade900 
+                color: widget.albaran.esCTR
+                    ? Colors.amber.shade900
                     : Colors.black87,
               ),
             ),
@@ -403,8 +407,8 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
                                 color: Colors.red,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.close, 
-                                                 size: 14, color: Colors.white),
+                              child: const Icon(Icons.close,
+                                  size: 14, color: Colors.white),
                             ),
                           ),
                         ),
@@ -466,8 +470,8 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
                     : Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.gesture, 
-                               size: 32, color: Colors.grey.shade400),
+                          Icon(Icons.gesture,
+                              size: 32, color: Colors.grey.shade400),
                           const SizedBox(height: 8),
                           Text(
                             'Toca para firmar',
@@ -534,7 +538,8 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.check_circle, color: Colors.green.shade700, size: 32),
+                Icon(Icons.check_circle,
+                    color: Colors.green.shade700, size: 32),
                 const SizedBox(width: 12),
                 Text(
                   '¡Entrega completada!',
@@ -552,7 +557,8 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
             width: double.infinity,
             height: 48,
             child: OutlinedButton.icon(
-              onPressed: () => _showPostDeliveryDialog(popOnClose: false, isResend: true),
+              onPressed: () =>
+                  _showPostDeliveryDialog(popOnClose: false, isResend: true),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.blue.shade700,
                 side: BorderSide(color: Colors.blue.shade300),
@@ -586,11 +592,12 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
                 borderRadius: BorderRadius.circular(16),
               ),
             ),
-            icon: _isProcessing 
+            icon: _isProcessing
                 ? const SizedBox(
-                    width: 20, height: 20,
+                    width: 20,
+                    height: 20,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2, color: Colors.white),
                   )
                 : const Icon(Icons.check_circle, size: 28),
             label: Text(
@@ -600,7 +607,7 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
           ),
         ),
         const SizedBox(height: 12),
-        
+
         // Botones secundarios
         Row(
           children: [
@@ -717,11 +724,13 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
 
   /// Diálogo post-entrega con opciones de ticket
   /// [popOnClose] controla si al cerrar el diálogo se vuelve a la lista
-  Future<void> _showPostDeliveryDialog({bool popOnClose = true, bool isResend = false}) async {
+  Future<void> _showPostDeliveryDialog(
+      {bool popOnClose = true, bool isResend = false}) async {
     await showDialog(
       context: context,
       barrierDismissible: isResend,
-      builder: (ctx) => _PostDeliveryDialog(albaran: widget.albaran, isResend: isResend),
+      builder: (ctx) =>
+          _PostDeliveryDialog(albaran: widget.albaran, isResend: isResend),
     );
     if (popOnClose && mounted) Navigator.pop(context);
   }
@@ -837,7 +846,9 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
           ),
           const SizedBox(height: 12),
           Text(
-            widget.isResend ? 'Reenviar nota de entrega' : 'Entrega realizada con éxito',
+            widget.isResend
+                ? 'Reenviar nota de entrega'
+                : 'Entrega realizada con éxito',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
@@ -910,8 +921,10 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
         onPressed: _isProcessing ? null : onTap,
         icon: isThisProcessing
             ? const SizedBox(
-                width: 18, height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
               )
             : Icon(icon, size: 20),
         label: Text(label),
@@ -919,14 +932,18 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
           backgroundColor: color,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       ),
     );
   }
 
   Future<void> _downloadReceipt() async {
-    setState(() { _isProcessing = true; _processingAction = 'download'; });
+    setState(() {
+      _isProcessing = true;
+      _processingAction = 'download';
+    });
     try {
       final provider = context.read<EntregasProvider>();
       final result = await provider.generateReceipt(albaran: widget.albaran);
@@ -934,7 +951,9 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
       if (result == null || result['pdfBase64'] == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Error al generar el recibo'), backgroundColor: Colors.red),
+            const SnackBar(
+                content: Text('Error al generar el recibo'),
+                backgroundColor: Colors.red),
           );
         }
         return;
@@ -942,18 +961,21 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
 
       final Uint8List bytes = base64Decode(result['pdfBase64'] as String);
       final dir = await getTemporaryDirectory();
-      final fileName = (result['fileName'] as String?) ?? 'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
+      final fileName = (result['fileName'] as String?) ??
+          'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
       await Share.shareXFiles(
-        [XFile(file.path)],
+        [XFile(file.path, mimeType: 'application/pdf')],
         text: 'Nota de entrega - Albarán ${widget.albaran.numeroAlbaran}',
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('PDF generado correctamente'), backgroundColor: Colors.green),
+          const SnackBar(
+              content: Text('PDF generado correctamente'),
+              backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -963,12 +985,19 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
         );
       }
     } finally {
-      if (mounted) setState(() { _isProcessing = false; _processingAction = null; });
+      if (mounted)
+        setState(() {
+          _isProcessing = false;
+          _processingAction = null;
+        });
     }
   }
 
   Future<void> _shareReceipt() async {
-    setState(() { _isProcessing = true; _processingAction = 'whatsapp'; });
+    setState(() {
+      _isProcessing = true;
+      _processingAction = 'whatsapp';
+    });
     try {
       final provider = context.read<EntregasProvider>();
       final result = await provider.generateReceipt(albaran: widget.albaran);
@@ -976,7 +1005,9 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
       if (result == null || result['pdfBase64'] == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Error al generar el recibo'), backgroundColor: Colors.red),
+            const SnackBar(
+                content: Text('Error al generar el recibo'),
+                backgroundColor: Colors.red),
           );
         }
         return;
@@ -984,16 +1015,17 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
 
       final Uint8List bytes = base64Decode(result['pdfBase64'] as String);
       final dir = await getTemporaryDirectory();
-      final fileName = (result['fileName'] as String?) ?? 'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
+      final fileName = (result['fileName'] as String?) ??
+          'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
       // Usar share sheet que permite seleccionar WhatsApp
       await Share.shareXFiles(
-        [XFile(file.path)],
+        [XFile(file.path, mimeType: 'application/pdf')],
         text: 'Nota de entrega - Albarán ${widget.albaran.numeroAlbaran}\n'
-              'Cliente: ${widget.albaran.nombreCliente}\n'
-              'Total: ${widget.albaran.importeTotal.toStringAsFixed(2)} EUR',
+            'Cliente: ${widget.albaran.nombreCliente}\n'
+            'Total: ${widget.albaran.importeTotal.toStringAsFixed(2)} EUR',
       );
     } catch (e) {
       if (mounted) {
@@ -1002,7 +1034,11 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
         );
       }
     } finally {
-      if (mounted) setState(() { _isProcessing = false; _processingAction = null; });
+      if (mounted)
+        setState(() {
+          _isProcessing = false;
+          _processingAction = null;
+        });
     }
   }
 
@@ -1031,11 +1067,15 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
           ElevatedButton(
             onPressed: () {
               final value = emailController.text.trim();
-              if (value.isNotEmpty && value.contains('@') && value.contains('.')) {
+              if (value.isNotEmpty &&
+                  value.contains('@') &&
+                  value.contains('.')) {
                 Navigator.pop(ctx, value);
               } else {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Email no válido'), backgroundColor: Colors.orange),
+                  const SnackBar(
+                      content: Text('Email no válido'),
+                      backgroundColor: Colors.orange),
                 );
               }
             },
@@ -1047,7 +1087,10 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
 
     if (email == null || email.isEmpty) return;
 
-    setState(() { _isProcessing = true; _processingAction = 'email'; });
+    setState(() {
+      _isProcessing = true;
+      _processingAction = 'email';
+    });
     try {
       final provider = context.read<EntregasProvider>();
       final success = await provider.sendReceiptByEmail(
@@ -1058,7 +1101,8 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Email enviado a $email' : 'Error al enviar email'),
+            content: Text(
+                success ? 'Email enviado a $email' : 'Error al enviar email'),
             backgroundColor: success ? Colors.green : Colors.red,
           ),
         );
@@ -1070,7 +1114,11 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
         );
       }
     } finally {
-      if (mounted) setState(() { _isProcessing = false; _processingAction = null; });
+      if (mounted)
+        setState(() {
+          _isProcessing = false;
+          _processingAction = null;
+        });
     }
   }
 }

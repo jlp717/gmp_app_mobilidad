@@ -81,7 +81,8 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       final dir = await getTemporaryDirectory();
       // Use timestamp to prevent file locking issues on repeated opens
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final uniqueName = '${widget.fileName.replaceAll('.pdf', '')}_$timestamp.pdf';
+      final uniqueName =
+          '${widget.fileName.replaceAll('.pdf', '')}_$timestamp.pdf';
       final file = File('${dir.path}/$uniqueName');
       await file.writeAsBytes(widget.pdfBytes);
       if (mounted) {
@@ -142,13 +143,15 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     try {
       if (_tempPath == null) return;
       await Share.shareXFiles(
-        [XFile(_tempPath!)],
+        [XFile(_tempPath!, mimeType: 'application/pdf')],
         text: '${widget.title} - ${widget.fileName}',
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al compartir: $e'), backgroundColor: AppTheme.error),
+          SnackBar(
+              content: Text('Error al compartir: $e'),
+              backgroundColor: AppTheme.error),
         );
       }
     }
@@ -208,7 +211,8 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             const SizedBox(height: 16),
             Text(
               _errorMessage!,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -283,7 +287,8 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       },
       onPageError: (page, error) {
         if (mounted) {
-          setState(() => _errorMessage = 'Error en página ${page ?? 0}: $error');
+          setState(
+              () => _errorMessage = 'Error en página ${page ?? 0}: $error');
         }
       },
     );

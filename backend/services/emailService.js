@@ -3,12 +3,12 @@ const logger = require('../middleware/logger');
 
 // SMTP Configuration
 const SMTP_CONFIG = {
-    host: 'mail.mari-pepa.com',
-    port: 587,
-    secure: false,
+    host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1',
     auth: {
-        user: 'noreply@mari-pepa.com',
-        pass: '6pVyRf3xptxiN3i'
+        user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
+        pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
     },
     tls: {
         rejectUnauthorized: false
