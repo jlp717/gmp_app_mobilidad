@@ -318,6 +318,11 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
 
 // Start server
 async function startServer() {
+  // Validate configuration before starting (throws if JWT secrets missing)
+  const { validateConfig } = require('./src/config/env');
+  validateConfig();
+  logger.info('✅ Configuration validated successfully');
+
   await initDb();
 
   // ─── PHASE 1: Verify/create DB schema using DIRECT connections ────────
@@ -547,5 +552,8 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
-startServer();
+startServer().catch((err) => {
+  logger.error(`🔥 Failed to start server: ${err.message}`);
+  process.exit(1);
+});
 

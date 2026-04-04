@@ -12,7 +12,7 @@ class Db2CommissionRepository extends CommissionRepository {
     this._db = dbPool || new Db2ConnectionPool();
   }
 
-  async getCommissionPayments(vendedorCodes, year, month) {
+  async findByVendor(vendedorCodes, year, month, filters = {}) {
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
       : `CP.VENDEDOR_CODIGO IN (${sanitizeCodeList(vendedorCodes)})`;
@@ -42,6 +42,10 @@ class Db2CommissionRepository extends CommissionRepository {
 
     const result = await this._db.executeParams(sql, params);
     return (result || []).map(row => Commission.fromDbRow(row));
+  }
+
+  async getCommissionPayments(vendedorCodes, year, month) {
+    return this.findByVendor(vendedorCodes, year, month);
   }
 
   async getSummary(vendedorCodes, year) {

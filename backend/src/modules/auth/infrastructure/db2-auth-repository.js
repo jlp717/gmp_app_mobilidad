@@ -13,13 +13,49 @@ class Db2AuthRepository extends AuthRepository {
 
   async findByCode(code) {
     const sql = `
-      SELECT USUARIO, NOMBRE, ROL, EMAIL, PASSWORD_HASH, ACTIVO
-      FROM JAVIER.APP_USUARIOS
-      WHERE USUARIO = ?
+      SELECT V.CODIGOVENDEDOR AS USUARIO, V.NOMBREVENDEDOR AS NOMBRE,
+        CASE WHEN VX.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+        '' AS EMAIL, '' AS PASSWORD_HASH, 1 AS ACTIVO
+      FROM DSEDAC.VDD V
+      LEFT JOIN DSEDAC.VDDX VX ON VX.CODIGOVENDEDOR = V.CODIGOVENDEDOR
+      WHERE V.CODIGOVENDEDOR = ?
     `;
     const result = await this._db.executeParams(sql, [code]);
     if (!result || result.length === 0) return null;
     return User.fromDbRow(result[0]);
+  }
+
+  async findByCredentials(username, password) {
+    const sql = `
+      SELECT V.CODIGOVENDEDOR AS USUARIO, V.NOMBREVENDEDOR AS NOMBRE,
+        CASE WHEN VX.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+        '' AS EMAIL, PL.CODIGOPIN AS PASSWORD_HASH, 1 AS ACTIVO
+      FROM DSEDAC.VDD V
+      LEFT JOIN DSEDAC.VDDX VX ON VX.CODIGOVENDEDOR = V.CODIGOVENDEDOR
+      LEFT JOIN DSEDAC.VDPL1 PL ON PL.CODIGOVENDEDOR = V.CODIGOVENDEDOR
+      WHERE V.CODIGOVENDEDOR = ?
+    `;
+    const result = await this._db.executeParams(sql, [username]);
+    if (!result || result.length === 0) return null;
+    const user = User.fromDbRow(result[0]);
+    // PIN-based auth: compare plain text PIN
+    if (user._passwordHash === password) {
+      return user;
+    }
+    return null;
+  }
+
+  async updatePassword(userId, newPasswordHash) {
+    // Update PIN in VDPL1 table
+    const sql = `
+      MERGE INTO DSEDAC.VDPL1 PL
+      USING (VALUES (?)) AS V(CODIGOVENDEDOR)
+      ON PL.CODIGOVENDEDOR = V.CODIGOVENDEDOR
+      WHEN MATCHED THEN UPDATE SET PL.CODIGOPIN = ?
+      WHEN NOT MATCHED THEN INSERT (CODIGOVENDEDOR, CODIGOPIN) VALUES (?, ?)
+    `;
+    await this._db.executeParams(sql, [userId, newPasswordHash, userId, newPasswordHash]);
+    return true;
   }
 
   async logLoginAttempt(userId, success, ip) {
