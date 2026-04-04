@@ -31,6 +31,8 @@ const { initCache, getCacheStats } = require('./services/redis-cache');
 const { networkOptimizer, responseCoalescing } = require('./middleware/network-optimizer');
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
+const { AdvancedRateLimiter } = require('./src/core/infrastructure/security/advanced-rate-limiter');
+const { refreshTokenManager } = require('./src/core/infrastructure/security/refresh-token-manager');
 
 // =============================================================================
 // FEATURE TOGGLE: USE_TS_ROUTES
@@ -193,6 +195,49 @@ app.use((req, res, next) => {
 
 // Rate Limiting
 app.use('/api/', globalLimiter);
+
+// Advanced rate limiter for login endpoint (prevent brute force)
+const advancedRateLimiter = new AdvancedRateLimiter();
+app.use('/api/auth/login', advancedRateLimiter.middleware());
+
+// Refresh token endpoint
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'refreshToken required' });
+    }
+    const tokens = refreshTokenManager.rotateToken(refreshToken);
+    res.json(tokens);
+  } catch (err) {
+    if (err.name === 'TokenError') {
+      return res.status(401).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', verifyToken, async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (refreshToken) {
+      refreshTokenManager.revokeToken(refreshToken);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Cache stats endpoint (admin only)
+app.get('/api/admin/cache-stats', verifyToken, (req, res) => {
+  const { performanceCache } = require('./src/core/infrastructure/cache/performance-cache');
+  res.json({
+    performance: performanceCache.getStats(),
+    timestamp: new Date().toISOString()
+  });
+});
 
 // =============================================================================
 // PUBLIC ROUTES (No Auth Required)

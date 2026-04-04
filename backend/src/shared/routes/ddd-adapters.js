@@ -23,6 +23,7 @@ const { Db2RuteroRepository } = require('../modules/rutero');
 const { Db2AuthRepository } = require('../modules/auth');
 const { Db2ConnectionPool } = require('../core/infrastructure/database/db2-connection-pool');
 const { ResponseCache } = require('../core/infrastructure/cache/response-cache');
+const { performanceCache } = require('../core/infrastructure/cache/performance-cache');
 
 // TTL constants (milliseconds)
 const TTL = {
@@ -59,8 +60,24 @@ function getCache() {
   return responseCache;
 }
 
-// Cache helper
-async function withCache(cache, key, ttl, fetchFn, res) {
+// Cache helper with performance optimization for ALL queries
+async function withCache(cache, key, ttl, fetchFn, res, req) {
+  const isAllQuery = req?.query?.vendedorCodes === 'ALL';
+  
+  if (isAllQuery) {
+    // Use performance cache with aggressive TTL for ALL queries
+    const perfCacheKey = `ALL:${key}`;
+    const role = req?.user?.role || 'COMERCIAL';
+    const ttlConfig = performanceCache.getTTL(role, true);
+    
+    const result = await performanceCache.get(perfCacheKey, fetchFn, ttlConfig);
+    res.set('X-Cache-Source', result.source);
+    res.set('X-Cache-Hit', result.cached ? 'true' : 'false');
+    res.set('X-Query-Type', 'ALL-OPTIMIZED');
+    return res.json(result.data);
+  }
+  
+  // Standard cache for non-ALL queries
   const cached = await cache.get(key);
   if (cached) return res.json(cached);
   const result = await fetchFn();
@@ -88,9 +105,11 @@ function createAuthRoutes() {
       }
 
       const { verifyPassword } = require('../../middleware/auth');
-      const passwordValid = user._passwordHash
-        ? await verifyPassword(password, user._passwordHash)
-        : password === user._passwordHash;
+      if (!user._passwordHash) {
+        logger.warn(`[DDD-AUTH] User ${username} has no password hash - login denied`);
+        return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
+      }
+      const passwordValid = await verifyPassword(password, user._passwordHash);
 
       if (!passwordValid) {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
@@ -146,7 +165,7 @@ function createPedidosRoutes() {
           offset: parseInt(offset) || 0
         });
         return { success: true, products: result.products, count: result.count };
-      }, res);
+      }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /products: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });

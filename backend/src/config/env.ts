@@ -68,8 +68,20 @@ export const config = {
 
   // JWT - Autenticación
   jwt: {
-    accessSecret: process.env.JWT_ACCESS_SECRET || 'dev-access-secret-change-in-production-32chars',
-    refreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-in-production-32chars',
+    accessSecret: (() => {
+      const secret = process.env.JWT_ACCESS_SECRET;
+      if (!secret || secret.length < 32) {
+        throw new Error('JWT_ACCESS_SECRET must be set in environment and be at least 32 characters. Generate with: openssl rand -hex 32');
+      }
+      return secret;
+    })(),
+    refreshSecret: (() => {
+      const secret = process.env.JWT_REFRESH_SECRET;
+      if (!secret || secret.length < 32) {
+        throw new Error('JWT_REFRESH_SECRET must be set in environment and be at least 32 characters. Generate with: openssl rand -hex 32');
+      }
+      return secret;
+    })(),
     accessExpires: process.env.JWT_ACCESS_EXPIRES || '15m',
     refreshExpires: process.env.JWT_REFRESH_EXPIRES || '7d',
   },
