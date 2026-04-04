@@ -46,13 +46,14 @@ class Db2AuthRepository extends AuthRepository {
   }
 
   async updatePassword(userId, newPasswordHash) {
-    // Update PIN in VDPL1 table
+    // NEVER write to DSEDAC/DSED (ERP tables are read-only)
+    // Store password hash in JAVIER.APP_USUARIOS (our app's table)
     const sql = `
-      MERGE INTO DSEDAC.VDPL1 PL
-      USING (VALUES (?)) AS V(CODIGOVENDEDOR)
-      ON PL.CODIGOVENDEDOR = V.CODIGOVENDEDOR
-      WHEN MATCHED THEN UPDATE SET PL.CODIGOPIN = ?
-      WHEN NOT MATCHED THEN INSERT (CODIGOVENDEDOR, CODIGOPIN) VALUES (?, ?)
+      MERGE INTO JAVIER.APP_USUARIOS U
+      USING (VALUES (?)) AS V(USUARIO)
+      ON U.USUARIO = V.USUARIO
+      WHEN MATCHED THEN UPDATE SET U.PASSWORD_HASH = ?
+      WHEN NOT MATCHED THEN INSERT (USUARIO, PASSWORD_HASH, ACTIVO) VALUES (?, ?, 1)
     `;
     await this._db.executeParams(sql, [userId, newPasswordHash, userId, newPasswordHash]);
     return true;

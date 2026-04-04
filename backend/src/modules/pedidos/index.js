@@ -9,6 +9,7 @@ const { ConfirmOrderUseCase, ConfirmOrderError } = require('./application/confir
 const { GetProductDetailUseCase } = require('./application/get-product-detail-usecase');
 const { GetPromotionsUseCase } = require('./application/get-promotions-usecase');
 const { GetOrderHistoryUseCase } = require('./application/get-order-history-usecase');
+const { GetOrderStatsUseCase } = require('./application/get-order-stats-usecase');
 
 module.exports = {
   Product,
@@ -21,5 +22,6 @@ module.exports = {
   ConfirmOrderError,
   GetProductDetailUseCase,
   GetPromotionsUseCase,
-  GetOrderHistoryUseCase
+  GetOrderHistoryUseCase,
+  GetOrderStatsUseCase
 };

@@ -7,6 +7,8 @@ const { Db2RepartidorRepository } = require('./infrastructure/db2-repartidor-rep
 const { GetDeliveryRoutesUseCase } = require('./application/get-delivery-routes-usecase');
 const { GetDeliveryDetailUseCase } = require('./application/get-delivery-detail-usecase');
 const { UpdateDeliveryStatusUseCase } = require('./application/update-delivery-status-usecase');
+const { GetHistoricoUseCase } = require('./application/get-historico-usecase');
+const { GetCommissionsUseCase } = require('./application/get-commissions-usecase');
 
 module.exports = {
   DeliveryRoute,
@@ -15,5 +17,7 @@ module.exports = {
   Db2RepartidorRepository,
   GetDeliveryRoutesUseCase,
   GetDeliveryDetailUseCase,
-  UpdateDeliveryStatusUseCase
+  UpdateDeliveryStatusUseCase,
+  GetHistoricoUseCase,
+  GetCommissionsUseCase
 };

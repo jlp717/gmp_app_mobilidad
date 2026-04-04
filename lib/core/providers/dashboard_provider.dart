@@ -23,11 +23,14 @@ class DashboardProvider with ChangeNotifier {
   bool _isRefreshing = false;
   String? _error;
 
-  // Cache layer for JEFE DE VENTAS optimization
+  // Cache layer for JEFE DE VENTAS optimization with bounded eviction
   static final Map<String, DashboardCacheEntry> _cache = {};
+  static const int _maxCacheEntries =
+      50; // Bounded cache to prevent memory leak
   static const Duration _cacheTtlJefe = Duration(seconds: 30);
   static const Duration _cacheTtlComercial = Duration(minutes: 2);
   static const Duration _cacheTtlRepartidor = Duration(minutes: 1);
+  static final List<String> _cacheAccessOrder = []; // For LRU eviction
 
   DashboardProvider(
     this._vendedorCodes, {
@@ -118,6 +121,17 @@ class DashboardProvider with ChangeNotifier {
       ]);
 
       if (_metrics != null) {
+        // LRU eviction: update access order
+        _cacheAccessOrder.remove(_cacheKey);
+        _cacheAccessOrder.add(_cacheKey);
+
+        // Bounded cache: evict oldest if over limit
+        while (_cache.length >= _maxCacheEntries &&
+            _cacheAccessOrder.isNotEmpty) {
+          final oldest = _cacheAccessOrder.removeAt(0);
+          _cache.remove(oldest);
+        }
+
         _cache[_cacheKey] = DashboardCacheEntry(
           metrics: _metrics!,
           recentSales: _recentSales,

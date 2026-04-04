@@ -10,6 +10,8 @@ const { GetTopClientsUseCase } = require('./application/get-top-clients-usecase'
 const { GetTopProductsUseCase } = require('./application/get-top-products-usecase');
 const { GetRecentSalesUseCase } = require('./application/get-recent-sales-usecase');
 const { GetYoYComparisonUseCase } = require('./application/get-yoy-comparison-usecase');
+const { GetHierarchyDataUseCase } = require('./application/get-hierarchy-data-usecase');
+const { GetClientConditionsUseCase } = require('./application/get-client-conditions-usecase');
 
 module.exports = {
   DashboardMetrics,
@@ -23,5 +25,7 @@ module.exports = {
   GetTopClientsUseCase,
   GetTopProductsUseCase,
   GetRecentSalesUseCase,
-  GetYoYComparisonUseCase
+  GetYoYComparisonUseCase,
+  GetHierarchyDataUseCase,
+  GetClientConditionsUseCase
 };
