@@ -15,13 +15,12 @@ class Db2RepartidorRepository extends RepartidorRepository {
     const sql = `
       SELECT 
         RC.DIA,
-        RC.CODCLI,
-        COALESCE(C.NOMCLI, RC.CODCLI) AS NOMCLI,
-        C.DIRCLI,
-        RC.ORDEN,
-        RC.TIEMPO_EST
+        RC.CLIENTE AS CODIGOCLIENTE,
+        COALESCE(C.NOMBRECLIENTE, RC.CLIENTE) AS NOMBRECLIENTE,
+        C.DIRECCION,
+        RC.ORDEN
       FROM JAVIER.RUTERO_CONFIG RC
-      LEFT JOIN JAVIER.CLI C ON TRIM(C.CODCLI) = TRIM(RC.CODCLI)
+      LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(RC.CLIENTE)
       WHERE RC.VENDEDOR = ?
         AND RC.DIA BETWEEN ? AND ?
         AND RC.ORDEN >= 0
@@ -42,12 +41,12 @@ class Db2RepartidorRepository extends RepartidorRepository {
       const day = row.DIA;
       if (!routes[day]) {
         routes[day] = new DeliveryRoute({
-          id: `${day}`,
+          id: `${day}-${row.CODIGOCLIENTE}`,
           day,
-          clientCode: row.CODCLI,
-          clientName: row.NOMCLI,
-          address: row.DIRCLI,
-          estimatedTime: row.TIEMPO_EST
+          clientCode: row.CODIGOCLIENTE,
+          clientName: row.NOMBRECLIENTE,
+          address: row.DIRECCION,
+          estimatedTime: row.ORDEN
         });
       }
     });
@@ -56,27 +55,38 @@ class Db2RepartidorRepository extends RepartidorRepository {
   }
 
   async getDayDeliveries(repartidorCode, date) {
+    const dateParts = date.split('-');
+    const year = dateParts[0];
+    const month = parseInt(dateParts[1]);
+    const day = parseInt(dateParts[2]);
+
     const sql = `
       SELECT 
-        CAC.NUMALB AS ALBARAN,
-        CAC.CODCLI AS CLIENTE,
-        COALESCE(CLI.NOMCLI, CAC.CODCLI) AS NOMBRE_CLIENTE,
-        CAC.FECHA,
-        CAC.IMPORTETOTAL AS TOTAL,
-        COALESCE(DS.ESTADO, 'PENDIENTE') AS ESTADO,
-        CACFIRMAS.FIRMA_PATH AS FIRMA
-      FROM JAVIER.CAC
-      LEFT JOIN JAVIER.CLI CLI ON TRIM(CLI.CODCLI) = TRIM(CAC.CODCLI)
-      LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.NUMALB = CAC.NUMALB
-      LEFT JOIN JAVIER.CACFIRMAS ON CACFIRMAS.NUMALB = CAC.NUMALB
-      WHERE CAC.VENDEDOR = ?
-        AND CAC.FECHA = ?
-      ORDER BY CAC.NUMALB
+        OPC.NUMEROORDENPREPARACION AS NUMEROORDEN,
+        OPC.EJERCICIOORDENPREPARACION AS EJERCICIO,
+        OPC.CODIGOCLIENTEALBARAN AS CLIENTE,
+        COALESCE(CLI.NOMBRECLIENTE, OPC.CODIGOCLIENTEALBARAN) AS NOMBRE_CLIENTE,
+        OPC.IMPORTETOTAL AS TOTAL,
+        COALESCE(DS.STATUS, 'PENDIENTE') AS ESTADO,
+        DS.FIRMA_PATH AS FIRMA
+      FROM DSEDAC.CPC OPC
+      INNER JOIN DSEDAC.OPP OP 
+        ON OP.NUMEROORDENPREPARACION = OPC.NUMEROORDENPREPARACION
+        AND OP.EJERCICIOORDENPREPARACION = OPC.EJERCICIOORDENPREPARACION
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(OPC.CODIGOCLIENTEALBARAN)
+      LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+        ON DS.REPARTIDOR_ID = TRIM(OP.CODIGOREPARTIDOR)
+        AND DS.ID = OPC.NUMEROORDENPREPARACION
+      WHERE OP.CODIGOREPARTIDOR = ?
+        AND OPC.DIADOCUMENTO = ?
+        AND OPC.MESDOCUMENTO = ?
+        AND OPC.ANODOCUMENTO = ?
+      ORDER BY OPC.NUMEROORDENPREPARACION
     `;
 
-    const result = await this._db.executeParams(sql, [repartidorCode, date]);
+    const result = await this._db.executeParams(sql, [repartidorCode, day, month, year]);
     return (result || []).map(row => new DeliveryItem({
-      albaran: row.ALBARAN,
+      albaran: `${row.EJERCICIO}-${row.NUMEROORDEN}`,
       clientCode: row.CLIENTE,
       clientName: row.NOMBRE_CLIENTE,
       total: parseFloat(row.TOTAL || 0),
@@ -88,29 +98,33 @@ class Db2RepartidorRepository extends RepartidorRepository {
   async getDeliveryDetail(albaranNumber) {
     const cabSql = `
       SELECT 
-        CAC.NUMALB AS ALBARAN,
-        CAC.CODCLI AS CLIENTE,
-        COALESCE(CLI.NOMCLI, CAC.CODCLI) AS NOMBRE_CLIENTE,
-        CAC.FECHA,
-        CAC.IMPORTETOTAL AS TOTAL,
-        COALESCE(DS.ESTADO, 'PENDIENTE') AS ESTADO
-      FROM JAVIER.CAC
-      LEFT JOIN JAVIER.CLI CLI ON TRIM(CLI.CODCLI) = TRIM(CAC.CODCLI)
-      LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.NUMALB = CAC.NUMALB
-      WHERE CAC.NUMALB = ?
+        OPC.NUMEROORDENPREPARACION AS NUMEROORDEN,
+        OPC.EJERCICIOORDENPREPARACION AS EJERCICIO,
+        OPC.CODIGOCLIENTEALBARAN AS CLIENTE,
+        COALESCE(CLI.NOMBRECLIENTE, OPC.CODIGOCLIENTEALBARAN) AS NOMBRE_CLIENTE,
+        OPC.IMPORTETOTAL AS TOTAL,
+        COALESCE(DS.STATUS, 'PENDIENTE') AS ESTADO
+      FROM DSEDAC.CPC OPC
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(OPC.CODIGOCLIENTEALBARAN)
+      LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = OPC.NUMEROORDENPREPARACION
+      WHERE OPC.NUMEROORDENPREPARACION = ?
     `;
 
     const linSql = `
       SELECT 
-        CPC.CODART AS PRODUCTO,
-        COALESCE(ART.DESCART, CPC.CODART) AS NOMBRE,
-        CPC.CANTIDAD,
-        CPC.PRECIO,
-        CPC.IMPORTETOTAL AS TOTAL_LINEA
-      FROM JAVIER.CPC
-      LEFT JOIN JAVIER.ART ART ON ART.CODART = CPC.CODART
-      WHERE CPC.NUMALB = ?
-      ORDER BY CPC.LINEA
+        LAC.CODIGOARTICULO AS PRODUCTO,
+        COALESCE(ART.DESCRIPCIONARTICULO, LAC.CODIGOARTICULO) AS NOMBRE,
+        LAC.CANTIDADUNIDADES AS CANTIDAD,
+        LAC.IMPORTEVENTA AS PRECIO,
+        LAC.IMPORTECOSTO AS COSTO
+      FROM DSEDAC.LAC LAC
+      INNER JOIN DSEDAC.CAC CAC
+        ON LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
+        AND LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
+        AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
+        AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN
+      WHERE CAC.NUMEROORDENPREPARACION = ?
+      ORDER BY LAC.CODIGOARTICULO
     `;
 
     const [cab, lines] = await Promise.all([
@@ -121,7 +135,7 @@ class Db2RepartidorRepository extends RepartidorRepository {
     if (!cab || cab.length === 0) return null;
 
     return new DeliveryItem({
-      albaran: cab[0].ALBARAN,
+      albaran: `${cab[0].EJERCICIO}-${cab[0].NUMEROORDEN}`,
       clientCode: cab[0].CLIENTE,
       clientName: cab[0].NOMBRE_CLIENTE,
       items: lines || [],
@@ -133,45 +147,48 @@ class Db2RepartidorRepository extends RepartidorRepository {
   async updateStatus(albaranNumber, status, observations = '') {
     const sql = `
       MERGE INTO JAVIER.DELIVERY_STATUS DS
-      USING (VALUES (?)) AS V(NUMALB)
-      ON DS.NUMALB = V.NUMALB
-      WHEN MATCHED THEN UPDATE SET DS.ESTADO = ?, DS.FECHA_ACT = CURRENT TIMESTAMP, DS.OBSERVACIONES = ?
-      WHEN NOT MATCHED THEN INSERT (NUMALB, ESTADO, FECHA_ACT, OBSERVACIONES) VALUES (?, ?, CURRENT TIMESTAMP, ?)
+      USING (VALUES (?, ?)) AS V(ID, REPARTIDOR_ID)
+      ON DS.ID = V.ID
+      WHEN MATCHED THEN UPDATE SET DS.STATUS = ?, DS.OBSERVACIONES = ?, DS.UPDATED_AT = CURRENT TIMESTAMP
+      WHEN NOT MATCHED THEN INSERT (ID, STATUS, OBSERVACIONES, REPARTIDOR_ID, UPDATED_AT) VALUES (?, ?, ?, ?, CURRENT TIMESTAMP)
     `;
 
     await this._db.executeParams(sql, [
-      albaranNumber, status, observations,
-      albaranNumber, status, observations
+      albaranNumber, '', status, observations,
+      albaranNumber, status, observations, ''
     ]);
 
     return { albaranNumber, status, updatedAt: new Date() };
   }
 
-  async registerSignature(albaranNumber, signaturePath) {
+  async registerSignature(albaranNumber, signaturePath, latitud = null, longitud = null) {
     const sql = `
-      MERGE INTO JAVIER.CACFIRMAS CF
-      USING (VALUES (?)) AS V(NUMALB)
-      ON CF.NUMALB = V.NUMALB
-      WHEN MATCHED THEN UPDATE SET CF.FIRMA_PATH = ?, CF.FECHA_FIRMA = CURRENT TIMESTAMP
-      WHEN NOT MATCHED THEN INSERT (NUMALB, FIRMA_PATH, FECHA_FIRMA) VALUES (?, ?, CURRENT TIMESTAMP)
+      MERGE INTO JAVIER.DELIVERY_STATUS DS
+      USING (VALUES (?)) AS V(ID)
+      ON DS.ID = V.ID
+      WHEN MATCHED THEN UPDATE SET DS.FIRMA_PATH = ?, DS.LATITUD = ?, DS.LONGITUD = ?, DS.UPDATED_AT = CURRENT TIMESTAMP
+      WHEN NOT MATCHED THEN INSERT (ID, FIRMA_PATH, LATITUD, LONGITUD, STATUS, UPDATED_AT) VALUES (?, ?, ?, ?, 'ENTREGADO', CURRENT TIMESTAMP)
     `;
 
-    await this._db.executeParams(sql, [albaranNumber, signaturePath, albaranNumber, signaturePath]);
+    await this._db.executeParams(sql, [
+      albaranNumber, signaturePath, latitud, longitud,
+      albaranNumber, signaturePath, latitud, longitud
+    ]);
 
-    return { albaranNumber, signaturePath };
+    return { albaranNumber, signaturePath, latitud, longitud };
   }
 
   async getHistorico(repartidorCode, filters = {}) {
     const { year, month, limit = 50, offset = 0 } = filters;
-    let whereClause = 'WHERE CAC.VENDEDOR = ?';
+    let whereClause = 'WHERE OP.CODIGOREPARTIDOR = ?';
     const params = [repartidorCode];
 
     if (year) {
-      whereClause += ' AND YEAR(CAC.FECHA) = ?';
+      whereClause += ' AND OPC.ANODOCUMENTO = ?';
       params.push(year);
     }
     if (month) {
-      whereClause += ' AND MONTH(CAC.FECHA) = ?';
+      whereClause += ' AND OPC.MESDOCUMENTO = ?';
       params.push(month);
     }
 
@@ -179,17 +196,20 @@ class Db2RepartidorRepository extends RepartidorRepository {
 
     const sql = `
       SELECT 
-        CAC.NUMALB AS ALBARAN,
-        CAC.CODCLI AS CLIENTE,
-        COALESCE(CLI.NOMCLI, CAC.CODCLI) AS NOMBRE_CLIENTE,
-        CAC.FECHA,
-        CAC.IMPORTETOTAL AS TOTAL,
-        COALESCE(DS.ESTADO, 'PENDIENTE') AS ESTADO
-      FROM JAVIER.CAC
-      LEFT JOIN JAVIER.CLI CLI ON TRIM(CLI.CODCLI) = TRIM(CAC.CODCLI)
-      LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.NUMALB = CAC.NUMALB
+        OPC.NUMEROORDENPREPARACION AS NUMEROORDEN,
+        OPC.EJERCICIOORDENPREPARACION AS EJERCICIO,
+        OPC.CODIGOCLIENTEALBARAN AS CLIENTE,
+        COALESCE(CLI.NOMBRECLIENTE, OPC.CODIGOCLIENTEALBARAN) AS NOMBRE_CLIENTE,
+        OPC.IMPORTETOTAL AS TOTAL,
+        COALESCE(DS.STATUS, 'PENDIENTE') AS ESTADO
+      FROM DSEDAC.CPC OPC
+      INNER JOIN DSEDAC.OPP OP 
+        ON OP.NUMEROORDENPREPARACION = OPC.NUMEROORDENPREPARACION
+        AND OP.EJERCICIOORDENPREPARACION = OPC.EJERCICIOORDENPREPARACION
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(OPC.CODIGOCLIENTEALBARAN)
+      LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = OPC.NUMEROORDENPREPARACION
       ${whereClause}
-      ORDER BY CAC.FECHA DESC
+      ORDER BY OPC.ANODOCUMENTO DESC, OPC.MESDOCUMENTO DESC, OPC.DIADOCUMENTO DESC
       FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
     `;
 
@@ -197,19 +217,22 @@ class Db2RepartidorRepository extends RepartidorRepository {
   }
 
   async getCommissions(repartidorCode, year, month) {
-    const yearFilter = year ? `AND YEAR(CAC.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(CAC.FECHA) = ?` : '';
+    const yearFilter = year ? `AND OPC.ANODOCUMENTO = ?` : '';
+    const monthFilter = month ? `AND OPC.MESDOCUMENTO = ?` : '';
     const params = [repartidorCode];
     if (year) params.push(year);
     if (month) params.push(month);
 
     const sql = `
       SELECT 
-        COALESCE(SUM(CAC.IMPORTETOTAL), 0) AS TOTAL_ENTREGADO,
-        COUNT(DISTINCT CAC.NUMALB) AS TOTAL_ALBARANES,
-        COUNT(DISTINCT CAC.CODCLI) AS TOTAL_CLIENTES
-      FROM JAVIER.CAC
-      WHERE CAC.VENDEDOR = ?
+        COALESCE(SUM(OPC.IMPORTETOTAL), 0) AS TOTAL_ENTREGADO,
+        COUNT(DISTINCT OPC.NUMEROORDENPREPARACION) AS TOTAL_ALBARANES,
+        COUNT(DISTINCT OPC.CODIGOCLIENTEALBARAN) AS TOTAL_CLIENTES
+      FROM DSEDAC.CPC OPC
+      INNER JOIN DSEDAC.OPP OP 
+        ON OP.NUMEROORDENPREPARACION = OPC.NUMEROORDENPREPARACION
+        AND OP.EJERCICIOORDENPREPARACION = OPC.EJERCICIOORDENPREPARACION
+      WHERE OP.CODIGOREPARTIDOR = ?
         ${yearFilter}
         ${monthFilter}
     `;

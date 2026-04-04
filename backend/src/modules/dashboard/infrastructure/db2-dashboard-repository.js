@@ -1,6 +1,6 @@
 /**
  * Dashboard Repository Implementation - DB2
- * Optimized queries with vendor code 'ALL' handling
+ * Uses REAL schema: DSED.LACLAE (sales view), DSEDAC.CLI (clients), DSEDAC.ART (products)
  */
 const { DashboardRepository } = require('../domain/dashboard-repository');
 const { DashboardMetrics, SalesEvolutionPoint, TopClient, TopProduct } = require('../domain/dashboard-metrics');
@@ -14,25 +14,25 @@ class Db2DashboardRepository extends DashboardRepository {
   }
 
   async getMetrics(vendedorCodes, year, month) {
-    const vendorCol = VENDOR_COLUMN;
+    const vendorCol = VENDOR_COLUMN; // R1_T8CDVD or LCCDVD depending on date
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
       : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
 
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND LCMMDC = ?` : '';
+    const monthFilter = month ? `AND LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
 
     const sql = `
       SELECT 
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS,
-        COALESCE(SUM(L.BULTOS), 0) AS CAJAS
-      FROM JAVIER.LACLAE L
+        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS,
+        COALESCE(SUM(LCCTEV), 0) AS CAJAS
+      FROM DSED.LACLAE
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -49,22 +49,22 @@ class Db2DashboardRepository extends DashboardRepository {
       ? '1=1'
       : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND LCAADC = ?` : '';
     const params = [];
     if (year) params.push(year);
 
     const sql = `
       SELECT 
-        YEAR(L.FECHA) AS ANIO,
-        MONTH(L.FECHA) AS MES,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS
-      FROM JAVIER.LACLAE L
+        LCAADC AS ANIO,
+        LCMMDC AS MES,
+        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS
+      FROM DSED.LACLAE
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
-      GROUP BY YEAR(L.FECHA), MONTH(L.FECHA)
+      GROUP BY LCAADC, LCMMDC
       ORDER BY ANIO, MES
       FETCH FIRST ${months} ROWS ONLY
     `;
@@ -84,8 +84,8 @@ class Db2DashboardRepository extends DashboardRepository {
       ? '1=1'
       : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND LCAADC = ?` : '';
+    const monthFilter = month ? `AND LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
@@ -93,18 +93,18 @@ class Db2DashboardRepository extends DashboardRepository {
 
     const sql = `
       SELECT 
-        L.CODIGO AS CODIGO,
-        COALESCE(C.NOMBRE, L.CODIGO) AS NOMBRE,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.CLI C ON TRIM(C.CODCLI) = TRIM(L.CODIGO)
+        L.LCCDCL AS CODIGO,
+        COALESCE(CLI.NOMBRECLIENTE, L.LCCDCL) AS NOMBRE,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
         ${monthFilter}
-      GROUP BY L.CODIGO, C.NOMBRE
+      GROUP BY L.LCCDCL, CLI.NOMBRECLIENTE
       ORDER BY VENTAS DESC
       FETCH FIRST ? ROWS ONLY
     `;
@@ -125,8 +125,8 @@ class Db2DashboardRepository extends DashboardRepository {
       ? '1=1'
       : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND LCAADC = ?` : '';
+    const monthFilter = month ? `AND LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
@@ -134,18 +134,18 @@ class Db2DashboardRepository extends DashboardRepository {
 
     const sql = `
       SELECT 
-        L.CODART AS CODIGO,
-        COALESCE(A.DESCART, L.CODART) AS NOMBRE,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.CANTIDAD), 0) AS UNIDADES,
-        COALESCE(A.CODFAM, '') AS FAMILIA
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.ART A ON A.CODART = L.CODART
+        L.LCCDRF AS CODIGO,
+        COALESCE(ART.DESCRIPCIONARTICULO, L.LCCDRF) AS NOMBRE,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
+        COALESCE(ART.CODIGOFAMILIA, '') AS FAMILIA
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
         ${monthFilter}
-      GROUP BY L.CODART, A.DESCART, A.CODFAM
+      GROUP BY L.LCCDRF, ART.DESCRIPCIONARTICULO, ART.CODIGOFAMILIA
       ORDER BY VENTAS DESC
       FETCH FIRST ? ROWS ONLY
     `;
@@ -169,19 +169,21 @@ class Db2DashboardRepository extends DashboardRepository {
 
     const sql = `
       SELECT 
-        L.FECHA,
-        L.CODIGO AS CLIENTE,
-        COALESCE(C.NOMBRE, L.CODIGO) AS NOMBRE_CLIENTE,
-        L.CODART AS PRODUCTO,
-        COALESCE(A.DESCART, L.CODART) AS NOMBRE_PRODUCTO,
-        L.IMPORTE AS VENTAS,
-        L.CANTIDAD AS CANTIDAD
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.CLI C ON TRIM(C.CODCLI) = TRIM(L.CODIGO)
-      LEFT JOIN JAVIER.ART A ON A.CODART = L.CODART
+        L.LCAADC AS ANIO,
+        L.LCMMDC AS MES,
+        L.LCDDDC AS DIA,
+        L.LCCDCL AS CLIENTE,
+        COALESCE(CLI.NOMBRECLIENTE, L.LCCDCL) AS NOMBRE_CLIENTE,
+        L.LCCDRF AS PRODUCTO,
+        COALESCE(ART.DESCRIPCIONARTICULO, L.LCCDRF) AS NOMBRE_PRODUCTO,
+        L.LCIMVT AS VENTAS,
+        L.LCCTUD AS CANTIDAD
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
       WHERE ${vendorFilter}
         AND ${dateFilter}
-      ORDER BY L.FECHA DESC
+      ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
       FETCH FIRST ? ROWS ONLY
     `;
 
@@ -197,15 +199,15 @@ class Db2DashboardRepository extends DashboardRepository {
 
     const sql = `
       SELECT 
-        YEAR(L.FECHA) AS ANIO,
-        MONTH(L.FECHA) AS MES,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN
-      FROM JAVIER.LACLAE L
+        LCAADC AS ANIO,
+        LCMMDC AS MES,
+        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN
+      FROM DSED.LACLAE
       WHERE ${vendorFilter}
         AND ${dateFilter}
-        AND YEAR(L.FECHA) >= YEAR(CURRENT DATE) - 1
-      GROUP BY YEAR(L.FECHA), MONTH(L.FECHA)
+        AND LCAADC >= YEAR(CURRENT DATE) - 1
+      GROUP BY LCAADC, LCMMDC
       ORDER BY ANIO, MES
     `;
 
@@ -218,18 +220,18 @@ class Db2DashboardRepository extends DashboardRepository {
       ? '1=1'
       : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND LCAADC = ?` : '';
     const params = [];
     if (year) params.push(year);
 
     const sql = `
       SELECT 
         ${vendorCol} AS VENDEDOR,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS,
-        COUNT(DISTINCT L.CODIGO) AS CLIENTES
-      FROM JAVIER.LACLAE L
+        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS,
+        COUNT(DISTINCT LCCDCL) AS CLIENTES
+      FROM DSED.LACLAE
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -243,24 +245,22 @@ class Db2DashboardRepository extends DashboardRepository {
   async getClientConditions(vendedorCodes) {
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `CLI.CODVEN IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `CLI.CODIGOVENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
 
     const sql = `
       SELECT 
-        CLI.CODCLI AS CODIGO,
-        CLI.NOMCLI AS NOMBRE,
-        CLI.DIRCLI AS DIRECCION,
-        CLI.POBLAC AS POBLACION,
-        CLI.PROVINC,
-        CLI.TELCLI AS TELEFONO,
+        CLI.CODIGOCLIENTE AS CODIGO,
+        CLI.NOMBRECLIENTE AS NOMBRE,
+        CLI.DIRECCION,
+        CLI.POBLACION,
+        CLI.PROVINCIA,
+        CLI.TELEFONO1 AS TELEFONO,
         CLI.EMAIL,
-        CLI.CODTAR AS TARIFA,
-        CLI.DTOPP AS DTO_PRONTO_PAGO,
-        CLI.RIESGO AS LIMITE_RIESGO
-      FROM JAVIER.CLI CLI
+        CLI.CODCLI AS TARIFA
+      FROM DSEDAC.CLI CLI
       WHERE ${vendorFilter}
-        AND CLI.ACTIVO = 1
-      ORDER BY CLI.NOMCLI
+        AND (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
+      ORDER BY CLI.NOMBRECLIENTE
     `;
 
     return await this._db.executeParams(sql, []);

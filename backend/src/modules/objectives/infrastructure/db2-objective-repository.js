@@ -15,30 +15,40 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
   async findByVendor(vendedorCodes, year) {
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `O.VENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND O.ANIO = ?` : '';
+      : `CMV.CODIGOVENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
+    const yearFilter = year ? `AND CT.ANIO = ?` : '';
     const params = [];
     if (year) params.push(year);
 
     const sql = `
       SELECT 
-        O.VENDEDOR,
-        O.ANIO,
-        O.MES,
-        O.TIPO,
-        COALESCE(O.OBJETIVO, 0) AS OBJETIVO,
+        CMV.CODIGOVENDEDOR AS VENDEDOR,
+        CT.ANIO,
+        CT.MES,
+        'ventas' AS TIPO,
+        COALESCE(CT.IMPORTE_OBJETIVO, COALESCE(CMV.IMPORTEOBJETIVO, 0)) AS OBJETIVO,
         COALESCE(L.VENTAS, 0) AS ACTUAL
-      FROM JAVIER.OBJETIVOS O
+      FROM DSEDAC.CMV CMV
+      LEFT JOIN JAVIER.COMMERCIAL_TARGETS CT 
+        ON CT.CODIGOVENDEDOR = CMV.CODIGOVENDEDOR
+        AND CT.ACTIVO = 'S'
+        ${year ? 'AND CT.ANIO = ?' : ''}
       LEFT JOIN (
-        SELECT VENDEDOR, ANIO, MES, SUM(IMPORTE) AS VENTAS
-        FROM JAVIER.LACLAE
-        WHERE ${vendorFilter}
-          ${yearFilter}
-        GROUP BY VENDEDOR, ANIO, MES
-      ) L ON L.VENDEDOR = O.VENDEDOR AND L.ANIO = O.ANIO AND L.MES = O.MES
+        SELECT 
+          L.${require('../../../../utils/common').VENDOR_COLUMN} AS VENDEDOR,
+          L.LCAADC AS ANIO,
+          L.LCMMDC AS MES,
+          COALESCE(SUM(L.LCIMVT), 0) AS VENTAS
+        FROM DSED.LACLAE L
+        WHERE ${require('../../../../utils/common').LACLAE_SALES_FILTER}
+          ${vendorFilter}
+          ${year ? 'AND L.LCAADC = ?' : ''}
+        GROUP BY L.${require('../../../../utils/common').VENDOR_COLUMN}, L.LCAADC, L.LCMMDC
+      ) L ON L.VENDEDOR = CMV.CODIGOVENDEDOR 
+        AND L.ANIO = CT.ANIO 
+        AND L.MES = CT.MES
       WHERE ${vendorFilter}
-        ${yearFilter}
-      ORDER BY O.VENDEDOR, O.ANIO, O.MES
+      ORDER BY CMV.CODIGOVENDEDOR, CT.ANIO, CT.MES
     `;
 
     const result = await this._db.executeParams(sql, params);
@@ -76,11 +86,12 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
 
   async getClientMatrix(vendedorCodes, year, filters = {}) {
     const { limit = 50, offset = 0, family = null } = filters;
+    const vendorCol = require('../../../../utils/common').VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `L.VENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
-    const familyFilter = family ? `AND TRIM(A.CODFAM) = ?` : '';
+      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
+    const familyFilter = family ? `AND TRIM(ART.CODIGOFAMILIA) = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (family) params.push(family);
@@ -88,21 +99,22 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
 
     const sql = `
       SELECT 
-        L.CODIGO AS CLIENTE,
-        COALESCE(C.NOMCLI, L.CODIGO) AS NOMBRE_CLIENTE,
-        L.CODART AS PRODUCTO,
-        COALESCE(A.DESCART, L.CODART) AS NOMBRE_PRODUCTO,
-        COALESCE(A.CODFAM, '') AS FAMILIA,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.CANTIDAD), 0) AS UNIDADES,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.CLI C ON TRIM(C.CODCLI) = TRIM(L.CODIGO)
-      LEFT JOIN JAVIER.ART A ON A.CODART = L.CODART
+        L.LCCDCL AS CLIENTE,
+        COALESCE(CLI.NOMBRECLIENTE, L.LCCDCL) AS NOMBRE_CLIENTE,
+        L.LCCDRF AS PRODUCTO,
+        COALESCE(ART.DESCRIPCIONARTICULO, L.LCCDRF) AS NOMBRE_PRODUCTO,
+        COALESCE(ART.CODIGOFAMILIA, '') AS FAMILIA,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
+        COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}
+        AND ${require('../../../../utils/common').LACLAE_SALES_FILTER}
         ${yearFilter}
         ${familyFilter}
-      GROUP BY L.CODIGO, C.NOMCLI, L.CODART, A.DESCART, A.CODFAM
+      GROUP BY L.LCCDCL, CLI.NOMBRECLIENTE, L.LCCDRF, ART.DESCRIPCIONARTICULO, ART.CODIGOFAMILIA
       ORDER BY VENTAS DESC
       FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
     `;
@@ -112,17 +124,17 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
 
   async save(objective) {
     const sql = `
-      MERGE INTO JAVIER.OBJETIVOS O
-      USING (VALUES (?, ?, ?, ?)) AS V(VENDEDOR, ANIO, MES, TIPO)
-      ON O.VENDEDOR = V.VENDEDOR AND O.ANIO = V.ANIO AND O.MES = V.MES AND O.TIPO = V.TIPO
-      WHEN MATCHED THEN UPDATE SET O.OBJETIVO = ?
-      WHEN NOT MATCHED THEN INSERT (VENDEDOR, ANIO, MES, TIPO, OBJETIVO) VALUES (?, ?, ?, ?, ?)
+      MERGE INTO JAVIER.COMMERCIAL_TARGETS CT
+      USING (VALUES (?, ?, ?)) AS V(CODIGOVENDEDOR, ANIO, MES)
+      ON CT.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND CT.ANIO = V.ANIO AND CT.MES = V.MES
+      WHEN MATCHED THEN UPDATE SET CT.IMPORTE_OBJETIVO = ?, CT.ACTIVO = 'S'
+      WHEN NOT MATCHED THEN INSERT (CODIGOVENDEDOR, ANIO, MES, IMPORTE_OBJETIVO, ACTIVO) VALUES (?, ?, ?, ?, 'S')
     `;
 
     await this._db.executeParams(sql, [
-      objective.vendedor, objective.year, objective.month, objective.type,
+      objective.vendedor, objective.year, objective.month,
       objective.target,
-      objective.vendedor, objective.year, objective.month, objective.type, objective.target
+      objective.vendedor, objective.year, objective.month, objective.target
     ]);
 
     return objective;

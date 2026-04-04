@@ -12,9 +12,9 @@ class Db2WarehouseRepository extends WarehouseRepository {
   }
 
   async getStock({ productCode, warehouse, search = '', limit = 100, offset = 0 }) {
-    const productFilter = productCode ? `AND S.CODART = ?` : '';
-    const warehouseFilter = warehouse ? `AND S.CODALM = ?` : '';
-    const searchFilter = search ? `AND (A.DESCART LIKE ? OR A.CODART LIKE ?)` : '';
+    const productFilter = productCode ? `AND ARO.CODIGOARTICULO = ?` : '';
+    const warehouseFilter = warehouse ? `AND ARO.CODIGOALMACEN = ?` : '';
+    const searchFilter = search ? `AND (ART.DESCRIPCIONARTICULO LIKE ? OR ART.CODIGOARTICULO LIKE ?)` : '';
     const params = [];
     if (productCode) params.push(productCode);
     if (warehouse) params.push(warehouse);
@@ -23,20 +23,20 @@ class Db2WarehouseRepository extends WarehouseRepository {
 
     const sql = `
       SELECT 
-        S.CODART AS CODIGO,
-        A.DESCART AS NOMBRE,
-        COALESCE(S.STOCKACT, 0) AS STOCK,
-        COALESCE(S.RESERV, 0) AS RESERVADO,
-        COALESCE(S.STOCKACT, 0) - COALESCE(S.RESERV, 0) AS DISPONIBLE,
-        S.CODALM AS ALMACEN,
-        S.FECHA_ACT
-      FROM JAVIER.STOCKART S
-      LEFT JOIN JAVIER.ART A ON A.CODART = S.CODART
+        ARO.CODIGOARTICULO AS CODIGO,
+        ART.DESCRIPCIONARTICULO AS NOMBRE,
+        COALESCE(ARO.UNIDADESDISPONIBLES, 0) AS STOCK,
+        COALESCE(ARO.ENVASESDISPONIBLES, 0) AS ENVASES,
+        ARO.CODIGOALMACEN AS ALMACEN
+      FROM DSEDAC.ARO ARO
+      LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = ARO.CODIGOARTICULO
       WHERE 1=1
         ${productFilter}
         ${warehouseFilter}
         ${searchFilter}
-      ORDER BY A.DESCART
+        AND ART.ANOBAJA IS NULL
+        AND ART.BLOQUEADOSN = 'N'
+      ORDER BY ART.DESCRIPCIONARTICULO
       FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
     `;
 
@@ -97,18 +97,17 @@ class Db2WarehouseRepository extends WarehouseRepository {
   async getLowStock(threshold = 10) {
     const sql = `
       SELECT 
-        S.CODART AS CODIGO,
-        A.DESCART AS NOMBRE,
-        COALESCE(S.STOCKACT, 0) AS STOCK,
-        COALESCE(S.RESERV, 0) AS RESERVADO,
-        COALESCE(S.STOCKACT, 0) - COALESCE(S.RESERV, 0) AS DISPONIBLE,
-        S.CODALM AS ALMACEN,
-        S.FECHA_ACT
-      FROM JAVIER.STOCKART S
-      LEFT JOIN JAVIER.ART A ON A.CODART = S.CODART
-      WHERE COALESCE(S.STOCKACT, 0) - COALESCE(S.RESERV, 0) <= ?
-        AND A.ACTIVO = 1
-      ORDER BY DISPONIBLE ASC
+        ARO.CODIGOARTICULO AS CODIGO,
+        ART.DESCRIPCIONARTICULO AS NOMBRE,
+        COALESCE(ARO.UNIDADESDISPONIBLES, 0) AS STOCK,
+        COALESCE(ARO.ENVASESDISPONIBLES, 0) AS ENVASES,
+        ARO.CODIGOALMACEN AS ALMACEN
+      FROM DSEDAC.ARO ARO
+      LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = ARO.CODIGOARTICULO
+      WHERE COALESCE(ARO.UNIDADESDISPONIBLES, 0) <= ?
+        AND ART.ANOBAJA IS NULL
+        AND ART.BLOQUEADOSN = 'N'
+      ORDER BY STOCK ASC
     `;
 
     const result = await this._db.executeParams(sql, [threshold]);

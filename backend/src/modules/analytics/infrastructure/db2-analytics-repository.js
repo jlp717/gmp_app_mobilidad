@@ -17,31 +17,32 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
 
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
+    const monthFilter = month ? `AND L.LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
 
     const sql = `
       SELECT 
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS,
-        COALESCE(SUM(L.BULTOS), 0) AS CAJAS,
-        COUNT(DISTINCT L.CODIGO) AS CLIENTES,
-        COUNT(DISTINCT L.CODART) AS PRODUCTOS,
-        YEAR(L.FECHA) AS ANIO,
-        MONTH(L.FECHA) AS MES
-      FROM JAVIER.LACLAE L
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS,
+        COALESCE(SUM(L.LCCTEV), 0) AS CAJAS,
+        COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
+        COUNT(DISTINCT L.LCCDCL) AS CLIENTES,
+        COUNT(DISTINCT L.LCCDRF) AS PRODUCTOS,
+        L.LCAADC AS ANIO,
+        L.LCMMDC AS MES
+      FROM DSED.LACLAE L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
         ${monthFilter}
-      GROUP BY YEAR(L.FECHA), MONTH(L.FECHA)
+      GROUP BY L.LCAADC, L.LCMMDC
     `;
 
     const result = await this._db.executeParams(sql, params);
@@ -52,25 +53,25 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
     const params = [];
     if (year) params.push(year);
 
     const sql = `
       SELECT 
-        YEAR(L.FECHA) AS ANIO,
-        MONTH(L.FECHA) AS MES,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS,
-        COUNT(DISTINCT L.CODIGO) AS CLIENTES
-      FROM JAVIER.LACLAE L
+        L.LCAADC AS ANIO,
+        L.LCMMDC AS MES,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS,
+        COUNT(DISTINCT L.LCCDCL) AS CLIENTES
+      FROM DSED.LACLAE L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
-      GROUP BY YEAR(L.FECHA), MONTH(L.FECHA)
+      GROUP BY L.LCAADC, L.LCMMDC
       ORDER BY ANIO, MES
       FETCH FIRST ${months} ROWS ONLY
     `;
@@ -82,7 +83,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
 
     const params = [];
@@ -101,17 +102,17 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
 
     const sql = `
       SELECT 
-        YEAR(L.FECHA) AS ANIO,
-        MONTH(L.FECHA) AS MES,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS
-      FROM JAVIER.LACLAE L
+        L.LCAADC AS ANIO,
+        L.LCMMDC AS MES,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS
+      FROM DSED.LACLAE L
       WHERE ${vendorFilter}
         AND ${dateFilter}
-        AND ((YEAR(L.FECHA) = ? AND MONTH(L.FECHA) = ?)
-          OR (YEAR(L.FECHA) = ? AND MONTH(L.FECHA) = ?))
-      GROUP BY YEAR(L.FECHA), MONTH(L.FECHA)
+        AND ((L.LCAADC = ? AND L.LCMMDC = ?)
+          OR (L.LCAADC = ? AND L.LCMMDC = ?))
+      GROUP BY L.LCAADC, L.LCMMDC
       ORDER BY ANIO, MES
     `;
 
@@ -145,10 +146,10 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
+    const monthFilter = month ? `AND L.LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
@@ -158,18 +159,18 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
 
     const sql = `
       SELECT 
-        L.CODIGO AS CODIGO,
-        COALESCE(C.NOMBRE, L.CODIGO) AS NOMBRE,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.CLI C ON TRIM(C.CODCLI) = TRIM(L.CODIGO)
+        L.LCCDCL AS CODIGO,
+        COALESCE(C.NOMBRECLIENTE, L.LCCDCL) AS NOMBRE,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
         ${monthFilter}
-      GROUP BY L.CODIGO, C.NOMBRE
+      GROUP BY L.LCCDCL, C.NOMBRECLIENTE
       ORDER BY ${orderBy} DESC
       FETCH FIRST ? ROWS ONLY
     `;
@@ -189,10 +190,10 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
+    const monthFilter = month ? `AND L.LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
@@ -202,18 +203,18 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
 
     const sql = `
       SELECT 
-        L.CODART AS CODIGO,
-        COALESCE(A.DESCART, L.CODART) AS NOMBRE,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.CANTIDAD), 0) AS UNIDADES,
-        COALESCE(A.CODFAM, '') AS FAMILIA
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.ART A ON A.CODART = L.CODART
+        L.LCCDRF AS CODIGO,
+        COALESCE(ART.DESCRIPCIONARTICULO, L.LCCDRF) AS NOMBRE,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
+        COALESCE(ART.CODIGOFAMILIA, '') AS FAMILIA
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
         ${monthFilter}
-      GROUP BY L.CODART, A.DESCART, A.CODFAM
+      GROUP BY L.LCCDRF, ART.DESCRIPCIONARTICULO, ART.CODIGOFAMILIA
       ORDER BY ${orderBy} DESC
       FETCH FIRST ? ROWS ONLY
     `;
@@ -233,22 +234,22 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
 
     const sql = `
       SELECT 
-        YEAR(L.FECHA) AS ANIO,
-        MONTH(L.FECHA) AS MES,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS,
-        COUNT(DISTINCT L.CODIGO) AS CLIENTES
-      FROM JAVIER.LACLAE L
+        L.LCAADC AS ANIO,
+        L.LCMMDC AS MES,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS,
+        COUNT(DISTINCT L.LCCDCL) AS CLIENTES
+      FROM DSED.LACLAE L
       WHERE ${vendorFilter}
         AND ${dateFilter}
-        AND YEAR(L.FECHA) >= YEAR(CURRENT DATE) - ?
-      GROUP BY YEAR(L.FECHA), MONTH(L.FECHA)
+        AND L.LCAADC >= YEAR(CURRENT DATE) - ?
+      GROUP BY L.LCAADC, L.LCMMDC
       ORDER BY ANIO, MES
     `;
 
@@ -259,26 +260,26 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
+    const monthFilter = month ? `AND L.LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
 
     const sql = `
       SELECT 
-        L.CODIGO AS CODIGO,
-        COALESCE(C.NOMBRE, L.CODIGO) AS NOMBRE,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.CLI C ON TRIM(C.CODCLI) = TRIM(L.CODIGO)
+        L.LCCDCL AS CODIGO,
+        COALESCE(C.NOMBRECLIENTE, L.LCCDCL) AS NOMBRE,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
         ${monthFilter}
-      GROUP BY L.CODIGO, C.NOMBRE
+      GROUP BY L.LCCDCL, C.NOMBRECLIENTE
       ORDER BY VENTAS DESC
     `;
 
@@ -318,30 +319,29 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `L.${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(L.FECHA) = ?` : '';
+    const yearFilter = year ? `AND L.LCAADC = ?` : '';
+    const monthFilter = month ? `AND L.LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
 
     const sql = `
       SELECT 
-        COALESCE(A.CODFAM, 'SIN_FAMILIA') AS FAMILIA,
-        COALESCE(F.DESCRIPCION, COALESCE(A.CODFAM, 'Sin Familia')) AS NOMBRE_FAMILIA,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.CODART) AS PRODUCTOS,
-        COALESCE(SUM(L.CANTIDAD), 0) AS UNIDADES
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.ART A ON A.CODART = L.CODART
-      LEFT JOIN JAVIER.FAM F ON F.CODFAM = A.CODFAM
+        COALESCE(ART.CODIGOFAMILIA, 'SIN_FAMILIA') AS FAMILIA,
+        COALESCE(ART.CODIGOFAMILIA, 'Sin Familia') AS NOMBRE_FAMILIA,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCCDRF) AS PRODUCTOS,
+        COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
         ${monthFilter}
-      GROUP BY A.CODFAM, F.DESCRIPCION
+      GROUP BY ART.CODIGOFAMILIA
       ORDER BY VENTAS DESC
     `;
 

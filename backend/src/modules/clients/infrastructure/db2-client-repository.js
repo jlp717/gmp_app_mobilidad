@@ -1,5 +1,6 @@
 /**
  * Clients Repository Implementation - DB2
+ * REAL SCHEMA: DSEDAC.CLI (clients), DSED.LACLAE (sales), DSEDAC.ART (products), DSEDAC.CVC (payments)
  */
 const { ClientRepository } = require('../domain/client-repository');
 const { Client, ClientDetail } = require('../domain/client');
@@ -15,31 +16,31 @@ class Db2ClientRepository extends ClientRepository {
   async findAll({ vendedorCodes, search = '', limit = 100, offset = 0 }) {
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `CLI.CODVEN IN (${sanitizeCodeList(vendedorCodes)})`;
+      : `CLI.CODIGOVENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
     const searchFilter = search
-      ? `AND (CLI.NOMCLI LIKE ? OR CLI.CODCLI LIKE ?)`
+      ? `AND (CLI.NOMBRECLIENTE LIKE ? OR CLI.CODIGOCLIENTE LIKE ?)`
       : '';
     const params = [];
-    if (search) { params.push(`%${search}%`, `%${search}%`); }
+    if (search) { params.push(`%${search.toUpperCase()}%`, `%${search.toUpperCase()}%`); }
     params.push(limit, offset);
 
     const sql = `
       SELECT 
-        CLI.CODCLI AS CODIGO,
-        CLI.NOMCLI AS NOMBRE,
-        CLI.DIRCLI AS DIRECCION,
-        CLI.POBLAC AS POBLACION,
-        CLI.PROVINC AS PROVINCIA,
-        CLI.TELCLI AS TELEFONO,
+        CLI.CODIGOCLIENTE AS CODIGO,
+        CLI.NOMBRECLIENTE AS NOMBRE,
+        CLI.DIRECCION,
+        CLI.POBLACION,
+        CLI.PROVINCIA,
+        CLI.TELEFONO1 AS TELEFONO,
         CLI.EMAIL,
-        CLI.CODTAR AS TARIFA,
-        CLI.CODVEN AS VENDEDOR,
-        CLI.ACTIVO
-      FROM JAVIER.CLI CLI
+        CLI.CODCLI AS TARIFA,
+        CLI.CODIGOVENDEDOR AS VENDEDOR,
+        CASE WHEN CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0 THEN 1 ELSE 0 END AS ACTIVO
+      FROM DSEDAC.CLI CLI
       WHERE ${vendorFilter}
-        AND CLI.ACTIVO = 1
+        AND (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
         ${searchFilter}
-      ORDER BY CLI.NOMCLI
+      ORDER BY CLI.NOMBRECLIENTE
       FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
     `;
 
@@ -50,18 +51,18 @@ class Db2ClientRepository extends ClientRepository {
   async findByCode(code) {
     const sql = `
       SELECT 
-        CLI.CODCLI AS CODIGO,
-        CLI.NOMCLI AS NOMBRE,
-        CLI.DIRCLI AS DIRECCION,
-        CLI.POBLAC AS POBLACION,
-        CLI.PROVINC AS PROVINCIA,
-        CLI.TELCLI AS TELEFONO,
+        CLI.CODIGOCLIENTE AS CODIGO,
+        CLI.NOMBRECLIENTE AS NOMBRE,
+        CLI.DIRECCION,
+        CLI.POBLACION,
+        CLI.PROVINCIA,
+        CLI.TELEFONO1 AS TELEFONO,
         CLI.EMAIL,
-        CLI.CODTAR AS TARIFA,
-        CLI.CODVEN AS VENDEDOR,
-        CLI.ACTIVO
-      FROM JAVIER.CLI CLI
-      WHERE CLI.CODCLI = ?
+        CLI.CODCLI AS TARIFA,
+        CLI.CODIGOVENDEDOR AS VENDEDOR,
+        CASE WHEN CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0 THEN 1 ELSE 0 END AS ACTIVO
+      FROM DSEDAC.CLI CLI
+      WHERE TRIM(CLI.CODIGOCLIENTE) = ?
     `;
 
     const result = await this._db.executeParams(sql, [code]);
@@ -72,50 +73,54 @@ class Db2ClientRepository extends ClientRepository {
     const client = await this.findByCode(code);
     if (!client) return null;
 
+    const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `L.VENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
+      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+    const yearFilter = year ? `AND LCAADC = ?` : '';
     const params = [code];
     if (year) params.push(year);
 
+    // Sales by month using DSED.LACLAE
     const salesSql = `
       SELECT 
-        YEAR(L.FECHA) AS ANIO,
-        MONTH(L.FECHA) AS MES,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS
-      FROM JAVIER.LACLAE L
-      WHERE L.CODIGO = ?
+        LCAADC AS ANIO,
+        LCMMDC AS MES,
+        COALESCE(SUM(LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS
+      FROM DSED.LACLAE L
+      WHERE TRIM(LCCDCL) = ?
         AND ${vendorFilter}
         ${yearFilter}
-      GROUP BY YEAR(L.FECHA), MONTH(L.FECHA)
+      GROUP BY LCAADC, LCMMDC
       ORDER BY ANIO, MES
     `;
 
+    // Top products using DSED.LACLAE + DSEDAC.ART
     const productsSql = `
       SELECT 
-        L.CODART AS CODIGO,
-        COALESCE(A.DESCART, L.CODART) AS NOMBRE,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.CANTIDAD), 0) AS UNIDADES
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.ART A ON A.CODART = L.CODART
-      WHERE L.CODIGO = ?
+        L.LCCDRF AS CODIGO,
+        COALESCE(ART.DESCRIPCIONARTICULO, L.LCCDRF) AS NOMBRE,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
+      WHERE TRIM(L.LCCDCL) = ?
         AND ${vendorFilter}
         ${yearFilter}
-      GROUP BY L.CODART, A.DESCART
+      GROUP BY L.LCCDRF, ART.DESCRIPCIONARTICULO
       ORDER BY VENTAS DESC
       FETCH FIRST 20 ROWS ONLY
     `;
 
+    // Payment status using DSEDAC.CVC
     const paymentSql = `
       SELECT 
-        COALESCE(SUM(CASE WHEN ESTADO = 'P' THEN IMPORTE ELSE 0 END), 0) AS PENDIENTE,
-        COALESCE(SUM(CASE WHEN ESTADO = 'C' THEN IMPORTE ELSE 0 END), 0) AS COBRADO
-      FROM JAVIER.CVC
-      WHERE CODIGO = ?
+        COALESCE(SUM(CASE WHEN TRIM(SITUACION) = 'P' THEN IMPORTEPENDIENTE ELSE 0 END), 0) AS PENDIENTE,
+        COALESCE(SUM(CASE WHEN TRIM(SITUACION) <> 'P' THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS COBRADO
+      FROM DSEDAC.CVC
+      WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
     `;
 
     const [salesHistory, productsPurchased, paymentStatus] = await Promise.all([
@@ -136,28 +141,29 @@ class Db2ClientRepository extends ClientRepository {
   }
 
   async compare(clientCodes, vendedorCodes, year) {
+    const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `L.VENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND YEAR(L.FECHA) = ?` : '';
+      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
+    const yearFilter = year ? `AND LCAADC = ?` : '';
     const placeholders = clientCodes.map(() => '?').join(',');
     const params = [...clientCodes];
     if (year) params.push(year);
 
     const sql = `
       SELECT 
-        L.CODIGO AS CLIENTE,
-        COALESCE(C.NOMCLI, L.CODIGO) AS NOMBRE,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.IMPORTE - L.COSTE), 0) AS MARGEN,
-        COUNT(DISTINCT L.NUMDOC) AS PEDIDOS,
-        COUNT(DISTINCT L.CODART) AS PRODUCTOS
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.CLI C ON TRIM(C.CODCLI) = TRIM(L.CODIGO)
-      WHERE L.CODIGO IN (${placeholders})
+        L.LCCDCL AS CLIENTE,
+        COALESCE(CLI.NOMBRECLIENTE, L.LCCDCL) AS NOMBRE,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
+        COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS,
+        COUNT(DISTINCT L.LCCDRF) AS PRODUCTOS
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      WHERE TRIM(L.LCCDCL) IN (${placeholders})
         AND ${vendorFilter}
         ${yearFilter}
-      GROUP BY L.CODIGO, C.NOMCLI
+      GROUP BY L.LCCDCL, CLI.NOMBRECLIENTE
       ORDER BY VENTAS DESC
     `;
 
@@ -167,18 +173,20 @@ class Db2ClientRepository extends ClientRepository {
   async findSalesHistory(code, year, limit = 12) {
     const sql = `
       SELECT 
-        L.FECHA,
-        L.NUMDOC AS DOCUMENTO,
-        L.CODART AS PRODUCTO,
-        COALESCE(A.DESCART, L.CODART) AS NOMBRE_PRODUCTO,
-        L.CANTIDAD,
-        L.IMPORTE AS VENTAS,
-        L.IMPORTE - L.COSTE AS MARGEN
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.ART A ON A.CODART = L.CODART
-      WHERE L.CODIGO = ?
-        ${year ? `AND YEAR(L.FECHA) = ?` : ''}
-      ORDER BY L.FECHA DESC
+        LCAADC AS ANIO,
+        LCMMDC AS MES,
+        LCDDDC AS DIA,
+        LCSRAB || LCNRAB AS DOCUMENTO,
+        LCCDRF AS PRODUCTO,
+        COALESCE(ART.DESCRIPCIONARTICULO, LCCDRF) AS NOMBRE_PRODUCTO,
+        LCCTUD AS CANTIDAD,
+        LCIMVT AS VENTAS,
+        LCIMVT - LCIMCT AS MARGEN
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
+      WHERE TRIM(LCCDCL) = ?
+        ${year ? `AND LCAADC = ?` : ''}
+      ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
       FETCH FIRST ? ROWS ONLY
     `;
 
@@ -192,15 +200,15 @@ class Db2ClientRepository extends ClientRepository {
   async findProductsPurchased(code, limit = 20) {
     const sql = `
       SELECT 
-        L.CODART AS CODIGO,
-        COALESCE(A.DESCART, L.CODART) AS NOMBRE,
-        COALESCE(SUM(L.IMPORTE), 0) AS VENTAS,
-        COALESCE(SUM(L.CANTIDAD), 0) AS UNIDADES,
+        L.LCCDRF AS CODIGO,
+        COALESCE(ART.DESCRIPCIONARTICULO, L.LCCDRF) AS NOMBRE,
+        COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
+        COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
         COUNT(*) AS FRECUENCIA
-      FROM JAVIER.LACLAE L
-      LEFT JOIN JAVIER.ART A ON A.CODART = L.CODART
-      WHERE L.CODIGO = ?
-      GROUP BY L.CODART, A.DESCART
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
+      WHERE TRIM(L.LCCDCL) = ?
+      GROUP BY L.LCCDRF, ART.DESCRIPCIONARTICULO
       ORDER BY VENTAS DESC
       FETCH FIRST ? ROWS ONLY
     `;
@@ -211,11 +219,11 @@ class Db2ClientRepository extends ClientRepository {
   async findPaymentStatus(code) {
     const sql = `
       SELECT 
-        COALESCE(SUM(CASE WHEN ESTADO = 'P' THEN IMPORTE ELSE 0 END), 0) AS PENDIENTE,
-        COALESCE(SUM(CASE WHEN ESTADO = 'C' THEN IMPORTE ELSE 0 END), 0) AS COBRADO,
+        COALESCE(SUM(CASE WHEN TRIM(SITUACION) = 'P' THEN IMPORTEPENDIENTE ELSE 0 END), 0) AS PENDIENTE,
+        COALESCE(SUM(CASE WHEN TRIM(SITUACION) <> 'P' THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS COBRADO,
         COUNT(*) AS TOTAL_RECEIPTS
-      FROM JAVIER.CVC
-      WHERE CODIGO = ?
+      FROM DSEDAC.CVC
+      WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
     `;
 
     const result = await this._db.executeParams(sql, [code]);

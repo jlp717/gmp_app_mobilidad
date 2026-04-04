@@ -14,41 +14,38 @@ class Db2PedidosRepository extends PedidosRepository {
   }
 
   async searchProducts({ vendedorCodes, clientCode, family, marca, search, limit = 50, offset = 0 }) {
-    const vendorCol = VENDOR_COLUMN;
-    const vendorFilter = vendedorCodes === 'ALL'
-      ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
-
-    const dateFilter = LACLAE_SALES_FILTER;
-    const familyFilter = family ? `AND TRIM(FL.FAMILIA) = ?` : '';
-    const marcaFilter = marca ? `AND TRIM(FL.MARCA) = ?` : '';
-    const searchFilter = search ? `AND (TRIM(FL.DESART) LIKE ? OR TRIM(FL.CODART) LIKE ?)` : '';
+    // Products come from DSEDAC.ART, prices from DSEDAC.ARA, stock from DSEDAC.ARO
+    const familyFilter = family ? `AND TRIM(ART.CODIGOFAMILIA) = ?` : '';
+    const marcaFilter = marca ? `AND TRIM(ART.CODIGOMARCA) = ?` : '';
+    const searchFilter = search ? `AND (TRIM(ART.DESCRIPCIONARTICULO) LIKE ? OR TRIM(ART.CODIGOARTICULO) LIKE ?)` : '';
 
     const sql = `
       SELECT DISTINCT
-        FL.CODART,
-        FL.DESART,
-        COALESCE(FL.PRECIO, 0) as PRECIO,
-        COALESCE(FL.STOCK, 0) as STOCK,
-        FL.UNIDAD,
-        FL.FAMILIA,
-        FL.MARCA,
-        FL.IMAGEN
-      FROM JAVIER.LACLAE FL
-      WHERE ${vendorFilter}
-        AND ${dateFilter}
-        AND FL.CODART <> ''
+        ART.CODIGOARTICULO AS CODART,
+        ART.DESCRIPCIONARTICULO AS DESART,
+        COALESCE(ARA.PRECIOTARIFA, 0) as PRECIO,
+        COALESCE(ARO.UNIDADESDISPONIBLES, 0) as STOCK,
+        ART.UNIDADMEDIDA AS UNIDAD,
+        ART.CODIGOFAMILIA AS FAMILIA,
+        ART.CODIGOMARCA AS MARCA,
+        '' AS IMAGEN
+      FROM DSEDAC.ART ART
+      LEFT JOIN DSEDAC.ARA ARA ON ARA.CODIGOARTICULO = ART.CODIGOARTICULO
+      LEFT JOIN DSEDAC.ARO ARO ON ARO.CODIGOARTICULO = ART.CODIGOARTICULO
+      WHERE ART.BLOQUEADOSN = 'N'
+        AND ART.ANOBAJA = 0
+        AND ART.CODIGOARTICULO <> ''
         ${familyFilter}
         ${marcaFilter}
         ${searchFilter}
-      ORDER BY FL.DESART
+      ORDER BY ART.DESCRIPCIONARTICULO
       FETCH FIRST ${limit} ROWS ONLY OFFSET ${offset} ROWS
     `;
 
     const params = [];
     if (family) params.push(family);
     if (marca) params.push(marca);
-    if (search) { params.push(`%${search}%`, `%${search}%`); }
+    if (search) { params.push(`%${search.toUpperCase()}%`, `%${search.toUpperCase()}%`); }
 
     const result = await this._db.executeParams(sql, params);
     const products = result.map(row => Product.fromDbRow(row));
@@ -56,26 +53,23 @@ class Db2PedidosRepository extends PedidosRepository {
   }
 
   async getProductDetail({ code, clientCode, vendedorCodes }) {
-    const vendorCol = VENDOR_COLUMN;
-    const vendorFilter = vendedorCodes === 'ALL'
-      ? '1=1'
-      : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
-
     const sql = `
       SELECT
-        FL.CODART,
-        FL.DESART,
-        COALESCE(FL.PRECIO, 0) as PRECIO,
-        COALESCE(FL.STOCK, 0) as STOCK,
-        FL.UNIDAD,
-        FL.FAMILIA,
-        FL.MARCA,
-        FL.IMAGEN,
-        FL.PRECIO_MINIMO,
-        FL.UNIDADES_CAJA
-      FROM JAVIER.LACLAE FL
-      WHERE FL.CODART = ?
-        AND ${vendorFilter}
+        ART.CODIGOARTICULO AS CODART,
+        ART.DESCRIPCIONARTICULO AS DESART,
+        COALESCE(ARA.PRECIOTARIFA, 0) as PRECIO,
+        COALESCE(ARO.UNIDADESDISPONIBLES, 0) as STOCK,
+        ART.UNIDADMEDIDA AS UNIDAD,
+        ART.CODIGOFAMILIA AS FAMILIA,
+        ART.CODIGOMARCA AS MARCA,
+        '' AS IMAGEN,
+        0 AS PRECIO_MINIMO,
+        1 AS UNIDADES_CAJA
+      FROM DSEDAC.ART ART
+      LEFT JOIN DSEDAC.ARA ARA ON ARA.CODIGOARTICULO = ART.CODIGOARTICULO
+      LEFT JOIN DSEDAC.ARO ARO ON ARO.CODIGOARTICULO = ART.CODIGOARTICULO
+      WHERE TRIM(ART.CODIGOARTICULO) = ?
+        AND ART.BLOQUEADOSN = 'N'
       FETCH FIRST 1 ROW ONLY
     `;
 
@@ -192,15 +186,10 @@ class Db2PedidosRepository extends PedidosRepository {
         PC.ESTADO,
         PC.OBSERVACIONES,
         PC.CODIGOCLIENTE,
-        CL.NOMBRE as NOMBRE_CLIENTE,
-        SUM(PL.CANTIDAD * PL.PRECIO) as TOTAL
+        PC.NOMBRECLIENTE,
+        PC.IMPORTETOTAL as TOTAL
       FROM JAVIER.PEDIDOS_CAB PC
-      LEFT JOIN JAVIER.PEDIDOS_LIN PL ON PC.ID = PL.PEDIDO_ID
-      LEFT JOIN JAVIER.CLIENTES CL ON TRIM(PC.CODIGOCLIENTE) = TRIM(CL.CODIGO)
-      WHERE PC.CODIGO_USUARIO = ?
-      GROUP BY PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
-               PC.FECHAPEDIDO, PC.ESTADO, PC.OBSERVACIONES,
-               PC.CODIGOCLIENTE, CL.NOMBRE
+      WHERE PC.CODIGOVENDEDOR = ?
       ORDER BY PC.FECHAPEDIDO DESC
       FETCH FIRST ${limit} ROWS ONLY OFFSET ${offset} ROWS
     `;
@@ -218,7 +207,7 @@ class Db2PedidosRepository extends PedidosRepository {
         SUM(CASE WHEN ESTADO = 'FACTURADO' THEN 1 ELSE 0 END) as FACTURADOS,
         SUM(CASE WHEN ESTADO = 'ANULADO' THEN 1 ELSE 0 END) as ANULADOS
       FROM JAVIER.PEDIDOS_CAB
-      WHERE CODIGO_USUARIO = ?
+      WHERE CODIGOVENDEDOR = ?
     `;
 
     const result = await this._db.executeParams(sql, [userId]);

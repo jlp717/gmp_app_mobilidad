@@ -12,35 +12,32 @@ class Db2CommissionRepository extends CommissionRepository {
     this._db = dbPool || new Db2ConnectionPool();
   }
 
-  async findByVendor(vendedorCodes, year, month, filters = {}) {
+  async getCommissionPayments(vendedorCodes, year, month) {
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `V.VENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND YEAR(V.FECHA) = ?` : '';
-    const monthFilter = month ? `AND MONTH(V.FECHA) = ?` : '';
-    const clientFilter = filters.clientCode ? `AND TRIM(V.CODCLI) = ?` : '';
+      : `CP.VENDEDOR_CODIGO IN (${sanitizeCodeList(vendedorCodes)})`;
+    const yearFilter = year ? `AND CP.ANIO = ?` : '';
+    const monthFilter = month ? `AND CP.MES = ?` : '';
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
-    if (filters.clientCode) params.push(filters.clientCode);
 
     const sql = `
       SELECT 
-        V.VENDEDOR,
-        V.CODCLI AS CODIGO,
-        COALESCE(C.NOMCLI, V.CODCLI) AS NOMBRE,
-        V.NUMDOC,
-        V.FECHA,
-        COALESCE(V.IMPORTE, 0) AS IMPORTE,
-        COALESCE(V.PORC_COM, 0) AS PORCENTAJE,
-        COALESCE(V.IMP_COM, 0) AS COMISION
-      FROM JAVIER.VENTAS_COM V
-      LEFT JOIN JAVIER.CLI C ON TRIM(C.CODCLI) = TRIM(V.CODCLI)
+        CP.ID,
+        CP.VENDEDOR_CODIGO AS VENDEDOR,
+        CP.ANIO,
+        CP.MES,
+        COALESCE(CP.VENTAS_REAL, 0) AS VENTAS_REAL,
+        COALESCE(CP.OBJETIVO_MES, 0) AS OBJETIVO_MES,
+        COALESCE(CP.VENTAS_SOBRE_OBJETIVO, 0) AS VENTAS_SOBRE_OBJETIVO,
+        COALESCE(CP.COMISION_GENERADA, 0) AS COMISION_GENERADA,
+        COALESCE(CP.IMPORTE_PAGADO, 0) AS IMPORTE_PAGADO
+      FROM JAVIER.COMMISSION_PAYMENTS CP
       WHERE ${vendorFilter}
         ${yearFilter}
         ${monthFilter}
-        ${clientFilter}
-      ORDER BY V.FECHA DESC
+      ORDER BY CP.ANIO DESC, CP.MES DESC
     `;
 
     const result = await this._db.executeParams(sql, params);
@@ -50,22 +47,22 @@ class Db2CommissionRepository extends CommissionRepository {
   async getSummary(vendedorCodes, year) {
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `V.VENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND YEAR(V.FECHA) = ?` : '';
+      : `CP.VENDEDOR_CODIGO IN (${sanitizeCodeList(vendedorCodes)})`;
+    const yearFilter = year ? `AND CP.ANIO = ?` : '';
     const params = [];
     if (year) params.push(year);
 
     const sql = `
       SELECT 
-        V.VENDEDOR,
-        COALESCE(SUM(V.IMPORTE), 0) AS TOTAL_VENTAS,
-        COALESCE(SUM(V.IMP_COM), 0) AS TOTAL_COMISIONES,
-        COUNT(DISTINCT V.NUMDOC) AS TOTAL_DOCUMENTOS,
-        COUNT(DISTINCT V.CODCLI) AS TOTAL_CLIENTES
-      FROM JAVIER.VENTAS_COM V
+        CP.VENDEDOR_CODIGO AS VENDEDOR,
+        COALESCE(SUM(CP.VENTAS_REAL), 0) AS TOTAL_VENTAS,
+        COALESCE(SUM(CP.COMISION_GENERADA), 0) AS TOTAL_COMISIONES,
+        COALESCE(SUM(CP.IMPORTE_PAGADO), 0) AS TOTAL_PAGADO,
+        COUNT(DISTINCT CP.MES) AS TOTAL_MESES
+      FROM JAVIER.COMMISSION_PAYMENTS CP
       WHERE ${vendorFilter}
         ${yearFilter}
-      GROUP BY V.VENDEDOR
+      GROUP BY CP.VENDEDOR_CODIGO
       ORDER BY TOTAL_COMISIONES DESC
     `;
 
@@ -75,27 +72,29 @@ class Db2CommissionRepository extends CommissionRepository {
   async getByClient(vendedorCodes, clientCode, year) {
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
-      : `V.VENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
-    const yearFilter = year ? `AND YEAR(V.FECHA) = ?` : '';
+      : `LAC.CODIGOVENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
+    const yearFilter = year ? `AND LAC.ANODOCUMENTO = ?` : '';
     const params = [clientCode];
     if (year) params.push(year);
 
     const sql = `
       SELECT 
-        V.VENDEDOR,
-        V.CODCLI AS CODIGO,
-        COALESCE(C.NOMCLI, V.CODCLI) AS NOMBRE,
-        V.NUMDOC,
-        V.FECHA,
-        COALESCE(V.IMPORTE, 0) AS IMPORTE,
-        COALESCE(V.PORC_COM, 0) AS PORCENTAJE,
-        COALESCE(V.IMP_COM, 0) AS COMISION
-      FROM JAVIER.VENTAS_COM V
-      LEFT JOIN JAVIER.CLI C ON TRIM(C.CODCLI) = TRIM(V.CODCLI)
-      WHERE TRIM(V.CODCLI) = ?
+        LAC.CODIGOVENDEDOR AS VENDEDOR,
+        LAC.CODIGOCLIENTEALBARAN AS CODIGO,
+        COALESCE(CLI.NOMBRECLIENTE, LAC.CODIGOCLIENTEALBARAN) AS NOMBRE,
+        LAC.NUMEROALBARAN AS NUMDOC,
+        LAC.DIADOCUMENTO AS DIA,
+        LAC.MESDOCUMENTO AS MES,
+        LAC.ANODOCUMENTO AS ANIO,
+        COALESCE(LAC.IMPORTEVENTA, 0) AS IMPORTE,
+        0 AS PORCENTAJE,
+        0 AS COMISION
+      FROM DSEDAC.LAC LAC
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(LAC.CODIGOCLIENTEALBARAN)
+      WHERE TRIM(LAC.CODIGOCLIENTEALBARAN) = ?
         AND ${vendorFilter}
         ${yearFilter}
-      ORDER BY V.FECHA DESC
+      ORDER BY LAC.ANODOCUMENTO DESC, LAC.MESDOCUMENTO DESC, LAC.DIADOCUMENTO DESC
     `;
 
     const result = await this._db.executeParams(sql, params);
