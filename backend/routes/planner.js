@@ -1,14 +1,16 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const logger = require('../middleware/logger');
-const { getPool, query } = require('../config/db');
+const { getPool, query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, deleteCachePattern } = require('../services/redis-cache');
 const {
     getCurrentDate,
     buildVendedorFilter,
     formatCurrency,
-    LACLAE_SALES_FILTER
+    LACLAE_SALES_FILTER,
+    sanitizeForSQL
 } = require('../utils/common');
 
 // Imports from laclae service
@@ -17,6 +19,7 @@ const {
     getTotalClientsFromCache,
     getClientsForDay: getClientsForDayService,
     reloadRuteroConfig,
+    loadLaclaeCache,
     getClientCurrentDay,
     getNaturalOrder
 } = require('../services/laclae');
@@ -47,7 +50,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
   COUNT(DISTINCT L.CODIGOARTICULO) as numProducts
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      WHERE L.ANODOCUMENTO = ${year} AND L.MESDOCUMENTO = ${month} 
+      WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ? 
         AND L.TIPOVENTA IN ('CC', 'VC')
         AND L.TIPOLINEA IN ('AB', 'VT')
         AND L.SERIEALBARAN NOT IN ('N', 'Z')
@@ -60,7 +63,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
 
         // Cache calendar for 15 minutes
         const cacheKey = `calendar:${year}:${month}:${vendedorCodes}`;
-        const activities = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM);
+        const activities = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, [year, month]);
 
         // Group by day
         const dayMap = {};
@@ -112,11 +115,12 @@ router.get('/rutero/week', async (req, res) => {
         const now = getCurrentDate();
         const todayName = DAY_NAMES[now.getDay()];
         const currentRole = role || 'comercial';
+        const ignoreOverridesBool = req.query.ignoreOverrides === 'true';
 
-        logger.info(`[RUTERO WEEK] vendedorCodes: "${vendedorCodes}", role: "${currentRole}"`);
+        logger.info(`[RUTERO WEEK] vendedorCodes: "${vendedorCodes}", role: "${currentRole}", ignoreOverrides: ${ignoreOverridesBool}`);
 
         // Try to use cache first (instant response)
-        const cachedCounts = getWeekCountsFromCache(vendedorCodes, currentRole);
+        const cachedCounts = getWeekCountsFromCache(vendedorCodes, currentRole, ignoreOverridesBool);
 
         if (cachedCounts) {
             // Calculate total unique clients from cache
@@ -125,51 +129,54 @@ router.get('/rutero/week', async (req, res) => {
             // Calculate delivery progress for today
             let weekProgress = {};
             try {
-                const todayClients = cachedCounts[todayName] || 0;
-                if (todayClients > 0) {
-                    const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',') : null;
-                    let deliveredToday = 0;
-                    if (cleanCodes) {
-                        // HYBRID approach: Count from ERP data (primary) + App status (supplement)
-                        // 1. Primary: Count from OPP/CPC where CONFORMADOSN = 'S' for today (ERP native)
-                        const now = new Date();
-                        const dia = now.getDate();
-                        const mes = now.getMonth() + 1;
-                        const ano = now.getFullYear();
-                        try {
-                            const erpSql = `
-                                SELECT COUNT(DISTINCT CPC.NUMEROALBARAN) as DELIVERED
-                                FROM DSEDAC.OPP OPP
-                                INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-                                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanCodes})
-                                  AND OPP.DIAREPARTO = ${dia}
-                                  AND OPP.MESREPARTO = ${mes}
-                                  AND OPP.ANOREPARTO = ${ano}
-                                  AND (TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R'))
-                            `;
-                            const erpRows = await query(erpSql, false, false);
-                            deliveredToday = parseInt(erpRows[0]?.DELIVERED) || 0;
-                        } catch (erpErr) {
-                            logger.warn(`[RUTERO WEEK] ERP delivery count error: ${erpErr.message}`);
-                        }
+                    const todayClients = cachedCounts[todayName] || 0;
+                    if (todayClients > 0) {
+                        const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : [];
+                        let deliveredToday = 0;
+                        if (cleanCodes.length > 0) {
+                            // HYBRID approach: Count from ERP data (primary) + App status (supplement)
+                            // 1. Primary: Count from OPP/CPC where CONFORMADOSN = 'S' for today (ERP native)
+                            const now = new Date();
+                            const dia = now.getDate();
+                            const mes = now.getMonth() + 1;
+                            const ano = now.getFullYear();
+                            try {
+                                const erpPlaceholders = cleanCodes.map(() => '?').join(',');
+                                const erpSql = `
+                                    SELECT COUNT(DISTINCT CPC.NUMEROALBARAN) as DELIVERED
+                                    FROM DSEDAC.OPP OPP
+                                    INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                                    WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${erpPlaceholders})
+                                      AND OPP.DIAREPARTO = ?
+                                      AND OPP.MESREPARTO = ?
+                                      AND OPP.ANOREPARTO = ?
+                                      AND (TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R'))
+                                `;
+                                const erpParams = [...cleanCodes, dia, mes, ano];
+                                const erpRows = await queryWithParams(erpSql, erpParams, false, false);
+                                deliveredToday = parseInt(erpRows[0]?.DELIVERED) || 0;
+                            } catch (erpErr) {
+                                logger.warn(`[RUTERO WEEK] ERP delivery count error: ${erpErr.message}`);
+                            }
 
-                        // 2. Supplement: Add app-confirmed deliveries from DELIVERY_STATUS (if table exists)
-                        try {
-                            const appSql = `
-                                SELECT COUNT(DISTINCT DS.ID) as DELIVERED
-                                FROM JAVIER.DELIVERY_STATUS DS
-                                WHERE DS.STATUS = 'ENTREGADO'
-                                  AND DS.REPARTIDOR_ID IN (${cleanCodes})
-                                  AND DATE(DS.UPDATED_AT) = CURRENT DATE
-                            `;
-                            const appRows = await query(appSql, false, false);
-                            const appDelivered = parseInt(appRows[0]?.DELIVERED) || 0;
-                            // Use the higher of the two counts (avoid double counting)
-                            deliveredToday = Math.max(deliveredToday, appDelivered);
-                        } catch (dsErr) {
-                            // DELIVERY_STATUS table may not exist — this is OK, ERP data is primary
+                            // 2. Supplement: Add app-confirmed deliveries from DELIVERY_STATUS (if table exists)
+                            try {
+                                const appPlaceholders = cleanCodes.map(() => '?').join(',');
+                                const appSql = `
+                                    SELECT COUNT(DISTINCT DS.ID) as DELIVERED
+                                    FROM JAVIER.DELIVERY_STATUS DS
+                                    WHERE DS.STATUS = 'ENTREGADO'
+                                      AND DS.REPARTIDOR_ID IN (${appPlaceholders})
+                                      AND DATE(DS.UPDATED_AT) = CURRENT DATE
+                                `;
+                                const appRows = await queryWithParams(appSql, cleanCodes, false, false);
+                                const appDelivered = parseInt(appRows[0]?.DELIVERED) || 0;
+                                // Use the higher of the two counts (avoid double counting)
+                                deliveredToday = Math.max(deliveredToday, appDelivered);
+                            } catch (dsErr) {
+                                // DELIVERY_STATUS table may not exist — this is OK, ERP data is primary
+                            }
                         }
-                    }
                     weekProgress[todayName] = {
                         total: todayClients,
                         delivered: deliveredToday,
@@ -261,7 +268,7 @@ router.get('/rutero/vendedores', async (req, res) => {
         let sql;
 
         // Definitive whitelist of active commercial codes (matches comisiones)
-        const ACTIVE_COMERCIALES = ['01','02','03','05','10','13','15','16','33','35','72','73','80','81','83','92','93','95','97','98'];
+        const ACTIVE_COMERCIALES = ['01', '02', '03', '05', '10', '13', '15', '16', '33', '35', '72', '73', '80', '81', '83', '92', '93', '95', '97', '98'];
 
         if (role === 'repartidor') {
             sql = `
@@ -317,6 +324,10 @@ router.post('/rutero/move_clients', async (req, res) => {
             return res.status(400).json({ error: 'Datos inválidos. Se requiere vendedor y array de movimientos.' });
         }
 
+        if (vendedor.includes(',')) {
+            return res.status(400).json({ error: 'Vendedor debe ser un código único, no una lista.' });
+        }
+
         const DIAS_PROHIBIDOS = ['domingo'];
         const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 
@@ -340,67 +351,86 @@ router.post('/rutero/move_clients', async (req, res) => {
         if (!pool) throw new Error("Database pool not initialized");
 
         conn = await pool.connect();
-        await conn.beginTransaction();
+        // Removed beginTransaction to avoid DB2 Journaling silent failure
 
         const movedClientsInfo = [];
 
         for (const move of moves) {
-            const { client, toDay, position } = move;
+            const { client, toDay, position, fromDay } = move;
             if (!client || !toDay) continue;
 
             const dayLower = toDay.toLowerCase();
             const clientTrimmed = client.trim();
 
-            let previousDay = getClientCurrentDay(vendedor, clientTrimmed);
+            // Determine source day: prefer explicit fromDay, then RUTERO_CONFIG, then natural
+            let previousDay = fromDay ? fromDay.toLowerCase() : getClientCurrentDay(vendedor, clientTrimmed);
             let previousOrder = null;
 
             try {
                 const prevRes = await conn.query(`
-                    SELECT TRIM(DIA) as DIA, ORDEN FROM JAVIER.RUTERO_CONFIG 
-                    WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'
-                `);
+                    SELECT TRIM(DIA) as DIA, ORDEN FROM JAVIER.RUTERO_CONFIG
+                    WHERE VENDEDOR = ? AND TRIM(CLIENTE) = ?
+                    AND ORDEN >= 0
+                    ORDER BY ORDEN ASC
+                    FETCH FIRST 1 ROWS ONLY
+                `, [vendedor, clientTrimmed]);
                 if (prevRes && prevRes.length > 0) {
-                    previousDay = prevRes[0].DIA?.trim() || previousDay;
+                    if (!fromDay) previousDay = prevRes[0].DIA?.trim() || previousDay;
                     previousOrder = prevRes[0].ORDEN;
                 }
             } catch (e) {
                 logger.warn(`Could not get previous config: ${e.message}`);
             }
 
-            logger.info(`📋 Move: Cliente ${clientTrimmed} estaba en día "${previousDay || 'ninguno'}"`);
+            logger.info(`📋 Move: Cliente ${clientTrimmed} de "${previousDay || 'ninguno'}" a "${dayLower}"`);
 
-            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND TRIM(CLIENTE) = '${clientTrimmed}'`);
+            // Delete ALL existing entries for this client (positives + blocks)
+            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND TRIM(CLIENTE) = ?`, [vendedor, clientTrimmed]);
+
+            // Insert BLOCKING entry for source day (ORDEN = -1) so client no longer appears there
+            if (previousDay && previousDay !== dayLower) {
+                await conn.query(`
+                    INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
+                    VALUES (?, ?, ?, -1)
+                `, [vendedor, previousDay, clientTrimmed]);
+                logger.info(`🚫 Block entry created: ${clientTrimmed} blocked from ${previousDay}`);
+            }
 
             let targetOrder;
             const effectivePosition = position ?? targetPosition ?? 'end';
 
             if (effectivePosition === 'start' || effectivePosition === 0) {
                 await conn.query(`
-                    UPDATE JAVIER.RUTERO_CONFIG 
-                    SET ORDEN = ORDEN + 10 
-                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}'
-                `);
+                    UPDATE JAVIER.RUTERO_CONFIG
+                    SET ORDEN = ORDEN + 10
+                    WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
+                `, [vendedor, dayLower]);
                 targetOrder = 0;
             } else if (typeof effectivePosition === 'number' && effectivePosition > 0) {
                 targetOrder = effectivePosition * 10;
                 await conn.query(`
-                    UPDATE JAVIER.RUTERO_CONFIG 
-                    SET ORDEN = ORDEN + 10 
-                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}' AND ORDEN >= ${targetOrder}
-                `);
+                    UPDATE JAVIER.RUTERO_CONFIG
+                    SET ORDEN = ORDEN + 10
+                    WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= ?
+                `, [vendedor, dayLower, targetOrder]);
             } else {
                 const maxOrderRes = await conn.query(`
-                    SELECT MAX(ORDEN) as MAX_ORD 
-                    FROM JAVIER.RUTERO_CONFIG 
-                    WHERE VENDEDOR = '${vendedor}' AND DIA = '${dayLower}'
-                `);
-                targetOrder = (maxOrderRes[0]?.MAX_ORD || 0) + 10;
+                    SELECT MAX(ORDEN) as MAX_ORD
+                    FROM JAVIER.RUTERO_CONFIG
+                    WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
+                `, [vendedor, dayLower]);
+
+                // Si movemos al final, y no hay overrides (MAX_ORD is null), debemos ponerlo después de los naturales.
+                // Los naturales asumen orden 20000+natOrder o 99999 si no tienen.
+                // Para asegurarnos de que quede al final de todo, usamos un número muy alto si no se pasa posición.
+                const currentMax = maxOrderRes[0]?.MAX_ORD || 0;
+                targetOrder = Math.max(currentMax + 10, 199990); // 199990 garantiza que va al fondo de los naturales (que llegan a 99999)
             }
 
             await conn.query(`
-                INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
-                VALUES ('${vendedor}', '${dayLower}', '${clientTrimmed}', ${targetOrder})
-            `);
+                INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN)
+                VALUES (?, ?, ?, ?)
+            `, [vendedor, dayLower, clientTrimmed, targetOrder]);
 
             movedClientsInfo.push({
                 client: clientTrimmed,
@@ -411,19 +441,23 @@ router.post('/rutero/move_clients', async (req, res) => {
                 newPosition: targetOrder
             });
         }
-
-        await conn.commit();
+        // 🎯 FIX: Clear Redis cache for the day endpoint before doing DB transactions
+        try {
+            await deleteCachePattern(`rutero:config:v2:${vendedor}:*`);
+            await deleteCachePattern(`query:rutero:details:v3:*`);
+            await deleteCachePattern(`query:rutero:sales:*`);
+            await deleteCachePattern(`query:rutero:gps:*`);
+        } catch (e) {
+            logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
+        }
 
         try {
             for (const moved of movedClientsInfo) {
                 await conn.query(`
                     INSERT INTO JAVIER.RUTERO_LOG 
                     (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES)
-                    VALUES ('${vendedor}', 'CAMBIO_DIA', '${moved.fromDay}', '${moved.toDay}', '${moved.client}', 
-                            '${(moved.clientName || '').replace(/'/g, "''")}', 
-                            ${moved.previousPosition ?? 'NULL'}, ${moved.newPosition}, 
-                            'Movido de ${moved.fromDay} a ${moved.toDay}')
-                `);
+                    VALUES (?, 'CAMBIO_DIA', ?, ?, ?, ?, ?, ?, ?)
+                `, [vendedor, moved.fromDay, moved.toDay, moved.client, sanitizeForSQL(moved.clientName || ''), moved.previousPosition, moved.newPosition, `Movido de ${moved.fromDay} a ${moved.toDay}`]);
             }
         } catch (logErr) {
             logger.warn(`Log insert failed (non-blocking): ${logErr.message}`);
@@ -436,9 +470,9 @@ router.post('/rutero/move_clients', async (req, res) => {
 
         for (const day of affectedDays) {
             const countRes = await conn.query(`
-                SELECT COUNT(*) as CNT FROM JAVIER.RUTERO_CONFIG 
-                WHERE VENDEDOR = '${vendedor}' AND DIA = '${day}'
-            `);
+                SELECT COUNT(*) as CNT FROM JAVIER.RUTERO_CONFIG
+                WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
+            `, [vendedor, day]);
             updatedCounts[day] = countRes[0]?.CNT || 0;
         }
 
@@ -477,7 +511,6 @@ router.post('/rutero/move_clients', async (req, res) => {
 // RUTERO CONFIGURATION (GET/POST)
 // =============================================================================
 router.post('/rutero/config', async (req, res) => {
-    let conn;
     try {
         const { vendedor, dia, orden } = req.body;
 
@@ -485,18 +518,48 @@ router.post('/rutero/config', async (req, res) => {
             return res.status(400).json({ error: 'Datos inválidos. Se requiere vendedor, dia y array de orden.' });
         }
 
+        // Guard: vendedor must be a single code, not a comma-separated list
+        if (vendedor.includes(',')) {
+            return res.status(400).json({ error: 'Vendedor debe ser un código único, no una lista.' });
+        }
+
         const pool = getPool();
         if (!pool) throw new Error("Database pool not initialized");
 
-        conn = await pool.connect();
-        await conn.beginTransaction();
+        // 🎯 FIX: Clear Redis cache for the day endpoint before doing DB transactions
+        try {
+            await deleteCachePattern(`rutero:config:v2:${vendedor}:*`);
+            await deleteCachePattern(`query:rutero:details:v3:*`);
+            await deleteCachePattern(`query:rutero:sales:*`);
+            await deleteCachePattern(`query:rutero:gps:*`);
+        } catch (e) {
+            logger.warn(`Failed to invalidate cache patterns: ${e.message}`);
+        }
+
+        // Helper to run SQL with detailed error logging.
+        // Gets a FRESH connection each time to avoid DB2 dirty-connection issues.
+        async function execSql(label, sql, params) {
+            let c;
+            try {
+                c = await pool.connect();
+                const result = params ? await c.query(sql, params) : await c.query(sql);
+                return result;
+            } catch (err) {
+                const odbcDetail = (err.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
+                logger.error(`❌ SQL FAILED (${label}): ${odbcDetail || err.message}`);
+                logger.error(`   SQL was: ${sql.substring(0, 500)}`);
+                throw err;
+            } finally {
+                if (c) try { await c.close(); } catch (_) {}
+            }
+        }
 
         let previousPositions = {};
         try {
-            const prevRows = await conn.query(`
-                SELECT CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG 
-                WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}'
-            `);
+            const prevRows = await execSql('fetch-previous',
+                `SELECT CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ?`,
+                [vendedor, dia]
+            );
             prevRows.forEach(row => {
                 previousPositions[row.CLIENTE?.trim()] = row.ORDEN;
             });
@@ -504,29 +567,73 @@ router.post('/rutero/config', async (req, res) => {
             logger.warn(`Could not fetch previous positions: ${e.message}`);
         }
 
-        await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}'`);
+        // Delete ALL POSITIVE overrides for this day, so the new `orden` array becomes the absolute truth
+        // BUT we MUST preserve blocking entries (ORDEN = -1)!
+        await execSql('delete-positive',
+            `DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0`,
+            [vendedor, dia]
+        );
 
         if (orden.length > 0) {
-            const clientCodes = orden.map(o => `'${o.cliente}'`).join(',');
-            await conn.query(`DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = '${vendedor}' AND CLIENTE IN (${clientCodes})`);
+            const updatingClients = orden.filter(o => o.cliente).map(o => o.cliente.trim());
+            if (updatingClients.length > 0) {
+                const placeholders = updatingClients.map(() => '?').join(',');
+                await execSql('delete-blocks-for-updating',
+                    `DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ? AND TRIM(CLIENTE) IN (${placeholders})`,
+                    [vendedor, dia, ...updatingClients]
+                );
+            }
+
+            const incomingClients = new Set();
 
             for (const item of orden) {
-                if (item.cliente) {
-                    await conn.query(`
-                      INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) 
-                      VALUES ('${vendedor}', '${dia}', '${item.cliente}', ${parseInt(item.posicion) || 0})
-                    `);
+                if (!item.cliente) continue;
+                incomingClients.add(item.cliente.trim());
+
+                const posNueva = parseInt(item.posicion) || 0;
+                let posAnterior = item.posicionOriginal !== undefined ? parseInt(item.posicionOriginal) : posNueva;
+                const hadPreviousOverride = previousPositions[item.cliente.trim()] !== undefined;
+
+                const hayCambio = posAnterior !== posNueva;
+
+                if (hayCambio || hadPreviousOverride) {
+                    await execSql(`insert-client-${item.cliente}`,
+                        `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES (?, ?, ?, ?)`,
+                        [vendedor, dia, item.cliente, posNueva]
+                    );
+                }
+            }
+
+            // SMART MERGE PART 2: THE "GHOST" CLIENTS
+            // Only block clients that previously had a POSITIVE override (were explicitly managed).
+            const clientsInConfig = Object.keys(previousPositions);
+
+            for (const clientCode of clientsInConfig) {
+                if (!incomingClients.has(clientCode)) {
+                    const previousOrder = previousPositions[clientCode];
+                    if (previousOrder >= 0) {
+                        logger.info(`🚫 Smart Merge blocking previously-managed client ${clientCode} on day ${dia} (removed from reorder)`);
+                        await execSql(`block-ghost-${clientCode}`,
+                            `INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES (?, ?, ?, -1)`,
+                            [vendedor, dia, clientCode]
+                        );
+                    } else if (previousOrder === -1) {
+                        // Block already exists in DB (step 1 only deletes ORDEN >= 0)
+                        // No action needed — the existing -1 row is preserved automatically
+                        logger.debug(`🔒 Smart Merge: existing block for ${clientCode} on ${dia} already preserved (not deleted)`);
+                    }
                 }
             }
         }
-
-        await conn.commit();
 
         // Invalidate cache for this vendor's config to ensure immediate updates
         try {
             const cachePattern = `rutero:config:v2:${vendedor}:*`;
             await deleteCachePattern(cachePattern);
-            logger.info(`♻️ Cache invalidated for pattern: ${cachePattern}`);
+            await deleteCachePattern(`query:rutero:details:v3:*`);
+            await deleteCachePattern(`query:rutero:sales:*`);
+            await deleteCachePattern(`query:rutero:gps:*`);
+            logger.info(`♻️ Cache invalidated for pattern: ${cachePattern} and query caches`);
         } catch (cacheErr) {
             logger.warn(`Cache invalidation failed: ${cacheErr.message}`);
         }
@@ -540,13 +647,12 @@ router.post('/rutero/config', async (req, res) => {
 
             for (const item of orden) {
                 if (item.cliente) {
-                    await conn.query(`
-                        INSERT INTO JAVIER.RUTERO_LOG 
-                        (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES)
-                        VALUES ('${vendedor}', 'REORDENAMIENTO', '${dia}', '${dia}', '${item.cliente}', 
-                                '', NULL, ${parseInt(item.posicion) || 0}, 
-                                '${logDetail} a posición ${item.posicion}')
-                    `);
+                    try {
+                        await execSql(`log-${item.cliente}`,
+                            `INSERT INTO JAVIER.RUTERO_LOG (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, NOMBRE_CLIENTE, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES) VALUES (?, 'REORDENAMIENTO', ?, ?, ?, '', NULL, ?, ?)`,
+                            [vendedor, dia, dia, item.cliente, parseInt(item.posicion) || 0, `${logDetail} a posicion ${item.posicion}`]
+                        );
+                    } catch (_) { /* non-blocking */ }
                 }
             }
         } catch (logErr) {
@@ -601,15 +707,9 @@ router.post('/rutero/config', async (req, res) => {
         res.json({ success: true, message: 'Orden actualizado y notificado' });
 
     } catch (error) {
-        if (conn) {
-            try { await conn.rollback(); } catch (e) { logger.warn(`Rollback failed: ${e.message}`); }
-        }
-        logger.error(`Rutero config save error: ${error.message}`);
-        res.status(500).json({ error: 'Error guardando orden', details: error.message });
-    } finally {
-        if (conn) {
-            try { await conn.close(); } catch (e) { logger.warn(`Connection close failed: ${e.message}`); }
-        }
+        const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
+        logger.error(`Rutero config save error: ${odbcDetail || error.message}`);
+        res.status(500).json({ error: 'Error guardando orden', details: odbcDetail || error.message });
     }
 });
 
@@ -618,12 +718,12 @@ router.get('/rutero/config', async (req, res) => {
         const { vendedor, dia } = req.query;
         if (!vendedor || !dia) return res.status(400).json({ error: 'Vendedor y dia requeridos' });
 
-        const rows = await query(`
-      SELECT CLIENTE, ORDEN 
-      FROM JAVIER.RUTERO_CONFIG 
-      WHERE VENDEDOR = '${vendedor}' AND DIA = '${dia}' 
+        const rows = await queryWithParams(`
+      SELECT CLIENTE, ORDEN
+      FROM JAVIER.RUTERO_CONFIG
+      WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
       ORDER BY ORDEN ASC
-    `);
+    `, [vendedor, dia]);
 
         res.json({ config: rows });
     } catch (error) {
@@ -637,8 +737,10 @@ router.get('/rutero/config', async (req, res) => {
 // =============================================================================
 router.get('/rutero/counts', async (req, res) => {
     try {
-        const { vendedorCodes, role } = req.query;
-        const counts = getWeekCountsFromCache(vendedorCodes, role || 'comercial');
+        const { vendedorCodes, role, ignoreOverrides } = req.query;
+        const shouldIgnore = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
+
+        const counts = getWeekCountsFromCache(vendedorCodes, role || 'comercial', shouldIgnore);
 
         if (!counts) {
             return res.json({
@@ -687,6 +789,139 @@ router.get('/rutero/positions/:day', async (req, res) => {
     } catch (error) {
         logger.error(`Rutero positions error: ${error.message}`);
         res.status(500).json({ error: 'Error obteniendo posiciones' });
+    }
+});
+
+// =============================================================================
+// RUTERO FULL CACHE RELOAD (CDVI + LACLAE + RUTERO_CONFIG)
+// =============================================================================
+router.post('/rutero/reload-cache', async (req, res) => {
+    try {
+        logger.info(`[CACHE RELOAD] Full cache reload requested by ${req.user ? req.user.codigovendedor : 'unknown'}`);
+        const start = Date.now();
+        await loadLaclaeCache();
+        // Also invalidate Redis query caches so clients/rutero queries use fresh data
+        try {
+            await deleteCachePattern('clients:*');
+            await deleteCachePattern('rutero:*');
+            logger.info('[CACHE RELOAD] Redis query caches invalidated (clients + rutero)');
+        } catch (redisErr) {
+            logger.warn(`[CACHE RELOAD] Redis invalidation failed (non-blocking): ${redisErr.message}`);
+        }
+        const duration = Date.now() - start;
+        logger.info(`[CACHE RELOAD] Complete in ${duration}ms`);
+        res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG + Redis recargada' });
+    } catch (error) {
+        logger.error(`[CACHE RELOAD] Failed: ${error.message}`);
+        res.status(500).json({ error: 'Error recargando caché', details: error.message });
+    }
+});
+
+// =============================================================================
+// RUTERO DAY - DIRECT DB QUERY (NO CACHE) - For refresh button
+// =============================================================================
+router.get('/rutero/day-direct/:day', async (req, res) => {
+    try {
+        const { day } = req.params;
+        const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query;
+        
+        logger.info(`[RUTERO DAY DIRECT] Query without cache for ${vendedorCodes} on ${day}`);
+        
+        // First, reload the cache to ensure we have latest data
+        await loadLaclaeCache();
+        await reloadRuteroConfig();
+        
+        // Now use the fresh cache
+        const shouldIgnoreOverrides = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
+        let dayClientCodes = getClientsForDayService(vendedorCodes, day, role || 'comercial', shouldIgnoreOverrides);
+
+        if (!dayClientCodes || dayClientCodes.length === 0) {
+            return res.json({ clients: [], count: 0, day, cacheStatus: 'fresh' });
+        }
+
+        const batchSize = 200;
+        const clientBatch = dayClientCodes.slice(0, batchSize);
+        const safeClientFilter = clientBatch.map(c => `'${sanitizeForSQL(c)}'`).join(',');
+
+        // Query directly without cache
+        const clientDetailsSql = `
+            SELECT 
+                CODIGOCLIENTE as CODE,
+                COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
+                DIRECCION as ADDRESS,
+                POBLACION as CITY,
+                TELEFONO1 as PHONE,
+                TELEFONO2 as PHONE2
+            FROM DSEDAC.CLI
+            WHERE CODIGOCLIENTE IN (${safeClientFilter})
+              AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
+        `;
+        const clientDetails = await query(clientDetailsSql, false, false);
+
+        // Get RUTERO_CONFIG order for sorting
+        const configSql = `
+            SELECT TRIM(CLIENTE) as CLIENTE, ORDEN
+            FROM JAVIER.RUTERO_CONFIG
+            WHERE VENDEDOR = '${vendedorCodes}' AND DIA = '${day.toLowerCase()}' AND ORDEN >= 0
+        `;
+        const configRows = await query(configSql, false, false);
+        
+        const configOrder = {};
+        configRows.forEach(r => { configOrder[r.CLIENTE?.trim()] = r.ORDEN; });
+
+        // Build client list with order
+        const clients = clientDetails.map(c => ({
+            code: c.CODE?.trim(),
+            name: c.NAME?.trim(),
+            address: c.ADDRESS?.trim(),
+            city: c.CITY?.trim(),
+            phone: c.PHONE?.trim(),
+            phone2: c.PHONE2?.trim(),
+            ruteroOrder: configOrder[c.CODE?.trim()] ?? 99999
+        }));
+
+        // Sort by rutero order
+        if (!shouldIgnoreOverrides) {
+            clients.sort((a, b) => a.ruteroOrder - b.ruteroOrder);
+        }
+
+        logger.info(`[RUTERO DAY DIRECT] Returning ${clients.length} clients (fresh from DB)`);
+        
+        res.json({
+            clients,
+            count: clients.length,
+            day,
+            cacheStatus: 'fresh'
+        });
+
+    } catch (error) {
+        logger.error(`Rutero day direct error: ${error.message}`);
+        res.status(500).json({ error: 'Error obteniendo rutero', details: error.message });
+    }
+});
+
+// =============================================================================
+// RUTERO FULL CACHE RELOAD (CDVI + LACLAE + RUTERO_CONFIG)
+// =============================================================================
+router.post('/rutero/reload-cache-old', async (req, res) => {
+    try {
+        logger.info(`[CACHE RELOAD] Full cache reload requested by ${req.user ? req.user.codigovendedor : 'unknown'}`);
+        const start = Date.now();
+        await loadLaclaeCache();
+        // Also invalidate Redis query caches so clients/rutero queries use fresh data
+        try {
+            await deleteCachePattern('clients:*');
+            await deleteCachePattern('rutero:*');
+            logger.info('[CACHE RELOAD] Redis query caches invalidated (clients + rutero)');
+        } catch (redisErr) {
+            logger.warn(`[CACHE RELOAD] Redis invalidation failed (non-blocking): ${redisErr.message}`);
+        }
+        const duration = Date.now() - start;
+        logger.info(`[CACHE RELOAD] Complete in ${duration}ms`);
+        res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG + Redis recargada' });
+    } catch (error) {
+        logger.error(`[CACHE RELOAD] Failed: ${error.message}`);
+        res.status(500).json({ error: 'Error recargando caché', details: error.message });
     }
 });
 
@@ -823,6 +1058,18 @@ router.get('/rutero/day/:day', async (req, res) => {
             return res.json({ clients: [], count: 0, day, cacheStatus: 'loading' });
         }
 
+        // --- DEBUG LOG FOR TESTS ---
+        if (day === 'miercoles' || day === 'jueves') {
+            logger.info(`[TEST-DEBUG] /rutero/day/${day} requested. dayClientCodes.length = ${dayClientCodes.length}`);
+            const testClient = '4300008971'; // Client from test output
+            const { ruteroConfigCache } = require('../services/laclae');
+            const cacheForVendor = ruteroConfigCache[vendedorCodes] || {};
+            const cacheForClient = cacheForVendor[testClient] || {};
+            logger.info(`[TEST-DEBUG] ruteroConfigCache for ${testClient}: ${JSON.stringify(cacheForClient)}`);
+            logger.info(`[TEST-DEBUG] is testClient in dayClientCodes? ${dayClientCodes.includes(testClient)}`);
+        }
+        // ---------------------------
+
         if (dayClientCodes.length === 0) {
             return res.json({
                 clients: [], count: 0, day, year: currentYear, compareYear: previousYear
@@ -832,12 +1079,12 @@ router.get('/rutero/day/:day', async (req, res) => {
         // Limit clients for safety
         const batchSize = 200;
         const clientBatch = dayClientCodes.slice(0, batchSize);
-        const safeClientFilter = clientBatch.map(c => `'${c.replace(/'/g, "''")}'`).join(',');
+        const safeClientFilter = clientBatch.map(c => `'${sanitizeForSQL(c)}'`).join(',');
 
         // --- 2. Heavy Queries with Caching ---
 
         // Cache Key Components
-        const clientsHash = safeClientFilter.length > 50 ? safeClientFilter.substring(0, 50) + clientBatch.length : safeClientFilter;
+        const clientsHash = crypto.createHash('md5').update(safeClientFilter).digest('hex');
         const cacheTTL = TTL.MEDIUM; // 5 minutes
 
         // A. Client Details
@@ -985,7 +1232,12 @@ router.get('/rutero/day/:day', async (req, res) => {
                 WHERE VENDEDOR = '${primaryVendor}' AND DIA = '${day.toLowerCase()}'
              `, false); // false = no debug log clutter
 
-            configRows.forEach(r => orderMap.set(r.CLIENTE.trim(), r.ORDEN));
+            configRows.forEach(r => {
+                // Only include POSITIVE overrides (order >= 0), skip blocking entries (-1)
+                if (r.ORDEN >= 0) {
+                    orderMap.set(r.CLIENTE.trim(), r.ORDEN);
+                }
+            });
             logger.info(`[RUTERO SORT] Loaded ${configRows.length} overrides for ${primaryVendor}/${day}`);
         }
 
@@ -1024,6 +1276,12 @@ router.get('/rutero/day/:day', async (req, res) => {
                 // "Custom" Mode: Use Config Order
                 if (orderMap.has(code)) {
                     clientOrder = orderMap.get(code);
+                } else {
+                    // FALLBACK: Preserve AS400 Natural Route behavior for unconfigured clients!
+                    // Shifted by 20000 to place them strictly below custom-sorted ones, 
+                    // while retaining their exact relative AS400 order.
+                    const natOrder = getNaturalOrder(primaryVendor, code, day);
+                    clientOrder = natOrder > 0 ? (20000 + natOrder) : 99999;
                 }
             }
 
@@ -1059,14 +1317,8 @@ router.get('/rutero/day/:day', async (req, res) => {
             }
 
             // 2. Secondary Sort (Tie-breaker for 9999s)
-            if (shouldIgnoreOverrides) {
-                // Original Route Fallback: Stable Sort by CODE
-                return (a.name || '').localeCompare(b.name || '');
-            } else {
-                // Custom Route Fallback: Optimization Sort by SALES (Desc)
-                // This keeps high-value clients visible if not manually ordered
-                return b.status.ytdSales - a.status.ytdSales;
-            }
+            // Fix: Use strictly Name to avoid visual jumping compared to Route Config UI
+            return (a.name || '').localeCompare(b.name || '');
         });
 
         res.json({
@@ -1108,7 +1360,7 @@ router.get('/diagnose/client/:code', async (req, res) => {
 
         // 1. Get client info from DSEDAC.CLI
         try {
-            const clientData = await query(`
+            const clientData = await queryWithParams(`
                 SELECT 
                     TRIM(CODIGOCLIENTE) as CODE,
                     TRIM(COALESCE(NOMBREALTERNATIVO, NOMBRECLIENTE)) as NAME,
@@ -1117,9 +1369,9 @@ router.get('/diagnose/client/:code', async (req, res) => {
                     TRIM(POBLACION) as CITY,
                     TRIM(CODIGORUTA) as ROUTE
                 FROM DSEDAC.CLI
-                WHERE CODIGOCLIENTE = '${clientCode}'
+                WHERE CODIGOCLIENTE = ?
                 FETCH FIRST 1 ROWS ONLY
-            `);
+            `, [clientCode]);
             if (clientData.length > 0) {
                 results.clientInfo = clientData[0];
                 results.analysis.push(`✓ Cliente encontrado en CLI: ${clientData[0].NAME}`);
@@ -1134,17 +1386,17 @@ router.get('/diagnose/client/:code', async (req, res) => {
 
         // 2. Get sales history from DSED.LACLAE to see which vendors have sold to this client
         try {
-            const laclaeData = await query(`
+            const laclaeData = await queryWithParams(`
                 SELECT DISTINCT
                     TRIM(L.R1_T8CDVD) as VENDOR_LACLAE,
                     L.LCYEAB as YEAR,
                     L.R1_T8DIVL as VIS_L, L.R1_T8DIVM as VIS_M, L.R1_T8DIVX as VIS_X,
                     L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S
                 FROM DSED.LACLAE L
-                WHERE L.LCCDCL = '${clientCode}'
+                WHERE L.LCCDCL = ?
                 ORDER BY L.LCYEAB DESC
                 FETCH FIRST 10 ROWS ONLY
-            `);
+            `, [clientCode]);
             results.laclaeHistory = laclaeData;
 
             const vendors = [...new Set(laclaeData.map(r => r.VENDOR_LACLAE))];
@@ -1167,12 +1419,12 @@ router.get('/diagnose/client/:code', async (req, res) => {
 
         // 3. Check RUTERO_CONFIG for overrides
         try {
-            const configData = await query(`
+            const configData = await queryWithParams(`
                 SELECT TRIM(VENDEDOR) as VENDEDOR, TRIM(DIA) as DIA, ORDEN
                 FROM JAVIER.RUTERO_CONFIG
-                WHERE TRIM(CLIENTE) = '${clientCode}'
+                WHERE TRIM(CLIENTE) = ?
                 FETCH FIRST 10 ROWS ONLY
-            `);
+            `, [clientCode]);
             if (configData.length > 0) {
                 results.ruteroConfig = configData;
                 results.analysis.push(`⚠ OVERRIDE en RUTERO_CONFIG:`);
@@ -1189,12 +1441,12 @@ router.get('/diagnose/client/:code', async (req, res) => {
         // 4. Get vendor info for CLI vendor
         if (results.clientInfo?.VENDOR_CLI) {
             try {
-                const vendorData = await query(`
+                const vendorData = await queryWithParams(`
                     SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME
                     FROM DSEDAC.VDD
-                    WHERE CODIGOVENDEDOR = '${results.clientInfo.VENDOR_CLI}'
+                    WHERE CODIGOVENDEDOR = ?
                     FETCH FIRST 1 ROWS ONLY
-                `);
+                `, [results.clientInfo.VENDOR_CLI]);
                 if (vendorData.length > 0) {
                     results.vendorInfo = vendorData[0];
                     results.analysis.push(`✓ Vendedor CLI: ${vendorData[0].CODE} - ${vendorData[0].NAME}`);
@@ -1291,7 +1543,7 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         };
 
         // Get monthly sales for current and previous year
-        const monthlySalesSql = `
+        const monthlySales = await queryWithParams(`
             SELECT 
                 L.LCYEAB as YEAR,
                 L.LCMMDC as MONTH,
@@ -1299,13 +1551,12 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
                 SUM(L.LCIMCT) as COST,
                 SUM(L.LCIMVT - L.LCIMCT) as MARGIN
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL = '${clientCode}'
-              AND L.LCYEAB IN (${currentYear}, ${previousYear})
+            WHERE L.LCCDCL = ?
+              AND L.LCYEAB IN (?, ?)
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCYEAB, L.LCMMDC
             ORDER BY L.LCYEAB DESC, L.LCMMDC ASC
-        `;
-        const monthlySales = await query(monthlySalesSql, false, false);
+        `, [clientCode, currentYear, previousYear], false, false);
 
         // Group by month and calculate comparisons
         const monthMap = {};
@@ -1353,18 +1604,17 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         const isNewClient = totalLastYear < 0.01 && totalCurrentYear > 0;
 
         // Get multi-year history
-        const yearlyHistorySql = `
+        const yearlyHistory = await queryWithParams(`
             SELECT 
                 L.LCYEAB as YEAR,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL = '${clientCode}'
-              AND L.LCYEAB >= ${currentYear - 5}
+            WHERE L.LCCDCL = ?
+              AND L.LCYEAB >= ?
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCYEAB
             ORDER BY L.LCYEAB DESC
-        `;
-        const yearlyHistory = await query(yearlyHistorySql, false, false);
+        `, [clientCode, currentYear - 5], false, false);
         const yearlyTotals = yearlyHistory.map(row => ({
             year: row.YEAR,
             sales: formatCurrencyLocal(row.SALES),
@@ -1372,17 +1622,16 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         }));
 
         // Calculate purchase frequency (orders in current year)
-        const frequencySql = `
+        const frequencyResult = await queryWithParams(`
             SELECT 
                 COUNT(DISTINCT L.LCDIDL || '-' || L.LCMIDL || '-' || L.LCAIDL) as ORDER_COUNT,
                 COUNT(*) as LINE_COUNT,
                 MAX(L.LCAIDL * 10000 + L.LCMIDL * 100 + L.LCDIDL) as LAST_ORDER_DATE
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL = '${clientCode}'
-              AND L.LCYEAB = ${currentYear}
+            WHERE L.LCCDCL = ?
+              AND L.LCYEAB = ?
               AND ${LACLAE_SALES_FILTER}
-        `;
-        const frequencyResult = await query(frequencySql, false, false);
+        `, [clientCode, currentYear], false, false);
         const freq = frequencyResult[0] || {};
         const orderCount = parseInt(freq.ORDER_COUNT) || 0;
         const monthsWithData = monthlyData.filter(m => m.currentYear > 0).length;

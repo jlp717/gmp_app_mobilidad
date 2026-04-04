@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "claude-flow": {
+      "command": "claude-flow",
+      "args": ["mcp", "start"],
+      "env": {
+        "npm_config_update_notifier": "false",
+        "CLAUDE_FLOW_MODE": "v3",
+        "CLAUDE_FLOW_HOOKS_ENABLED": "true",
+        "CLAUDE_FLOW_TOPOLOGY": "hierarchical-mesh",
+        "CLAUDE_FLOW_MAX_AGENTS": "60",
+        "CLAUDE_FLOW_MEMORY_BACKEND": "hybrid",
+        "CLAUDE_FLOW_TOKEN_OPTIMIZER": "true",
+        "CLAUDE_FLOW_AGENT_BOOSTER": "true",
+        "CLAUDE_FLOW_WASM_BOOSTER": "true",
+        "CLAUDE_FLOW_SELF_LEARNING": "true"
+      },
+      "autoStart": true
+    },
+    "context7": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "env": {
+        "npm_config_update_notifier": "false"
+      },
+      "autoStart": false
+    }
+  }
+}

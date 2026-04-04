@@ -8,15 +8,39 @@ import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/api/api_config.dart';
 import '../../../../core/widgets/async_operation_modal.dart';
 import '../../../../core/widgets/pdf_preview_screen.dart';
 import '../../../../core/widgets/email_form_modal.dart';
 import '../../../../core/widgets/whatsapp_form_modal.dart';
 import '../../../entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
+import '../../../../core/widgets/smart_product_image.dart';
+
+/// Validate Spanish DNI/NIE format with check letter
+bool _isValidDniNie(String value) {
+  final cleaned = value.trim().toUpperCase();
+  final regex = RegExp(r'^([XYZ]\d{7}|\d{8})[A-Z]$');
+  if (!regex.hasMatch(cleaned)) return false;
+  const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+  var numStr = cleaned.substring(0, cleaned.length - 1);
+  numStr = numStr
+      .replaceFirst('X', '0')
+      .replaceFirst('Y', '1')
+      .replaceFirst('Z', '2');
+  final num = int.tryParse(numStr);
+  if (num == null) return false;
+  return cleaned[cleaned.length - 1] == letters[num % 23];
+}
 
 /// Rutero Detail Modal - Futuristic Redesign v2
 /// Features:
@@ -38,13 +62,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     with TickerProviderStateMixin {
   late TabController _tabController;
   late AnimationController _slideController;
-  
-  final TextEditingController _observacionesController = TextEditingController();
+
+  final TextEditingController _observacionesController =
+      TextEditingController();
   final TextEditingController _dniController = TextEditingController();
   final TextEditingController _nombreController = TextEditingController();
   final FocusNode _dniFocus = FocusNode();
   final FocusNode _nombreFocus = FocusNode();
-  
+
   final SignatureController _signatureController = SignatureController(
     penStrokeWidth: 3,
     penColor: Colors.black,
@@ -54,12 +79,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   // Product verification state
   final Map<String, bool> _productChecked = {};
   final Map<String, int> _productQuantities = {};
-  
+
   // Data state
   List<EntregaItem> _items = [];
   bool _isLoadingItems = true;
   String? _itemsError;
-  
+
   // Helpers
   List<String> _suggestedNames = [];
   List<String> _suggestedDnis = [];
@@ -67,12 +92,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   String _selectedPaymentMethod = 'EFECTIVO';
   bool _isPaid = false;
   bool _isSubmitting = false;
-  
+
+  // Zebra printer config
+  bool _tieneImpresora = false;
+  String? _printerName;
+  String? _printerAddress;
+  bool _isTestingConnection = false;
+  bool? _lastConnectionResult; // null=not tested, true=ok, false=fail
+
   // Inline validation errors (instead of snackbar)
   String? _nombreError;
   String? _dniError;
   String? _firmaError;
   String? _pagoError;
+  String? _observacionesError;
+
+  // PDF cache to avoid regenerating on re-open
+  String? _cachedPdfBase64;
 
   @override
   void initState() {
@@ -82,15 +118,245 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       duration: const Duration(milliseconds: 400),
       vsync: this,
     )..forward();
-    
+
     _observacionesController.text = widget.albaran.observaciones ?? '';
 
     if (widget.albaran.esCTR) {
       _selectedPaymentMethod = 'EFECTIVO';
     }
-    
+
     _loadItems();
     _loadSignerSuggestions();
+    _loadPrinterConfig();
+  }
+
+  Future<void> _loadPrinterConfig() async {
+    final has = await ZebraPrintService.tieneImpresora();
+    final name = await ZebraPrintService.getSavedPrinterName();
+    final addr = await ZebraPrintService.getSavedPrinterAddress();
+    if (mounted) {
+      setState(() {
+        _tieneImpresora = has;
+        _printerName = name;
+        _printerAddress = addr;
+      });
+    }
+  }
+
+  Future<void> _testPrinterConnection() async {
+    setState(() {
+      _isTestingConnection = true;
+      _lastConnectionResult = null;
+    });
+    final ok = await ZebraPrintService.testConnection();
+    if (mounted) {
+      setState(() {
+        _isTestingConnection = false;
+        _lastConnectionResult = ok;
+      });
+    }
+  }
+
+  Future<void> _selectAndSavePrinter() async {
+    final device = await ZebraPrintService.selectPrinter(context);
+    if (device != null && mounted) {
+      final displayName =
+          device.name ?? ZebraPrintService.maskAddress(device.address);
+      await ZebraPrintService.savePrinter(
+        device.address,
+        displayName,
+      );
+      setState(() {
+        _printerName = displayName;
+        _printerAddress = device.address;
+        _lastConnectionResult = null;
+      });
+    }
+  }
+
+  /// Reusable printer config widget (toggle, status, verify, change).
+  Widget _buildPrinterConfigSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _tieneImpresora
+              ? AppTheme.neonCyan.withValues(alpha: 0.4)
+              : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.print,
+                color:
+                    _tieneImpresora ? AppTheme.neonCyan : AppTheme.textTertiary,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Imprimir ticket (Zebra)',
+                  style: TextStyle(
+                    color: _tieneImpresora
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              Switch(
+                value: _tieneImpresora,
+                activeThumbColor: AppTheme.neonCyan,
+                onChanged: (val) async {
+                  if (val && _printerAddress == null) {
+                    await _selectAndSavePrinter();
+                    if (_printerAddress == null) return;
+                  }
+                  await ZebraPrintService.setTieneImpresora(val);
+                  setState(() {
+                    _tieneImpresora = val;
+                    _lastConnectionResult = null;
+                  });
+                },
+              ),
+            ],
+          ),
+          if (_tieneImpresora) ...[
+            const SizedBox(height: 8),
+            if (_printerAddress != null) ...[
+              Row(
+                children: [
+                  Icon(
+                    Icons.bluetooth_connected,
+                    size: 14,
+                    color: _lastConnectionResult == true
+                        ? AppTheme.success
+                        : _lastConnectionResult == false
+                            ? AppTheme.error
+                            : AppTheme.textTertiary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${_printerName ?? "Zebra"} · '
+                      '${ZebraPrintService.maskAddress(_printerAddress!)}',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_lastConnectionResult != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, left: 20),
+                  child: Text(
+                    _lastConnectionResult!
+                        ? 'Conectada · Cifrado BT activo'
+                        : 'No detectada · Verifica que esté encendida',
+                    style: TextStyle(
+                      color: _lastConnectionResult!
+                          ? AppTheme.success
+                          : AppTheme.error,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 30,
+                      child: OutlinedButton.icon(
+                        onPressed: _isTestingConnection
+                            ? null
+                            : _testPrinterConnection,
+                        icon: _isTestingConnection
+                            ? const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: AppTheme.neonCyan,
+                                ),
+                              )
+                            : const Icon(Icons.wifi_find, size: 14),
+                        label: Text(
+                          _isTestingConnection ? 'Verificando...' : 'Verificar',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.neonCyan,
+                          side: BorderSide(
+                            color: AppTheme.neonCyan.withValues(alpha: 0.4),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SizedBox(
+                      height: 30,
+                      child: OutlinedButton.icon(
+                        onPressed: _selectAndSavePrinter,
+                        icon: const Icon(Icons.swap_horiz, size: 14),
+                        label: const Text(
+                          'Cambiar',
+                          style: TextStyle(fontSize: 11),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.textSecondary,
+                          side: const BorderSide(color: AppTheme.borderColor),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              SizedBox(
+                height: 32,
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _selectAndSavePrinter,
+                  icon: const Icon(Icons.bluetooth_searching, size: 16),
+                  label: const Text(
+                    'Seleccionar impresora',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.neonCyan,
+                    side: BorderSide(
+                      color: AppTheme.neonCyan.withValues(alpha: 0.4),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _loadItems() async {
@@ -102,17 +368,29 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         widget.albaran.serie,
         widget.albaran.terminal,
       );
-      
+
+      // Filter out ghost lines: no product code, or description starts with "Pedido:"
+      final filtered = items.where((item) {
+        final code = item.codigoArticulo.trim();
+        final desc = item.descripcion.trim();
+        if (code.isEmpty) return false;
+        if (desc.toLowerCase().startsWith('pedido:')) return false;
+        // Filter lines with code like "000" or purely zeros
+        if (RegExp(r'^0+$').hasMatch(code)) return false;
+        return true;
+      }).toList();
+
       if (mounted) {
         setState(() {
-          _items = items;
+          _items = filtered;
           _isLoadingItems = false;
-          
-          for (var item in items) {
-             if (!_productChecked.containsKey(item.codigoArticulo)) {
-                _productChecked[item.codigoArticulo] = true;
-                _productQuantities[item.codigoArticulo] = item.cantidadPedida.toInt();
-             }
+
+          for (var item in filtered) {
+            if (!_productChecked.containsKey(item.codigoArticulo)) {
+              _productChecked[item.codigoArticulo] = true;
+              _productQuantities[item.codigoArticulo] =
+                  item.cantidadPedida.toInt();
+            }
           }
         });
       }
@@ -130,19 +408,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     try {
       final codigoCliente = widget.albaran.codigoCliente;
       if (codigoCliente == null) return;
-      
+
       final response = await ApiClient.get('/entregas/signers/$codigoCliente');
       if (response['success'] == true && mounted) {
         final signers = response['signers'] as List;
         setState(() {
-          _suggestedDnis = signers.map((s) => s['DNI'].toString().trim()).toList();
-          _suggestedNames = signers.map((s) => s['NOMBRE'].toString().trim()).toList();
-          
+          _suggestedDnis =
+              signers.map((s) => s['DNI'].toString().trim()).toList();
+          _suggestedNames =
+              signers.map((s) => s['NOMBRE'].toString().trim()).toList();
+
           // Pre-fill with most recent signer (User request)
           if (signers.isNotEmpty) {
-             final last = signers.first;
-             _dniController.text = last['DNI'].toString().trim();
-             _nombreController.text = last['NOMBRE'].toString().trim();
+            final last = signers.first;
+            _dniController.text = last['DNI'].toString().trim();
+            _nombreController.text = last['NOMBRE'].toString().trim();
           }
         });
       }
@@ -180,7 +460,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         curve: Curves.easeOutCubic,
       )),
       child: Container(
-        height: MediaQuery.of(context).size.height * (_isCompleted ? 0.70 : 0.92),
+        // Responsive: use more height in landscape where screen is shorter
+        height: Responsive.modalHeight(
+          context,
+          portraitFraction: _isCompleted ? 0.70 : 0.92,
+          landscapeFraction: _isCompleted ? 0.80 : 0.95,
+        ),
         decoration: BoxDecoration(
           color: AppTheme.darkBase,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -260,7 +545,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     color: AppTheme.success.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.check_circle, color: AppTheme.success, size: 32),
+                  child: const Icon(Icons.check_circle,
+                      color: AppTheme.success, size: 32),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -281,7 +567,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         _isFactura
                             ? 'Factura ${widget.albaran.numeroFactura}'
                             : 'Albarán ${widget.albaran.numeroAlbaran}',
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 13),
                       ),
                     ],
                   ),
@@ -302,16 +589,40 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
             child: Column(
               children: [
-                _buildInfoRow(Icons.store, 'Cliente', widget.albaran.nombreCliente),
+                _buildInfoRow(
+                    Icons.store, 'Cliente', widget.albaran.nombreCliente),
                 const Divider(color: AppTheme.borderColor, height: 20),
-                _buildInfoRow(Icons.location_on, 'Dirección', '${widget.albaran.direccion}, ${widget.albaran.poblacion}'),
+                _buildInfoRow(Icons.location_on, 'Dirección',
+                    '${widget.albaran.direccion}, ${widget.albaran.poblacion}'),
                 const Divider(color: AppTheme.borderColor, height: 20),
-                _buildInfoRow(Icons.euro, 'Importe', '${widget.albaran.importeTotal.toStringAsFixed(2)} €'),
-                const Divider(color: AppTheme.borderColor, height: 20),
-                _buildInfoRow(Icons.payment, 'Forma pago', widget.albaran.formaPagoDesc),
-                if (widget.albaran.observaciones != null && widget.albaran.observaciones!.isNotEmpty) ...[
+                // IVA breakdown: show neto + each IVA line + total
+                if (widget.albaran.importeNeto > 0) ...[
+                  _buildInfoRow(Icons.euro, 'Importe Neto',
+                      '${widget.albaran.importeNeto.toStringAsFixed(2)} €'),
+                  for (final iva in widget.albaran.ivaBreakdown)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _buildInfoRow(
+                        Icons.percent,
+                        'IVA ${iva.pct.toStringAsFixed(0)}%',
+                        '${iva.iva.toStringAsFixed(2)} €',
+                      ),
+                    ),
                   const Divider(color: AppTheme.borderColor, height: 20),
-                  _buildInfoRow(Icons.notes, 'Observaciones', widget.albaran.observaciones!),
+                  _buildInfoRow(Icons.euro, 'Total',
+                      '${widget.albaran.importeTotal.toStringAsFixed(2)} €'),
+                ] else ...[
+                  _buildInfoRow(Icons.euro, 'Importe',
+                      '${widget.albaran.importeTotal.toStringAsFixed(2)} €'),
+                ],
+                const Divider(color: AppTheme.borderColor, height: 20),
+                _buildInfoRow(
+                    Icons.payment, 'Forma pago', widget.albaran.formaPagoDesc),
+                if (widget.albaran.observaciones != null &&
+                    widget.albaran.observaciones!.isNotEmpty) ...[
+                  const Divider(color: AppTheme.borderColor, height: 20),
+                  _buildInfoRow(Icons.notes, 'Observaciones',
+                      widget.albaran.observaciones!),
                 ],
               ],
             ),
@@ -370,6 +681,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
           ),
 
+          // Zebra printer section (same as finalize tab)
+          const SizedBox(height: 16),
+          _buildPrinterConfigSection(),
+          if (_tieneImpresora && _items.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _buildShareButton(
+              icon: Icons.print,
+              label: 'Imprimir Ticket (Zebra)',
+              color: const Color(0xFF00BCD4),
+              onTap: _showZebraPrintPreview,
+            ),
+          ],
+
           const SizedBox(height: 24),
         ],
       ),
@@ -382,23 +706,31 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       children: [
         Icon(icon, size: 18, color: AppTheme.textTertiary),
         const SizedBox(width: 10),
+        // Responsive label width
         SizedBox(
-          width: 80,
-          child: Text(label, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+          width: Responsive.value(context, phone: 60, desktop: 80),
+          child: Text(label,
+              style:
+                  const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
         ),
         Expanded(
-          child: Text(value, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+          child: Text(value,
+              style:
+                  const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
         ),
       ],
     );
   }
 
   Future<void> _previewReceiptPdf() async {
-    final modal = AsyncOperationModal.show(context, text: 'Generando vista previa...');
+    final modal =
+        AsyncOperationModal.show(context, text: 'Generando vista previa...');
     try {
-      final pdfData = await _generateReceiptPdf();
+      // Use cached PDF if available, otherwise generate
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) throw Exception('No se pudo generar el PDF');
-      
+      _cachedPdfBase64 = pdfData; // Cache for re-opens
+
       modal.close();
       if (!mounted) return;
 
@@ -406,8 +738,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final docLabel = widget.albaran.numeroFactura > 0
           ? 'Factura ${widget.albaran.numeroFactura}'
           : 'Albarán ${widget.albaran.numeroAlbaran}';
-      final fileName = 'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
+      final fileName =
+          'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
 
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -427,30 +761,53 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
       );
     } catch (e) {
-      modal.error('Error al visualizar: $e');
+      modal.error('Error al visualizar: $e',
+          onRetry: () => _previewReceiptPdf());
     }
   }
 
   /// Descargar el PDF y abrirlo con share sheet
   Future<void> _downloadReceiptPdf() async {
-    final modal = AsyncOperationModal.show(context, text: 'Descargando...');
+    final modal = AsyncOperationModal.show(context, text: 'Preparando PDF...');
     try {
-      final pdfData = await _generateReceiptPdf();
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) {
         throw Exception('Error al generar el PDF');
       }
+      _cachedPdfBase64 = pdfData;
 
       final tempDir = await getTemporaryDirectory();
       final docLabel = widget.albaran.numeroFactura > 0
           ? 'Factura_${widget.albaran.numeroFactura}'
           : 'Albaran_${widget.albaran.numeroAlbaran}';
-      final file = File('${tempDir.path}/Nota_Entrega_$docLabel.pdf');
+      final dlTs = DateTime.now().millisecondsSinceEpoch;
+      final file = File('${tempDir.path}/Nota_Entrega_${docLabel}_$dlTs.pdf');
       await file.writeAsBytes(base64Decode(pdfData));
 
-      modal.success('Guardado en Descargas');
-      await OpenFilex.open(file.path);
+      modal.close();
+      if (!mounted) return;
+
+      // Use Share sheet - user can save or open in any app
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: 'Guardar $docLabel',
+        subject: docLabel,
+        sharePositionOrigin: origin,
+      );
     } catch (e) {
-      modal.error('Error descargando PDF: $e');
+      if (mounted) {
+        modal.error('Error descargando PDF: $e');
+      }
     }
   }
 
@@ -472,7 +829,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             children: [
               // Document badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: _isFactura
@@ -496,7 +854,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     Icon(
                       _isFactura ? Icons.receipt_long : Icons.description,
                       size: 16,
-                      color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
+                      color:
+                          _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -504,7 +863,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                           ? 'FACTURA ${widget.albaran.serieFactura.isNotEmpty ? "${widget.albaran.serieFactura}-" : ""}${widget.albaran.numeroFactura}'
                           : 'ALBARÁN ${widget.albaran.serie.isNotEmpty ? "${widget.albaran.serie}" : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
                       style: TextStyle(
-                        color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
+                        color: _isFactura
+                            ? AppTheme.neonPurple
+                            : AppTheme.neonBlue,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
@@ -523,26 +884,34 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     NumberFormat.currency(symbol: '€', locale: 'es_ES')
                         .format(widget.albaran.importeTotal),
                     style: TextStyle(
-                      color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
+                      color: _isUrgent
+                          ? AppTheme.obligatorio
+                          : AppTheme.textPrimary,
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
-                          .withOpacity(0.15),
+                      color:
+                          (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
+                              .withOpacity(0.15),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       _isCompleted
                           ? '✓ ENTREGADO'
-                          : _isUrgent ? '⚠ COBRO OBLIGATORIO' : '✓ COBRO OPCIONAL',
+                          : _isUrgent
+                              ? '⚠ COBRO OBLIGATORIO'
+                              : '✓ COBRO OPCIONAL',
                       style: TextStyle(
                         color: _isCompleted
                             ? AppTheme.success
-                            : _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                            : _isUrgent
+                                ? AppTheme.obligatorio
+                                : AppTheme.success,
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
                       ),
@@ -561,7 +930,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     color: AppTheme.borderColor,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.close, color: AppTheme.textSecondary, size: 18),
+                  child: const Icon(Icons.close,
+                      color: AppTheme.textSecondary, size: 18),
                 ),
                 onPressed: () => Navigator.pop(context),
                 padding: EdgeInsets.zero,
@@ -584,16 +954,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           const SizedBox(height: 4),
           Row(
             children: [
-              const Icon(Icons.location_on_outlined, size: 14, color: AppTheme.textSecondary),
+              const Icon(Icons.location_on_outlined,
+                  size: 14, color: AppTheme.textSecondary),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   '${widget.albaran.direccion}, ${widget.albaran.poblacion}',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 13),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
+          ),
+          // KPI Glacius compact badges
+          ClientAlertsWidget(
+            clientId: widget.albaran.codigoCliente,
+            compact: true,
           ),
         ],
       ),
@@ -714,7 +1091,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 color: AppTheme.error.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
+              child: const Icon(Icons.error_outline,
+                  color: AppTheme.error, size: 48),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -724,7 +1102,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const SizedBox(height: 8),
             Text(
               '$error',
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -768,6 +1147,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final checked = _productChecked.values.where((v) => v).length;
     final total = lineas.length;
 
+    final ordenPrep = widget.albaran.ordenPreparacion;
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -776,35 +1157,58 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.neonBlue.withOpacity(0.2)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Icon(Icons.checklist, color: AppTheme.neonBlue, size: 20),
-          const SizedBox(width: 12),
-          Text(
-            '$checked de $total productos verificados',
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: checked == total
-                  ? AppTheme.success.withOpacity(0.2)
-                  : AppTheme.warning.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              checked == total ? '✓ COMPLETO' : 'PENDIENTE',
-              style: TextStyle(
-                color: checked == total ? AppTheme.success : AppTheme.warning,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Icon(Icons.checklist, color: AppTheme.neonBlue, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                '$checked de $total productos verificados',
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: checked == total
+                      ? AppTheme.success.withOpacity(0.2)
+                      : AppTheme.warning.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  checked == total ? '✓ COMPLETO' : 'PENDIENTE',
+                  style: TextStyle(
+                    color:
+                        checked == total ? AppTheme.success : AppTheme.warning,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
+          if (ordenPrep != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.assignment, color: AppTheme.neonCyan, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Orden de Preparación: $ordenPrep',
+                  style: const TextStyle(
+                    color: AppTheme.neonCyan,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -812,7 +1216,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Widget _buildProductCard(EntregaItem linea) {
     final isChecked = _productChecked[linea.codigoArticulo] ?? true;
-    final quantity = _productQuantities[linea.codigoArticulo] ?? linea.cantidadPedida.toInt();
+    final quantity = _productQuantities[linea.codigoArticulo] ??
+        linea.cantidadPedida.toInt();
     final isModified = quantity != linea.cantidadPedida.toInt();
 
     return Container(
@@ -851,16 +1256,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         : AppTheme.darkBase,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: isChecked ? AppTheme.success : AppTheme.borderColor,
+                      color:
+                          isChecked ? AppTheme.success : AppTheme.borderColor,
                       width: 2,
                     ),
                   ),
                   child: isChecked
-                      ? const Icon(Icons.check, color: AppTheme.success, size: 18)
+                      ? const Icon(Icons.check,
+                          color: AppTheme.success, size: 18)
                       : null,
                 ),
 
-                const SizedBox(width: 14),
+                const SizedBox(width: 10),
+
+                // Product image thumbnail
+                _buildProductThumbnail(linea),
+
+                const SizedBox(width: 10),
 
                 // Product info
                 Expanded(
@@ -871,11 +1283,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         linea.descripcion,
                         style: TextStyle(
                           color: AppTheme.textPrimary,
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          decoration: isChecked ? null : TextDecoration.lineThrough,
+                          decoration:
+                              isChecked ? null : TextDecoration.lineThrough,
                         ),
-                        maxLines: 2,
+                        maxLines: 4,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
@@ -909,6 +1322,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                               ),
                             ),
                           ],
+                          const Spacer(),
+                          // Ficha técnica button
+                          _buildFichaButton(linea),
                         ],
                       ),
                     ],
@@ -931,20 +1347,29 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                             ? () {
                                 HapticFeedback.selectionClick();
                                 setState(() {
-                                  _productQuantities[linea.codigoArticulo] = quantity - 1;
+                                  _productQuantities[linea.codigoArticulo] =
+                                      quantity - 1;
+                                  _cachedPdfBase64 = null;
                                 });
                               }
                             : null,
                       ),
-                      Container(
-                        width: 40,
-                        alignment: Alignment.center,
-                        child: Text(
-                          '$quantity',
-                          style: TextStyle(
-                            color: isModified ? AppTheme.warning : AppTheme.textPrimary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                      GestureDetector(
+                        onTap: () => _showQuantityEditDialog(linea, quantity),
+                        child: Container(
+                          width: 40,
+                          alignment: Alignment.center,
+                          child: Text(
+                            '$quantity',
+                            style: TextStyle(
+                              color: isModified
+                                  ? AppTheme.warning
+                                  : AppTheme.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              decoration: TextDecoration.underline,
+                              decorationStyle: TextDecorationStyle.dotted,
+                            ),
                           ),
                         ),
                       ),
@@ -953,11 +1378,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         onTap: () {
                           HapticFeedback.selectionClick();
                           setState(() {
-                            _productQuantities[linea.codigoArticulo] = quantity + 1;
+                            _productQuantities[linea.codigoArticulo] =
+                                quantity + 1;
+                            _cachedPdfBase64 = null;
                           });
                         },
                       ),
                     ],
+                  ),
+                ),
+                // Pencil icon for direct quantity editing
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => _showQuantityEditDialog(linea, quantity),
+                  child: Icon(
+                    Icons.edit_outlined,
+                    color: AppTheme.textTertiary,
+                    size: 18,
                   ),
                 ),
               ],
@@ -989,6 +1426,324 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
+  // ==========================================================================
+  // PRODUCT IMAGE & FICHA TÉCNICA
+  // ==========================================================================
+
+  String _productImageUrl(String code) =>
+      '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(code.trim())}/image';
+
+  String _productFichaUrl(String code) =>
+      '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(code.trim())}/ficha';
+
+  Widget _buildProductThumbnail(EntregaItem linea) {
+    final url = _productImageUrl(linea.codigoArticulo);
+    return GestureDetector(
+      onTap: () => _showFullscreenImage(
+        url,
+        linea.descripcion,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 48,
+          height: 48,
+          color: AppTheme.darkBase,
+          child: SmartProductImage(
+            imageUrl: url,
+            productCode: linea.codigoArticulo,
+            productName: linea.descripcion,
+            width: 48,
+            height: 48,
+            fit: BoxFit.cover,
+            headers: {
+              'Accept': 'image/*',
+              if (ApiClient.dio.options.headers['Authorization'] != null)
+                'Authorization':
+                    ApiClient.dio.options.headers['Authorization'] as String
+            },
+            showCodeOnFallback: false,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFichaButton(EntregaItem linea) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _openFichaTecnica(linea),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 3,
+          ),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: AppTheme.neonBlue.withOpacity(0.5),
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.description_outlined,
+                color: AppTheme.neonBlue,
+                size: 14,
+              ),
+              SizedBox(width: 3),
+              Text(
+                'Ficha',
+                style: TextStyle(
+                  color: AppTheme.neonBlue,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFullscreenImage(String imageUrl, String name) {
+    Navigator.of(context).push<void>(
+      PageRouteBuilder<void>(
+        opaque: false,
+        barrierColor: Colors.black87,
+        barrierDismissible: true,
+        pageBuilder: (ctx, anim, secondAnim) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              elevation: 0,
+              title: Text(
+                name,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+            body: Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5.0,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: '',
+                  productName: name,
+                  fit: BoxFit.contain,
+                  headers: {
+                    'Accept': 'image/*',
+                    if (ApiClient.dio.options.headers['Authorization'] != null)
+                      'Authorization': ApiClient
+                          .dio.options.headers['Authorization'] as String
+                  },
+                  showCodeOnFallback: true,
+                ),
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (ctx, anim, secondAnim, child) {
+          return FadeTransition(opacity: anim, child: child);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openFichaTecnica(EntregaItem linea) async {
+    final navigator = Navigator.of(context);
+    final url = _productFichaUrl(linea.codigoArticulo);
+    final filePath =
+        '${(await getTemporaryDirectory()).path}/${linea.codigoArticulo.trim()}_ficha.pdf';
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.neonBlue,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              'Descargando ficha técnica...',
+              style: TextStyle(color: Colors.grey[300]),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await ApiClient.dio.download(url, filePath);
+
+      if (!navigator.canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      if (!File(filePath).existsSync()) {
+        if (navigator.canPop()) navigator.pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se encontró la ficha técnica'),
+          ),
+        );
+        return;
+      }
+
+      await navigator.push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              title: Text(
+                'Ficha - ${linea.codigoArticulo.trim()}',
+                style: const TextStyle(fontSize: 14),
+              ),
+              backgroundColor: AppTheme.darkSurface,
+              elevation: 0,
+            ),
+            body: PDFView(
+              filePath: filePath,
+              enableSwipe: true,
+              swipeHorizontal: false,
+              autoSpacing: true,
+              pageFling: true,
+              onError: (error) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error al abrir PDF: $error')),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (navigator.canPop()) navigator.pop();
+      final msg = e.toString().contains('404')
+          ? 'No hay ficha técnica para este producto'
+          : 'Error al descargar: $e';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+    }
+  }
+
+  /// Show a dialog to edit quantity directly by typing a number.
+  Future<void> _showQuantityEditDialog(EntregaItem linea, int current) async {
+    final controller = TextEditingController(text: '$current');
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.edit, color: AppTheme.neonBlue, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                linea.descripcion,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 14,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Cantidad original: ${linea.cantidadPedida.toInt()}',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Nueva cantidad',
+                filled: true,
+                fillColor: AppTheme.darkBase,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              onSubmitted: (val) {
+                final n = int.tryParse(val);
+                if (n != null && n >= 0) Navigator.pop(ctx, n);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'CANCELAR',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final n = int.tryParse(controller.text);
+              if (n != null && n >= 0) Navigator.pop(ctx, n);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonBlue,
+            ),
+            child: const Text('ACEPTAR'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && mounted) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _productQuantities[linea.codigoArticulo] = result;
+        _cachedPdfBase64 = null; // Invalidate PDF cache
+      });
+    }
+  }
+
   Widget _buildConfirmAllButton(List<EntregaItem> lineas) {
     final allChecked = _productChecked.values.every((v) => v);
 
@@ -1010,7 +1765,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   }
                 });
               },
-              icon: Icon(allChecked ? Icons.check_box : Icons.check_box_outline_blank),
+              icon: Icon(
+                  allChecked ? Icons.check_box : Icons.check_box_outline_blank),
               label: Text(allChecked ? 'DESMARCAR TODO' : 'MARCAR TODO'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.neonBlue,
@@ -1090,14 +1846,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   NumberFormat.currency(symbol: '€', locale: 'es_ES')
                       .format(widget.albaran.importeTotal),
                   style: TextStyle(
-                    color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
-                    fontSize: 42,
+                    color:
+                        _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
+                    // Responsive: scale down large amount on small screens
+                    fontSize:
+                        Responsive.fontSize(context, small: 28, large: 42),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     color: (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
                         .withOpacity(0.15),
@@ -1109,7 +1869,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       Icon(
                         _isUrgent ? Icons.priority_high : Icons.info_outline,
                         size: 16,
-                        color: _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                        color:
+                            _isUrgent ? AppTheme.obligatorio : AppTheme.success,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -1117,7 +1878,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                             ? 'COBRO OBLIGATORIO - ${_getPaymentTypeLabel()}'
                             : 'COBRO OPCIONAL - ${_getPaymentTypeLabel()}',
                         style: TextStyle(
-                          color: _isUrgent ? AppTheme.obligatorio : AppTheme.success,
+                          color: _isUrgent
+                              ? AppTheme.obligatorio
+                              : AppTheme.success,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1147,15 +1910,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             children: [
               Expanded(child: _buildPaymentOption('EFECTIVO', Icons.money)),
               const SizedBox(width: 12),
-              Expanded(child: _buildPaymentOption('TARJETA', Icons.credit_card)),
+              Expanded(
+                  child: _buildPaymentOption('TARJETA', Icons.credit_card)),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildPaymentOption('BIZUM', Icons.phone_android)),
+              Expanded(
+                  child: _buildPaymentOption('BIZUM', Icons.phone_android)),
               const SizedBox(width: 12),
-              Expanded(child: _buildPaymentOption('TRANSFER', Icons.account_balance)),
+              Expanded(
+                  child:
+                      _buildPaymentOption('TRANSFER', Icons.account_balance)),
             ],
           ),
 
@@ -1197,7 +1964,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       color: _isPaid ? AppTheme.success : AppTheme.darkBase,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: _isPaid ? AppTheme.success : AppTheme.borderColor,
+                        color:
+                            _isPaid ? AppTheme.success : AppTheme.borderColor,
                         width: 2,
                       ),
                     ),
@@ -1213,7 +1981,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         Text(
                           'MARCAR COMO COBRADO',
                           style: TextStyle(
-                            color: _isPaid ? AppTheme.success : AppTheme.textPrimary,
+                            color: _isPaid
+                                ? AppTheme.success
+                                : AppTheme.textPrimary,
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
@@ -1260,12 +2030,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 20),
+                  const Icon(Icons.warning_amber_rounded,
+                      color: AppTheme.error, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       _pagoError!,
-                      style: const TextStyle(color: AppTheme.error, fontSize: 12, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                          color: AppTheme.error,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
@@ -1388,7 +2162,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 ),
                 const SizedBox(height: 16),
                 const SizedBox(height: 16),
-                
+
                 // Name Autocomplete
                 RawAutocomplete<String>(
                   textEditingController: _nombreController,
@@ -1398,11 +2172,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       return const Iterable<String>.empty();
                     }
                     return _suggestedNames.where((String option) {
-                      return option.toUpperCase().contains(textEditingValue.text.toUpperCase());
+                      return option
+                          .toUpperCase()
+                          .contains(textEditingValue.text.toUpperCase());
                     });
                   },
-                  fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
-                     return TextField(
+                  fieldViewBuilder:
+                      (context, controller, focusNode, onEditingComplete) {
+                    return TextField(
                       controller: controller,
                       focusNode: focusNode,
                       onEditingComplete: onEditingComplete,
@@ -1434,7 +2211,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         color: AppTheme.darkCard,
                         child: SizedBox(
                           height: 200.0,
-                          width: MediaQuery.of(context).size.width - 80, // Adjust width
+                          // Responsive: less margin on phones
+                          width: MediaQuery.of(context).size.width -
+                              Responsive.value(context,
+                                  phone: 40, desktop: 80), // Adjust width
                           child: ListView.builder(
                             padding: const EdgeInsets.all(8.0),
                             itemCount: options.length,
@@ -1442,7 +2222,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                               final String option = options.elementAt(index);
                               return ListTile(
                                 tileColor: AppTheme.darkBase,
-                                title: Text(option, style: const TextStyle(color: AppTheme.textPrimary)),
+                                title: Text(option,
+                                    style: const TextStyle(
+                                        color: AppTheme.textPrimary)),
                                 onTap: () {
                                   onSelected(option);
                                 },
@@ -1454,9 +2236,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     );
                   },
                 ),
-                
+
                 const SizedBox(height: 12),
-                
+
                 // DNI Autocomplete
                 RawAutocomplete<String>(
                   textEditingController: _dniController,
@@ -1466,11 +2248,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       return const Iterable<String>.empty();
                     }
                     return _suggestedDnis.where((String option) {
-                      return option.toUpperCase().contains(textEditingValue.text.toUpperCase());
+                      return option
+                          .toUpperCase()
+                          .contains(textEditingValue.text.toUpperCase());
                     });
                   },
-                  fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
-                     return TextField(
+                  fieldViewBuilder:
+                      (context, controller, focusNode, onEditingComplete) {
+                    return TextField(
                       controller: controller,
                       focusNode: focusNode,
                       onEditingComplete: onEditingComplete,
@@ -1502,7 +2287,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         color: AppTheme.darkCard,
                         child: SizedBox(
                           height: 200.0,
-                          width: MediaQuery.of(context).size.width - 80,
+                          // Responsive: less margin on phones
+                          width: MediaQuery.of(context).size.width -
+                              Responsive.value(context, phone: 40, desktop: 80),
                           child: ListView.builder(
                             padding: const EdgeInsets.all(8.0),
                             itemCount: options.length,
@@ -1510,10 +2297,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                               final String option = options.elementAt(index);
                               return ListTile(
                                 tileColor: AppTheme.darkBase,
-                                title: Text(option, style: const TextStyle(color: AppTheme.textPrimary)),
+                                title: Text(option,
+                                    style: const TextStyle(
+                                        color: AppTheme.textPrimary)),
                                 onTap: () {
                                   onSelected(option);
-                                  // Try to auto-fill regular name if possible? 
+                                  // Try to auto-fill regular name if possible?
                                   // For now keeping it simple.
                                 },
                               );
@@ -1530,15 +2319,46 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
           const SizedBox(height: 16),
 
+          // Orange warning when quantities modified
+          if (_items.any((item) =>
+              (_productQuantities[item.codigoArticulo] ??
+                  item.cantidadPedida.toInt()) !=
+              item.cantidadPedida.toInt()))
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.15),
+                border: Border.all(color: Colors.orange),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'ATENCIÓN: Si marca en verde sin modificar cantidades, '
+                'la entrega está OK. Si modifica o quita cantidades, la '
+                'entrega NO coincide — debe añadir observaciones en la '
+                'pestaña \'Observaciones\' antes de confirmar.',
+                style: TextStyle(
+                  color: Colors.orange,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+
           // Observations
           TextField(
             controller: _observacionesController,
             maxLines: 3,
+            onChanged: (_) {
+              if (_observacionesError != null) {
+                setState(() => _observacionesError = null);
+              }
+            },
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               labelText: 'Observaciones',
               hintText: 'Añadir nota sobre la entrega...',
               alignLabelWithHint: true,
+              errorText: _observacionesError,
               filled: true,
               fillColor: AppTheme.darkCard,
               border: OutlineInputBorder(
@@ -1547,6 +2367,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
           ),
 
+          const SizedBox(height: 12),
+          _buildPrinterConfigSection(),
           const SizedBox(height: 20),
 
           // Signature
@@ -1578,13 +2400,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ],
           ),
           const SizedBox(height: 8),
+          // Responsive signature canvas: shorter in landscape, scales on phones
           Container(
-            height: 160,
+            height: Responsive.isLandscape(context)
+                ? 120.0
+                : Responsive.value(context, phone: 120, desktop: 160),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: _firmaError != null ? AppTheme.error : AppTheme.borderColor,
+                color:
+                    _firmaError != null ? AppTheme.error : AppTheme.borderColor,
                 width: _firmaError != null ? 2 : 1,
               ),
             ),
@@ -1667,7 +2493,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   String _getPaymentTypeLabel() {
     final code = widget.albaran.tipoPago.toUpperCase().trim();
-    if (code == '01' || code == 'CNT' || code.contains('CONTADO')) return 'CONTADO';
+    if (code == '01' || code == 'CNT' || code.contains('CONTADO'))
+      return 'CONTADO';
     if (code.contains('REP')) return 'REPOSICIÓN';
     if (code.contains('MEN')) return 'MENSUAL';
     if (code.contains('CRE') || code == 'CR') return 'CRÉDITO';
@@ -1683,47 +2510,72 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _dniError = null;
       _firmaError = null;
       _pagoError = null;
+      _observacionesError = null;
     });
   }
 
   /// Validate all fields, return true if valid
   bool _validateFields() {
     bool isValid = true;
-    
+
     // Clear previous errors
     _clearValidationErrors();
-    
+
     // Validate nombre
     if (_nombreController.text.trim().isEmpty) {
       _nombreError = 'El nombre del receptor es obligatorio';
       isValid = false;
     }
-    
-    // Validate DNI
-    if (_dniController.text.trim().isEmpty) {
+
+    // Validate DNI format (Spanish DNI/NIE)
+    final dniText = _dniController.text.trim();
+    if (dniText.isEmpty) {
       _dniError = 'El DNI/NIF es obligatorio';
       isValid = false;
-    }
-    
-    // Validate signature
-    if (_signatureController.isEmpty) {
-      _firmaError = 'La firma es obligatoria';
+    } else if (!_isValidDniNie(dniText)) {
+      _dniError = 'Formato no válido (ej: 12345678A o X1234567B)';
       isValid = false;
     }
-    
+
+    // Require observations when quantities are modified OR any product unchecked
+    final anyQtyModified = _items.any((item) =>
+        (_productQuantities[item.codigoArticulo] ??
+            item.cantidadPedida.toInt()) !=
+        item.cantidadPedida.toInt());
+    final anyUnchecked =
+        _items.any((item) => !(_productChecked[item.codigoArticulo] ?? true));
+    final hasDiscrepancy = anyQtyModified || anyUnchecked;
+    if (hasDiscrepancy && _observacionesController.text.trim().isEmpty) {
+      _observacionesError = anyUnchecked
+          ? 'Obligatorio: hay productos sin marcar como entregados'
+          : 'Obligatorio cuando se modifican cantidades';
+      isValid = false;
+      // Navigate to finalize tab so they see the error
+      _tabController.animateTo(2);
+    }
+
+    // Validate signature (always required; extra emphasis when quantities differ)
+    if (_signatureController.isEmpty) {
+      _firmaError = anyQtyModified
+          ? 'FIRMA OBLIGATORIA: las cantidades no coinciden con el pedido'
+          : 'La firma es obligatoria';
+      _tabController.animateTo(2); // Switch to signature tab
+      isValid = false;
+    }
+
     // CTR payment validation
     if (_isUrgent && !_isPaid) {
       _pagoError = '⚠️ COBRO OBLIGATORIO';
       _tabController.animateTo(1); // Switch to payment tab
       isValid = false;
     }
-    
+
     setState(() {}); // Trigger rebuild to show errors
-    
+
     if (!isValid) {
       HapticFeedback.heavyImpact();
     }
-    
+
     return isValid;
   }
 
@@ -1737,11 +2589,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(Icons.check_circle_outline, color: AppTheme.neonBlue, size: 28),
+            Icon(Icons.check_circle_outline,
+                color: AppTheme.neonBlue, size: 28),
             const SizedBox(width: 12),
             const Text(
               'Confirmar Entrega',
-              style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -1766,25 +2620,30 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.description, size: 16, color: AppTheme.textTertiary),
+                      Icon(Icons.description,
+                          size: 16, color: AppTheme.textTertiary),
                       const SizedBox(width: 8),
                       Text(
-                        _isFactura 
+                        _isFactura
                             ? 'Factura ${widget.albaran.numeroFactura}'
                             : 'Albarán ${widget.albaran.numeroAlbaran}',
-                        style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.person, size: 16, color: AppTheme.textTertiary),
+                      Icon(Icons.person,
+                          size: 16, color: AppTheme.textTertiary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           '${_nombreController.text} (${_dniController.text})',
-                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                          style: TextStyle(
+                              color: AppTheme.textSecondary, fontSize: 13),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -1798,7 +2657,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         const SizedBox(width: 8),
                         Text(
                           'Cobrado: $_selectedPaymentMethod',
-                          style: TextStyle(color: AppTheme.success, fontSize: 13),
+                          style:
+                              TextStyle(color: AppTheme.success, fontSize: 13),
                         ),
                       ],
                     ),
@@ -1811,7 +2671,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('CANCELAR', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('CANCELAR',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -1847,10 +2708,24 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (sigBytes == null) throw Exception('Error al procesar firma');
       final String base64Sig = base64Encode(sigBytes);
 
-      // Build observations
+      // Build observations with quantity changes
       String finalObs = _observacionesController.text.trim();
+      final qtyChanges = <String>[];
+      for (final item in _items) {
+        final orig = item.cantidadPedida.toInt();
+        final actual = _productQuantities[item.codigoArticulo] ?? orig;
+        if (actual != orig) {
+          qtyChanges.add(
+            '${item.descripcion}: $orig -> $actual',
+          );
+        }
+      }
+      if (qtyChanges.isNotEmpty) {
+        finalObs += '\n--- Cambios de cantidad ---\n${qtyChanges.join('\n')}';
+      }
       if (_nombreController.text.isNotEmpty) {
-        finalObs += '\nReceptor: ${_nombreController.text} (${_dniController.text})';
+        finalObs +=
+            '\nReceptor: ${_nombreController.text} (${_dniController.text})';
       }
       if (_isPaid) {
         finalObs += '\nCobrado: $_selectedPaymentMethod';
@@ -1879,11 +2754,27 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         );
         widget.albaran.firma = updated.firma;
         widget.albaran.estado = EstadoEntrega.entregado;
+        // Print on Zebra if configured
+        if (_tieneImpresora) {
+          await _showZebraPrintPreview();
+        }
         // Show share dialog before closing
         await _showShareReceiptDialog();
         if (!mounted) return;
+        // Capture messenger BEFORE pop (context dies after pop)
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
-        AsyncOperationModal.show(context, text: 'Entrega registrada correctamente').success();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Row(children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              const Text('Entrega registrada correctamente'),
+            ]),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
       } else {
         // Handle already delivered error specially
         final errorMsg = provider.error ?? 'Error al guardar entrega';
@@ -1910,11 +2801,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 28),
+            Icon(Icons.warning_amber_rounded,
+                color: AppTheme.warning, size: 28),
             const SizedBox(width: 12),
             const Text(
               'Entrega ya confirmada',
-              style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+              style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16),
             ),
           ],
         ),
@@ -1954,6 +2849,224 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
+  /// Show Zebra print preview with editable observations
+  Future<void> _showZebraPrintPreview() async {
+    final obsController = TextEditingController(
+      text: _observacionesController.text.trim(),
+    );
+    bool isPrinting = false;
+    // Capture parent scaffold messenger before entering dialog
+    final parentMessenger = ScaffoldMessenger.of(context);
+
+    // Pre-compute signature GRF if signature exists
+    String? signatureGrf;
+    if (!_signatureController.isEmpty) {
+      try {
+        final sigPng = await _signatureController.toPngBytes();
+        if (sigPng != null) {
+          signatureGrf = await ZebraPrintService.convertSignatureToGrf(sigPng);
+        }
+      } catch (e) {
+        debugPrint('[ZEBRA] Error converting signature to GRF: $e');
+      }
+    }
+
+    if (!mounted) return;
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final zpl = ZebraPrintService.generateDeliveryZpl(
+            albaran: widget.albaran,
+            items: _items,
+            observaciones: obsController.text.trim(),
+            receptorNombre: _nombreController.text.trim(),
+            receptorDni: _dniController.text.trim(),
+            signatureGrf: signatureGrf,
+            fechaFirma: DateTime.now(),
+          );
+
+          return AlertDialog(
+            backgroundColor: AppTheme.darkCard,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(Icons.print, color: AppTheme.neonCyan),
+                const SizedBox(width: 12),
+                const Text('Imprimir Ticket',
+                    style: TextStyle(color: AppTheme.textPrimary)),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Preview header
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkBase,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Granja Mari Pepa S.L.',
+                              style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.albaran.numeroFactura > 0
+                                ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
+                                : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}',
+                            style: TextStyle(
+                                color: AppTheme.neonCyan, fontSize: 14),
+                          ),
+                          Text('Fecha: ${widget.albaran.fecha}',
+                              style: TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 13)),
+                          const Divider(color: AppTheme.textTertiary),
+                          Text('Cliente: ${widget.albaran.nombreCliente}',
+                              style: TextStyle(
+                                  color: AppTheme.textPrimary, fontSize: 13)),
+                          const SizedBox(height: 8),
+                          // Item summary
+                          ...(_items.take(5).map((item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(item.descripcion,
+                                          style: TextStyle(
+                                              color: AppTheme.textSecondary,
+                                              fontSize: 12),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Text(
+                                      'x${item.cantidadPedida.toStringAsFixed(0)}  ${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}€',
+                                      style: TextStyle(
+                                          color: AppTheme.textSecondary,
+                                          fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ))),
+                          if (_items.length > 5)
+                            Text('... +${_items.length - 5} más',
+                                style: TextStyle(
+                                    color: AppTheme.textTertiary,
+                                    fontSize: 11)),
+                          const Divider(color: AppTheme.textTertiary),
+                          Text(
+                              'TOTAL: ${widget.albaran.importeTotal.toStringAsFixed(2)} €',
+                              style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Editable observations
+                    Text('Observaciones (editable):',
+                        style: TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 13)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: obsController,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: 'Añadir observaciones para el ticket...',
+                        hintStyle: TextStyle(color: AppTheme.textTertiary),
+                        filled: true,
+                        fillColor: AppTheme.darkBase,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.neonCyan)),
+                      ),
+                      style: const TextStyle(
+                          color: AppTheme.textPrimary, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isPrinting ? null : () => Navigator.pop(ctx),
+                child: Text('Omitir',
+                    style: TextStyle(color: AppTheme.textTertiary)),
+              ),
+              ElevatedButton.icon(
+                onPressed: isPrinting
+                    ? null
+                    : () async {
+                        setDialogState(() => isPrinting = true);
+                        final success = await ZebraPrintService.printZpl(zpl);
+                        if (!ctx.mounted) return;
+                        setDialogState(() => isPrinting = false);
+                        if (success) {
+                          Navigator.pop(ctx);
+                          parentMessenger.showSnackBar(
+                            const SnackBar(
+                              content: Row(children: [
+                                Icon(Icons.check_circle, color: Colors.white),
+                                SizedBox(width: 12),
+                                Text('Ticket enviado a impresora'),
+                              ]),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        } else {
+                          parentMessenger.showSnackBar(
+                            SnackBar(
+                              content: const Row(children: [
+                                Icon(Icons.error_outline, color: Colors.white),
+                                SizedBox(width: 12),
+                                Expanded(
+                                    child: Text(
+                                        'Error al imprimir. Verifica que la Zebra está encendida y vinculada.')),
+                              ]),
+                              backgroundColor: AppTheme.error,
+                            ),
+                          );
+                        }
+                      },
+                icon: isPrinting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.print),
+                label:
+                    Text(isPrinting ? 'Imprimiendo...' : 'Imprimir en Zebra'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.neonCyan,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   /// Show dialog to share delivery receipt via WhatsApp or Email
   Future<void> _showShareReceiptDialog() async {
     return showDialog<void>(
@@ -1966,7 +3079,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           children: [
             Icon(Icons.share, color: AppTheme.neonBlue),
             const SizedBox(width: 12),
-            const Text('Compartir Nota', style: TextStyle(color: AppTheme.textPrimary)),
+            const Text('Compartir Nota',
+                style: TextStyle(color: AppTheme.textPrimary)),
           ],
         ),
         content: Column(
@@ -2025,7 +3139,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Omitir', style: TextStyle(color: AppTheme.textTertiary)),
+            child:
+                Text('Omitir', style: TextStyle(color: AppTheme.textTertiary)),
           ),
         ],
       ),
@@ -2050,7 +3165,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             children: [
               Icon(icon, color: color, size: 24),
               const SizedBox(width: 12),
-              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+              Text(label,
+                  style: TextStyle(color: color, fontWeight: FontWeight.w600)),
               const Spacer(),
               Icon(Icons.chevron_right, color: color.withOpacity(0.6)),
             ],
@@ -2063,39 +3179,83 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Future<void> _shareViaWhatsApp() async {
     final result = await WhatsAppFormModal.show(
       context,
-      defaultMessage: 'Nota de entrega - Albarán ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}',
+      defaultMessage:
+          'Nota de entrega - Albarán ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}',
     );
     if (result == null || !mounted) return;
 
-    final modal = AsyncOperationModal.show(context, text: 'Preparando WhatsApp...');
+    final modal =
+        AsyncOperationModal.show(context, text: 'Preparando WhatsApp...');
     try {
-      // Generate receipt PDF via API
-      final pdfData = await _generateReceiptPdf();
+      // Generate receipt PDF via API (use cache if available)
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) throw Exception('Error generando PDF para WhatsApp');
+      _cachedPdfBase64 = pdfData;
+
+      // Request storage permission for Android 10 and below
+      if (Platform.isAndroid) {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        if (androidInfo.version.sdkInt <= 29) {
+          var status = await Permission.storage.status;
+          if (!status.isGranted) {
+            status = await Permission.storage.request();
+            if (!status.isGranted) {
+              modal.close();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Permiso de almacenamiento denegado'),
+                    backgroundColor: AppTheme.error,
+                  ),
+                );
+              }
+              return;
+            }
+          }
+        }
+      }
 
       // Save PDF temporarily
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}.pdf');
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final file = File(
+        '${tempDir.path}/nota_entrega_${widget.albaran.numeroAlbaran}_$ts.pdf',
+      );
       await file.writeAsBytes(base64Decode(pdfData));
 
       modal.close();
       if (!mounted) return;
 
-      // Clean phone
-      String cleanPhone = result.phone.replaceAll(RegExp(r'[^\d]'), '');
-      if (cleanPhone.length == 9) cleanPhone = '34$cleanPhone';
+      // Share PDF via system share sheet (user picks WhatsApp).
+      // Note: on Android, sending text + file to WhatsApp often causes
+      // WhatsApp to ignore the file. Use subject for the message text
+      // so the file attachment is reliably included.
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
 
-      // Share via WhatsApp
-      final whatsappUrl = 'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(result.message)}';
-      if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
-        await launchUrl(Uri.parse(whatsappUrl), mode: LaunchMode.externalApplication);
-      } else {
-        // Fallback
-        await Share.shareXFiles([XFile(file.path)], text: result.message);
-      }
-      
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        subject: result.message,
+        text: result.message,
+        sharePositionOrigin: origin,
+      );
     } catch (e) {
-      modal.error('Error al compartir: $e');
+      if (mounted) {
+        modal.close();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al compartir: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
     }
   }
 
@@ -2103,7 +3263,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final result = await EmailFormModal.show(
       context,
       defaultSubject: 'Nota de entrega - ${widget.albaran.nombreCliente}',
-      defaultBody: 'Adjunto le remitimos la nota de entrega correspondiente.\n\nSaludos,\nGranja Mari Pepa',
+      defaultBody:
+          'Adjunto le remitimos la nota de entrega correspondiente.\n\nSaludos,\nGranja Mari Pepa',
     );
     if (result == null || !mounted) return;
 
@@ -2119,19 +3280,30 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'signaturePath': widget.albaran.firma,
           'clientCode': widget.albaran.codigoCliente,
           'clientName': widget.albaran.nombreCliente,
-          'albaranNum': widget.albaran.numeroAlbaran.toString(),
-          'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
+          'albaranNum':
+              '${widget.albaran.serie}-${widget.albaran.terminal}-${widget.albaran.numeroAlbaran}',
+          'facturaNum': widget.albaran.numeroFactura > 0
+              ? widget.albaran.numeroFactura.toString()
+              : null,
           'fecha': widget.albaran.fecha,
           'subtotal': widget.albaran.importeTotal,
           'iva': 0,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
-          'repartidor': widget.albaran.codigoRepartidor,
-          'items': _items.map((i) => {
-            'cantidad': i.cantidadPedida,
-            'descripcion': i.descripcion,
-            'precio': i.precioUnitario,
-          }).toList(),
+          'ordenPreparacion': widget.albaran.ordenPreparacion,
+          'firmante': _nombreController.text.trim(),
+          'firmanteDni': _dniController.text.trim(),
+          'repartidor': widget.albaran.nombreRepartidor.isNotEmpty
+              ? widget.albaran.nombreRepartidor
+              : widget.albaran.codigoRepartidor,
+          'items': _items
+              .map((i) => {
+                    'cantidad': _productQuantities[i.codigoArticulo] ??
+                        i.cantidadPedida.toInt(),
+                    'descripcion': i.descripcion,
+                    'precio': i.precioUnitario,
+                  })
+              .toList(),
         },
       );
 
@@ -2156,7 +3328,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           children: [
             Icon(Icons.email, color: AppTheme.neonBlue, size: 24),
             const SizedBox(width: 12),
-            const Text('Enviar por Email', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
+            const Text('Enviar por Email',
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
           ],
         ),
         content: Column(
@@ -2175,11 +3348,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               decoration: InputDecoration(
                 hintText: 'correo@ejemplo.com',
                 hintStyle: TextStyle(color: AppTheme.textTertiary),
-                prefixIcon: const Icon(Icons.alternate_email, color: AppTheme.textTertiary),
+                prefixIcon: const Icon(Icons.alternate_email,
+                    color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.darkBase,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.neonBlue)),
               ),
               style: const TextStyle(color: AppTheme.textPrimary),
             ),
@@ -2188,13 +3366,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('CANCELAR', style: TextStyle(color: AppTheme.textTertiary)),
+            child: Text('CANCELAR',
+                style: TextStyle(color: AppTheme.textTertiary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.neonBlue,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('ENVIAR'),
           ),
@@ -2214,7 +3394,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           children: [
             const Icon(Icons.chat, color: Color(0xFF25D366), size: 24),
             const SizedBox(width: 12),
-            const Text('Enviar por WhatsApp', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
+            const Text('Enviar por WhatsApp',
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
           ],
         ),
         content: Column(
@@ -2233,11 +3414,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               decoration: InputDecoration(
                 hintText: '600000000',
                 hintStyle: TextStyle(color: AppTheme.textTertiary),
-                prefixIcon: const Icon(Icons.phone, color: AppTheme.textTertiary),
+                prefixIcon:
+                    const Icon(Icons.phone, color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.darkBase,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF25D366))),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF25D366))),
               ),
               style: const TextStyle(color: AppTheme.textPrimary),
             ),
@@ -2246,14 +3432,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('CANCELAR', style: TextStyle(color: AppTheme.textTertiary)),
+            child: Text('CANCELAR',
+                style: TextStyle(color: AppTheme.textTertiary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF25D366),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('COMPARTIR'),
           ),
@@ -2270,19 +3458,30 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           'signaturePath': widget.albaran.firma,
           'clientCode': widget.albaran.codigoCliente,
           'clientName': widget.albaran.nombreCliente,
-          'albaranNum': widget.albaran.numeroAlbaran.toString(),
-          'facturaNum': widget.albaran.numeroFactura > 0 ? widget.albaran.numeroFactura.toString() : null,
+          'albaranNum':
+              '${widget.albaran.serie}-${widget.albaran.terminal}-${widget.albaran.numeroAlbaran}',
+          'facturaNum': widget.albaran.numeroFactura > 0
+              ? widget.albaran.numeroFactura.toString()
+              : null,
           'fecha': widget.albaran.fecha,
           'subtotal': widget.albaran.importeTotal,
           'iva': 0,
           'total': widget.albaran.importeTotal,
           'formaPago': widget.albaran.formaPagoDesc,
-          'repartidor': widget.albaran.codigoRepartidor,
-          'items': _items.map((i) => {
-            'cantidad': i.cantidadPedida,
-            'descripcion': i.descripcion,
-            'precio': i.precioUnitario,
-          }).toList(),
+          'ordenPreparacion': widget.albaran.ordenPreparacion,
+          'firmante': _nombreController.text.trim(),
+          'firmanteDni': _dniController.text.trim(),
+          'repartidor': widget.albaran.nombreRepartidor.isNotEmpty
+              ? widget.albaran.nombreRepartidor
+              : widget.albaran.codigoRepartidor,
+          'items': _items
+              .map((i) => {
+                    'cantidad': _productQuantities[i.codigoArticulo] ??
+                        i.cantidadPedida.toInt(),
+                    'descripcion': i.descripcion,
+                    'precio': i.precioUnitario,
+                  })
+              .toList(),
         },
       );
 
@@ -2297,4 +3496,3 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 }
-

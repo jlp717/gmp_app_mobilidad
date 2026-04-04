@@ -11,6 +11,14 @@ class ProductHistoryItem {
   final String lote;
   final String ref;
   final String invoice;
+  // FIX: Added subfamily and FI codes to support proper classification display
+  final String family;
+  final String subfamily;
+  final String fi1;
+  final String fi2;
+  final String fi3;
+  final String fi4;
+  final String fi5;
 
   ProductHistoryItem({
     required this.date,
@@ -25,7 +33,22 @@ class ProductHistoryItem {
     required this.lote,
     required this.ref,
     required this.invoice,
+    this.family = '',
+    this.subfamily = 'General',
+    this.fi1 = '',
+    this.fi2 = '',
+    this.fi3 = '',
+    this.fi4 = '',
+    this.fi5 = '',
   });
+
+  /// URL for product image (served by backend)
+  String imageUrl(String baseUrl) =>
+      '$baseUrl/products/${Uri.encodeComponent(productCode.trim())}/image';
+
+  /// URL for technical datasheet PDF (served by backend)
+  String fichaUrl(String baseUrl) =>
+      '$baseUrl/products/${Uri.encodeComponent(productCode.trim())}/ficha';
 
   factory ProductHistoryItem.fromJson(Map<String, dynamic> json) {
     return ProductHistoryItem(
@@ -41,6 +64,14 @@ class ProductHistoryItem {
       lote: (json['lote'] as String?) ?? '',
       ref: (json['ref'] as String?) ?? '',
       invoice: (json['invoice'] as String?) ?? '',
+      family: (json['family'] as String?) ?? '',
+      subfamily: (json['subfamily'] as String?) ?? 'General',
+      fi1: (json['fi1'] as String?) ?? '',
+      fi2: (json['fi2'] as String?) ?? '',
+      fi3: (json['fi3'] as String?) ?? '',
+      fi4: (json['fi4'] as String?) ?? '',
+      fi5: (json['fi5'] as String?) ?? '',
     );
   }
 }
+

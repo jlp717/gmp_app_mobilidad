@@ -13,24 +13,27 @@ module.exports = {
             cwd: __dirname,
 
             // ==================== CLUSTERING ====================
-            instances: 'max', // Use all available CPU cores
-            exec_mode: 'cluster', // Enable cluster mode
+            instances: 1, // Fork mode for better stability
+            exec_mode: 'fork',
 
             // ==================== ENVIRONMENT ====================
             env: {
-                NODE_ENV: 'development',
+                NODE_ENV: 'production',
                 PORT: 3334,
                 USE_TS_ROUTES: 'false',
+                VENDOR_COLUMN: 'R1_T8CDVD',
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3334,
                 USE_TS_ROUTES: 'false',
+                VENDOR_COLUMN: 'R1_T8CDVD',
             },
             env_ts: {
                 NODE_ENV: 'production',
                 PORT: 3334,
-                USE_TS_ROUTES: 'true',
+                USE_TS_ROUTES: 'false', // TS auth NOT compatible with Flutter yet — DO NOT enable
+                VENDOR_COLUMN: 'R1_T8CDVD',
             },
 
             // ==================== MEMORY & RESTART ====================
@@ -51,7 +54,7 @@ module.exports = {
             ignore_watch: ['node_modules', 'logs', '.validation-baselines', 'coverage'],
 
             // ==================== HEALTH CHECK ====================
-            listen_timeout: 10000, // Time to wait for app to be ready
+            listen_timeout: 30000, // Time to wait for app to be ready (LACLAE cache preload)
             kill_timeout: 5000, // Time to wait for graceful shutdown
 
             // ==================== AUTO RESTART ON FILE CHANGE ====================

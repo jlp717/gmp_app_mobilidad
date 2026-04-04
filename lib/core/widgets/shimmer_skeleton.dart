@@ -4,6 +4,7 @@
 /// Uses shimmer animation to indicate loading state
 
 import 'package:flutter/material.dart';
+import '../utils/responsive.dart';
 
 /// Shimmer effect widget for loading states
 class ShimmerLoading extends StatefulWidget {
@@ -95,14 +96,14 @@ class SkeletonCard extends StatelessWidget {
     return Container(
       height: height,
       width: width,
-      margin: margin,
+      margin: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 20), vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF1E2746),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white10),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -217,8 +218,8 @@ class SkeletonSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     return ShimmerLoading(
       child: Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(20),
+        margin: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,

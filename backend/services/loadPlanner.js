@@ -1,17 +1,11 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * LOAD PLANNER SERVICE — Algoritmo 3D Bin Packing "Largest Area Fit First"
+ * LOAD PLANNER SERVICE — 3D Bin Packing para camiones
  * ═══════════════════════════════════════════════════════════════════════════
- * 
+ *
  * Simula la carga de un camión con cajas de pedidos, calculando la posición
- * óptima (x,y,z) de cada bulto para minimizar el espacio vacío.
- * 
- * HEURÍSTICA: 
- *  1. Ordena bultos de mayor a menor volumen
- *  2. Para cada bulto, busca el "espacio libre" con mayor área de base
- *  3. Intenta todas las rotaciones (6 orientaciones) y elige la que mejor ajusta
- *  4. Al colocar un bulto, el espacio libre se subdivide en hasta 3 nuevos espacios
- * 
+ * (x,y,z) de cada bulto usando un algoritmo de shelf-packing por capas.
+ *
  * @module services/loadPlanner
  */
 
@@ -19,35 +13,97 @@ const { query } = require('../config/db');
 const logger = require('../middleware/logger');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DEFAULT DIMENSIONS — used when article hasn't been measured yet
+// DIMENSION ESTIMATION — estimates box size from weight when no real dims
 // ─────────────────────────────────────────────────────────────────────────────
-const DEFAULT_BOX = { largo: 40, ancho: 30, alto: 25 }; // cm
-const DEFAULT_WEIGHT_PER_BOX = 5.0; // kg
+const DEFAULT_WEIGHT_PER_BOX = 8.0; // kg
+
+/**
+ * Estima dimensiones de caja basándose en el peso.
+ * Productos más pesados → cajas más grandes (proporcional).
+ */
+function estimateBoxDimensions(pesoUnidad, unidadesCaja, articleName) {
+    const pesoCaja = (pesoUnidad || 0) * Math.max(unidadesCaja || 1, 1);
+    const name = (articleName || '').toUpperCase();
+
+    // Family-based estimation from article name patterns (wider spread for visual differentiation)
+    if (name.includes('LATA') || name.includes('BOTE') || name.includes('CONSERVA')) {
+        return pesoCaja <= 5 ? { largo: 28, ancho: 20, alto: 10 } : { largo: 42, ancho: 34, alto: 16 };
+    }
+    if (name.includes('BOTELLA') || name.includes('VINO') || name.includes('CERVEZA') || name.includes('CAVA')) {
+        return pesoCaja <= 8 ? { largo: 28, ancho: 18, alto: 32 } : { largo: 42, ancho: 30, alto: 38 };
+    }
+    if (name.includes('ACEITE') || name.includes('GARRAFA') || name.includes('VINAGRE')) {
+        return pesoCaja <= 10 ? { largo: 35, ancho: 25, alto: 28 } : { largo: 42, ancho: 32, alto: 35 };
+    }
+    if (name.includes('AGUA') || name.includes('PACK') || name.includes('REFRESCO') || name.includes('ZUMO')) {
+        return pesoCaja <= 10 ? { largo: 32, ancho: 22, alto: 20 } : { largo: 44, ancho: 32, alto: 28 };
+    }
+    if (name.includes('HARINA') || name.includes('AZUCAR') || name.includes('SAL ') || name.includes('ARROZ')) {
+        return pesoCaja <= 10 ? { largo: 32, ancho: 22, alto: 16 } : { largo: 48, ancho: 32, alto: 24 };
+    }
+    if (name.includes('LECHE') || name.includes('BRICK') || name.includes('NATA')) {
+        return pesoCaja <= 8 ? { largo: 26, ancho: 18, alto: 18 } : { largo: 38, ancho: 26, alto: 24 };
+    }
+    if (name.includes('PATATA') || name.includes('CEBOLLA') || name.includes('FRUTA') || name.includes('VERDURA') || name.includes('TOMATE')) {
+        return pesoCaja <= 10 ? { largo: 40, ancho: 30, alto: 20 } : { largo: 55, ancho: 38, alto: 28 };
+    }
+    if (name.includes('CONGELAD') || name.includes('HELADO') || name.includes('HIELO')) {
+        return pesoCaja <= 8 ? { largo: 35, ancho: 25, alto: 18 } : { largo: 50, ancho: 35, alto: 30 };
+    }
+    if (name.includes('JAMON') || name.includes('EMBUTI') || name.includes('CHORIZO') || name.includes('SALCHICH')) {
+        return pesoCaja <= 5 ? { largo: 30, ancho: 20, alto: 12 } : { largo: 45, ancho: 30, alto: 18 };
+    }
+    if (name.includes('QUESO') || name.includes('YOGUR') || name.includes('LACTEO')) {
+        return pesoCaja <= 6 ? { largo: 28, ancho: 22, alto: 14 } : { largo: 40, ancho: 30, alto: 20 };
+    }
+    if (name.includes('PAN') || name.includes('BOLLO') || name.includes('GALLETA')) {
+        return pesoCaja <= 3 ? { largo: 35, ancho: 22, alto: 15 } : { largo: 50, ancho: 35, alto: 22 };
+    }
+    if (name.includes('LIMPIEZA') || name.includes('DETERGENT') || name.includes('LEJIA') || name.includes('JABON')) {
+        return pesoCaja <= 8 ? { largo: 32, ancho: 24, alto: 22 } : { largo: 48, ancho: 35, alto: 30 };
+    }
+
+    // 12-tier weight-based estimation (wider spread: 20×15×8 → 70×50×40)
+    if (pesoCaja <= 1)  return { largo: 20, ancho: 15, alto: 8 };
+    if (pesoCaja <= 2)  return { largo: 25, ancho: 18, alto: 10 };
+    if (pesoCaja <= 4)  return { largo: 30, ancho: 20, alto: 12 };
+    if (pesoCaja <= 6)  return { largo: 34, ancho: 24, alto: 14 };
+    if (pesoCaja <= 8)  return { largo: 38, ancho: 28, alto: 16 };
+    if (pesoCaja <= 12) return { largo: 42, ancho: 30, alto: 20 };
+    if (pesoCaja <= 16) return { largo: 48, ancho: 34, alto: 24 };
+    if (pesoCaja <= 22) return { largo: 52, ancho: 38, alto: 28 };
+    if (pesoCaja <= 30) return { largo: 58, ancho: 42, alto: 32 };
+    if (pesoCaja <= 40) return { largo: 62, ancho: 45, alto: 35 };
+    if (pesoCaja <= 60) return { largo: 66, ancho: 48, alto: 38 };
+    return { largo: 70, ancho: 50, alto: 40 };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA ACCESS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Recupera la configuración del camión (dimensiones interiores + tolerancia)
+ * Recupera la configuración del camión (dimensiones interiores + capacidad)
  * Combina datos de DSEDAC.VEH con JAVIER.ALMACEN_CAMIONES_CONFIG
+ * Si CARGAMAXIMA=0, estima desde CONTENEDORVOLUMEN
  */
 async function getTruckConfig(vehicleCode) {
     const rows = await query(`
-    SELECT 
+    SELECT
       TRIM(V.CODIGOVEHICULO) AS CODE,
       TRIM(V.DESCRIPCIONVEHICULO) AS DESCRIPCION,
-      TRIM(V.MATRICULAVEHICULO) AS MATRICULA,
+      TRIM(V.MATRICULA) AS MATRICULA,
       V.CARGAMAXIMA,
       V.TARA,
       V.VOLUMEN AS VOLUMEN_VEH,
       V.CONTENEDORVOLUMEN,
-      COALESCE(C.LARGO_INTERIOR_CM, 600) AS LARGO_CM,
-      COALESCE(C.ANCHO_INTERIOR_CM, 240) AS ANCHO_CM,
-      COALESCE(C.ALTO_INTERIOR_CM, 220) AS ALTO_CM,
+      COALESCE(V.NUMEROCONTENEDORES, 0) AS NUM_PALETS,
+      COALESCE(C.LARGO_INTERIOR_CM, 0) AS LARGO_CM,
+      COALESCE(C.ANCHO_INTERIOR_CM, 0) AS ANCHO_CM,
+      COALESCE(C.ALTO_INTERIOR_CM, 0) AS ALTO_CM,
       COALESCE(C.TOLERANCIA_EXCESO, 5.00) AS TOLERANCIA
     FROM DSEDAC.VEH V
-    LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C 
+    LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C
       ON TRIM(V.CODIGOVEHICULO) = C.CODIGOVEHICULO
     WHERE TRIM(V.CODIGOVEHICULO) = '${vehicleCode.replace(/'/g, "''")}'
   `);
@@ -55,19 +111,91 @@ async function getTruckConfig(vehicleCode) {
     if (!rows.length) return null;
 
     const r = rows[0];
+    const rawContVol = parseFloat(r.CONTENEDORVOLUMEN) || 0;
+    const contVolM3 = rawContVol;
+
+    // Determinar payload 
+    let maxPayload = parseFloat(r.CARGAMAXIMA) || 0;
+
+    let lengthCm = parseFloat(r.LARGO_CM) || 0;
+    let widthCm = parseFloat(r.ANCHO_CM) || 0;
+    let heightCm = parseFloat(r.ALTO_CM) || 0;
+
+    const numPalets = parseInt(r.NUM_PALETS, 10) || 0;
+
+    // GOD MODE: Algoritmo Palet-Europeo. El AS400 no almacena Largo/Ancho/Alto.
+    // Si la BD de configuración manual está en 0 y tenemos el número de palets, creamos la estructura.
+    if ((lengthCm === 0 || widthCm === 0 || heightCm === 0) && numPalets > 0) {
+        // En 240cm de ancho caben exactamente 2 pales europeos por el lado de 120cm
+        // Por tanto, la profundidad ocupa filas de 80cm cada una.
+        const filas = Math.ceil(numPalets / 2);
+        lengthCm = filas * 80;
+        widthCm = 240;
+        heightCm = 220; // Altura estándar util
+
+        // Cada palé asume 500kg de peso estandar
+        if (maxPayload === 0) {
+            maxPayload = numPalets * 500;
+        }
+    }
+
+    // Derive from container volume if available
+    if ((lengthCm === 0 || widthCm === 0 || heightCm === 0) && contVolM3 > 0) {
+        // Standard truck proportions: L:W:H ≈ 2.5:1:0.92
+        const wM = Math.cbrt(contVolM3 / (2.5 * 0.92));
+        widthCm = Math.max(160, Math.min(260, Math.round(wM * 100)));
+        lengthCm = Math.max(200, Math.min(1400, Math.round(wM * 2.5 * 100)));
+        heightCm = Math.max(150, Math.min(280, Math.round(wM * 0.92 * 100)));
+    }
+
+    // Derive from payload weight ranges
+    if ((lengthCm === 0 || widthCm === 0 || heightCm === 0) && maxPayload > 0) {
+        if (maxPayload <= 1500) {
+            lengthCm = 280; widthCm = 170; heightCm = 160; // Small van
+        } else if (maxPayload <= 3500) {
+            lengthCm = 380; widthCm = 200; heightCm = 190; // Large van
+        } else if (maxPayload <= 8000) {
+            lengthCm = 600; widthCm = 240; heightCm = 220; // Medium truck
+        } else {
+            lengthCm = 800; widthCm = 245; heightCm = 240; // Heavy truck
+        }
+    }
+
+    // Derive from vehicle description keywords
+    if (lengthCm === 0 || widthCm === 0 || heightCm === 0) {
+        const desc = (r.DESCRIPCION || '').toUpperCase();
+        if (desc.includes('KANGOO') || desc.includes('BERLINGO') || desc.includes('PARTNER')) {
+            lengthCm = 260; widthCm = 155; heightCm = 130;
+        } else if (desc.includes('FURGONETA') || desc.includes('FURGO')) {
+            lengthCm = 300; widthCm = 170; heightCm = 170;
+        } else if (desc.includes('SPRINTER') || desc.includes('CRAFTER') || desc.includes('MASTER') || desc.includes('DAILY')) {
+            lengthCm = 430; widthCm = 200; heightCm = 200;
+        } else {
+            lengthCm = 600; widthCm = 240; heightCm = 220; // Generic truck
+        }
+    }
+
+    if (maxPayload === 0) {
+        maxPayload = 6000;
+    }
+    const finalVolM3 = (lengthCm * widthCm * heightCm) / 1e6;
+
+    // Determine vehicle type from description
+    const desc = (r.DESCRIPCION || '').toUpperCase();
+    const vehicleType = desc.includes('FURGONETA') || desc.includes('FURGO') || lengthCm < 400
+        ? 'VAN' : 'TRUCK';
+
     return {
         code: r.CODE,
         description: (r.DESCRIPCION || '').trim(),
         matricula: (r.MATRICULA || '').trim(),
-        maxPayloadKg: parseFloat(r.CARGAMAXIMA) || 3000,
+        vehicleType,
+        maxPayloadKg: maxPayload,
         tara: parseFloat(r.TARA) || 0,
-        container: {
-            lengthCm: parseFloat(r.LARGO_CM),
-            widthCm: parseFloat(r.ANCHO_CM),
-            heightCm: parseFloat(r.ALTO_CM),
-        },
-        tolerancePct: parseFloat(r.TOLERANCIA),
-        volumeM3: (parseFloat(r.LARGO_CM) * parseFloat(r.ANCHO_CM) * parseFloat(r.ALTO_CM)) / 1e6,
+        containerVolumeM3: contVolM3 > 0 ? contVolM3 : finalVolM3,
+        interior: { lengthCm, widthCm, heightCm },
+        tolerancePct: parseFloat(r.TOLERANCIA) || 5,
+        volumeM3: finalVolM3,
     };
 }
 
@@ -80,14 +208,14 @@ async function getArticleDimensions(articleCodes) {
     const codeList = articleCodes.map(c => `'${c.replace(/'/g, "''")}'`).join(',');
 
     const rows = await query(`
-    SELECT 
+    SELECT
       TRIM(A.CODIGOARTICULO) AS CODE,
       TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
       COALESCE(A.PESO, 0) AS PESO,
       COALESCE(A.UNIDADESCAJA, 1) AS UDS_CAJA,
       D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG
     FROM DSEDAC.ART A
-    LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D 
+    LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D
       ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
     WHERE TRIM(A.CODIGOARTICULO) IN (${codeList})
   `);
@@ -95,29 +223,35 @@ async function getArticleDimensions(articleCodes) {
     const result = {};
     for (const r of rows) {
         const hasDimensions = r.LARGO_CM != null && r.ANCHO_CM != null && r.ALTO_CM != null;
-        const weight = parseFloat(r.PESO_CAJA_KG) || parseFloat(r.PESO) || DEFAULT_WEIGHT_PER_BOX;
+        const pesoUd = parseFloat(r.PESO) || 0;
+        const udsCaja = parseInt(r.UDS_CAJA) || 1;
+        const weight = parseFloat(r.PESO_CAJA_KG) || pesoUd || DEFAULT_WEIGHT_PER_BOX;
+
+        // Use real dimensions if available, otherwise estimate from weight
+        const estimated = estimateBoxDimensions(pesoUd, udsCaja, r.NOMBRE);
 
         result[r.CODE] = {
             code: r.CODE,
             name: (r.NOMBRE || '').trim(),
-            largoCm: hasDimensions ? parseFloat(r.LARGO_CM) : DEFAULT_BOX.largo,
-            anchoCm: hasDimensions ? parseFloat(r.ANCHO_CM) : DEFAULT_BOX.ancho,
-            altoCm: hasDimensions ? parseFloat(r.ALTO_CM) : DEFAULT_BOX.alto,
+            largoCm: hasDimensions ? parseFloat(r.LARGO_CM) : estimated.largo,
+            anchoCm: hasDimensions ? parseFloat(r.ANCHO_CM) : estimated.ancho,
+            altoCm: hasDimensions ? parseFloat(r.ALTO_CM) : estimated.alto,
             weightKg: weight,
-            unitsPerBox: parseInt(r.UDS_CAJA) || 1,
+            unitsPerBox: udsCaja,
             estimated: !hasDimensions,
         };
     }
 
-    // Fill missing codes with defaults
+    // Fallback for articles not found in ART table
+    const defaultDims = estimateBoxDimensions(DEFAULT_WEIGHT_PER_BOX, 1);
     for (const code of articleCodes) {
         if (!result[code]) {
             result[code] = {
                 code,
-                name: 'Artículo desconocido',
-                largoCm: DEFAULT_BOX.largo,
-                anchoCm: DEFAULT_BOX.ancho,
-                altoCm: DEFAULT_BOX.alto,
+                name: 'Desconocido',
+                largoCm: defaultDims.largo,
+                anchoCm: defaultDims.ancho,
+                altoCm: defaultDims.alto,
                 weightKg: DEFAULT_WEIGHT_PER_BOX,
                 unitsPerBox: 1,
                 estimated: true,
@@ -133,18 +267,26 @@ async function getArticleDimensions(articleCodes) {
  */
 async function getOrdersForVehicle(vehicleCode, year, month, day) {
     const rows = await query(`
-    SELECT 
-      OPP.ID,
+    SELECT
       OPP.EJERCICIOORDENPREPARACION AS EJERCICIO,
       OPP.NUMEROORDENPREPARACION AS NUM_ORDEN,
       TRIM(OPP.CODIGOREPARTIDOR) AS REPARTIDOR,
       TRIM(OPP.CODIGOVEHICULO) AS VEHICULO,
       OPP.DIAREPARTO, OPP.MESREPARTO, OPP.ANOREPARTO,
-      TRIM(OPP.CODIGOCLIENTE) AS CLIENTE,
-      TRIM(OPP.CODIGOARTICULO) AS ARTICULO,
-      COALESCE(OPP.CANTIDADPEDIDA, 0) AS CANTIDAD,
-      COALESCE(OPP.UNIDADESPEDIDAS, 0) AS UNIDADES
+      TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+      TRIM(LAC.CODIGOARTICULO) AS ARTICULO,
+      LAC.CANTIDADUNIDADES AS CANTIDAD,
+      LAC.CANTIDADENVASES AS CAJAS,
+      COALESCE(LAC.IMPORTEVENTA, 0) AS IMPORTE_VENTA,
+      COALESCE(LAC.IMPORTECOSTO, 0) AS IMPORTE_COSTO
     FROM DSEDAC.OPP OPP
+    INNER JOIN DSEDAC.CPC CPC
+      ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+      AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+    INNER JOIN DSEDAC.LAC LAC
+      ON CPC.NUMEROALBARAN = LAC.NUMEROALBARAN
+      AND CPC.EJERCICIOALBARAN = LAC.EJERCICIOALBARAN
+      AND TRIM(CPC.SERIEALBARAN) = TRIM(LAC.SERIEALBARAN)
     WHERE TRIM(OPP.CODIGOVEHICULO) = '${vehicleCode.replace(/'/g, "''")}'
       AND OPP.ANOREPARTO = ${parseInt(year)}
       AND OPP.MESREPARTO = ${parseInt(month)}
@@ -153,170 +295,151 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
   `);
 
     return rows.map(r => ({
-        id: r.ID,
+        id: r.EJERCICIO + '-' + r.NUM_ORDEN,
         orderYear: r.EJERCICIO,
         orderNumber: r.NUM_ORDEN,
         driverCode: r.REPARTIDOR,
         clientCode: (r.CLIENTE || '').trim(),
         articleCode: (r.ARTICULO || '').trim(),
-        quantity: parseFloat(r.CANTIDAD) || parseFloat(r.UNIDADES) || 1,
-    }));
+        units: parseFloat(r.CANTIDAD) || 0,
+        boxes: parseFloat(r.CAJAS) || 0,
+        importeVenta: parseFloat(r.IMPORTE_VENTA) || 0,
+        margenReal: Math.max(0, (parseFloat(r.IMPORTE_VENTA) || 0) - (parseFloat(r.IMPORTE_COSTO) || 0)),
+    }))
+    .filter(o => {
+        // Skip zero-quantity lines
+        if (o.units === 0 && o.boxes === 0) return false;
+        // Skip known non-physical article codes
+        const code = o.articleCode;
+        if (code.length <= 2) return false;
+        if (['0000', '0006', '0022', '0043', 'D001', 'K'].includes(code)) return false;
+        return true;
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3D BIN PACKING — "Largest Area Fit First" (LAFF) Heuristic
+// 3D BIN PACKING — Shelf/Layer packing (robust, no fragmentation issues)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Representa un espacio libre dentro del contenedor
- * @typedef {Object} FreeSpace
- * @property {number} x - Coordenada X (largo)
- * @property {number} y - Coordenada Y (ancho) 
- * @property {number} z - Coordenada Z (alto/vertical)
- * @property {number} w - Ancho del espacio
- * @property {number} d - Profundidad del espacio
- * @property {number} h - Altura del espacio
- */
+function binPack3D(boxes, interior, tolerancePct = 5) {
+    const cW = interior.widthCm;
+    const cD = interior.lengthCm;
+    const cH = interior.heightCm;
 
-/**
- * Genera las 6 rotaciones posibles de una caja (largo, ancho, alto)
- */
-function getRotations(l, w, h) {
-    return [
-        { w: l, d: w, h: h },
-        { w: l, d: h, h: w },
-        { w: w, d: l, h: h },
-        { w: w, d: h, h: l },
-        { w: h, d: l, h: w },
-        { w: h, d: w, h: l },
-    ];
-}
-
-/**
- * Algoritmo principal de Bin Packing 3D
- * 
- * @param {Array} boxes - Lista de cajas [{id, w, d, h, weight, label, orderNumber, clientCode}]
- * @param {Object} container - {lengthCm, widthCm, heightCm}
- * @param {number} tolerancePct - % exceso permitido (ej: 5)
- * @returns {Object} - {placed: [...], overflow: [...], metrics: {...}}
- */
-function binPack3D(boxes, container, tolerancePct = 5) {
-    const maxW = container.widthCm * (1 + tolerancePct / 100);
-    const maxD = container.lengthCm * (1 + tolerancePct / 100);
-    const maxH = container.heightCm;
-
-    // Sort: largest volume first (greedy heuristic)
-    const sorted = [...boxes].sort((a, b) => (b.w * b.d * b.h) - (a.w * a.d * a.h));
-
-    // Free spaces: start with the entire container
-    let freeSpaces = [{
-        x: 0, y: 0, z: 0,
-        w: container.widthCm,
-        d: container.lengthCm,
-        h: container.heightCm,
-    }];
+    // Sort: heaviest first (stability), then largest volume
+    const sorted = [...boxes].sort((a, b) => {
+        const wDiff = b.weight - a.weight;
+        if (Math.abs(wDiff) > 1) return wDiff;
+        return (b.w * b.d * b.h) - (a.w * a.d * a.h);
+    });
 
     const placed = [];
     const overflow = [];
 
-    for (const box of sorted) {
-        let bestFit = null;
-        let bestSpaceIdx = -1;
-        let bestRotation = null;
-        let bestScore = -1;
+    // Free space list: start with entire container
+    let freeSpaces = [{ x: 0, y: 0, z: 0, w: cW, d: cD, h: cH }];
 
-        // Try to fit in each free space
+    function generateRotations(box) {
+        const dims = [
+            { w: box.w, d: box.d, h: box.h },
+            { w: box.w, d: box.h, h: box.d },
+            { w: box.d, d: box.w, h: box.h },
+            { w: box.d, d: box.h, h: box.w },
+            { w: box.h, d: box.w, h: box.d },
+            { w: box.h, d: box.d, h: box.w },
+        ];
+        return dims.filter(r => r.w <= cW && r.d <= cD && r.h <= cH)
+                    .sort((a, b) => a.h - b.h); // prefer flat (lowest h)
+    }
+
+    function splitFreeSpace(space, boxRot) {
+        const newSpaces = [];
+        // Right remainder
+        const rw = space.w - boxRot.w;
+        if (rw > 2) {
+            newSpaces.push({ x: space.x + boxRot.w, y: space.y, z: space.z, w: rw, d: space.d, h: space.h });
+        }
+        // Back remainder
+        const bd = space.d - boxRot.d;
+        if (bd > 2) {
+            newSpaces.push({ x: space.x, y: space.y + boxRot.d, z: space.z, w: boxRot.w, d: bd, h: space.h });
+        }
+        // Top remainder
+        const th = space.h - boxRot.h;
+        if (th > 2) {
+            newSpaces.push({ x: space.x, y: space.y, z: space.z + boxRot.h, w: boxRot.w, d: boxRot.d, h: th });
+        }
+        return newSpaces;
+    }
+
+    for (const box of sorted) {
+        const rots = generateRotations(box);
+        if (!rots.length) { overflow.push({ ...box }); continue; }
+
+        let bestFit = null;
+        let bestSpace = -1;
+        let bestRot = null;
+        let bestScore = Infinity;
+
         for (let si = 0; si < freeSpaces.length; si++) {
             const space = freeSpaces[si];
-            const rotations = getRotations(box.w, box.d, box.h);
-
-            for (const rot of rotations) {
+            for (const rot of rots) {
                 if (rot.w <= space.w && rot.d <= space.d && rot.h <= space.h) {
-                    // Score: prefer bottom-left placement, then largest base area usage
-                    const fitScore = (rot.w * rot.d) / (space.w * space.d) * 1000
-                        - space.z * 10  // prefer lower Z
-                        - space.x       // prefer leftmost
-                        - space.y;      // prefer front
-
-                    if (fitScore > bestScore) {
-                        bestScore = fitScore;
+                    // Score: prefer lowest Z (gravity), then tightest fit
+                    const score = space.z * 10000 +
+                        (space.w - rot.w) * 3 + (space.d - rot.d) * 2 + (space.h - rot.h);
+                    if (score < bestScore) {
+                        bestScore = score;
                         bestFit = space;
-                        bestSpaceIdx = si;
-                        bestRotation = rot;
+                        bestSpace = si;
+                        bestRot = rot;
                     }
                 }
             }
         }
 
-        if (bestFit && bestRotation) {
-            // Place the box
+        if (bestFit && bestRot) {
             placed.push({
-                id: box.id,
-                label: box.label,
-                orderNumber: box.orderNumber,
-                clientCode: box.clientCode,
-                articleCode: box.articleCode,
-                weight: box.weight,
-                // Position (bottom-left-front corner)
-                x: bestFit.x,
-                y: bestFit.y,
-                z: bestFit.z,
-                // Dimensions as placed
-                w: bestRotation.w,
-                d: bestRotation.d,
-                h: bestRotation.h,
+                id: box.id, label: box.label,
+                orderNumber: box.orderNumber, clientCode: box.clientCode,
+                articleCode: box.articleCode, weight: box.weight,
+                importeEur: box.importeEur || 0,
+                margenEur: box.margenEur || 0,
+                x: bestFit.x, y: bestFit.y, z: bestFit.z,
+                w: bestRot.w, d: bestRot.d, h: bestRot.h,
             });
 
-            // Remove the used space and subdivide into up to 3 new free spaces
-            freeSpaces.splice(bestSpaceIdx, 1);
+            // Split free space
+            const newSpaces = splitFreeSpace(bestFit, bestRot);
+            freeSpaces.splice(bestSpace, 1, ...newSpaces);
 
-            const bx = bestFit.x, by = bestFit.y, bz = bestFit.z;
-            const sw = bestFit.w, sd = bestFit.d, sh = bestFit.h;
-            const rw = bestRotation.w, rd = bestRotation.d, rh = bestRotation.h;
-
-            // Space to the right of the box
-            if (sw - rw > 1) {
-                freeSpaces.push({
-                    x: bx + rw, y: by, z: bz,
-                    w: sw - rw, d: sd, h: sh,
-                });
+            // Periodically clean up tiny free spaces
+            if (placed.length % 25 === 0) {
+                freeSpaces = freeSpaces.filter(s => s.w * s.d * s.h > 1000); // > 10cm^3
             }
-            // Space behind the box
-            if (sd - rd > 1) {
-                freeSpaces.push({
-                    x: bx, y: by + rd, z: bz,
-                    w: rw, d: sd - rd, h: sh,
-                });
-            }
-            // Space above the box
-            if (sh - rh > 1) {
-                freeSpaces.push({
-                    x: bx, y: by, z: bz + rh,
-                    w: rw, d: rd, h: sh - rh,
-                });
-            }
-
-            // Merge adjacent free spaces (optimization pass)
-            freeSpaces = mergeFreeSpaces(freeSpaces);
         } else {
-            // Box doesn't fit → overflow
             overflow.push({
-                id: box.id,
-                label: box.label,
-                orderNumber: box.orderNumber,
-                clientCode: box.clientCode,
-                articleCode: box.articleCode,
-                weight: box.weight,
+                id: box.id, label: box.label,
+                orderNumber: box.orderNumber, clientCode: box.clientCode,
+                articleCode: box.articleCode, weight: box.weight,
+                importeEur: box.importeEur || 0,
+                margenEur: box.margenEur || 0,
                 w: box.w, d: box.d, h: box.h,
             });
         }
     }
 
-    // Calculate metrics
-    const containerVolume = container.widthCm * container.lengthCm * container.heightCm;
+    // Metrics
+    const containerVolume = cW * cD * cH;
     const usedVolume = placed.reduce((sum, b) => sum + (b.w * b.d * b.h), 0);
     const totalWeight = placed.reduce((sum, b) => sum + b.weight, 0);
+    const overflowVolume = overflow.reduce((sum, b) => sum + (b.w * b.d * b.h), 0);
     const overflowWeight = overflow.reduce((sum, b) => sum + b.weight, 0);
+    const totalDemandVolume = usedVolume + overflowVolume;
+    const totalDemandWeight = totalWeight + overflowWeight;
+    const totalImporteEur = placed.reduce((sum, b) => sum + (b.importeEur || 0), 0);
+    const totalMargenEur = placed.reduce((sum, b) => sum + (b.margenEur || 0), 0);
+    const overflowImporteEur = overflow.reduce((sum, b) => sum + (b.importeEur || 0), 0);
 
     return {
         placed,
@@ -327,55 +450,19 @@ function binPack3D(boxes, container, tolerancePct = 5) {
             overflowCount: overflow.length,
             containerVolumeCm3: containerVolume,
             usedVolumeCm3: usedVolume,
-            volumeOccupancyPct: Math.round((usedVolume / containerVolume) * 10000) / 100,
+            volumeOccupancyPct: containerVolume > 0
+                ? Math.round((usedVolume / containerVolume) * 10000) / 100 : 0,
             totalWeightKg: Math.round(totalWeight * 100) / 100,
             overflowWeightKg: Math.round(overflowWeight * 100) / 100,
-            freeSpacesRemaining: freeSpaces.length,
+            totalDemandVolumeCm3: totalDemandVolume,
+            totalDemandWeightKg: Math.round(totalDemandWeight * 100) / 100,
+            demandVsCapacityPct: containerVolume > 0
+                ? Math.round((totalDemandVolume / containerVolume) * 10000) / 100 : 0,
+            totalImporteEur: Math.round(totalImporteEur * 100) / 100,
+            totalMargenEur: Math.round(totalMargenEur * 100) / 100,
+            overflowImporteEur: Math.round(overflowImporteEur * 100) / 100,
         },
     };
-}
-
-/**
- * Merges adjacent free spaces that can be combined
- * This prevents excessive fragmentation of the available space
- */
-function mergeFreeSpaces(spaces) {
-    if (spaces.length <= 1) return spaces;
-
-    let merged = true;
-    while (merged) {
-        merged = false;
-        for (let i = 0; i < spaces.length; i++) {
-            for (let j = i + 1; j < spaces.length; j++) {
-                const a = spaces[i], b = spaces[j];
-
-                // Can merge if they share a face and align perfectly
-                // Merge along X axis
-                if (a.y === b.y && a.z === b.z && a.d === b.d && a.h === b.h && a.x + a.w === b.x) {
-                    spaces[i] = { ...a, w: a.w + b.w };
-                    spaces.splice(j, 1);
-                    merged = true;
-                    break;
-                }
-                // Merge along Y axis
-                if (a.x === b.x && a.z === b.z && a.w === b.w && a.h === b.h && a.y + a.d === b.y) {
-                    spaces[i] = { ...a, d: a.d + b.d };
-                    spaces.splice(j, 1);
-                    merged = true;
-                    break;
-                }
-                // Merge along Z axis
-                if (a.x === b.x && a.y === b.y && a.w === b.w && a.d === b.d && a.z + a.h === b.z) {
-                    spaces[i] = { ...a, h: a.h + b.h };
-                    spaces.splice(j, 1);
-                    merged = true;
-                    break;
-                }
-            }
-            if (merged) break;
-        }
-    }
-    return spaces;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -384,14 +471,6 @@ function mergeFreeSpaces(spaces) {
 
 /**
  * Planifica la carga de un camión para una fecha dada.
- * Lee los pedidos de OPP, recupera dimensiones de artículos, y ejecuta bin packing 3D.
- * 
- * @param {string} vehicleCode - Código del vehículo (DSEDAC.VEH.CODIGOVEHICULO)
- * @param {number} year - Año de reparto
- * @param {number} month - Mes de reparto
- * @param {number} day - Día de reparto
- * @param {number} [customTolerance] - Override de tolerancia (%)
- * @returns {Promise<Object>} Resultado del plan de carga con posiciones 3D
  */
 async function planLoad(vehicleCode, year, month, day, customTolerance) {
     // 1. Get truck config
@@ -410,57 +489,80 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
             overflow: [],
             metrics: {
                 totalBoxes: 0, placedCount: 0, overflowCount: 0,
-                containerVolumeCm3: truck.container.lengthCm * truck.container.widthCm * truck.container.heightCm,
+                containerVolumeCm3: truck.interior.lengthCm * truck.interior.widthCm * truck.interior.heightCm,
                 usedVolumeCm3: 0, volumeOccupancyPct: 0,
                 totalWeightKg: 0, overflowWeightKg: 0,
+                maxPayloadKg: truck.maxPayloadKg, weightOccupancyPct: 0,
+                status: 'SEGURO',
             },
         };
     }
 
-    // 3. Get unique article codes and their dimensions
+    // 3. Get article dimensions
     const articleCodes = [...new Set(orders.map(o => o.articleCode).filter(Boolean))];
     const dimensions = await getArticleDimensions(articleCodes);
 
-    // 4. Build box list from orders (each unit = 1 box)
+    // 4. Build box list from orders
+    // CANTIDADENVASES = physical boxes/cases, CANTIDADUNIDADES = individual items
+    // Each ENVASE is one 3D box. If envases=0, treat the line as 1 box.
     const boxes = [];
     let boxId = 0;
     for (const order of orders) {
-        const dim = dimensions[order.articleCode] || {
-            largoCm: DEFAULT_BOX.largo,
-            anchoCm: DEFAULT_BOX.ancho,
-            altoCm: DEFAULT_BOX.alto,
+        const dim0 = dimensions[order.articleCode];
+        const fallbackDims = estimateBoxDimensions(order.weightPerUnit || DEFAULT_WEIGHT_PER_BOX, 1, dim0 ? dim0.name : '');
+        const dim = dim0 || {
+            largoCm: fallbackDims.largo,
+            anchoCm: fallbackDims.ancho,
+            altoCm: fallbackDims.alto,
             weightKg: DEFAULT_WEIGHT_PER_BOX,
+            unitsPerBox: 1,
             name: 'Desconocido',
         };
 
-        const qty = Math.max(1, Math.round(order.quantity));
-        for (let i = 0; i < qty; i++) {
+        // Physical boxes: use CANTIDADENVASES if > 0, otherwise 1 per line
+        const numBoxes = order.boxes > 0 ? Math.round(order.boxes) : 1;
+
+        // Total weight for this line (units * weight per unit)
+        const lineWeight = order.units > 0
+            ? order.units * (dim.weightKg || DEFAULT_WEIGHT_PER_BOX)
+            : numBoxes * (dim.weightKg || DEFAULT_WEIGHT_PER_BOX);
+        const weightPerBox = lineWeight / numBoxes;
+
+        // EUR per box: distribute line totals evenly across physical boxes
+        const importePerBox = order.importeVenta / numBoxes;
+        const margenPerBox = order.margenReal / numBoxes;
+
+        for (let i = 0; i < numBoxes; i++) {
             boxes.push({
                 id: boxId++,
                 w: dim.largoCm,
                 d: dim.anchoCm,
                 h: dim.altoCm,
-                weight: dim.weightKg,
+                weight: weightPerBox > 0 ? weightPerBox : DEFAULT_WEIGHT_PER_BOX,
                 label: dim.name,
                 orderNumber: order.orderNumber,
                 clientCode: order.clientCode,
                 articleCode: order.articleCode,
+                importeEur: Math.round(importePerBox * 100) / 100,
+                margenEur: Math.round(margenPerBox * 100) / 100,
             });
         }
     }
 
+    logger.info(`Load plan ${vehicleCode}: ${orders.length} order lines → ${boxes.length} physical boxes`);
+
     // 5. Run bin packing
     const tolerance = customTolerance ?? truck.tolerancePct;
-    const result = binPack3D(boxes, truck.container, tolerance);
+    const result = binPack3D(boxes, truck.interior, tolerance);
 
-    // 6. Add weight capacity check
+    // 6. Add weight capacity
     const weightCapacity = truck.maxPayloadKg;
     result.metrics.maxPayloadKg = weightCapacity;
     result.metrics.weightOccupancyPct = weightCapacity > 0
         ? Math.round((result.metrics.totalWeightKg / weightCapacity) * 10000) / 100
         : 0;
 
-    // Status based on occupancy
+    // Status
     const volPct = result.metrics.volumeOccupancyPct;
     const wPct = result.metrics.weightOccupancyPct;
     if (result.overflow.length > 0) {
@@ -480,8 +582,7 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
 }
 
 /**
- * Planifica la carga con una lista explícita de pedidos (sin consultar OPP)
- * Useful for "what-if" simulations from the frontend
+ * Planifica la carga con una lista explícita de pedidos (simulaciones "what-if")
  */
 async function planLoadManual(vehicleCode, items, customTolerance) {
     const truck = await getTruckConfig(vehicleCode);
@@ -495,10 +596,11 @@ async function planLoadManual(vehicleCode, items, customTolerance) {
     const boxes = [];
     let boxId = 0;
     for (const item of items) {
+        const fallbackDims = estimateBoxDimensions(item.weightKg || DEFAULT_WEIGHT_PER_BOX, 1, item.label || '');
         const dim = dimensions[item.articleCode] || {
-            largoCm: item.largoCm || DEFAULT_BOX.largo,
-            anchoCm: item.anchoCm || DEFAULT_BOX.ancho,
-            altoCm: item.altoCm || DEFAULT_BOX.alto,
+            largoCm: item.largoCm || fallbackDims.largo,
+            anchoCm: item.anchoCm || fallbackDims.ancho,
+            altoCm: item.altoCm || fallbackDims.alto,
             weightKg: item.weightKg || DEFAULT_WEIGHT_PER_BOX,
             name: item.label || 'Manual',
         };
@@ -518,7 +620,7 @@ async function planLoadManual(vehicleCode, items, customTolerance) {
     }
 
     const tolerance = customTolerance ?? truck.tolerancePct;
-    const result = binPack3D(boxes, truck.container, tolerance);
+    const result = binPack3D(boxes, truck.interior, tolerance);
 
     result.metrics.maxPayloadKg = truck.maxPayloadKg;
     result.metrics.weightOccupancyPct = truck.maxPayloadKg > 0
@@ -533,11 +635,328 @@ async function planLoadManual(vehicleCode, items, customTolerance) {
     return { truck, tolerancePct: tolerance, ...result };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PROFIT OPTIMIZER — Greedy knapsack by profit density (value/volume)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Given all orders for a vehicle+date, selects the subset that maximizes
+ * total revenue while fitting within truck capacity.
+ *
+ * Uses a greedy approach: sort orders by value/volume ratio descending,
+ * then include orders until truck is full.
+ *
+ * Returns { included: [orderNumbers], excluded: [orderNumbers],
+ *           totalValue, totalWeight, totalVolume }
+ */
+async function optimizeForProfit(vehicleCode, year, month, day) {
+    const truck = await getTruckConfig(vehicleCode);
+    if (!truck) throw new Error(`Vehículo '${vehicleCode}' no encontrado`);
+
+    const orders = await getOrdersForVehicle(vehicleCode, year, month, day);
+    if (!orders.length) return { included: [], excluded: [], totalValue: 0, totalWeight: 0, totalVolume: 0 };
+
+    const articleCodes = [...new Set(orders.map(o => o.articleCode))];
+    const dimensions = await getArticleDimensions(articleCodes);
+
+    // Group order lines by order number, aggregate weight + volume + value
+    const orderAgg = {};
+    for (const order of orders) {
+        const dim = dimensions[order.articleCode];
+        const fallbackDims = estimateBoxDimensions(order.weightPerUnit || DEFAULT_WEIGHT_PER_BOX, 1, dim ? dim.name : '');
+        const d = dim || {
+            largoCm: fallbackDims.largo,
+            anchoCm: fallbackDims.ancho,
+            altoCm: fallbackDims.alto,
+            weightKg: DEFAULT_WEIGHT_PER_BOX,
+        };
+
+        const numBoxes = order.boxes > 0 ? Math.round(order.boxes) : 1;
+        const lineWeight = order.units > 0
+            ? order.units * (d.weightKg || DEFAULT_WEIGHT_PER_BOX)
+            : numBoxes * (d.weightKg || DEFAULT_WEIGHT_PER_BOX);
+        const lineVolume = (d.largoCm * d.anchoCm * d.altoCm) * numBoxes;
+
+        // Real EUR from invoice data (fallback to weight if no pricing)
+        const lineValue = order.importeVenta > 0
+            ? order.importeVenta
+            : lineWeight;
+
+        if (!orderAgg[order.orderNumber]) {
+            orderAgg[order.orderNumber] = {
+                orderNumber: order.orderNumber,
+                clientCode: order.clientCode,
+                weight: 0,
+                volume: 0,
+                value: 0,
+                boxCount: 0,
+            };
+        }
+        orderAgg[order.orderNumber].weight += lineWeight;
+        orderAgg[order.orderNumber].volume += lineVolume;
+        orderAgg[order.orderNumber].value += lineValue;
+        orderAgg[order.orderNumber].boxCount += numBoxes;
+    }
+
+    const orderList = Object.values(orderAgg);
+
+    // Calculate density (value per cm³) and sort descending
+    for (const o of orderList) {
+        o.density = o.volume > 0 ? o.value / o.volume : 0;
+    }
+    orderList.sort((a, b) => b.density - a.density);
+
+    // Greedy fill
+    const maxWeight = truck.maxPayloadKg;
+    const maxVolume = truck.interior.lengthCm * truck.interior.widthCm * truck.interior.heightCm;
+    // Allow tolerance
+    const tolFactor = 1 + (truck.tolerancePct || 5) / 100;
+
+    let usedWeight = 0;
+    let usedVolume = 0;
+    let totalValue = 0;
+    const included = [];
+    const excluded = [];
+
+    for (const o of orderList) {
+        const newWeight = usedWeight + o.weight;
+        const newVolume = usedVolume + o.volume;
+
+        if (newWeight <= maxWeight * tolFactor && newVolume <= maxVolume * tolFactor) {
+            included.push(o.orderNumber);
+            usedWeight = newWeight;
+            usedVolume = newVolume;
+            totalValue += o.value;
+        } else {
+            excluded.push(o.orderNumber);
+        }
+    }
+
+    logger.info(`Profit optimizer ${vehicleCode}: ${included.length} included, ${excluded.length} excluded, value=${totalValue.toFixed(1)}kg`);
+
+    return {
+        included,
+        excluded,
+        totalValue: Math.round(totalValue * 100) / 100,
+        totalWeight: Math.round(usedWeight * 100) / 100,
+        totalVolume: Math.round(usedVolume),
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMART OPTIMIZER — Must-deliver + margin maximization + client completeness
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Optimización inteligente de carga:
+ * 1. Pedidos must-deliver SIEMPRE se incluyen primero
+ * 2. Restantes ordenados por margen EUR / volumen (densidad de valor)
+ * 3. Penalización si un cliente queda con carga parcial
+ * 4. Respeta capacidad con tolerancia configurada
+ *
+ * @param {string} vehicleCode
+ * @param {number} year
+ * @param {number} month
+ * @param {number} day
+ * @param {number[]} mustDeliverOrders - orderNumbers que DEBEN ir sí o sí
+ * @returns {object} { included, excluded, mustDeliverCount, totalValue, ... }
+ */
+async function smartOptimize(vehicleCode, year, month, day, mustDeliverOrders = []) {
+    const start = Date.now();
+    const truck = await getTruckConfig(vehicleCode);
+    if (!truck) throw new Error(`Vehículo '${vehicleCode}' no encontrado`);
+
+    const orders = await getOrdersForVehicle(vehicleCode, year, month, day);
+    if (!orders.length) {
+        return {
+            included: [], excluded: [], mustDeliverCount: 0,
+            totalValue: 0, totalWeight: 0, totalVolume: 0,
+            capacityUsedPct: { weight: 0, volume: 0 }, elapsed: 0,
+        };
+    }
+
+    const articleCodes = [...new Set(orders.map(o => o.articleCode).filter(Boolean))];
+    const dimensions = await getArticleDimensions(articleCodes);
+    const mustSet = new Set(mustDeliverOrders.map(n => Number(n)));
+
+    // ── Aggregate order lines by orderNumber ──────────────────────────
+    const orderAgg = {};
+    for (const order of orders) {
+        const dim = dimensions[order.articleCode];
+        const fallbackDims = estimateBoxDimensions(
+            order.weightPerUnit || DEFAULT_WEIGHT_PER_BOX, 1,
+            dim ? dim.name : ''
+        );
+        const d = dim || {
+            largoCm: fallbackDims.largo, anchoCm: fallbackDims.ancho,
+            altoCm: fallbackDims.alto, weightKg: DEFAULT_WEIGHT_PER_BOX,
+        };
+
+        const numBoxes = order.boxes > 0 ? Math.round(order.boxes) : 1;
+        const lineWeight = order.units > 0
+            ? order.units * (d.weightKg || DEFAULT_WEIGHT_PER_BOX)
+            : numBoxes * (d.weightKg || DEFAULT_WEIGHT_PER_BOX);
+        const lineVolume = (d.largoCm * d.anchoCm * d.altoCm) * numBoxes;
+        // Real EUR value from invoice (fallback to weight proxy if no data)
+        const lineValue = order.importeVenta > 0
+            ? order.importeVenta
+            : lineWeight * 2.5;
+
+        if (!orderAgg[order.orderNumber]) {
+            orderAgg[order.orderNumber] = {
+                orderNumber: order.orderNumber,
+                clientCode: order.clientCode,
+                weight: 0, volume: 0, value: 0, boxCount: 0,
+                mustDeliver: mustSet.has(order.orderNumber),
+            };
+        }
+        const agg = orderAgg[order.orderNumber];
+        agg.weight += lineWeight;
+        agg.volume += lineVolume;
+        agg.value += lineValue;
+        agg.boxCount += numBoxes;
+    }
+
+    const orderList = Object.values(orderAgg);
+    const maxWeight = truck.maxPayloadKg;
+    const maxVolume = truck.interior.lengthCm * truck.interior.widthCm * truck.interior.heightCm;
+    const tolFactor = 1 + (truck.tolerancePct || 5) / 100;
+
+    // ── Paso 1: Must-deliver siempre primero ──────────────────────────
+    let usedWeight = 0, usedVolume = 0, totalValue = 0;
+    const included = [];
+    const excluded = [];
+
+    const mustOrders = orderList.filter(o => o.mustDeliver);
+    const optionalOrders = orderList.filter(o => !o.mustDeliver);
+
+    for (const o of mustOrders) {
+        included.push(o.orderNumber);
+        usedWeight += o.weight;
+        usedVolume += o.volume;
+        totalValue += o.value;
+    }
+
+    if (usedWeight > maxWeight * tolFactor || usedVolume > maxVolume * tolFactor) {
+        logger.warn(`Smart optimize ${vehicleCode}: must-deliver alone exceeds capacity! weight=${usedWeight.toFixed(0)}/${maxWeight}`);
+    }
+
+    // ── Paso 2: Agrupar opcionales por cliente → penalizar incompletos ─
+    const clientOrders = {};
+    for (const o of optionalOrders) {
+        if (!clientOrders[o.clientCode]) clientOrders[o.clientCode] = [];
+        clientOrders[o.clientCode].push(o);
+    }
+
+    for (const o of optionalOrders) {
+        const clientCount = clientOrders[o.clientCode].length;
+        const baseDensity = o.volume > 0 ? o.value / o.volume : 0;
+        // Penalizar clientes con muchos pedidos (mejor todo o nada)
+        o.density = baseDensity * (clientCount > 3 ? 0.85 : 1.0);
+    }
+    optionalOrders.sort((a, b) => b.density - a.density);
+
+    // ── Paso 3: Greedy fill por densidad ──────────────────────────────
+    for (const o of optionalOrders) {
+        const newWeight = usedWeight + o.weight;
+        const newVolume = usedVolume + o.volume;
+        if (newWeight <= maxWeight * tolFactor && newVolume <= maxVolume * tolFactor) {
+            included.push(o.orderNumber);
+            usedWeight = newWeight;
+            usedVolume = newVolume;
+            totalValue += o.value;
+        } else {
+            excluded.push(o.orderNumber);
+        }
+    }
+
+    const elapsed = Date.now() - start;
+    logger.info(`Smart optimize ${vehicleCode}: ${included.length} included (${mustOrders.length} must-deliver), ${excluded.length} excluded, value=${totalValue.toFixed(1)}EUR, time=${elapsed}ms`);
+
+    return {
+        included,
+        excluded,
+        mustDeliverCount: mustOrders.length,
+        totalValue: Math.round(totalValue * 100) / 100,
+        totalWeight: Math.round(usedWeight * 100) / 100,
+        totalVolume: Math.round(usedVolume),
+        capacityUsedPct: {
+            weight: maxWeight > 0 ? Math.round(usedWeight / maxWeight * 10000) / 100 : 0,
+            volume: maxVolume > 0 ? Math.round(usedVolume / maxVolume * 10000) / 100 : 0,
+        },
+        elapsed,
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AXLE BALANCE — Calculate weight distribution front/rear and left/right
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calcula el balance de ejes a partir de las cajas colocadas.
+ * Devuelve centro de gravedad + porcentajes por eje.
+ */
+function calculateAxleBalance(placed, interior) {
+    if (!placed.length) {
+        return {
+            centerOfGravity: { x: 0, y: 0, z: 0 },
+            axleBalance: { frontPct: 50, rearPct: 50, leftPct: 50, rightPct: 50 },
+            balanced: true,
+        };
+    }
+
+    let totalWeight = 0, wx = 0, wy = 0, wz = 0;
+    for (const b of placed) {
+        const w = b.weight || 0;
+        totalWeight += w;
+        wx += (b.x + b.w / 2) * w;
+        wy += (b.y + b.d / 2) * w;
+        wz += (b.z + b.h / 2) * w;
+    }
+
+    if (totalWeight === 0) {
+        return {
+            centerOfGravity: { x: 0, y: 0, z: 0 },
+            axleBalance: { frontPct: 50, rearPct: 50, leftPct: 50, rightPct: 50 },
+            balanced: true,
+        };
+    }
+
+    const cgX = wx / totalWeight;
+    const cgY = wy / totalWeight;
+    const cgZ = wz / totalWeight;
+
+    const midW = interior.widthCm / 2;
+    const midD = interior.lengthCm / 2;
+
+    // Rear = close to cab (high Y), Front = close to door (low Y)
+    const rearPct = midD > 0 ? Math.round((cgY / interior.lengthCm) * 100) : 50;
+    const frontPct = 100 - rearPct;
+    const rightPct = midW > 0 ? Math.round((cgX / interior.widthCm) * 100) : 50;
+    const leftPct = 100 - rightPct;
+
+    const balanced = rearPct <= 65 && rearPct >= 35 && rightPct <= 60 && rightPct >= 40;
+
+    return {
+        centerOfGravity: {
+            x: Math.round(cgX * 10) / 10,
+            y: Math.round(cgY * 10) / 10,
+            z: Math.round(cgZ * 10) / 10,
+        },
+        axleBalance: { frontPct, rearPct, leftPct, rightPct },
+        balanced,
+    };
+}
+
 module.exports = {
     planLoad,
     planLoadManual,
+    optimizeForProfit,
+    smartOptimize,
+    calculateAxleBalance,
     getTruckConfig,
     getArticleDimensions,
     getOrdersForVehicle,
     binPack3D,
+    estimateBoxDimensions,
 };

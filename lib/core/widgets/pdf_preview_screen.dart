@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../theme/app_theme.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -58,12 +60,29 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     _writeTempFile();
   }
 
+  @override
+  void dispose() {
+    // Save path for async cleanup, then nullify to unmount PDFView first
+    final pathToClean = _tempPath;
+    _tempPath = null;
+    // Clean up temp file async with delay to let native view fully release
+    if (pathToClean != null) {
+      Future<void>.delayed(const Duration(milliseconds: 1500), () {
+        try {
+          File(pathToClean).deleteSync();
+        } catch (_) {}
+      });
+    }
+    super.dispose();
+  }
+
   Future<void> _writeTempFile() async {
     try {
       final dir = await getTemporaryDirectory();
       // Use timestamp to prevent file locking issues on repeated opens
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final uniqueName = '${widget.fileName.replaceAll('.pdf', '')}_$timestamp.pdf';
+      final uniqueName =
+          '${widget.fileName.replaceAll('.pdf', '')}_$timestamp.pdf';
       final file = File('${dir.path}/$uniqueName');
       await file.writeAsBytes(widget.pdfBytes);
       if (mounted) {
@@ -78,14 +97,46 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
 
   Future<void> _downloadPdf() async {
     if (_tempPath == null) return;
-    
+
     try {
-      // On modern Android (11+), we cannot write directly to /storage/emulated/0/Download
-      // The best practice is to "Share" the file, which allows the user to "Save to Files"
-      // or open it in a PDF viewer that can save it.
+      // Request storage permission for Android 10 and below
+      if (Platform.isAndroid) {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        if (androidInfo.version.sdkInt <= 29) {
+          var status = await Permission.storage.status;
+          if (!status.isGranted) {
+            status = await Permission.storage.request();
+            if (!status.isGranted) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Permiso de almacenamiento denegado'),
+                    backgroundColor: AppTheme.error,
+                  ),
+                );
+              }
+              return;
+            }
+          }
+        }
+      }
+
+      // Use Share.shareXFiles which works on all Android versions
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       await Share.shareXFiles(
-        [XFile(_tempPath!)],
+        [XFile(_tempPath!, mimeType: 'application/pdf')],
         text: 'Guardar ${widget.fileName}',
+        subject: widget.fileName,
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (mounted) {
@@ -102,14 +153,27 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
   Future<void> _sharePdf() async {
     try {
       if (_tempPath == null) return;
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
       await Share.shareXFiles(
-        [XFile(_tempPath!)],
+        [XFile(_tempPath!, mimeType: 'application/pdf')],
         text: '${widget.title} - ${widget.fileName}',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al compartir: $e'), backgroundColor: AppTheme.error),
+          SnackBar(
+              content: Text('Error al compartir: $e'),
+              backgroundColor: AppTheme.error),
         );
       }
     }
@@ -169,7 +233,8 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             const SizedBox(height: 16),
             Text(
               _errorMessage!,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -244,7 +309,8 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       },
       onPageError: (page, error) {
         if (mounted) {
-          setState(() => _errorMessage = 'Error en página ${page ?? 0}: $error');
+          setState(
+              () => _errorMessage = 'Error en página ${page ?? 0}: $error');
         }
       },
     );

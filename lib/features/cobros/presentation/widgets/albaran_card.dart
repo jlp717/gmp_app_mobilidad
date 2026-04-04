@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../data/models/cobros_models.dart';
 
 class AlbaranCard extends StatelessWidget {
@@ -27,7 +28,7 @@ class AlbaranCard extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -156,10 +157,10 @@ class AlbaranCard extends StatelessWidget {
                   children: [
                     Text(
                       currencyFormat.format(albaran.importeTotal),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                        fontSize: Responsive.fontSize(context, small: 14, large: 18),
                       ),
                     ),
                     if (albaran.formaPago != null)

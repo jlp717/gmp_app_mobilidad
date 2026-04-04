@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../data/models/cobros_models.dart';
 
 class EntregaDetailSheet extends StatelessWidget {
@@ -42,7 +43,7 @@ class EntregaDetailSheet extends StatelessWidget {
           
           // Header
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
             child: Row(
               children: [
                 // Número albarán
@@ -62,10 +63,10 @@ class EntregaDetailSheet extends StatelessWidget {
                   ),
                   child: Text(
                     'Albarán #${albaran.numeroAlbaran}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: Responsive.fontSize(context, small: 14, large: 16),
                     ),
                   ),
                 ),
@@ -133,10 +134,10 @@ class EntregaDetailSheet extends StatelessWidget {
                     ),
                     Text(
                       currencyFormat.format(albaran.importeTotal),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
-                        fontSize: 22,
+                        fontSize: Responsive.fontSize(context, small: 18, large: 22),
                       ),
                     ),
                   ],
@@ -157,7 +158,7 @@ class EntregaDetailSheet extends StatelessWidget {
           
           // Cliente info
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 20), vertical: 12),
             child: Row(
               children: [
                 Container(
@@ -175,10 +176,10 @@ class EntregaDetailSheet extends StatelessWidget {
                     children: [
                       Text(
                         albaran.nombreCliente,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w600,
-                          fontSize: 16,
+                          fontSize: Responsive.fontSize(context, small: 14, large: 16),
                         ),
                       ),
                       const SizedBox(height: 4),

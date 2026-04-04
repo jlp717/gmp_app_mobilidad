@@ -5,6 +5,10 @@ import '../widgets/entrega_card.dart';
 import '../widgets/entregas_header.dart';
 import 'albaran_detail_page.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/error_state_widget.dart';
+import '../../../../core/widgets/optimized_list.dart';
 
 /// Página principal de entregas para el repartidor
 class EntregasPage extends StatefulWidget {
@@ -43,7 +47,7 @@ class _EntregasPageState extends State<EntregasPage>
         child: Column(
           children: [
             // Header con resumen
-            const EntregasHeader(),
+            EntregasHeader(),
             
             // Tabs
             Container(
@@ -97,36 +101,13 @@ class _EntregasPageState extends State<EntregasPage>
               child: Consumer<EntregasProvider>(
                 builder: (context, provider, _) {
                   if (provider.isLoading) {
-                    return const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Cargando entregas del día...'),
-                        ],
-                      ),
-                    );
+                    return const SkeletonList(itemCount: 5, itemHeight: 100);
                   }
 
                   if (provider.error != null) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.error_outline, 
-                               size: 64, color: Colors.red.shade300),
-                          const SizedBox(height: 16),
-                          Text(provider.error!,
-                               textAlign: TextAlign.center),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: () => provider.cargarAlbaranesPendientes(),
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Reintentar'),
-                          ),
-                        ],
-                      ),
+                    return ErrorStateWidget(
+                      message: provider.error!,
+                      onRetry: () => provider.cargarAlbaranesPendientes(),
                     );
                   }
 
@@ -165,11 +146,26 @@ class _EntregasPageState extends State<EntregasPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade400),
+            Icon(
+              Icons.inbox_outlined,
+              size: Responsive.iconSize(
+                context,
+                phone: 48,
+                desktop: 64,
+              ),
+              color: Colors.grey.shade400,
+            ),
             const SizedBox(height: 16),
             Text(
               'No hay entregas en esta sección',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: Responsive.fontSize(
+                  context,
+                  small: 13,
+                  large: 16,
+                ),
+              ),
             ),
           ],
         ),
@@ -178,8 +174,10 @@ class _EntregasPageState extends State<EntregasPage>
 
     return RefreshIndicator(
       onRefresh: () => context.read<EntregasProvider>().cargarAlbaranesPendientes(),
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+      child: OptimizedListView(
+        padding: EdgeInsets.all(
+          Responsive.padding(context, small: 10, large: 16),
+        ),
         itemCount: albaranes.length,
         itemBuilder: (context, index) {
           final albaran = albaranes[index];

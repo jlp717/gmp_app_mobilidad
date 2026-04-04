@@ -1,0 +1,6 @@
+{
+  "openclaw.openclawPath": "C:\\nvm4w\\nodejs\\openclaw.cmd",
+  "openclaw.gatewayUrl": "http://localhost:18789",
+  "openclaw.enableCliFallback": true,
+  "openclaw.aiOutputLanguage": "es"
+}

@@ -15,6 +15,7 @@ enum TipoCobro {
   albaran,
   factura,
   presupuesto,
+  pedidoApp,
   normal;
 
   String get label {
@@ -25,6 +26,8 @@ enum TipoCobro {
         return 'Factura';
       case TipoCobro.presupuesto:
         return 'Presupuesto';
+      case TipoCobro.pedidoApp:
+        return 'Pedido App';
       case TipoCobro.normal:
         return 'Cobro';
     }
@@ -38,10 +41,28 @@ enum TipoCobro {
         return Colors.green;
       case TipoCobro.presupuesto:
         return Colors.purple;
+      case TipoCobro.pedidoApp:
+        return Colors.teal;
       case TipoCobro.normal:
         return Colors.orange;
     }
   }
+}
+
+enum TipoVenta {
+  contado,
+  credito;
+
+  String get code => this == contado ? 'CC' : 'VC';
+  String get label => this == contado ? 'Contado' : 'Crédito';
+}
+
+enum TipoModoCobro {
+  normal,
+  especial;
+
+  String get code => this == normal ? 'NORMAL' : 'ESPECIAL';
+  String get label => this == normal ? 'Normal' : 'Especial';
 }
 
 // ============================================
@@ -75,9 +96,13 @@ class CobroPendiente {
       id: json['id']?.toString() ?? '',
       referencia: (json['referencia'] as String?) ?? '',
       tipo: _parseTipoCobro((json['tipo'] as String?) ?? 'normal'),
-      fecha: DateTime.tryParse((json['fecha'] as String?) ?? '') ?? DateTime.now(),
-      importeTotal: ((json['importeTotal'] ?? json['importe'] ?? 0) as num).toDouble(),
-      importePendiente: ((json['importePendiente'] ?? json['importe'] ?? 0) as num).toDouble(),
+      fecha:
+          DateTime.tryParse((json['fecha'] as String?) ?? '') ?? DateTime.now(),
+      importeTotal:
+          ((json['importeTotal'] ?? json['importe'] ?? 0) as num).toDouble(),
+      importePendiente:
+          ((json['importePendiente'] ?? json['importe'] ?? 0) as num)
+              .toDouble(),
       formaPago: json['formaPago'] as String?,
       esCTR: json['esCTR'] == true,
     );
@@ -91,6 +116,8 @@ class CobroPendiente {
         return TipoCobro.factura;
       case 'presupuesto':
         return TipoCobro.presupuesto;
+      case 'pedido_app':
+        return TipoCobro.pedidoApp;
       default:
         return TipoCobro.normal;
     }
@@ -122,12 +149,13 @@ class EntregaItem {
       descripcion: (json['descripcion'] as String?) ?? '',
       cantidadPedida: (json['cantidadPedida'] as int?) ?? 0,
       cantidadEntregada: (json['cantidadEntregada'] as int?) ?? 0,
-      estado: EstadoEntrega.fromString((json['estado'] as String?) ?? 'PENDIENTE'),
+      estado:
+          EstadoEntrega.fromString((json['estado'] as String?) ?? 'PENDIENTE'),
     );
   }
 
-  double get porcentajeEntregado => 
-    cantidadPedida > 0 ? (cantidadEntregada / cantidadPedida) : 0;
+  double get porcentajeEntregado =>
+      cantidadPedida > 0 ? (cantidadEntregada / cantidadPedida) : 0;
 }
 
 /// Albarán pendiente de entrega
@@ -171,10 +199,12 @@ class Albaran {
       direccion: (json['direccion'] as String?) ?? '',
       fecha: _parseDate(json['fecha']),
       importeTotal: ((json['importeTotal'] ?? 0) as num).toDouble(),
-      estado: EstadoEntrega.fromString((json['estado'] as String?) ?? 'PENDIENTE'),
+      estado:
+          EstadoEntrega.fromString((json['estado'] as String?) ?? 'PENDIENTE'),
       items: (json['items'] as List<dynamic>?)
-          ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
-          .toList() ?? [],
+              ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
       formaPago: json['formaPago'] as String?,
       esCTR: json['esCTR'] == true,
       fotos: List<String>.from(json['fotos'] as List? ?? []),
@@ -202,8 +232,10 @@ class Albaran {
   }
 
   int get totalItems => items.length;
-  int get itemsEntregados => items.where((i) => i.estado == EstadoEntrega.entregado).length;
-  double get porcentajeCompletado => totalItems > 0 ? (itemsEntregados / totalItems) : 0;
+  int get itemsEntregados =>
+      items.where((i) => i.estado == EstadoEntrega.entregado).length;
+  double get porcentajeCompletado =>
+      totalItems > 0 ? (itemsEntregados / totalItems) : 0;
   bool get completo => itemsEntregados == totalItems && totalItems > 0;
 }
 
@@ -274,14 +306,21 @@ class ResumenCobros {
   });
 
   factory ResumenCobros.fromJson(Map<String, dynamic> json) {
+    final facturasData = json['facturas'];
+    final albaranesData = json['albaranes'];
     return ResumenCobros(
       totalPendiente: ((json['totalPendiente'] ?? 0) as num).toDouble(),
-      numFacturas: (json['facturas'] as int?) ?? 0,
-      numAlbaranes: (json['albaranes'] as int?) ?? 0,
+      numFacturas: facturasData is Map
+          ? ((facturasData['cantidad'] ?? 0) as num).toInt()
+          : (facturasData as int?) ?? 0,
+      numAlbaranes: albaranesData is Map
+          ? ((albaranesData['cantidad'] ?? 0) as num).toInt()
+          : (albaranesData as int?) ?? 0,
       diasMoraMaximo: (json['diasMoraMaximo'] as int?) ?? 0,
       cobros: (json['cobros'] as List<dynamic>?)
-          ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
-          .toList() ?? [],
+              ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 }

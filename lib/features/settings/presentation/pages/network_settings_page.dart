@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/services/network_service.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Pantalla de configuración de red
 /// Permite ver y cambiar el servidor activo manualmente
@@ -136,7 +137,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       body: _isLoading && _diagnostics == null
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -181,10 +182,10 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text(
+                Text(
                   'Servidor Activo',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -195,8 +196,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             if (activeServer != null) ...[
               Text(
                 activeServer.name,
-                style: const TextStyle(
-                  fontSize: 20,
+                style: TextStyle(
+                  fontSize: Responsive.fontSize(context, small: 18, large: 24),
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF22D3EE),
                 ),
@@ -251,14 +252,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.auto_fix_high, color: Color(0xFF22D3EE)),
-                SizedBox(width: 12),
+                const Icon(Icons.auto_fix_high, color: Color(0xFF22D3EE)),
+                const SizedBox(width: 12),
                 Text(
                   'Detección Automática',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -307,14 +308,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.dns, color: Color(0xFFA78BFA)),
-                SizedBox(width: 12),
+                const Icon(Icons.dns, color: Color(0xFFA78BFA)),
+                const SizedBox(width: 12),
                 Text(
                   'Servidores Disponibles',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -380,14 +381,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.add_link, color: Color(0xFFF472B6)),
-                SizedBox(width: 12),
+                const Icon(Icons.add_link, color: Color(0xFFF472B6)),
+                const SizedBox(width: 12),
                 Text(
                   'Servidor Personalizado',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -451,14 +452,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.bug_report, color: Color(0xFF4ADE80)),
-                    SizedBox(width: 12),
+                    const Icon(Icons.bug_report, color: Color(0xFF4ADE80)),
+                    const SizedBox(width: 12),
                     Text(
                       'Diagnóstico de Red',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: Responsive.fontSize(context, small: 16, large: 20),
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),

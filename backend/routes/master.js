@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const {
     getCurrentDate,
-    formatCurrency
+    formatCurrency,
+    sanitizeForSQL
 } = require('../utils/common');
 
 // =============================================================================
@@ -16,7 +17,7 @@ router.get('/products', async (req, res) => {
 
         let searchFilter = '';
         if (search) {
-            const safeSearch = search.replace(/'/g, "''").trim().toUpperCase();
+            const safeSearch = sanitizeForSQL(search.trim().toUpperCase());
             searchFilter = `AND(UPPER(DESCRIPCIONARTICULO) LIKE '%${safeSearch}%' 
                       OR CODIGOARTICULO LIKE '%${safeSearch}%'
                       OR UPPER(CODIGOMARCA) LIKE '%${safeSearch}%')`;

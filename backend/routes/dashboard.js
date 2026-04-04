@@ -1,18 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const {
     getCurrentDate,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    buildColumnaVendedorFilter,
+    getVendorColumn,
+    getVendorColumnExpr,
     formatCurrency,
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
-    getBSales
+    getBSales,
+    sanitizeForSQL
 } = require('../utils/common');
 
 // =============================================================================
@@ -27,9 +31,8 @@ router.get('/metrics', async (req, res) => {
         const cacheKey = `dashboard:metrics:${currentYear}:${currentMonth || 'all'}:${vendedorCodes}`;
 
         // -- FETCH FROM REDIS CACHE (L2) --
-        // Logic wrapped directly in route to use parallel queries
-
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        // Determine Filter Column based on transition
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, [currentYear, currentYear - 1], 'L');
 
         const currentDataSql = `
           SELECT 
@@ -178,25 +181,40 @@ router.get('/matrix-data', async (req, res) => {
             yearFilter = `AND L.LCAADC IN (${selectedYear}, ${prevYear})`;
         }
 
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        // Determine which years this query spans for date-aware vendor column
+        let queryYears = [];
+        if (years && years.trim().length > 0) {
+            queryYears = years.split(',').map(y => parseInt(y.trim())).filter(y => !isNaN(y));
+        }
+        if (queryYears.length === 0) {
+            queryYears = [selectedYear, prevYear];
+        }
+
+        // Use LCCDVD only — DSEDAC.LAC does NOT have R1_T8CDVD column
+        // DB2 validates all column refs at parse time, so CASE with R1_T8CDVD fails with -205
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, queryYears, 'L', { forLACTable: true });
 
         const clientFilter = clientCodes && clientCodes !== 'ALL'
-            ? `AND L.LCCDCL IN (${clientCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
+            ? `AND L.LCCDCL IN (${clientCodes.split(',').map(c => `'${sanitizeForSQL(c.trim())}'`).join(',')})`
             : '';
 
         const productFilter = productCodes && productCodes !== 'ALL'
-            ? `AND L.CODIGOARTICULO IN (${productCodes.split(',').map(c => `'${c.trim()}'`).join(',')})`
+            ? `AND L.CODIGOARTICULO IN (${productCodes.split(',').map(c => `'${sanitizeForSQL(c.trim())}'`).join(',')})`
             : '';
 
         let familyProductFilter = '';
         if (familyCodes && familyCodes !== 'ALL') {
-            const fCodes = familyCodes.split(',').map(f => `'${f.trim()}'`).join(',');
-            const famProducts = await cachedQuery(query, `SELECT TRIM(CODIGOARTICULO) as CODE FROM DSEDAC.ART WHERE CODIGOFAMILIA IN (${fCodes})`, `fam_prods:${fCodes}`, TTL.LONG);
-            if (famProducts.length > 0) {
-                const pCodes = famProducts.slice(0, 1000).map(p => `'${p.CODE}'`).join(','); // Safety limit
-                familyProductFilter = `AND L.CODIGOARTICULO IN (${pCodes})`; // Simplified for performance
-            } else {
+            const fCodes = familyCodes.split(',').map(f => `'${sanitizeForSQL(f.trim())}'`).filter(c => c !== "''").join(',');
+            if (!fCodes) {
                 familyProductFilter = 'AND 1=0';
+            } else {
+                const famProducts = await cachedQuery(query, `SELECT TRIM(CODIGOARTICULO) as CODE FROM DSEDAC.ART WHERE CODIGOFAMILIA IN (${fCodes})`, `fam_prods:${fCodes}`, TTL.LONG);
+                if (famProducts.length > 0) {
+                    const pCodes = famProducts.slice(0, 1000).map(p => `'${p.CODE}'`).join(','); // Safety limit
+                    familyProductFilter = `AND L.CODIGOARTICULO IN (${pCodes})`;
+                } else {
+                    familyProductFilter = 'AND 1=0';
+                }
             }
         }
 
@@ -204,11 +222,14 @@ router.get('/matrix-data', async (req, res) => {
         const selectClauses = ['L.LCAADC as YEAR', 'L.LCMMDC as MONTH'];
         const groupClauses = ['L.LCAADC', 'L.LCMMDC'];
 
+        // Build vendor column expression — force LCCDVD for DSEDAC.LAC (no R1_T8CDVD)
+        const vendorColExpr = getVendorColumnExpr('L', { forLACTable: true });
+
         hierarchy.forEach((level, index) => {
             const levelIdx = index + 1;
             if (level === 'vendor') {
-                selectClauses.push(`RTRIM(L.LCCDVD) as ID_${levelIdx}`);
-                groupClauses.push('L.LCCDVD');
+                selectClauses.push(`RTRIM(${vendorColExpr}) as ID_${levelIdx}`);
+                groupClauses.push(vendorColExpr);
             } else if (level === 'client') {
                 selectClauses.push(`RTRIM(L.LCCDCL) as ID_${levelIdx}`);
                 groupClauses.push('L.LCCDCL');
@@ -218,6 +239,10 @@ router.get('/matrix-data', async (req, res) => {
             } else if (level === 'family') {
                 selectClauses.push(`RTRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
                 groupClauses.push('L.CODIGOARTICULO');
+            } else if (level === 'subfamily') {
+                // FIX Bug #5: Support subfamily level in hierarchy for proper FI classification
+                selectClauses.push(`COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as ID_${levelIdx}`);
+                groupClauses.push('A.CODIGOSUBFAMILIA');
             }
         });
 
@@ -227,9 +252,14 @@ router.get('/matrix-data', async (req, res) => {
         selectClauses.push('SUM(L.LCIMVT) as SALES');
         selectClauses.push('SUM(L.LCIMVT - L.LCIMCT) as MARGIN');
 
+        // FIX: Add ART join when subfamily hierarchy is requested
+        const needsArtJoin = hierarchy.includes('subfamily');
+        const artJoinClause = needsArtJoin ? 'LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO' : '';
+
         const aggregateSQL = `
             SELECT ${selectClauses.join(', ')}
             FROM DSEDAC.LAC L
+              ${artJoinClause}
               WHERE 1=1
               AND ${LAC_SALES_FILTER}
               ${yearFilter}
@@ -241,6 +271,9 @@ router.get('/matrix-data', async (req, res) => {
             ORDER BY SUM(L.LCIMVT) DESC
             FETCH FIRST 50000 ROWS ONLY
         `;
+
+        // Log full SQL for debugging (only first time, not on cache hit)
+        logger.info(`[MATRIX] Full SQL (${aggregateSQL.replace(/\s+/g, ' ').length} chars): ${aggregateSQL.replace(/\s+/g, ' ').trim()}`);
 
         // We cache the RAW aggregate data
         const rawKey = `matrix:raw:${cacheKey}`;
@@ -342,8 +375,12 @@ router.get('/matrix-data', async (req, res) => {
         res.json(responseStub);
 
     } catch (error) {
-        logger.error(`Matrix data error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo datos matriciales' });
+        const odbcInfo = error.odbcErrors ? ` ODBC: ${JSON.stringify(error.odbcErrors)}` : '';
+        logger.error(`Matrix data error: ${error.message}${odbcInfo}`);
+        res.status(500).json({
+            error: 'Error obteniendo datos matriciales',
+            detail: process.env.NODE_ENV !== 'production' ? error.message : undefined
+        });
     }
 });
 

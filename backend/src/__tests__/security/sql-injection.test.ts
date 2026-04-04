@@ -275,7 +275,7 @@ describe('Security - Legacy Sanitization Functions', () => {
 
     it('builds valid filter for clean codes', () => {
       const result = buildVendedorFilter('5,10');
-      expect(result).toContain("TRIM(CODIGOVENDEDOR) IN ('5','10')");
+      expect(result).toContain("CODIGOVENDEDOR IN ('5','10')");
     });
 
     it('strips injection attempts from vendor codes', () => {

@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:signature/signature.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Modal de firma digital para captura de firma del cliente
 /// Retorna la firma como base64 string o null si se cancela
@@ -113,10 +114,9 @@ class _SignatureModalState extends State<SignatureModal> {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    
     return Container(
-      height: screenHeight * 0.85,
+      // Responsive: use more height in landscape where screen is shorter
+      height: Responsive.modalHeight(context, portraitFraction: 0.85, landscapeFraction: 0.95),
       decoration: const BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -134,9 +134,9 @@ class _SignatureModalState extends State<SignatureModal> {
             ),
           ),
           
-          // Header
+          // Header (responsive padding)
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
             child: Column(
               children: [
                 Row(
@@ -250,9 +250,9 @@ class _SignatureModalState extends State<SignatureModal> {
             ),
           ),
           
-          // Action Buttons
+          // Action Buttons (responsive padding)
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
             child: Row(
               children: [
                 // Cancel button

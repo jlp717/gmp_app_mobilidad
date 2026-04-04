@@ -1,0 +1,3 @@
+table,id,cliente_id,cliente_nombre,fecha,campo,valor,impacto,severity
+DSEDAC.CAC,P-4-2023,4400000040,"FRONERI IBERIA",10/1/2023,IMPORTETOTAL,0,"Unreasonable total (base=-26.98, iva=-2.7)",high
+DSEDAC.CAC,P-4-2023,4400000040,"FRONERI IBERIA",10/1/2023,IMPORTETOTAL,0 (base=-26.98, iva=-2.7),"Total is 0 but bases are non-zero — displays ""-0"" or wrong amount in UI",high

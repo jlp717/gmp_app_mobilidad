@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/error_state_widget.dart';
@@ -172,7 +173,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           // Content
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -200,7 +201,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
 
   Widget _buildCommissionProgress(double overallPct, double thresholdProgress) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 20), vertical: 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
@@ -211,16 +212,16 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Progreso hacia Umbral 30%',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: Responsive.fontSize(context, small: 10, large: 12)),
                   ),
                   Text(
                     '${overallPct.toStringAsFixed(1)}% cobrado',
                     style: TextStyle(
                       color: overallPct >= 30 ? AppTheme.success : Colors.orange,
                       fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                      fontSize: Responsive.fontSize(context, small: 10, large: 12),
                     ),
                   ),
                 ],
@@ -259,30 +260,33 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
   Widget _buildSummaryCards() {
     return Container(
       padding: const EdgeInsets.all(12),
-      child: Row(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
           // Total Cobrable
-          Expanded(
+          SizedBox(
+            width: Responsive.isPhone(context) ? (MediaQuery.of(context).size.width - 32) / 2 : 120,
             child: _buildSummaryCard(
               icon: Icons.account_balance_wallet,
-              label: 'Total Cobrable',
+              label: 'Cobrable',
               value: CurrencyFormatter.format(_totalCollectable),
               color: AppTheme.neonBlue,
             ),
           ),
-          const SizedBox(width: 8),
           // Total Cobrado
-          Expanded(
+          SizedBox(
+            width: Responsive.isPhone(context) ? (MediaQuery.of(context).size.width - 32) / 2 : 120,
             child: _buildSummaryCard(
               icon: Icons.payments,
-              label: 'Total Cobrado',
+              label: 'Cobrado',
               value: CurrencyFormatter.format(_totalCollected),
               color: AppTheme.neonPurple,
             ),
           ),
-          const SizedBox(width: 8),
           // Comisión Ganada
-          Expanded(
+          SizedBox(
+            width: Responsive.isPhone(context) ? (MediaQuery.of(context).size.width - 24) : 150,
             child: _buildSummaryCard(
               icon: Icons.emoji_events,
               label: 'Comisión Ganada',
@@ -304,7 +308,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
     bool isHighlighted = false,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 12)),
       decoration: BoxDecoration(
         gradient: isHighlighted
             ? LinearGradient(colors: [color.withOpacity(0.2), color.withOpacity(0.1)])
@@ -333,7 +337,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           Text(
             value,
             style: TextStyle(
-              fontSize: isHighlighted ? 18 : 16,
+              fontSize: isHighlighted ? Responsive.fontSize(context, small: 14, large: 18) : Responsive.fontSize(context, small: 12, large: 16),
               fontWeight: FontWeight.bold,
               color: color,
             ),
@@ -439,7 +443,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),

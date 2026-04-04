@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// 📱 WHATSAPP FORM MODAL
@@ -108,7 +109,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        width: 400,
+        width: Responsive.clampWidth(context, 400),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,

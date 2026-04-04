@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// ⏳ ASYNC OPERATION MODAL
@@ -149,8 +150,9 @@ class AsyncOperationModal extends StatelessWidget {
   Widget _buildContent(BuildContext context, _ModalState state) {
     return Container(
       key: ValueKey(state),
-      width: 320,
-      padding: const EdgeInsets.all(28),
+      width: Responsive.clampWidth(context, 320),
+      // Responsive padding
+      padding: EdgeInsets.all(Responsive.padding(context, small: 20, large: 28)),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(20),

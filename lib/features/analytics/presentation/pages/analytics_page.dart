@@ -8,6 +8,7 @@ import '../../../../core/providers/dashboard_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/date_formatter.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Professional Advanced Analytics Page
 /// Features: Multi-year comparison, Spanish formatting, Advanced filters
@@ -108,7 +109,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           : RefreshIndicator(
               onRefresh: _fetchAllData,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -137,13 +138,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const Icon(Icons.analytics, color: AppTheme.neonBlue, size: 32),
+        Icon(
+          Icons.analytics,
+          color: AppTheme.neonBlue,
+          size: Responsive.iconSize(
+            context, phone: 24, desktop: 32,
+          ),
+        ),
         const SizedBox(width: 12),
-        const Text(
+        Text(
           'Analíticas Avanzadas',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 24,
+            fontSize: Responsive.fontSize(
+              context, small: 18, large: 24,
+            ),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -365,9 +374,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Indicadores Clave',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
         Row(
@@ -388,7 +397,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildKPICard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
@@ -432,9 +441,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 'Evolución de Ventas',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               if (_selectedYears.length > 1) _buildChartLegend(),
@@ -632,7 +641,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final growthPercent = (growth['salesPercent'] as num?)?.toDouble() ?? 0.0;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
@@ -641,9 +650,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Comparativa Interanual',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           Row(
@@ -727,7 +736,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     if (_marginsData.isEmpty) return const SizedBox();
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
@@ -736,9 +745,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Análisis de Márgenes',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 24),
           SizedBox(

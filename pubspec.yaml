@@ -1,7 +1,8 @@
+
 name: gmp_app_mobilidad
 description: "Ultimate Sales Analytics - Ultra-Modern Tablet App for Sales Directors & Representatives"
 publish_to: 'none'
-version: 3.2.0+23
+version: 3.3.2+37
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -15,13 +16,24 @@ dependencies:
 
   # State Management
   provider: ^6.1.1
-  flutter_bloc: ^8.1.3
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+  rxdart: ^0.27.7
+  freezed_annotation: ^2.4.1
   equatable: ^2.0.5
+
+  # Dependency Injection
+  get_it: ^7.6.7
+  injectable: ^2.3.2
 
   # Network & API
   http: ^1.2.0
   dio: ^5.4.0
   connectivity_plus: ^5.0.2
+
+  # Security
+  flutter_secure_storage: ^9.2.2
+  crypto: ^3.0.3
 
   # Local Storage & Caching
   hive: ^2.2.3
@@ -29,6 +41,7 @@ dependencies:
   shared_preferences: ^2.2.2
   path_provider: ^2.1.2
   path: ^1.8.3
+  collection: ^1.18.0
 
   # Charts & Visualizations
   fl_chart: ^0.66.0
@@ -60,6 +73,15 @@ dependencies:
   printing: ^5.11.1            # PDF preview/print support
   flutter_pdfview: ^1.3.2      # In-app PDF viewer
   package_info_plus: ^9.0.0
+  device_info_plus: ^11.0.0     # Device fingerprinting for audit
+
+  # Zebra Bluetooth Printing
+  flutter_bluetooth_printer: ^2.2.0  # Raw ZPL over BT Classic (SPP/RFCOMM)
+  permission_handler: ^11.3.1        # Runtime BT permissions Android 12+
+
+  # WebView (Three.js 3D visualization)
+  webview_flutter: ^4.10.0
+  screenshot: ^3.0.0             # Canvas screenshot capture
 
 dev_dependencies:
   flutter_test:
@@ -68,7 +90,11 @@ dev_dependencies:
   # Linting & Code Quality (matches analysis_options.yaml)
   very_good_analysis: ^6.0.0
 
-  # Hive Code Generation
+  # Code Generation
+  freezed: ^2.4.7
+  riverpod_generator: ^2.4.0
+  injectable_generator: ^2.4.2
+  json_serializable: ^6.7.1
   hive_generator: ^2.0.1
   build_runner: ^2.4.8
 
@@ -85,3 +111,6 @@ flutter_icons:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/load_planner/
+    - assets/load_planner/lib/

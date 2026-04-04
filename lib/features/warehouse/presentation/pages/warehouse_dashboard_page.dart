@@ -3,9 +3,17 @@
 /// Muestra los camiones del día con KPIs de carga
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../../../core/config/feature_flags.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
+import '../../application/load_planner_provider.dart';
 import '../../data/warehouse_data_service.dart';
 import 'load_planner_3d_page.dart';
+import 'load_planner_v2_page.dart';
+import '../../../../core/widgets/shimmer_skeleton.dart';
+import '../../../../core/widgets/error_state_widget.dart';
 
 class WarehouseDashboardPage extends StatefulWidget {
   const WarehouseDashboardPage({super.key});
@@ -81,13 +89,15 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
         children: [
           _buildHeader(),
           _buildDateSelector(),
+          if (!_loading && _error == null && _trucks.isNotEmpty) _buildKpiStrip(),
           Expanded(
             child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: AppTheme.neonBlue))
+                ? const SkeletonList(itemCount: 4, itemHeight: 120)
                 : _error != null
-                    ? _buildError()
+                    ? ErrorStateWidget(
+                        message: _error!,
+                        onRetry: _loadDashboard,
+                      )
                     : _trucks.isEmpty
                         ? _buildEmpty()
                         : _buildTruckGrid(),
@@ -99,7 +109,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 14, large: 20), 12, Responsive.padding(context, small: 14, large: 20), 8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -120,19 +130,19 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
               border: Border.all(
                   color: AppTheme.neonBlue.withValues(alpha: 0.3)),
             ),
-            child: const Icon(Icons.warehouse_rounded,
-                color: AppTheme.neonBlue, size: 28),
+            child: Icon(Icons.warehouse_rounded,
+                color: AppTheme.neonBlue, size: Responsive.iconSize(context, phone: 22, desktop: 28)),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'CENTRO DE EXPEDICIONES',
                   style: TextStyle(
                     color: AppTheme.neonBlue,
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 14, large: 18),
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.5,
                   ),
@@ -255,7 +265,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
       child: GridView.builder(
         padding: const EdgeInsets.all(12),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: MediaQuery.of(context).size.width > 900 ? 3 : 2,
+          crossAxisCount: MediaQuery.of(context).size.width > 900 ? 3 : MediaQuery.of(context).size.width < 400 ? 1 : 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: 1.15,
@@ -270,18 +280,27 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => LoadPlanner3DPage(
-            vehicleCode: truck.vehicleCode,
-            vehicleName: truck.description,
-            date: _selectedDate,
-          ),
+          builder: (_) => FeatureFlags.newLoadPlanner
+              ? ChangeNotifierProvider(
+                  create: (_) => LoadPlannerProvider(),
+                  child: LoadPlannerV2Page(
+                    vehicleCode: truck.vehicleCode,
+                    vehicleName: truck.description,
+                    date: _selectedDate,
+                  ),
+                )
+              : LoadPlanner3DPage(
+                  vehicleCode: truck.vehicleCode,
+                  vehicleName: truck.description,
+                  date: _selectedDate,
+                ),
         ));
       },
       child: AnimatedBuilder(
         animation: _pulseController,
         builder: (ctx, child) {
           return Container(
-            padding: const EdgeInsets.all(14),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
             decoration: BoxDecoration(
               color: AppTheme.darkCard,
               borderRadius: BorderRadius.circular(16),
@@ -469,6 +488,36 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
         ),
       ],
     );
+  }
+
+  Widget _buildKpiStrip() {
+    final totalPedidos = _trucks.fold(0, (s, t) => s + t.orderCount);
+    final totalLineas = _trucks.fold(0, (s, t) => s + t.lineCount);
+    final totalCamiones = _trucks.length;
+    final totalPeso = _trucks.fold(0.0, (s, t) => s + t.maxPayloadKg);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.neonBlue.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.1))),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+        _kpiItem('$totalPedidos', 'Pedidos', AppTheme.neonBlue),
+        _kpiItem('$totalLineas', 'Lineas', AppTheme.neonPurple),
+        _kpiItem('$totalCamiones', 'Vehiculos', AppTheme.neonGreen),
+        _kpiItem('${totalPeso.toStringAsFixed(0)}', 'kg cap.', Colors.amber),
+      ]),
+    );
+  }
+
+  Widget _kpiItem(String value, String label, Color color) {
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Text(value, style: TextStyle(color: color, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.w800)),
+      const SizedBox(height: 2),
+      Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 9)),
+    ]);
   }
 
   Widget _buildError() {

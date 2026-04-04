@@ -1,0 +1,1422 @@
+/// Pedidos Data Service
+/// ====================
+/// API client for order operations (COMERCIAL + JEFE_VENTAS roles)
+/// Includes product catalog, stock, pricing, and order CRUD
+
+import 'package:flutter/foundation.dart';
+import '../../../core/api/api_client.dart';
+import '../../../core/cache/cache_service.dart';
+
+// ─── MODELS ──────────────────────────────────────────────────
+
+/// Product in catalog list
+class Product {
+  final String code;
+  final String name;
+  final String brand;
+  final String family;
+  final String ean;
+  final double unitsPerBox;
+  final double unitsFraction;
+  final double unitsRetractil;
+  final String unitMeasure;
+  final double weight;
+  final double stockEnvases;
+  final double stockUnidades;
+  final double precioTarifa1;
+  final double precioMinimo;
+  final double precioCliente;
+  final int codigoTarifaCliente;
+  final double precioTarifaCliente;
+  // Extended fields from ART table
+  final String nameExt;
+  final String familyName;
+  final String prefamilia;
+  final String subFamily;
+  final String grupoGeneral;
+  final String tipoProducto;
+  final String claseArticulo;
+  final String categoria;
+  final String gama;
+  final String codigoIva;
+  final double pesoNeto;
+  final double volumen;
+  final String grados;
+  final String calibre;
+  final String observacion1;
+  final String observacion2;
+  final String presentacion;
+  final String formato;
+  final bool productoPesado;
+  final bool trazable;
+  final double unidadPale;
+  final double unidadFilaPale;
+  final String? fechaAlta;
+  final int anoBaja;
+  final int mesBaja;
+
+  Product({
+    required this.code,
+    required this.name,
+    this.brand = '',
+    this.family = '',
+    this.ean = '',
+    this.unitsPerBox = 1,
+    this.unitsFraction = 0,
+    this.unitsRetractil = 0,
+    this.unitMeasure = '',
+    this.weight = 0,
+    this.stockEnvases = 0,
+    this.stockUnidades = 0,
+    this.precioTarifa1 = 0,
+    this.precioMinimo = 0,
+    this.precioCliente = 0,
+    this.codigoTarifaCliente = 1,
+    this.precioTarifaCliente = 0,
+    this.nameExt = '',
+    this.familyName = '',
+    this.prefamilia = '',
+    this.subFamily = '',
+    this.grupoGeneral = '',
+    this.tipoProducto = '',
+    this.claseArticulo = '',
+    this.categoria = '',
+    this.gama = '',
+    this.codigoIva = '0',
+    this.pesoNeto = 0,
+    this.volumen = 0,
+    this.grados = '',
+    this.calibre = '',
+    this.observacion1 = '',
+    this.observacion2 = '',
+    this.presentacion = '',
+    this.formato = '',
+    this.productoPesado = false,
+    this.trazable = false,
+    this.unidadPale = 0,
+    this.unidadFilaPale = 0,
+    this.fechaAlta,
+    this.anoBaja = 0,
+    this.mesBaja = 0,
+  });
+
+  factory Product.fromJson(Map<String, dynamic> json) {
+    return Product(
+      code: (json['code'] ?? '').toString().trim(),
+      name: (json['name'] ?? '').toString().trim(),
+      brand: (json['brand'] ?? '').toString().trim(),
+      family: (json['family'] ?? '').toString().trim(),
+      ean: (json['ean'] ?? '').toString().trim(),
+      unitsPerBox: _toDouble(json['unitsPerBox']),
+      unitsFraction: _toDouble(json['unitsFraction']),
+      unitsRetractil: _toDouble(json['unitsRetractil']),
+      unitMeasure: (json['unitMeasure'] ?? '').toString().trim(),
+      weight: _toDouble(json['weight']),
+      stockEnvases: _toDouble(json['stockEnvases']),
+      stockUnidades: _toDouble(json['stockUnidades']),
+      precioTarifa1: _toDouble(json['precioTarifa1']),
+      precioMinimo: _toDouble(json['precioMinimo']),
+      precioCliente: _toDouble(json['precioCliente']),
+      codigoTarifaCliente: json['codigoTarifaCliente'] is int
+          ? json['codigoTarifaCliente'] as int
+          : int.tryParse(json['codigoTarifaCliente']?.toString() ?? '1') ?? 1,
+      precioTarifaCliente: _toDouble(json['precioTarifaCliente']),
+      nameExt: (json['nameExt'] ?? '').toString().trim(),
+      familyName: (json['familyName'] ?? '').toString().trim(),
+      prefamilia: (json['prefamilia'] ?? '').toString().trim(),
+      subFamily: (json['subFamily'] ?? '').toString().trim(),
+      grupoGeneral: (json['grupoGeneral'] ?? '').toString().trim(),
+      tipoProducto: (json['tipoProducto'] ?? '').toString().trim(),
+      claseArticulo: (json['claseArticulo'] ?? '').toString().trim(),
+      categoria: (json['categoria'] ?? '').toString().trim(),
+      gama: (json['gama'] ?? '').toString().trim(),
+      codigoIva: (json['codigoIva'] ?? '0').toString().trim(),
+      pesoNeto: _toDouble(json['pesoNeto']),
+      volumen: _toDouble(json['volumen']),
+      grados: (json['grados'] ?? '').toString().trim(),
+      calibre: (json['calibre'] ?? '').toString().trim(),
+      observacion1: (json['observacion1'] ?? '').toString().trim(),
+      observacion2: (json['observacion2'] ?? '').toString().trim(),
+      presentacion: (json['presentacion'] ?? '').toString().trim(),
+      formato: (json['formato'] ?? '').toString().trim(),
+      productoPesado: json['productoPesado'] == true,
+      trazable: json['trazable'] == true,
+      unidadPale: _toDouble(json['unidadPale']),
+      unidadFilaPale: _toDouble(json['unidadFilaPale']),
+      fechaAlta: json['fechaAlta']?.toString(),
+      anoBaja: json['anoBaja'] is int
+          ? json['anoBaja'] as int
+          : int.tryParse(json['anoBaja']?.toString() ?? '0') ?? 0,
+      mesBaja: json['mesBaja'] is int
+          ? json['mesBaja'] as int
+          : int.tryParse(json['mesBaja']?.toString() ?? '0') ?? 0,
+    );
+  }
+
+  /// Best available price (client > tariff), never below minimum price.
+  double get bestPrice {
+    final raw = precioCliente > 0 ? precioCliente : precioTarifa1;
+    if (precioMinimo > 0 && raw < precioMinimo) return precioMinimo;
+    return raw;
+  }
+
+  /// Whether stock is available
+  bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
+
+  /// Whether the product is discontinued
+  bool get isDiscontinued => anoBaja > 0;
+
+  /// Total pieces in stock (envases * unitsPerBox + loose unidades)
+  double get totalPieces => stockEnvases * unitsPerBox + stockUnidades;
+
+  /// Normalized primary sale unit from DB UNIDADMEDIDA + FORMATO fields.
+  /// Most products have UM="" in DB; FORMATO='K' and productoPesado='S'
+  /// distinguish weight-sold (kg) products.
+  String get _normalizedUnit {
+    final um = unitMeasure.toUpperCase().trim();
+    // Explicit UM in DB
+    if (um == 'KILO' || um == 'KILOGRAMOS' || um == 'KG' || um == 'KILOS') {
+      return 'KILOGRAMOS';
+    }
+    if (um == 'LITRO' || um == 'LITROS' || um == 'LT') return 'LITROS';
+    if (um == 'UNIDAD' || um == 'UNIDADES' || um == 'UDS') return 'UNIDADES';
+    if (um == 'PIEZA' || um == 'PIEZAS') return 'PIEZAS';
+    if (um == 'BOLSA' || um == 'BOLSAS') return 'BOLSAS';
+    if (um == 'ESTUCHE' || um == 'ESTUCHES') return 'ESTUCHES';
+    if (um == 'BANDEJA' || um == 'BANDEJAS') return 'BANDEJAS';
+    if (um == 'BOTELLA' || um == 'BOTELLAS') return 'BOTELLAS';
+    if (um == 'PAQUETE' || um == 'PAQUETES') return 'PAQUETES';
+    if (um == 'BOTE' || um == 'BOTES') return 'BOTES';
+    if (um == 'LATA' || um == 'LATAS') return 'LATAS';
+    if (um == 'GARRAFA' || um == 'GARRAFAS') return 'GARRAFAS';
+    if (um == 'SACO' || um == 'SACOS') return 'SACOS';
+    if (um == 'ROLLO' || um == 'ROLLOS') return 'ROLLOS';
+    if (um == 'CAJA' || um == 'CAJAS') return 'CAJAS';
+    // UM empty → detect via FORMATO='K' or productoPesado
+    if (um.isEmpty) {
+      if (formato.toUpperCase().trim() == 'K' || productoPesado) {
+        return 'KILOGRAMOS';
+      }
+      return 'CAJAS';
+    }
+    return um; // fallback: use as-is
+  }
+
+  /// True if this is a weight-sold product (KILOGRAMOS/LITROS)
+  /// These show the CANTIDAD button with unit selector in the legacy app.
+  bool get isWeightProduct {
+    final norm = _normalizedUnit;
+    return norm == 'KILOGRAMOS' || norm == 'LITROS';
+  }
+
+  /// True if this product should show dual-field entry (cajas + unidades linked).
+  /// Standard products with U/C > 1 that can be fractioned (U/F < U/C).
+  bool get isDualFieldProduct {
+    if (isWeightProduct) return false;
+    return unitsPerBox > 1 && unitsFraction > 0 && unitsFraction < unitsPerBox;
+  }
+
+  /// The unit label to display under the CANTIDAD input field for single-field products.
+  /// Matches legacy logic derived from UNIDADESRETRACTIL and description text.
+  String get displayUnit {
+    if (isWeightProduct) return _normalizedUnit;
+
+    // Explicit UM from DB (rare but takes precedence)
+    final um = unitMeasure.toUpperCase().trim();
+    if (um.isNotEmpty &&
+        um != 'KILO' &&
+        um != 'KILOGRAMOS' &&
+        um != 'KG' &&
+        um != 'KILOS' &&
+        um != 'LITRO' &&
+        um != 'LITROS' &&
+        um != 'LT' &&
+        um != 'CAJA' &&
+        um != 'CAJAS') {
+      return um;
+    }
+
+    if (unitsRetractil > 0 && unitsPerBox == 1) {
+      final n = name.toUpperCase();
+      if (n.contains('BANDEJA')) return 'BANDEJAS';
+      if (n.contains('ESTUCHE')) return 'ESTUCHES';
+      if (n.contains('PIEZA')) return 'PIEZAS';
+      return 'PIEZAS'; // Default fallback for U/R > 0 if not specified
+    }
+
+    return 'CAJAS';
+  }
+
+  /// The price to show exactly as "Neto U/R" in the UI.
+  /// If product has U/R > 0 and U/C == 1, it calculates price/U/R.
+  double get netoURPrice {
+    if (unitsRetractil > 0 && unitsPerBox == 1 && !isWeightProduct) {
+      return bestPrice / unitsRetractil;
+    }
+    return 0; // Means do not show Neto U/R
+  }
+
+  /// Kg per box for weight products. For KILO products UC = kg per box.
+  double get kgPerBox {
+    if (_normalizedUnit == 'KILOGRAMOS') {
+      // UC is the kg-per-box for KILO products
+      return unitsPerBox > 0 ? unitsPerBox : 1;
+    }
+    if (_normalizedUnit == 'LITROS') {
+      return unitsPerBox > 0 ? unitsPerBox : 1;
+    }
+    return unitsPerBox > 0 ? unitsPerBox : 1;
+  }
+
+  /// Convert boxes to the primary unit quantity
+  double unidadesFromEnvases(double envases) => envases * unitsPerBox;
+
+  /// Convert primary unit quantity to boxes (can be fractional)
+  double envasesFromUnidades(double unidades) =>
+      unitsPerBox > 0 ? unidades / unitsPerBox : unidades;
+
+  /// Content description: what each caja contains (e.g., "10 uds", "6 kg")
+  String get boxContentDesc {
+    final norm = _normalizedUnit;
+    if (norm == 'KILOGRAMOS') {
+      final kpb = kgPerBox;
+      if (kpb > 0) {
+        return '${_fmtNum(kpb)} kg';
+      }
+      return '';
+    }
+    if (norm == 'LITROS') {
+      if (unitsPerBox > 0) return '${_fmtNum(unitsPerBox)} L';
+      return '';
+    }
+
+    // For single-field box-only products
+    if (!isDualFieldProduct && unitsPerBox > 1) {
+      return '${_fmtNum(unitsPerBox)} uds';
+    }
+
+    if (norm == 'CAJAS') {
+      if (unitsPerBox > 1) return '${_fmtNum(unitsPerBox)} uds';
+      return '';
+    }
+    // For ESTUCHES, BANDEJAS, etc.
+    if (unitsPerBox > 1) {
+      return '${_fmtNum(unitsPerBox)} ${unitLabel(norm).toLowerCase()}';
+    }
+    return '';
+  }
+
+  /// Price for given unit type.
+  /// bestPrice is always per CAJA (box).
+  double priceForUnit(String unit) {
+    final base = bestPrice;
+    if (unit == 'CAJAS') return base;
+    final norm = _normalizedUnit;
+
+    // Weight products: UC = kg per box
+    if (norm == 'KILOGRAMOS' && (unit == 'KILOGRAMOS' || unit == norm)) {
+      return kgPerBox > 0 ? base / kgPerBox : base;
+    }
+    if (norm == 'LITROS' && (unit == 'LITROS' || unit == norm)) {
+      return unitsPerBox > 0 ? base / unitsPerBox : base;
+    }
+    // Standard products: UC = units per box
+    if (unit == 'UNIDADES' || unit == norm) {
+      return unitsPerBox > 0 ? base / unitsPerBox : base;
+    }
+    // PIEZAS / BANDEJAS / ESTUCHES / etc. — use unitsRetractil as content per box
+    if (unitsRetractil > 0 && unitsRetractil != unitsPerBox) {
+      return base / unitsRetractil;
+    }
+    return base;
+  }
+
+  /// Stock available expressed in the given unit type
+  double stockForUnit(String unit) {
+    if (unit == 'CAJAS') return stockEnvases;
+    final norm = _normalizedUnit;
+    if (norm == 'KILOGRAMOS' && (unit == 'KILOGRAMOS' || unit == norm)) {
+      return stockEnvases * kgPerBox + stockUnidades;
+    }
+    // PIEZAS / BANDEJAS / ESTUCHES: total pieces = envases * unitsRetractil + loose unidades
+    if (unitsRetractil > 0 && unitsRetractil != unitsPerBox) {
+      return stockEnvases * unitsRetractil + stockUnidades;
+    }
+    // For all other units: total = envases * unitsPerBox + loose unidades
+    return stockEnvases * unitsPerBox + stockUnidades;
+  }
+
+  /// Quantity of the selected unit contained in one box
+  double quantityPerBoxForUnit(String unit) {
+    if (unit == 'CAJAS') return 1;
+    final norm = _normalizedUnit;
+    if (norm == 'KILOGRAMOS' && (unit == 'KILOGRAMOS' || unit == norm)) {
+      return kgPerBox;
+    }
+    // PIEZAS / BANDEJAS / ESTUCHES: use unitsRetractil
+    if (unitsRetractil > 0 && unitsRetractil != unitsPerBox) {
+      return unitsRetractil;
+    }
+    // For LITROS, UNIDADES, etc.: unitsPerBox
+    return unitsPerBox > 0 ? unitsPerBox : 1;
+  }
+
+  /// Unit price description for display.
+  /// E.g., "3,456 €/kg", "0,540 €/ud", "11,621 €/cj"
+  String unitPriceDesc({int decimals = 3}) {
+    final norm = _normalizedUnit;
+    if (norm == 'KILOGRAMOS') {
+      return '${priceForUnit('KILOGRAMOS').toStringAsFixed(decimals)} €/kg';
+    }
+    if (norm == 'LITROS') {
+      return '${priceForUnit('LITROS').toStringAsFixed(decimals)} €/L';
+    }
+
+    // Legacy display: If U/R > 0 and U/C = 1, show Neto U/R logic
+    if (netoURPrice > 0) {
+      final dUnit = displayUnit;
+      String shortLabel = 'ud';
+      if (dUnit == 'BANDEJAS')
+        shortLabel = 'bandeja';
+      else if (dUnit == 'ESTUCHES')
+        shortLabel = 'estuche';
+      else if (dUnit == 'PIEZAS') shortLabel = 'pieza';
+      return 'Neto U/R: ${netoURPrice.toStringAsFixed(decimals)} €/$shortLabel';
+    }
+
+    if (unitsPerBox > 1 && isDualFieldProduct) {
+      return '${priceForUnit('UNIDADES').toStringAsFixed(decimals)} €/ud';
+    }
+    return '${bestPrice.toStringAsFixed(decimals)} €/cj';
+  }
+
+  /// Unit label abbreviation for display
+  static String unitLabel(String unit) {
+    switch (unit.toUpperCase().trim()) {
+      case 'UNIDADES':
+      case 'UNIDAD':
+        return 'uds';
+      case 'PIEZAS':
+      case 'PIEZA':
+        return 'uds';
+      case 'KILOGRAMOS':
+      case 'KILO':
+      case 'KG':
+        return 'kg';
+      case 'LITROS':
+      case 'LITRO':
+        return 'L';
+      case 'BOLSAS':
+      case 'BOLSA':
+        return 'bolsas';
+      case 'ESTUCHES':
+      case 'ESTUCHE':
+        return 'est.';
+      case 'BANDEJAS':
+      case 'BANDEJA':
+        return 'band.';
+      case 'BOTELLAS':
+      case 'BOTELLA':
+        return 'bot.';
+      case 'PAQUETES':
+      case 'PAQUETE':
+        return 'paq.';
+      case 'BOTES':
+      case 'BOTE':
+        return 'botes';
+      case 'LATAS':
+      case 'LATA':
+        return 'latas';
+      case 'GARRAFAS':
+      case 'GARRAFA':
+        return 'garr.';
+      case 'SACOS':
+      case 'SACO':
+        return 'sacos';
+      case 'ROLLOS':
+      case 'ROLLO':
+        return 'rollos';
+      case 'CAJAS':
+      case 'CAJA':
+      default:
+        return 'cajas';
+    }
+  }
+
+  /// Available unit types for this product.
+  /// Weight products: CAJAS + KILOGRAMOS (with CANTIDAD selector)
+  /// Standard with fraction-checking: CAJAS + UNIDADES (dual-field)
+  /// Simple boxes: CAJAS only
+  List<String> get availableUnits {
+    final norm = _normalizedUnit;
+    if (norm == 'KILOGRAMOS') return ['CAJAS', 'KILOGRAMOS'];
+    if (norm == 'LITROS') return ['CAJAS', 'LITROS'];
+
+    final dUnit = displayUnit;
+
+    if (isDualFieldProduct) return ['CAJAS', 'UNIDADES'];
+
+    // Explicit sub-unit (BANDEJAS, ESTUCHES, BOLSAS, PIEZAS…) with UC > 1 →
+    // can sell by full box OR by individual unit
+    if (dUnit != 'CAJAS' && (unitsPerBox > 1 || unitsRetractil > 0)) {
+      return ['CAJAS', dUnit];
+    }
+
+    return [dUnit];
+  }
+
+  /// Format a numeric value for display (remove trailing zeros)
+  static String _fmtNum(double v) {
+    if (v == v.truncateToDouble()) return v.toStringAsFixed(0);
+    final s = v.toStringAsFixed(2);
+    // Remove trailing zeros: 2.50 → 2.5, 2.00 → 2
+    if (s.endsWith('0')) return s.substring(0, s.length - 1);
+    return s;
+  }
+}
+
+/// Tariff entry for product detail
+class TariffEntry {
+  final int code;
+  final String description;
+  final double price;
+  final double precioUnitario;
+
+  TariffEntry({
+    required this.code,
+    required this.description,
+    required this.price,
+    this.precioUnitario = 0,
+  });
+
+  factory TariffEntry.fromJson(Map<String, dynamic> json) {
+    return TariffEntry(
+      code: _toInt(json['code']),
+      description: (json['description'] ?? '').toString().trim(),
+      price: _toDouble(json['price']),
+      precioUnitario: _toDouble(json['precioUnitario']),
+    );
+  }
+}
+
+/// Stock entry per warehouse
+class StockEntry {
+  final int almacenCode;
+  final String almacenName;
+  final double envases;
+  final double unidades;
+
+  StockEntry(
+      {required this.almacenCode,
+      required this.almacenName,
+      required this.envases,
+      required this.unidades});
+
+  factory StockEntry.fromJson(Map<String, dynamic> json) {
+    final code = json['almacenCode'] ?? json['almacen'];
+    final name = json['almacenName'] ?? json['almacenDesc'] ?? '';
+    return StockEntry(
+      almacenCode: _toInt(code),
+      almacenName: name.toString().trim(),
+      envases: _toDouble(json['envases']),
+      unidades: _toDouble(json['unidades']),
+    );
+  }
+}
+
+/// Promotion item from backend
+class PromotionItem {
+  final String code;
+  final String name;
+  final String promoDesc;
+  final String promoType;
+  final String promoCode;
+  final double promoPrice;
+  final double regularPrice;
+  final String dateFrom;
+  final String dateTo;
+  final double stockEnvases;
+  final double stockUnidades;
+  final double minQty;
+  final double giftQty;
+  final bool cumulative;
+
+  PromotionItem({
+    required this.code,
+    required this.name,
+    required this.promoDesc,
+    this.promoType = '',
+    this.promoCode = '',
+    this.promoPrice = 0,
+    this.regularPrice = 0,
+    this.dateFrom = '',
+    this.dateTo = '',
+    this.stockEnvases = 0,
+    this.stockUnidades = 0,
+    this.minQty = 0,
+    this.giftQty = 0,
+    this.cumulative = false,
+  });
+
+  bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
+  double get savingPct =>
+      regularPrice > 0 ? ((regularPrice - promoPrice) / regularPrice * 100) : 0;
+  bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
+  bool get isGift => promoType == 'GIFT';
+  String get giftLabel => minQty > 0 && giftQty > 0
+      ? '${minQty.toInt()}+${giftQty.toInt()} gratis'
+      : promoDesc;
+
+  factory PromotionItem.fromJson(Map<String, dynamic> json) {
+    String dateFrom = (json['dateFrom'] ?? '').toString().trim();
+    String dateTo = (json['dateTo'] ?? '').toString().trim();
+
+    if (dateFrom.isEmpty && json['dayFrom'] != null) {
+      final d = (json['dayFrom'] ?? '').toString().trim().padLeft(2, '0');
+      final m = (json['monthFrom'] ?? '').toString().trim().padLeft(2, '0');
+      final y = (json['yearFrom'] ?? '').toString().trim();
+      if (y.isNotEmpty) {
+        dateFrom = '$d/$m/$y';
+      }
+    }
+    if (dateTo.isEmpty && json['dayTo'] != null) {
+      final d = (json['dayTo'] ?? '').toString().trim().padLeft(2, '0');
+      final m = (json['monthTo'] ?? '').toString().trim().padLeft(2, '0');
+      final y = (json['yearTo'] ?? '').toString().trim();
+      if (y.isNotEmpty) {
+        dateTo = '$d/$m/$y';
+      }
+    }
+
+    return PromotionItem(
+      code: (json['code'] ?? '').toString().trim(),
+      name: (json['name'] ?? '').toString().trim(),
+      promoDesc:
+          (json['promoDesc'] ?? json['description'] ?? '').toString().trim(),
+      promoType: (json['promoType'] ?? '').toString().trim(),
+      promoCode: (json['promoCode'] ?? '').toString().trim(),
+      promoPrice: _toDouble(json['promoPrice'] ?? json['price']),
+      regularPrice: _toDouble(json['regularPrice']),
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      stockEnvases: _toDouble(json['stockEnvases']),
+      stockUnidades: _toDouble(json['stockUnidades']),
+      minQty: _toDouble(json['minQty']),
+      giftQty: _toDouble(json['giftQty']),
+      cumulative: json['cumulative'] == true,
+    );
+  }
+}
+
+/// Full product detail
+class ProductDetail {
+  final Product product;
+  final List<TariffEntry> tariffs;
+  final List<StockEntry> stockByWarehouse;
+  final double clientPrice;
+  final int codigoTarifaCliente;
+
+  ProductDetail({
+    required this.product,
+    required this.tariffs,
+    required this.stockByWarehouse,
+    this.clientPrice = 0,
+    int? codigoTarifaCliente,
+  }) : codigoTarifaCliente = codigoTarifaCliente ?? product.codigoTarifaCliente;
+
+  factory ProductDetail.fromJson(Map<String, dynamic> json) {
+    // Backend nests tariffs/stock inside 'product', so look in both places
+    final inner = json['product'] as Map<String, dynamic>? ?? json;
+    final tariffsList =
+        json['tariffs'] as List? ?? inner['tariffs'] as List? ?? [];
+    final stockList = json['stockByWarehouse'] as List? ??
+        json['stock'] as List? ??
+        inner['stockByWarehouse'] as List? ??
+        inner['stock'] as List? ??
+        [];
+    final cPrice = json['clientPrice'] ??
+        json['precioCliente'] ??
+        inner['clientPrice'] ??
+        inner['precioCliente'];
+    return ProductDetail(
+      product: Product.fromJson(inner),
+      tariffs: tariffsList
+          .map((t) => TariffEntry.fromJson(t as Map<String, dynamic>))
+          .toList(),
+      stockByWarehouse: stockList
+          .map((s) => StockEntry.fromJson(s as Map<String, dynamic>))
+          .toList(),
+      clientPrice: _toDouble(cPrice),
+    );
+  }
+}
+
+/// Order line (for cart and saved orders)
+class OrderLine {
+  int? id;
+  final String codigoArticulo;
+  final String descripcion;
+  double cantidadEnvases;
+  double cantidadUnidades;
+  String unidadMedida;
+  double unidadesCaja;
+  double precioVenta;
+  double precioCosto;
+  double precioTarifa;
+  double precioTarifaCliente;
+  double precioMinimo;
+  double importeVenta;
+  double importeCosto;
+  double importeMargen;
+  double porcentajeMargen;
+  double ivaRate; // e.g. 0.21, 0.10, 0.04, 0.0
+  double unidadesFraccion; // Support for dual-field unit logic
+  String claseLinea; // 'VT' = Venta, 'SC' = Sin Cargo
+
+  OrderLine({
+    this.id,
+    required this.codigoArticulo,
+    required this.descripcion,
+    this.cantidadEnvases = 0,
+    this.cantidadUnidades = 0,
+    this.unidadMedida = 'CAJAS',
+    this.unidadesCaja = 1,
+    this.precioVenta = 0,
+    this.precioCosto = 0,
+    this.precioTarifa = 0,
+    this.precioTarifaCliente = 0,
+    this.precioMinimo = 0,
+    this.importeVenta = 0,
+    this.importeCosto = 0,
+    this.importeMargen = 0,
+    this.porcentajeMargen = 0,
+    this.ivaRate = 0.21,
+    this.unidadesFraccion = 0,
+    this.claseLinea = 'VT',
+  });
+
+  factory OrderLine.fromJson(Map<String, dynamic> json) {
+    return OrderLine(
+      id: json['id'] != null ? _toInt(json['id']) : null,
+      codigoArticulo: (json['codigoArticulo'] ?? json['CODIGOARTICULO'] ?? '')
+          .toString()
+          .trim(),
+      descripcion:
+          (json['descripcion'] ?? json['DESCRIPCION'] ?? '').toString().trim(),
+      cantidadEnvases:
+          _toDouble(json['cantidadEnvases'] ?? json['CANTIDADENVASES']),
+      cantidadUnidades:
+          _toDouble(json['cantidadUnidades'] ?? json['CANTIDADUNIDADES']),
+      unidadMedida:
+          (json['unidadMedida'] ?? json['UNIDADMEDIDA'] ?? 'CAJAS').toString(),
+      unidadesCaja:
+          _toDouble(json['unidadesCaja'] ?? json['UNIDADESCAJA'], fallback: 1),
+      precioVenta: _toDouble(json['precioVenta'] ?? json['PRECIOVENTA']),
+      precioCosto: _toDouble(json['precioCosto'] ?? json['PRECIOCOSTO']),
+      precioTarifa: _toDouble(json['precioTarifa'] ?? json['PRECIOTARIFA']),
+      precioTarifaCliente:
+          _toDouble(json['precioTarifaCliente'] ?? json['PRECIOTARIFACLIENTE']),
+      precioMinimo: _toDouble(json['precioMinimo'] ?? json['PRECIOMINIMO']),
+      importeVenta: _toDouble(json['importeVenta'] ?? json['IMPORTEVENTA']),
+      importeCosto: _toDouble(json['importeCosto'] ?? json['IMPORTECOSTO']),
+      importeMargen: _toDouble(json['importeMargen'] ?? json['IMPORTEMARGEN']),
+      porcentajeMargen:
+          _toDouble(json['porcentajeMargen'] ?? json['PORCENTAJEMARGEN']),
+      ivaRate: _toDouble(json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'],
+          fallback: 0.21),
+      unidadesFraccion:
+          _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
+      claseLinea:
+          (json['claseLinea'] ?? json['CLASELINEA'] ?? 'VT').toString().trim(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'codigoArticulo': codigoArticulo,
+        'descripcion': descripcion,
+        'cantidadEnvases': cantidadEnvases,
+        'cantidadUnidades': cantidadUnidades,
+        'unidadMedida': unidadMedida,
+        'unidadesCaja': unidadesCaja,
+        'unidadesFraccion': unidadesFraccion,
+        'precioVenta': precioVenta,
+        'precioCosto': precioCosto,
+        'precioTarifa': precioTarifa,
+        'precioTarifaCliente': precioTarifaCliente,
+        'precioMinimo': precioMinimo,
+        'ivaRate': ivaRate,
+        'claseLinea': claseLinea,
+      };
+
+  /// Recalculate amounts based on current qty and price.
+  /// Also auto-computes the complementary quantity field:
+  /// - CAJAS: cantidadUnidades = cantidadEnvases * unidadesCaja
+  /// - KILOGRAMOS/other: cantidadEnvases = cantidadUnidades / unidadesCaja
+  void recalculate() {
+    final unit = unidadMedida.trim().toUpperCase();
+    // Auto-compute complementary field
+    if (unit == 'CAJAS' || unit.isEmpty) {
+      // Selling by boxes → compute total units
+      if (cantidadEnvases > 0 && unidadesCaja > 0) {
+        cantidadUnidades =
+            double.parse((cantidadEnvases * unidadesCaja).toStringAsFixed(5));
+      }
+    } else {
+      // Selling by kg/litros/units → compute box equivalent
+      if (cantidadUnidades > 0 && unidadesCaja > 0) {
+        cantidadEnvases =
+            double.parse((cantidadUnidades / unidadesCaja).toStringAsFixed(2));
+      }
+    }
+
+    // The billing qty is always the primary field for the selected unit
+    final billingQty =
+        (unit == 'CAJAS' || unit.isEmpty) ? cantidadEnvases : cantidadUnidades;
+    importeVenta = double.parse((precioVenta * billingQty).toStringAsFixed(2));
+    importeCosto = double.parse((precioCosto * billingQty).toStringAsFixed(2));
+    importeMargen =
+        double.parse((importeVenta - importeCosto).toStringAsFixed(2));
+    porcentajeMargen = importeVenta > 0
+        ? double.parse(
+            ((importeMargen / importeVenta) * 100).toStringAsFixed(2))
+        : 0;
+  }
+}
+
+/// Order summary (list item)
+class OrderSummary {
+  final int id;
+  final int numeroPedido;
+  final String clienteCode;
+  final String clienteName;
+  final String vendedorCode;
+  final String fecha;
+  final String estado;
+  final String tipoVenta;
+  final double total;
+  final double margen;
+  final int lineCount;
+  // New fields
+  final String serie;
+  final int ejercicio;
+  final String numeroPedidoFormatted;
+  final String fechaFormatted;
+  final double base;
+  final double iva;
+  final double costo;
+  final String observaciones;
+  final int tarifa;
+  final String formaPago;
+  final String origen;
+
+  OrderSummary({
+    required this.id,
+    required this.numeroPedido,
+    required this.clienteCode,
+    required this.clienteName,
+    required this.vendedorCode,
+    required this.fecha,
+    required this.estado,
+    required this.tipoVenta,
+    required this.total,
+    this.margen = 0,
+    this.lineCount = 0,
+    this.serie = 'M',
+    this.ejercicio = 0,
+    this.numeroPedidoFormatted = '',
+    this.fechaFormatted = '',
+    this.base = 0,
+    this.iva = 0,
+    this.costo = 0,
+    this.observaciones = '',
+    this.tarifa = 1,
+    this.formaPago = '02',
+    this.origen = 'A',
+  });
+
+  factory OrderSummary.fromJson(Map<String, dynamic> json) {
+    return OrderSummary(
+      id: _toInt(json['id']),
+      numeroPedido: _toInt(json['numeroPedido']),
+      clienteCode: (json['clienteCode'] ?? '').toString().trim(),
+      clienteName: (json['clienteName'] ?? '').toString().trim(),
+      vendedorCode: (json['vendedorCode'] ?? '').toString().trim(),
+      fecha: (json['fecha'] ?? '').toString(),
+      estado: (json['estado'] ?? '').toString().trim(),
+      tipoVenta: (json['tipoVenta'] ?? 'CC').toString().trim(),
+      total: _toDouble(json['total']),
+      margen: _toDouble(json['margen']),
+      lineCount: _toInt(json['lineCount']),
+      serie: (json['serie'] ?? 'M').toString().trim(),
+      ejercicio: _toInt(json['ejercicio']),
+      numeroPedidoFormatted: (json['numeroPedidoFormatted'] ?? '').toString(),
+      fechaFormatted: (json['fechaFormatted'] ?? '').toString(),
+      base: _toDouble(json['base']),
+      iva: _toDouble(json['iva']),
+      costo: _toDouble(json['costo']),
+      observaciones: (json['observaciones'] ?? '').toString().trim(),
+      tarifa: _toInt(json['tarifa']),
+      formaPago: (json['formaPago'] ?? '02').toString().trim(),
+      origen: (json['origen'] ?? 'A').toString().trim(),
+    );
+  }
+}
+
+/// Order statistics
+class OrderStats {
+  final int totalOrders;
+  final double totalAmount;
+  final double totalBase;
+  final double totalIva;
+  final double avgMargin;
+  final double avgTicket;
+  final Map<String, int> byStatus;
+  final List<Map<String, dynamic>> dailyTrend;
+  final List<Map<String, dynamic>> topClients;
+  final double trendOrdersPct;
+  final double trendAmountPct;
+
+  OrderStats({
+    required this.totalOrders,
+    required this.totalAmount,
+    required this.totalBase,
+    required this.totalIva,
+    required this.avgMargin,
+    required this.avgTicket,
+    required this.byStatus,
+    required this.dailyTrend,
+    required this.topClients,
+    this.trendOrdersPct = 0,
+    this.trendAmountPct = 0,
+  });
+
+  factory OrderStats.fromJson(Map<String, dynamic> json) {
+    final trendOrdersPct = _toDouble(json['trendOrdersPct']);
+    final trendAmountPct = _toDouble(json['trendAmountPct']);
+    return OrderStats(
+      totalOrders: _toInt(json['totalOrders']),
+      totalAmount: _toDouble(json['totalAmount']),
+      totalBase: _toDouble(json['totalBase']),
+      totalIva: _toDouble(json['totalIva']),
+      avgMargin: _toDouble(json['avgMargin']),
+      avgTicket: _toDouble(json['avgTicket']),
+      byStatus: (json['byStatus'] as Map? ?? {}).map(
+        (k, v) => MapEntry(
+            k.toString(), v is int ? v : int.tryParse(v.toString()) ?? 0),
+      ),
+      dailyTrend: (json['dailyTrend'] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>))
+          .toList(),
+      topClients: (json['topClients'] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>))
+          .toList(),
+      trendOrdersPct: trendOrdersPct,
+      trendAmountPct: trendAmountPct,
+    );
+  }
+}
+
+/// Order detail (header + lines)
+class OrderDetail {
+  final OrderSummary header;
+  final List<OrderLine> lines;
+
+  OrderDetail({required this.header, required this.lines});
+
+  factory OrderDetail.fromJson(Map<String, dynamic> json) {
+    final linesJson = json['lines'] as List? ?? [];
+    return OrderDetail(
+      header: OrderSummary.fromJson(json),
+      lines: linesJson
+          .map((l) => OrderLine.fromJson(l as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+/// Recommendation item
+class Recommendation {
+  final String code;
+  final String name;
+  final int frequency;
+  final double totalUnits;
+  final int clientCount;
+
+  Recommendation({
+    required this.code,
+    required this.name,
+    this.frequency = 0,
+    this.totalUnits = 0,
+    this.clientCount = 0,
+  });
+
+  factory Recommendation.fromJson(Map<String, dynamic> json) {
+    return Recommendation(
+      code: (json['code'] ?? '').toString().trim(),
+      name: (json['name'] ?? '').toString().trim(),
+      frequency: json['frequency'] is int
+          ? json['frequency'] as int
+          : int.tryParse(json['frequency']?.toString() ?? '0') ?? 0,
+      totalUnits: _toDouble(json['totalUnits']),
+      clientCount: json['clientCount'] is int
+          ? json['clientCount'] as int
+          : int.tryParse(json['clientCount']?.toString() ?? '0') ?? 0,
+    );
+  }
+}
+
+// ─── SERVICE ──────────────────────────────────────────────────
+
+class PedidosService {
+  static const _base = '/pedidos';
+
+  // ── Product Catalog ──
+
+  static Future<List<Product>> getProducts({
+    required String vendedorCodes,
+    String? search,
+    String? clientCode,
+    String? family,
+    String? marca,
+    int limit = 50,
+    int offset = 0,
+    bool forceRefresh = false,
+  }) async {
+    final params = <String, dynamic>{
+      'vendedorCodes': vendedorCodes,
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+    };
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    if (clientCode != null && clientCode.isNotEmpty)
+      params['clientCode'] = clientCode;
+    if (family != null && family.isNotEmpty) params['family'] = family;
+    if (marca != null && marca.isNotEmpty) params['marca'] = marca;
+
+    final cacheKey =
+        'pedidos:products:${clientCode ?? ''}:${search ?? ''}:${family ?? ''}:${marca ?? ''}:$offset';
+    try {
+      final response = await ApiClient.get(
+        '$_base/products',
+        queryParameters: params,
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 5),
+        forceRefresh: forceRefresh,
+      );
+      final list = response['products'] as List? ?? [];
+      return list
+          .map((p) => Product.fromJson(p as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('[PedidosService] Error getProducts: $e');
+      rethrow;
+    }
+  }
+
+  static Future<ProductDetail> getProductDetail(String code,
+      {String? clientCode}) async {
+    final trimmedCode = code.trim();
+    if (trimmedCode.isEmpty) {
+      throw Exception('Product code is required');
+    }
+    final params = <String, dynamic>{};
+    if (clientCode != null) params['clientCode'] = clientCode;
+
+    try {
+      final response = await ApiClient.get(
+        '$_base/products/$trimmedCode',
+        queryParameters: params,
+        cacheKey: 'pedidos:detail:$trimmedCode:${clientCode ?? ''}',
+        cacheTTL: const Duration(minutes: 10),
+      );
+      return ProductDetail.fromJson(response);
+    } catch (e) {
+      debugPrint('[PedidosService] Error getProductDetail: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, double>> getStock(String code) async {
+    try {
+      final response = await ApiClient.get(
+        '$_base/products/$code/stock',
+        cacheKey: 'pedidos:stock:$code',
+        cacheTTL: CacheService.realtimeTTL,
+      );
+      final stock = response['stock'] as Map<String, dynamic>? ?? {};
+      return {
+        'envases': _toDouble(stock['envases']),
+        'unidades': _toDouble(stock['unidades']),
+      };
+    } catch (e) {
+      debugPrint('[PedidosService] Error getStock: $e');
+      rethrow;
+    }
+  }
+
+  // ── Filters ──
+
+  static Future<List<String>> getFamilies() async {
+    try {
+      final response = await ApiClient.get(
+        '$_base/families',
+        cacheKey: 'pedidos:families',
+        cacheTTL: const Duration(hours: 1),
+      );
+      return (response['families'] as List? ?? [])
+          .map((f) => f.toString())
+          .toList();
+    } catch (e) {
+      debugPrint('[PedidosService] Error getFamilies: $e');
+      return [];
+    }
+  }
+
+  static Future<List<String>> getBrands() async {
+    try {
+      final response = await ApiClient.get(
+        '$_base/brands',
+        cacheKey: 'pedidos:brands',
+        cacheTTL: const Duration(hours: 1),
+      );
+      return (response['brands'] as List? ?? [])
+          .map((b) => b.toString())
+          .toList();
+    } catch (e) {
+      debugPrint('[PedidosService] Error getBrands: $e');
+      return [];
+    }
+  }
+
+  // ── Orders CRUD ──
+
+  static Future<Map<String, dynamic>> createOrder({
+    required String clientCode,
+    required String clientName,
+    required String vendedorCode,
+    String tipoVenta = 'CC',
+    int almacen = 1,
+    int tarifa = 1,
+    String observaciones = '',
+    required List<OrderLine> lines,
+  }) async {
+    try {
+      final response = await ApiClient.post('$_base/create', {
+        'clientCode': clientCode,
+        'clientName': clientName,
+        'vendedorCode': vendedorCode,
+        'tipoventa': tipoVenta,
+        'almacen': almacen,
+        'tarifa': tarifa,
+        'observaciones': observaciones,
+        'lines': lines.map((l) => l.toJson()).toList(),
+      });
+      // Invalidate orders cache
+      CacheService.invalidateByPrefix('pedidos:orders:');
+      return response;
+    } catch (e) {
+      debugPrint('[PedidosService] Error createOrder: $e');
+      rethrow;
+    }
+  }
+
+  static Future<List<OrderSummary>> getOrders({
+    required String vendedorCodes,
+    String? status,
+    int? year,
+    int? month,
+    int limit = 50,
+    int offset = 0,
+    bool forceRefresh = false,
+    String? dateFrom,
+    String? dateTo,
+    String? search,
+    double? minAmount,
+    double? maxAmount,
+    String sortBy = 'fecha',
+    String sortOrder = 'DESC',
+  }) async {
+    final params = <String, dynamic>{
+      'vendedorCodes': vendedorCodes,
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+      'sortBy': sortBy,
+      'sortOrder': sortOrder,
+    };
+    if (status != null) params['status'] = status;
+    if (year != null) params['year'] = year.toString();
+    if (month != null) params['month'] = month.toString();
+    if (dateFrom != null) params['dateFrom'] = dateFrom;
+    if (dateTo != null) params['dateTo'] = dateTo;
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    if (minAmount != null) params['minAmount'] = minAmount.toStringAsFixed(2);
+    if (maxAmount != null) params['maxAmount'] = maxAmount.toStringAsFixed(2);
+
+    try {
+      final response = await ApiClient.get(
+        _base,
+        queryParameters: params,
+        cacheKey:
+            'pedidos:orders:$vendedorCodes:${status ?? ''}:${year ?? ''}:$offset',
+        cacheTTL: const Duration(minutes: 2),
+        forceRefresh: forceRefresh,
+      );
+      final list = response['orders'] as List? ?? [];
+      return list
+          .map((o) => OrderSummary.fromJson(o as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('[PedidosService] Error getOrders: $e');
+      rethrow;
+    }
+  }
+
+  static Future<OrderStats> getOrderStats({
+    required String vendedorCodes,
+    String? dateFrom,
+    String? dateTo,
+    bool forceRefresh = false,
+  }) async {
+    final params = <String, dynamic>{'vendedorCodes': vendedorCodes};
+    if (dateFrom != null) params['dateFrom'] = dateFrom;
+    if (dateTo != null) params['dateTo'] = dateTo;
+
+    try {
+      final response = await ApiClient.get(
+        '$_base/orders/stats',
+        queryParameters: params,
+        cacheKey:
+            'pedidos:stats:$vendedorCodes:${dateFrom ?? ''}:${dateTo ?? ''}',
+        cacheTTL: const Duration(minutes: 5),
+        forceRefresh: forceRefresh,
+      );
+      return OrderStats.fromJson(response['stats'] as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint('[PedidosService] Error getOrderStats: $e');
+      rethrow;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getOrderAlbaran(int orderId) async {
+    try {
+      final response = await ApiClient.get('$_base/$orderId/albaran');
+      return (response['albaranes'] as List? ?? [])
+          .map((a) => Map<String, dynamic>.from(a as Map))
+          .toList();
+    } catch (e) {
+      debugPrint('[PedidosService] Error getOrderAlbaran: $e');
+      return [];
+    }
+  }
+
+  static Future<OrderDetail> getOrderDetail(int orderId) async {
+    try {
+      final response = await ApiClient.get(
+        '$_base/$orderId',
+        cacheKey: 'pedidos:order:$orderId',
+        cacheTTL: const Duration(minutes: 1),
+      );
+      return OrderDetail.fromJson(response['order'] as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint('[PedidosService] Error getOrderDetail: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> addLine(int orderId, OrderLine line) async {
+    try {
+      await ApiClient.put('$_base/$orderId/lines', data: line.toJson());
+      CacheService.invalidate('pedidos:order:$orderId');
+      CacheService.invalidateByPrefix('pedidos:orders:');
+    } catch (e) {
+      debugPrint('[PedidosService] Error addLine: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> updateLine(
+      int orderId, int lineId, Map<String, dynamic> data) async {
+    try {
+      await ApiClient.put('$_base/$orderId/lines/$lineId', data: data);
+      CacheService.invalidate('pedidos:order:$orderId');
+      CacheService.invalidateByPrefix('pedidos:orders:');
+    } catch (e) {
+      debugPrint('[PedidosService] Error updateLine: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> deleteLine(int orderId, int lineId) async {
+    try {
+      await ApiClient.put('$_base/$orderId/lines/$lineId/delete');
+      CacheService.invalidate('pedidos:order:$orderId');
+      CacheService.invalidateByPrefix('pedidos:orders:');
+    } catch (e) {
+      debugPrint('[PedidosService] Error deleteLine: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> confirmOrder(
+      int orderId, String saleType) async {
+    try {
+      final response = await ApiClient.put('$_base/$orderId/confirm',
+          data: {'saleType': saleType});
+      CacheService.invalidate('pedidos:order:$orderId');
+      CacheService.invalidateByPrefix('pedidos:orders:');
+      return response;
+    } on ApiException catch (e) {
+      // Capture 409 errors (stock insufficient) and return the data
+      if (e.statusCode == 409) {
+        debugPrint('[PedidosService] Order blocked due to stock: ${e.message}');
+        return {
+          'blocked': true,
+          'message': e.message,
+          'statusCode': e.statusCode,
+        };
+      }
+      debugPrint('[PedidosService] Error confirmOrder: $e');
+      rethrow;
+    } catch (e) {
+      debugPrint('[PedidosService] Error confirmOrder: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> cancelOrder(int orderId) async {
+    try {
+      await ApiClient.put('$_base/$orderId/cancel');
+      CacheService.invalidate('pedidos:order:$orderId');
+      CacheService.invalidateByPrefix('pedidos:orders:');
+    } catch (e) {
+      debugPrint('[PedidosService] Error cancelOrder: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateOrderStatus(
+      int orderId, String status) async {
+    try {
+      final response = await ApiClient.put('$_base/$orderId/status',
+          data: {'status': status});
+      CacheService.invalidate('pedidos:order:$orderId');
+      CacheService.invalidateByPrefix('pedidos:orders:');
+      return response;
+    } catch (e) {
+      debugPrint('[PedidosService] Error updateOrderStatus: $e');
+      rethrow;
+    }
+  }
+
+  // ── Recommendations ──
+
+  static Future<Map<String, List<Recommendation>>> getRecommendations({
+    required String clientCode,
+    required String vendedorCode,
+  }) async {
+    try {
+      final response = await ApiClient.get(
+        '$_base/recommendations/$clientCode',
+        queryParameters: {'vendedorCode': vendedorCode},
+        cacheKey: 'pedidos:reco:$clientCode:$vendedorCode',
+        cacheTTL: const Duration(minutes: 15),
+      );
+      final clientHistory = (response['clientHistory'] as List? ?? [])
+          .map((r) => Recommendation.fromJson(r as Map<String, dynamic>))
+          .toList();
+      final similarClients = (response['similarClients'] as List? ?? [])
+          .map((r) => Recommendation.fromJson(r as Map<String, dynamic>))
+          .toList();
+      return {
+        'clientHistory': clientHistory,
+        'similarClients': similarClients,
+      };
+    } catch (e) {
+      debugPrint('[PedidosService] Error getRecommendations: $e');
+      return {'clientHistory': [], 'similarClients': []};
+    }
+  }
+
+  // ── Client Balance ──
+  static Future<Map<String, dynamic>> getClientBalance(
+      String clientCode) async {
+    try {
+      final response = await ApiClient.get(
+        '$_base/client-balance/$clientCode',
+        cacheKey: 'pedidos:balance:$clientCode',
+        cacheTTL: const Duration(minutes: 5),
+      );
+      return response['balance'] as Map<String, dynamic>? ?? {};
+    } catch (e) {
+      debugPrint('[PedidosService] Error getClientBalance: $e');
+      return {};
+    }
+  }
+
+  // ── Clone Order ──
+  static Future<Map<String, dynamic>> cloneOrder(int orderId) async {
+    try {
+      final response = await ApiClient.get(
+        '$_base/$orderId/clone',
+        cacheKey: 'pedidos:clone:$orderId',
+        cacheTTL: const Duration(seconds: 30),
+      );
+      return response['order'] as Map<String, dynamic>? ?? {};
+    } catch (e) {
+      debugPrint('[PedidosService] Error cloneOrder: $e');
+      rethrow;
+    }
+  }
+
+  // ── Complementary Products ──
+  static Future<List<Map<String, dynamic>>> getComplementaryProducts(
+      List<String> productCodes,
+      {String? clientCode}) async {
+    try {
+      final response = await ApiClient.post('$_base/complementary', {
+        'productCodes': productCodes,
+        if (clientCode != null) 'clientCode': clientCode,
+      });
+      return (response['products'] as List? ?? []).cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('[PedidosService] Error getComplementaryProducts: $e');
+      return [];
+    }
+  }
+
+  // ── Analytics ──
+  static Future<Map<String, dynamic>> getAnalytics(String vendedorCodes) async {
+    try {
+      final response = await ApiClient.get(
+        '$_base/analytics',
+        queryParameters: {'vendedorCodes': vendedorCodes},
+        cacheKey: 'pedidos:analytics:$vendedorCodes',
+        cacheTTL: const Duration(minutes: 10),
+      );
+      return response['analytics'] as Map<String, dynamic>? ?? {};
+    } catch (e) {
+      debugPrint('[PedidosService] Error getAnalytics: $e');
+      return {};
+    }
+  }
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────
+
+double _toDouble(dynamic value, {double fallback = 0}) {
+  if (value == null) return fallback;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString()) ?? fallback;
+}
+
+/// Safe int parser — handles null, int, String, num, Map (crash-proof).
+/// If the API returns a Map or other unexpected type where an int is
+/// expected, this returns [fallback] instead of throwing a type error.
+int _toInt(dynamic value, {int fallback = 0}) {
+  if (value == null) return fallback;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  // Map / List / any other unexpected type → fallback (prevents crashes)
+  return fallback;
+}

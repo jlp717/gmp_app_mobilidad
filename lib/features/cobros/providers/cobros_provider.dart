@@ -2,6 +2,7 @@
 /// Estado global para el módulo de cobros y entregas
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../data/models/cobros_models.dart';
 import '../../../core/api/api_client.dart';
 
@@ -21,6 +22,10 @@ class CobrosProvider extends ChangeNotifier {
   List<CobroPendiente> _cobrosPendientes = [];
   ResumenCobros? _resumenCobros;
   EstadoCliente? _estadoClienteActual;
+
+  // Pending summary per client (code -> {total, count})
+  Map<String, Map<String, dynamic>> _pendingSummary = {};
+  double _grandTotal = 0;
   
   // Filtros
   String _filtroEstado = 'todos';
@@ -45,6 +50,8 @@ class CobrosProvider extends ChangeNotifier {
   EstadoCliente? get estadoClienteActual => _estadoClienteActual;
   String get filtroEstado => _filtroEstado;
   String get filtroCliente => _filtroCliente;
+  Map<String, Map<String, dynamic>> get pendingSummary => _pendingSummary;
+  double get grandTotal => _grandTotal;
 
   // Estadísticas calculadas
   int get totalEntregasPendientes => _albaranesPendientes
@@ -127,8 +134,10 @@ class CobrosProvider extends ChangeNotifier {
       }
     } catch (e) {
       _error = 'Error de conexión: $e';
-      // Cargar datos de ejemplo para desarrollo
-      _cargarDatosEjemplo();
+      // M4 FIX: Only load example data in debug mode, never in production
+      if (kDebugMode) {
+        _cargarDatosEjemplo();
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -233,26 +242,75 @@ class CobrosProvider extends ChangeNotifier {
       orElse: () => throw Exception('Albarán no encontrado'),
     );
 
-    // Marcar todos los items como entregados
+    // P1-C FIX: Track success per item, don't mark complete if any fail
+    bool allSucceeded = true;
     for (final item in albaran.items) {
       if (item.estado != EstadoEntrega.entregado) {
-        await actualizarEstadoEntrega(
+        final ok = await actualizarEstadoEntrega(
           itemId: item.itemId,
           estado: EstadoEntrega.entregado,
           cantidadEntregada: item.cantidadPedida,
           observaciones: observaciones,
         );
+        if (!ok) allSucceeded = false;
       }
     }
 
-    albaran.estado = EstadoEntrega.entregado;
+    if (allSucceeded) {
+      albaran.estado = EstadoEntrega.entregado;
+    } else {
+      _error = 'No se pudieron completar todos los ítems de la entrega';
+    }
     notifyListeners();
-    return true;
+    return allSucceeded;
   }
 
   // ============================================
   // API - COMERCIAL
   // ============================================
+
+  /// Carga resumen de pendientes por cliente para un vendedor
+  /// Soporta múltiples vendedores (jefe de ventas) o vendedor individual
+  Future<void> cargarPendingSummary(String? vendedorCode, {List<String>? vendedorCodes}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      // Build URL: individual vendor vs multiple vendors
+      String endpoint;
+      if (vendedorCodes != null && vendedorCodes.isNotEmpty) {
+        // Multiple vendors: pass as comma-separated list
+        endpoint = '/cobros/pending-summary/${vendedorCodes.join(',')}';
+      } else if (vendedorCode != null && vendedorCode.isNotEmpty) {
+        // Single vendor
+        endpoint = '/cobros/pending-summary/$vendedorCode';
+      } else {
+        // No vendor specified - use ALL
+        endpoint = '/cobros/pending-summary/ALL';
+      }
+
+      final response = await ApiClient.get(endpoint);
+      if (response['success'] == true) {
+        final raw = response['summary'] as Map<String, dynamic>? ?? {};
+        _pendingSummary = raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
+        _grandTotal = (response['grandTotal'] as num?)?.toDouble() ?? 0;
+        _error = null;
+      } else {
+        _error = 'Error al cargar resumen de pendientes';
+      }
+    } catch (e) {
+      _error = 'Error de conexión: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  double pendingForClient(String code) {
+    final entry = _pendingSummary[code.trim()];
+    return (entry?['total'] as num?)?.toDouble() ?? 0;
+  }
 
   /// Carga cobros pendientes de un cliente
   Future<void> cargarCobrosPendientes(String codigoCliente) async {
@@ -300,6 +358,9 @@ class CobrosProvider extends ChangeNotifier {
     required String referencia,
     required double importe,
     required String formaPago,
+    required TipoVenta tipoVenta,
+    required TipoModoCobro tipoModo,
+    String? codigoUsuario,
     String? observaciones,
   }) async {
     try {
@@ -307,6 +368,10 @@ class CobrosProvider extends ChangeNotifier {
         'referencia': referencia,
         'importe': importe,
         'formaPago': formaPago,
+        'tipoVenta': tipoVenta.code,
+        'tipoModo': tipoModo.code,
+        'tipoUsuario': isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
+        'codigoUsuario': codigoUsuario ?? employeeCode,
         'observaciones': observaciones,
       });
 
@@ -318,6 +383,8 @@ class CobrosProvider extends ChangeNotifier {
       return false;
     } catch (e) {
       _error = 'Error registrando cobro: $e';
+      // P3-C FIX: Notify listeners so the UI shows the error
+      notifyListeners();
       return false;
     }
   }

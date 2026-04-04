@@ -6,6 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 
 /// Comprehensive Client Detail Page for Rutero
 /// Shows exhaustive breakdown with charts, statistics, purchase history
@@ -205,6 +206,9 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // KPI Alerts Section
+            ClientAlertsWidget(clientId: widget.clientCode),
+
             // Year Total Card
             _buildYearTotalCard(totals),
 

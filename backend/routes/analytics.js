@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const {
@@ -11,7 +11,9 @@ const {
     formatCurrency,
     MIN_YEAR,
     LAC_SALES_FILTER,
-    LACLAE_SALES_FILTER
+    LACLAE_SALES_FILTER,
+    sanitizeForSQL,
+    sanitizeCodeList
 } = require('../utils/common');
 
 
@@ -25,7 +27,7 @@ router.get('/yoy-comparison', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         // Optional month filter
-        const monthFilter = month ? `AND L.LCMMDC = ${month}` : '';
+        const monthFilter = month ? `AND L.LCMMDC = ${parseInt(month) || 0}` : '';
         const cacheKeyBase = `analytics:yoy:${currentYear}:${month || 'all'}:${vendedorCodes}`;
 
         const getData = async (yr) => {
@@ -90,8 +92,8 @@ router.get('/top-clients', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
 
         let dateFilter = '';
-        if (year) dateFilter += ` AND L.LCAADC = ${year}`;
-        if (month) dateFilter += ` AND L.LCMMDC = ${month}`;
+        if (year) dateFilter += ` AND L.LCAADC = ${parseInt(year) || 0}`;
+        if (month) dateFilter += ` AND L.LCMMDC = ${parseInt(month) || 0}`;
 
         const sql = `
       SELECT 
@@ -102,7 +104,7 @@ router.get('/top-clients', async (req, res) => {
       WHERE ${LACLAE_SALES_FILTER} ${dateFilter} ${vendedorFilter}
       GROUP BY L.LCCDCL
       ORDER BY totalSales DESC
-      FETCH FIRST ${limit} ROWS ONLY
+      FETCH FIRST ${parseInt(limit) || 10} ROWS ONLY
     `;
 
         const cacheKey = `analytics:top_clients:${year || 'current'}:${month || 'all'}:${vendedorCodes}:${limit}`;
@@ -114,7 +116,7 @@ router.get('/top-clients', async (req, res) => {
 
         if (topClients.length === 0) return res.json({ clients: [] });
 
-        const clientCodes = topClients.map(c => `'${c.CODE}'`).join(',');
+        const clientCodes = topClients.map(c => `'${sanitizeForSQL(c.CODE)}'`).join(',');
         const namesMsg = `
             SELECT CODIGOCLIENTE as C, NOMBRECLIENTE as N, POBLACION as P 
             FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${clientCodes})
@@ -320,48 +322,58 @@ router.get('/sales-history', async (req, res) => {
         // Filter by Client - safe interpolation
         if (clientCode) {
             const safeClientCode = clientCode.trim().replace(/[^a-zA-Z0-9]/g, '');
-            whereClause += ` AND CODIGOCLIENTEALBARAN = '${safeClientCode}'`;
+            whereClause += ` AND L.CODIGOCLIENTEALBARAN = '${safeClientCode}'`;
         }
 
         // Filter by Product (Code or Description) or Batch/Reference - safe interpolation
         if (productSearch) {
-            const safeTerm = productSearch.toUpperCase().trim().replace(/'/g, "''").replace(/[%_\\]/g, '');
-            whereClause += ` AND (UPPER(DESCRIPCION) LIKE '%${safeTerm}%' OR CODIGOARTICULO LIKE '%${safeTerm}%' OR REFERENCIA LIKE '%${safeTerm}%')`;
+            const safeTerm = sanitizeForSQL(productSearch.toUpperCase().trim()).replace(/[%_\\]/g, '');
+            whereClause += ` AND (UPPER(L.DESCRIPCION) LIKE '%${safeTerm}%' OR L.CODIGOARTICULO LIKE '%${safeTerm}%' OR L.REFERENCIA LIKE '%${safeTerm}%')`;
         }
 
         // Filter by Date Range (YYYY-MM-DD)
         if (startDate) {
             const start = new Date(startDate);
             const startNum = start.getFullYear() * 10000 + (start.getMonth() + 1) * 100 + start.getDate();
-            whereClause += ` AND (ANODOCUMENTO * 10000 + MESDOCUMENTO * 100 + DIADOCUMENTO) >= ${startNum}`;
+            whereClause += ` AND (L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) >= ${startNum}`;
         }
 
         if (endDate) {
             const end = new Date(endDate);
             const endNum = end.getFullYear() * 10000 + (end.getMonth() + 1) * 100 + end.getDate();
-            whereClause += ` AND (ANODOCUMENTO * 10000 + MESDOCUMENTO * 100 + DIADOCUMENTO) <= ${endNum}`;
+            whereClause += ` AND (L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) <= ${endNum}`;
         } else {
-            whereClause += ` AND ANODOCUMENTO >= ${MIN_YEAR}`;
+            whereClause += ` AND L.ANODOCUMENTO >= ${MIN_YEAR}`;
         }
 
-        // Construct query
+        // Construct query - FIX: JOIN with ART and ARTX to get subfamily/FI codes
+        // Previously missing JOINs caused FI3/FI4 subfamilies to appear as 'General'
         const querySql = `
       SELECT 
-        ANODOCUMENTO as year, 
-        MESDOCUMENTO as month, 
-        DIADOCUMENTO as day,
-        CODIGOCLIENTEALBARAN as clientCode,
-        CODIGOARTICULO as productCode,
-        DESCRIPCION as productName,
-        IMPORTEVENTA as total,
-        PRECIOVENTA as price,
-        CANTIDADUNIDADES as quantity,
-        TRAZABILIDADALBARAN as lote,
-        REFERENCIA as ref,
-        NUMERODOCUMENTO as invoice
-      FROM DSEDAC.LAC
+        L.ANODOCUMENTO as year, 
+        L.MESDOCUMENTO as month, 
+        L.DIADOCUMENTO as day,
+        L.CODIGOCLIENTEALBARAN as clientCode,
+        L.CODIGOARTICULO as productCode,
+        L.DESCRIPCION as productName,
+        L.IMPORTEVENTA as total,
+        L.PRECIOVENTA as price,
+        L.CANTIDADUNIDADES as quantity,
+        L.TRAZABILIDADALBARAN as lote,
+        L.REFERENCIA as ref,
+        L.NUMERODOCUMENTO as invoice,
+        COALESCE(A.CODIGOFAMILIA, '') as family,
+        COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as subfamily,
+        COALESCE(TRIM(AX.FILTRO01), '') as fi1,
+        COALESCE(TRIM(AX.FILTRO02), '') as fi2,
+        COALESCE(TRIM(AX.FILTRO03), '') as fi3,
+        COALESCE(TRIM(AX.FILTRO04), '') as fi4,
+        COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as fi5
+      FROM DSEDAC.LAC L
+      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+      LEFT JOIN DSEDAC.ARTX AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO
       ${whereClause}
-      ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
+      ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
       OFFSET ${parseInt(offset)} ROWS
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
     `;
@@ -382,7 +394,14 @@ router.get('/sales-history', async (req, res) => {
             total: formatCurrency(r.TOTAL),
             lote: r.LOTE?.trim() || '',
             ref: r.REF?.trim() || '',
-            invoice: r.INVOICE?.trim()
+            invoice: r.INVOICE?.trim(),
+            family: r.FAMILY?.trim() || '',
+            subfamily: r.SUBFAMILY?.trim() || 'General',
+            fi1: r.FI1?.trim() || '',
+            fi2: r.FI2?.trim() || '',
+            fi3: r.FI3?.trim() || '',
+            fi4: r.FI4?.trim() || '',
+            fi5: r.FI5?.trim() || ''
         }));
 
         res.json({
@@ -409,19 +428,19 @@ router.get('/sales-history/summary', async (req, res) => {
         // Build filters for LACLAE table
         const LACLAE_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z')`;
 
-        // Vendedor filter - adaptar para LACLAE (LCCDVD)
+        // Vendedor filter - adaptar para LACLAE (LCCDVD) - SECURITY: sanitize
         let vendedorFilter = '';
         if (vendedorCodes) {
-            const codes = vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',');
-            vendedorFilter = `AND L.LCCDVD IN (${codes})`;
+            const codes = sanitizeCodeList(vendedorCodes);
+            if (codes) vendedorFilter = `AND L.LCCDVD IN (${codes})`;
         }
 
         // Client filter - adaptar para LACLAE (LCCDCL)
-        const clientFilter = clientCode ? `AND L.LCCDCL = '${clientCode}'` : '';
+        const clientFilter = clientCode ? `AND L.LCCDCL = '${sanitizeForSQL(clientCode)}'` : '';
 
         // Product search filter - adaptar para LACLAE (LCCDRF, LCDESC)
         const searchFilter = productSearch
-            ? `AND (UPPER(L.LCDESC) LIKE UPPER('%${productSearch}%') OR TRIM(L.LCCDRF) LIKE '%${productSearch}%')`
+            ? `AND (UPPER(L.LCDESC) LIKE UPPER('%${sanitizeForSQL(productSearch)}%') OR TRIM(L.LCCDRF) LIKE '%${sanitizeForSQL(productSearch)}%')`
             : '';
 
         // Helper to query LACLAE

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -7,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/api/api_client.dart';
+import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/providers/dashboard_provider.dart';
 import '../../../../core/widgets/coming_soon_placeholder.dart';
 import '../../../clients/presentation/pages/simple_client_list_page.dart';
@@ -24,9 +26,16 @@ import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_panel_page.dart';
 import '../../../repartidor/presentation/pages/repartidor_clientes_page.dart';
 import '../../../facturas/presentation/pages/facturas_page.dart';
+import '../../../pedidos/presentation/pages/pedidos_page.dart';
+import '../../../pedidos/providers/pedidos_provider.dart';
 import '../../../warehouse/presentation/pages/warehouse_dashboard_page.dart';
+import '../../../warehouse/presentation/pages/vehicles_page.dart';
+import '../../../warehouse/presentation/pages/articles_page.dart';
+import '../../../warehouse/presentation/pages/load_history_page.dart';
 import '../../../warehouse/presentation/pages/personnel_page.dart';
 import '../../../../core/models/user_model.dart';
+import '../../../../core/utils/responsive.dart';
+import '../../../../core/widgets/lazy_indexed_stack.dart';
 import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
@@ -40,14 +49,15 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+  AuthProvider? _authProvider;
   DashboardProvider? _dashboardProvider;
-  bool _isNavExpanded = true; 
-  
+  bool _isNavExpanded = true;
+
   // State for Jefe Repartidor View
   String? _selectedRepartidor = 'ALL';
   List<Map<String, dynamic>> _repartidoresOptions = [];
   bool _isLoadingRepartidores = false;
-  
+
   // Toggle state
   bool _forceRepartidorMode = false;
   bool _forceAlmacenMode = false;
@@ -59,6 +69,11 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    // Listen for auth changes (logout/session expired)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _authProvider = context.read<AuthProvider>();
+      // Note: Can't add listener here as context is not available in initState
+    });
     // Verify connection on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnection();
@@ -76,8 +91,40 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Listen for auth state changes
+    final auth = context.watch<AuthProvider>();
+    if (!auth.isAuthenticated && mounted) {
+      // User logged out or session expired - navigate to login
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/login');
+        }
+      });
+    }
+  }
+
+  bool get _isRepartidorEffective {
+    final auth = context.read<AuthProvider>();
+    if (_forceRepartidorMode) return true;
+    if (_forceAlmacenMode) return false;
+    return auth.currentUser?.isRepartidor ?? false;
+  }
+
+  bool get _isAlmacenEffective {
+     if (_forceAlmacenMode) return true;
+     return false; 
+  }
+
   void _onFilterChanged() {
     if (_dashboardProvider == null) return;
+    // FIX: Only propagate vendor filter to dashboard when user is on Panel tab
+    // Previously, filtering by vendor in Clientes/Objetivos would contaminate
+    // the dashboard's own filter state
+    if (_currentIndex != 0) return; // Panel is always index 0 for Jefe
+
     final filterProvider = context.read<FilterProvider>();
     final authProvider = context.read<AuthProvider>();
     final selectedVendor = filterProvider.selectedVendor;
@@ -101,15 +148,6 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
-  // Helper to determine effective mode
-  bool get _isRepartidorEffective {
-     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-     final user = authProvider.currentUser;
-     if (user?.isRepartidor == true) return true; // Always true for real drivers
-     return _forceRepartidorMode; // Toggleable for Jefe
-  }
-
-  bool get _isAlmacenEffective => _forceAlmacenMode;
 
   void _checkForUpdates() {
     final auth = context.read<AuthProvider>();
@@ -277,16 +315,28 @@ class _MainShellState extends State<MainShell> {
         color: AppTheme.neonBlue,
       ));
       items.add(_NavItem(
+        icon: Icons.local_shipping_outlined,
+        selectedIcon: Icons.local_shipping_rounded,
+        label: 'Vehiculos',
+        color: AppTheme.neonPurple,
+      ));
+      items.add(_NavItem(
+        icon: Icons.inventory_2_outlined,
+        selectedIcon: Icons.inventory_2_rounded,
+        label: 'Articulos',
+        color: AppTheme.neonGreen,
+      ));
+      items.add(_NavItem(
+        icon: Icons.history_outlined,
+        selectedIcon: Icons.history_rounded,
+        label: 'Historial',
+        color: Colors.amber,
+      ));
+      items.add(_NavItem(
         icon: Icons.groups_outlined,
         selectedIcon: Icons.groups_rounded,
         label: 'Personal',
         color: AppTheme.neonPurple,
-      ));
-      items.add(_NavItem(
-        icon: Icons.smart_toy_outlined,
-        selectedIcon: Icons.smart_toy,
-        label: 'Chat IA',
-        color: AppTheme.neonPink,
       ));
       return items;
     }
@@ -320,8 +370,8 @@ class _MainShellState extends State<MainShell> {
         label: 'Rutero',
         color: AppTheme.neonBlue,
       ));
-      // Comisiones only for real repartidores, not Jefe in repartidor mode
-      if (!isJefe) {
+      // Comisiones only for real repartidores with showCommissions enabled
+      if (!isJefe && (authProvider.currentUser?.showCommissions ?? false)) {
         items.add(_NavItem(
           icon: Icons.euro_outlined,
           selectedIcon: Icons.euro,
@@ -374,13 +424,15 @@ class _MainShellState extends State<MainShell> {
       color: Colors.orange,
     ));
     
-    // Comisiones tab always visible for all sales roles (Jefe + Comercial)
-    items.add(_NavItem(
-      icon: Icons.euro_outlined,
-      selectedIcon: Icons.euro,
-      label: 'Comisiones',
-      color: AppTheme.neonGreen,
-    ));
+    // Comisiones: Jefe always sees it; comercial raso only if showCommissions
+    if (isJefeVentas || (authProvider.currentUser?.showCommissions ?? false)) {
+      items.add(_NavItem(
+        icon: Icons.euro_outlined,
+        selectedIcon: Icons.euro,
+        label: 'Comisiones',
+        color: AppTheme.neonGreen,
+      ));
+    }
     
     items.add(_NavItem(
       icon: Icons.receipt_long_outlined,
@@ -388,7 +440,28 @@ class _MainShellState extends State<MainShell> {
       label: 'Facturas',
       color: Colors.teal,
     ));
-    
+
+    items.add(_NavItem(
+      icon: Icons.shopping_cart_outlined,
+      selectedIcon: Icons.shopping_cart,
+      label: 'Pedidos',
+      color: Colors.deepOrange,
+    ));
+
+    items.add(_NavItem(
+      icon: Icons.ac_unit_outlined,
+      selectedIcon: Icons.ac_unit,
+      label: 'Glacius',
+      color: Colors.lightBlueAccent,
+    ));
+
+    items.add(_NavItem(
+      icon: Icons.payments_outlined,
+      selectedIcon: Icons.payments,
+      label: 'Cobros',
+      color: Colors.blueAccent,
+    ));
+
     items.add(_NavItem(
       icon: Icons.smart_toy_outlined,
       selectedIcon: Icons.smart_toy,
@@ -414,7 +487,7 @@ class _MainShellState extends State<MainShell> {
 
     if (user == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: ModernLoading(message: 'Cargando...')),
       );
     }
 
@@ -427,15 +500,257 @@ class _MainShellState extends State<MainShell> {
     final navItems = _getNavItems(isJefeVentas, authProvider.vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
 
+    // Responsive: phones use bottom nav, tablets use sidebar
+    final useBottomNav = Responsive.useBottomNav(context);
+
+    if (useBottomNav) {
+      return _buildPhoneLayout(navItems, safeIndex, authProvider, user, isJefeVentas);
+    }
+    return _buildTabletLayout(navItems, safeIndex, authProvider, user, isJefeVentas);
+  }
+
+  // ---------------------------------------------------------------------------
+  // PHONE LAYOUT: Bottom navigation + drawer for avatar/settings
+  // ---------------------------------------------------------------------------
+  Widget _buildPhoneLayout(
+    List<_NavItem> navItems,
+    int safeIndex,
+    AuthProvider authProvider,
+    UserModel user,
+    bool isJefeVentas,
+  ) {
+    // Max 5 items in bottom nav; if more, last slot becomes "More"
+    final maxBottomItems = 5;
+    final hasOverflow = navItems.length > maxBottomItems;
+    final bottomItems = hasOverflow ? navItems.sublist(0, maxBottomItems - 1) : navItems;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      // Drawer for user profile, mode switcher, settings, logout
+      drawer: _buildPhoneDrawer(user, isJefeVentas, authProvider),
+      body: SafeArea(
+        child: _buildCurrentPage(authProvider.vendedorCodes, isJefeVentas),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                // Hamburger/avatar button to open drawer
+                _buildBottomNavDrawerButton(user),
+                // Nav items
+                ...bottomItems.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  return Expanded(
+                    child: _buildBottomNavItem(
+                      item: entry.value,
+                      isSelected: safeIndex == idx,
+                      onTap: () => setState(() => _currentIndex = idx),
+                    ),
+                  );
+                }),
+                // "More" overflow button
+                if (hasOverflow)
+                  Expanded(
+                    child: _buildBottomNavItem(
+                      item: _NavItem(
+                        icon: Icons.more_horiz,
+                        selectedIcon: Icons.more_horiz,
+                        label: 'Más',
+                        color: AppTheme.textSecondary,
+                      ),
+                      isSelected: safeIndex >= maxBottomItems - 1,
+                      onTap: () => _showOverflowMenu(navItems, maxBottomItems - 1),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Bottom nav item for phone layout
+  Widget _buildBottomNavItem({
+    required _NavItem item,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isSelected ? item.selectedIcon : item.icon,
+              color: isSelected ? item.color : AppTheme.textSecondary,
+              size: 22,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              item.label,
+              style: TextStyle(
+                fontSize: 9,
+                color: isSelected ? item.color : AppTheme.textSecondary,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Small avatar button at the left of the bottom nav to open drawer
+  Widget _buildBottomNavDrawerButton(UserModel user) {
+    return Builder(
+      builder: (ctx) => GestureDetector(
+        onTap: () => Scaffold.of(ctx).openDrawer(),
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 48,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [AppTheme.neonBlue, AppTheme.neonPurple],
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Icon(Icons.menu, color: AppTheme.textSecondary, size: 10),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Overflow bottom sheet for nav items that don't fit in bottom bar
+  void _showOverflowMenu(List<_NavItem> navItems, int startIndex) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 12),
+              width: 32, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ...navItems.sublist(startIndex).asMap().entries.map((entry) {
+              final actualIndex = startIndex + entry.key;
+              final item = entry.value;
+              final isSelected = _currentIndex == actualIndex;
+              return ListTile(
+                leading: Icon(
+                  isSelected ? item.selectedIcon : item.icon,
+                  color: isSelected ? item.color : AppTheme.textSecondary,
+                ),
+                title: Text(
+                  item.label,
+                  style: TextStyle(
+                    color: isSelected ? item.color : Colors.white,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() => _currentIndex = actualIndex);
+                },
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Drawer for phone layout with user info, mode switcher, and actions
+  Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas, AuthProvider authProvider) {
+    return Drawer(
+      backgroundColor: AppTheme.surfaceColor,
+      width: MediaQuery.of(context).size.width * 0.72,
+      child: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            _buildUserAvatar(user, isJefeVentas),
+            const SizedBox(height: 16),
+            // Mode switcher in drawer for Jefe
+            if (isJefeVentas) _buildModeSwitcher(),
+            // Network settings removed for user restriction
+            const Spacer(),
+            const Divider(color: Colors.white10),
+            // Logout
+            ListTile(
+              leading: const Icon(Icons.logout_rounded, color: AppTheme.error, size: 20),
+              title: const Text('Cerrar Sesión', style: TextStyle(color: AppTheme.error, fontSize: 13)),
+              onTap: () {
+                Navigator.pop(context);
+                _showLogoutConfirmation(authProvider);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // TABLET LAYOUT: Sidebar (original design, identical on large screens)
+  // ---------------------------------------------------------------------------
+  Widget _buildTabletLayout(
+    List<_NavItem> navItems,
+    int safeIndex,
+    AuthProvider authProvider,
+    UserModel user,
+    bool isJefeVentas,
+  ) {
+    final sidebarW = Responsive.sidebarWidth(context);
+
     return Scaffold(
       body: SafeArea(
         child: Row(
           children: [
-            // Custom Sidebar Navigation
+            // Sidebar Navigation
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              width: _isNavExpanded ? 90 : 0, 
+              width: _isNavExpanded ? sidebarW : 0,
               child: _isNavExpanded ? Container(
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceColor,
@@ -449,116 +764,11 @@ class _MainShellState extends State<MainShell> {
                     _buildUserAvatar(user, isJefeVentas),
                     const SizedBox(height: 16),
 
-                    // MODE SWITCHER FOR JEFE
-                    // MODE SWITCHER FOR JEFE
-                    if (isJefeVentas)
-                         Padding(
-                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                           child: Container(
-                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                             decoration: BoxDecoration(
-                               color: _forceAlmacenMode
-                                  ? AppTheme.neonPink.withOpacity(0.15)
-                                  : _forceRepartidorMode 
-                                       ? Colors.orange.withOpacity(0.15) 
-                                       : AppTheme.neonBlue.withOpacity(0.15),
-                               borderRadius: BorderRadius.circular(12),
-                               border: Border.all(
-                                 color: _forceAlmacenMode
-                                    ? AppTheme.neonPink.withOpacity(0.5)
-                                    : _forceRepartidorMode 
-                                         ? Colors.orange.withOpacity(0.5) 
-                                         : AppTheme.neonBlue.withOpacity(0.5),
-                                 width: 1
-                               )
-                             ),
-                             child: PopupMenuButton<String>(
-                               tooltip: 'Cambiar Perfil',
-                               offset: const Offset(0, 40),
-                               color: AppTheme.surfaceColor,
-                               shape: RoundedRectangleBorder(
-                                 borderRadius: BorderRadius.circular(12),
-                                 side: BorderSide(color: Colors.white.withOpacity(0.1))
-                               ),
-                               child: Row(
-                                 mainAxisAlignment: MainAxisAlignment.center,
-                                 children: [
-                                   Icon(
-                                     _forceAlmacenMode ? Icons.warehouse_rounded
-                                       : _forceRepartidorMode ? Icons.local_shipping : Icons.store,
-                                     color: _forceAlmacenMode ? AppTheme.neonPink
-                                       : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
-                                     size: 20
-                                   ),
-                                   const SizedBox(width: 8),
-                                   Text(
-                                     _forceAlmacenMode ? 'Almacén'
-                                       : _forceRepartidorMode ? 'Reparto' : 'Ventas',
-                                     style: TextStyle(
-                                       fontSize: 11,
-                                       fontWeight: FontWeight.bold,
-                                       color: _forceAlmacenMode ? AppTheme.neonPink
-                                         : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
-                                     ),
-                                   ),
-                                   const Icon(Icons.arrow_drop_down, color: Colors.white54, size: 18),
-                                 ],
-                               ),
-                               itemBuilder: (context) => [
-                                 const PopupMenuItem(
-                                   value: 'VENTAS',
-                                   child: Row(
-                                     children: [
-                                       Icon(Icons.store, color: AppTheme.neonBlue, size: 18),
-                                       SizedBox(width: 12),
-                                       Text('Perfil Ventas', style: TextStyle(color: Colors.white)),
-                                     ],
-                                   ),
-                                 ),
-                                 const PopupMenuItem(
-                                   value: 'REPARTO',
-                                   child: Row(
-                                     children: [
-                                       Icon(Icons.local_shipping, color: Colors.orange, size: 18),
-                                       SizedBox(width: 12),
-                                       Text('Perfil Reparto', style: TextStyle(color: Colors.white)),
-                                     ],
-                                   ),
-                                 ),
-                                 const PopupMenuItem(
-                                   value: 'ALMACEN',
-                                   child: Row(
-                                     children: [
-                                       Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
-                                       SizedBox(width: 12),
-                                       Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
-                                     ],
-                                   ),
-                                 ),
-                               ],
-                               onSelected: (value) {
-                                 if (value == 'ALMACEN') {
-                                    setState(() {
-                                      _forceAlmacenMode = true;
-                                      _forceRepartidorMode = false;
-                                      _currentIndex = 0;
-                                    });
-                                    return;
-                                  }
-                                 
-                                 final bool newMode = value == 'REPARTO';
-                                 setState(() {
-                                    _forceAlmacenMode = false;
-                                    _forceRepartidorMode = newMode;
-                                    _currentIndex = 0;
-                                  });
-                               },
-                             ),
-                           ),
-                         ),
-                    
+                    // Mode switcher for Jefe
+                    if (isJefeVentas) _buildModeSwitcher(),
+
                     const SizedBox(height: 16),
-                    
+
                     Expanded(
                       child: ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -575,7 +785,7 @@ class _MainShellState extends State<MainShell> {
                         },
                       ),
                     ),
-                    
+
                     const Divider(height: 1, color: Colors.white10),
                     Padding(
                       padding: const EdgeInsets.all(12),
@@ -591,8 +801,8 @@ class _MainShellState extends State<MainShell> {
                 ),
               ) : null,
             ),
-            
-            // Expand button
+
+            // Expand button when sidebar is collapsed
             if (!_isNavExpanded)
               GestureDetector(
                 onTap: () => setState(() => _isNavExpanded = true),
@@ -614,12 +824,122 @@ class _MainShellState extends State<MainShell> {
                   ),
                 ),
               ),
-            
+
             // Main Content
             Expanded(
               child: _buildCurrentPage(authProvider.vendedorCodes, isJefeVentas),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Mode switcher widget (used in both sidebar and drawer)
+  Widget _buildModeSwitcher() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: _forceAlmacenMode
+             ? AppTheme.neonPink.withOpacity(0.15)
+             : _forceRepartidorMode
+                  ? Colors.orange.withOpacity(0.15)
+                  : AppTheme.neonBlue.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _forceAlmacenMode
+               ? AppTheme.neonPink.withOpacity(0.5)
+               : _forceRepartidorMode
+                    ? Colors.orange.withOpacity(0.5)
+                    : AppTheme.neonBlue.withOpacity(0.5),
+            width: 1,
+          ),
+        ),
+        child: PopupMenuButton<String>(
+          tooltip: 'Cambiar Perfil',
+          offset: const Offset(0, 40),
+          color: AppTheme.surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _forceAlmacenMode ? Icons.warehouse_rounded
+                  : _forceRepartidorMode ? Icons.local_shipping : Icons.store,
+                color: _forceAlmacenMode ? AppTheme.neonPink
+                  : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  _forceAlmacenMode ? 'Almacén'
+                    : _forceRepartidorMode ? 'Reparto' : 'Ventas',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: _forceAlmacenMode ? AppTheme.neonPink
+                      : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(Icons.arrow_drop_down, color: Colors.white54, size: 18),
+            ],
+          ),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'VENTAS',
+              child: Row(
+                children: [
+                  Icon(Icons.store, color: AppTheme.neonBlue, size: 18),
+                  SizedBox(width: 12),
+                  Text('Perfil Ventas', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'REPARTO',
+              child: Row(
+                children: [
+                  Icon(Icons.local_shipping, color: Colors.orange, size: 18),
+                  SizedBox(width: 12),
+                  Text('Perfil Reparto', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'ALMACEN',
+              child: Row(
+                children: [
+                  Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
+                  SizedBox(width: 12),
+                  Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+          ],
+          onSelected: (value) {
+            if (value == 'ALMACEN') {
+              setState(() {
+                _forceAlmacenMode = true;
+                _forceRepartidorMode = false;
+                _currentIndex = 0;
+              });
+              return;
+            }
+            final bool newMode = value == 'REPARTO';
+            setState(() {
+              _forceAlmacenMode = false;
+              _forceRepartidorMode = newMode;
+              _currentIndex = 0;
+            });
+          },
         ),
       ),
     );
@@ -726,11 +1046,13 @@ class _MainShellState extends State<MainShell> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    final isSmall = Responsive.isSmall(context);
+    
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           color: isSelected 
@@ -746,18 +1068,19 @@ class _MainShellState extends State<MainShell> {
             Icon(
               isSelected ? item.selectedIcon : item.icon,
               color: isSelected ? item.color : AppTheme.textSecondary,
-              size: 24,
+              size: isSmall ? 20 : 24,
             ),
             const SizedBox(height: 4),
             Text(
               item.label,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: isSmall ? 8 : 10,
                 color: isSelected ? item.color : AppTheme.textSecondary,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
               textAlign: TextAlign.center,
               maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -822,6 +1145,7 @@ class _MainShellState extends State<MainShell> {
       ),
     );
   }
+
 
   Widget _buildCollapseButton() {
     return InkWell(
@@ -914,7 +1238,6 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildCurrentPage(List<String> vendedorCodes, bool isJefeVentas) {
-    // Obtener el rol del usuario
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
 
@@ -922,36 +1245,27 @@ class _MainShellState extends State<MainShell> {
     // ALMACÉN MODE
     // ===============================================
     if (_isAlmacenEffective) {
-      switch (_currentIndex) {
-        case 0:
-          return const WarehouseDashboardPage();
-        case 1:
-          return const PersonnelPage();
-        case 2:
-          return const ComingSoonPlaceholder(
-            title: 'Nexus AI — Asistente de Almacén',
-            subtitle: 'Tu asistente inteligente para\nconsultar cargas, rutas y expediciones.',
-            icon: Icons.smart_toy,
-            accentColor: AppTheme.neonPink,
-          );
-        default:
-          return const Center(child: Text('Página no encontrada'));
-      }
+      return LazyIndexedStack(
+        index: _currentIndex,
+        children: const [
+          WarehouseDashboardPage(),
+          VehiclesPage(),
+          ArticlesPage(),
+          LoadHistoryPage(),
+          PersonnelPage(),
+        ],
+      );
     }
 
     final isRepartidor = _isRepartidorEffective; 
     
     // ===============================================
-    // REPARTIDOR: Dynamic indices
-    // Real rep:  0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA  (NO Panel)
-    // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
+    // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
-      // Determine effective repartidor ID
-      String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); // Default for real repartidor
+      String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); 
       final isJefe = user?.isJefeVentas == true;
       
-      // If Jefe, override with selection
       if (isJefeVentas) {
           if (_selectedRepartidor == null || _selectedRepartidor == 'ALL') {
              if (_repartidoresOptions.isNotEmpty) {
@@ -964,76 +1278,63 @@ class _MainShellState extends State<MainShell> {
           }
       }
 
-      // Build repartidor names map for child widgets
       final Map<String, String> repNamesMap = {
         for (var r in _repartidoresOptions)
           (r['code']?.toString() ?? ''): (r['name']?.toString() ?? ''),
       };
 
-      // Map tab indices dynamically based on role
+      final navItems = _getNavItems(isJefeVentas, vendedorCodes);
+
+      int? _navIndexOf(String label) {
+        for (int i = 0; i < navItems.length; i++) {
+          if (navItems[i].label == label) return i;
+        }
+        return null;
+      }
+
       Widget pageForIndex(int idx) {
-        if (!isJefe) {
-          // Real rep: 0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA
-          if (idx == 0) return RepartidorClientesPage(
+        final label = idx < navItems.length ? navItems[idx].label : '';
+
+        if (label == 'Panel') {
+          return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
+        }
+        if (label == 'Clientes') {
+          final histIdx = _navIndexOf('Histórico');
+          return RepartidorClientesPage(
             repartidorId: effectiveRepartidorId,
-            isJefeMode: false,
+            isJefeMode: isJefe,
             onNavigateToHistory: (clientId, clientName) {
               setState(() {
                 _pendingClientId = clientId;
                 _pendingClientName = clientName;
-                _currentIndex = 3; // Histórico
+                _currentIndex = histIdx ?? idx;
               });
             },
           );
-          if (idx == 1) return ChangeNotifierProvider(
+        }
+        if (label == 'Rutero') {
+          return ChangeNotifierProvider(
             create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
             child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
           );
-          if (idx == 2) return const ComingSoonPlaceholder(
+        }
+        if (label == 'Comisiones') {
+          return const ComingSoonPlaceholder(
             title: 'Comisiones de Reparto',
             subtitle: 'Aquí podrás consultar tus comisiones\nbasadas en los cobros realizados.',
             icon: Icons.euro,
             accentColor: AppTheme.neonGreen,
           );
-          if (idx == 3) {
-            final cId = _pendingClientId;
-            final cName = _pendingClientName;
-            _pendingClientId = null;
-            _pendingClientName = null;
-            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
-          }
-          if (idx == 4) return const ComingSoonPlaceholder(
-            title: 'Asistente IA de Reparto',
-            subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
-            icon: Icons.smart_toy,
-            accentColor: AppTheme.neonPink,
+        }
+        if (label == 'Histórico') {
+          return RepartidorHistoricoPage(
+            repartidorId: effectiveRepartidorId, 
+            initialClientId: _pendingClientId, 
+            initialClientName: _pendingClientName
           );
-        } else {
-          // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
-          if (idx == 0) return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
-          if (idx == 1) return RepartidorClientesPage(
-            repartidorId: effectiveRepartidorId,
-            isJefeMode: true,
-            onNavigateToHistory: (clientId, clientName) {
-              setState(() {
-                _pendingClientId = clientId;
-                _pendingClientName = clientName;
-                _currentIndex = 3; // Histórico
-              });
-            },
-          );
-          if (idx == 2) return ChangeNotifierProvider(
-            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
-          );
-          if (idx == 3) {
-            final cId = _pendingClientId;
-            final cName = _pendingClientName;
-            _pendingClientId = null;
-            _pendingClientName = null;
-            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
-          }
-          if (idx == 4) return const ComingSoonPlaceholder(
+        }
+        if (label == 'Chat IA') {
+          return const ComingSoonPlaceholder(
             title: 'Asistente IA de Reparto',
             subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
             icon: Icons.smart_toy,
@@ -1043,13 +1344,16 @@ class _MainShellState extends State<MainShell> {
         return const Center(child: Text('Página no encontrada'));
       }
 
-      // Use KeyedSubtree to force complete widget tree rebuild when ID or client changes
-      final content = KeyedSubtree(
-        key: ValueKey('rutero_view_${effectiveRepartidorId}_${_currentIndex}_${_pendingClientId ?? ""}'),
-        child: Builder(builder: (_) => pageForIndex(_currentIndex)),
+      final content = LazyIndexedStack(
+        index: _currentIndex,
+        children: List.generate(navItems.length, (idx) {
+          return KeyedSubtree(
+            key: ValueKey('rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}'),
+            child: pageForIndex(idx),
+          );
+        }),
       );
 
-      // Wrap in Column with Header only if Jefe
       if (isJefeVentas) {
          return Column(
            children: [
@@ -1062,31 +1366,62 @@ class _MainShellState extends State<MainShell> {
     }
     
     // ===============================================
-    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Chat
-    // (Cobros removido - ahora exclusivo de Repartidor)
+    // JEFE MODE
     // ===============================================
     if (isJefeVentas) {
-      switch (_currentIndex) {
-        case 0:
-          // Panel de Control (Dashboard)
-          if (_dashboardProvider == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return ChangeNotifierProvider.value(
-            value: _dashboardProvider!,
-            child: const DashboardContent(),
-          );
-        case 1:
-          return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 2:
-          return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 3:
-          return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 4:
-          return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 5:
+      return LazyIndexedStack(
+        index: _currentIndex,
+        children: [
+          _dashboardProvider == null 
+              ? const Center(child: CircularProgressIndicator()) 
+              : ChangeNotifierProvider.value(value: _dashboardProvider!, child: const DashboardContent()),
+          SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          const FacturasPage(),
+          ChangeNotifierProvider(create: (_) => PedidosProvider(), child: PedidosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true)),
+          KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          const ComingSoonPlaceholder(
+            title: 'Nexus AI — Asistente Comercial',
+            subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          ),
+        ],
+      );
+    }
+
+    // ===============================================
+    // COMERCIAL MODE
+    // ===============================================
+    final empCode = vendedorCodes.join(',');
+    final comercialNav = _getNavItems(false, vendedorCodes);
+
+    Widget comercialPageForIndex(int idx) {
+      final label = idx < comercialNav.length ? comercialNav[idx].label : '';
+      switch (label) {
+        case 'Clientes':
+          return SimpleClientListPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Ruta':
+          return RuteroPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Objetivos':
+          return ObjectivesPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Comisiones':
+          return CommissionsPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Facturas':
           return const FacturasPage();
-        case 6:
+        case 'Pedidos':
+          return ChangeNotifierProvider(
+            create: (_) => PedidosProvider(),
+            child: PedidosPage(employeeCode: empCode, isJefeVentas: false),
+          );
+        case 'Glacius':
+          return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Cobros':
+          return CobrosPage(employeeCode: empCode, isJefeVentas: false);
+        case 'Chat IA':
           return const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
             subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
@@ -1097,31 +1432,11 @@ class _MainShellState extends State<MainShell> {
           return const Center(child: Text('Página no encontrada'));
       }
     }
-    
-    // ===============================================
-    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Facturas, 5=Chat
-    // ===============================================
-    switch (_currentIndex) {
-      case 0:
-        return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 1:
-        return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 2:
-        return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 3:
-        return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 4:
-        return const FacturasPage();
-      case 5:
-        return const ComingSoonPlaceholder(
-          title: 'Nexus AI — Asistente Comercial',
-          subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
-          icon: Icons.smart_toy,
-          accentColor: AppTheme.neonPink,
-        );
-      default:
-        return const Center(child: Text('Página no encontrada'));
-    }
+
+    return LazyIndexedStack(
+      index: _currentIndex,
+      children: List.generate(comercialNav.length, (idx) => comercialPageForIndex(idx)),
+    );
   }
 }
 
@@ -1148,11 +1463,17 @@ class _LogoutConfirmationDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Responsive dialog sizing
+    final dw = Responsive.dialogWidth(context, 340);
+    final dp = Responsive.padding(context, small: 20, large: 28);
+    final iconDim = Responsive.value(context, phone: 52, desktop: 72);
+    final titleFs = Responsive.fontSize(context, small: 18, large: 22);
+
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        width: 340,
-        padding: const EdgeInsets.all(28),
+        width: dw,
+        padding: EdgeInsets.all(dp),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           gradient: LinearGradient(
@@ -1183,10 +1504,10 @@ class _LogoutConfirmationDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon with glow effect
+            // Icon with glow effect (responsive)
             Container(
-              width: 72,
-              height: 72,
+              width: iconDim,
+              height: iconDim,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppTheme.error.withOpacity(0.15),
@@ -1198,20 +1519,20 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                   ),
                 ],
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.logout_rounded,
                 color: AppTheme.error,
-                size: 32,
+                size: iconDim * 0.44,
               ),
             ),
             
             const SizedBox(height: 24),
             
-            // Title
-            const Text(
+            // Title (responsive)
+            Text(
               '¿Cerrar Sesión?',
               style: TextStyle(
-                fontSize: 22,
+                fontSize: titleFs,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textPrimary,
               ),

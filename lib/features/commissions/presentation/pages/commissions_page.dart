@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
@@ -237,7 +238,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           final currentAmount = double.tryParse(amountController.text) ?? 0;
-          final observacionesRequired = currentAmount < monthCommission && currentAmount > 0;
+          // FIX: Use epsilon tolerance (0.01€) to avoid floating-point false positives
+          // e.g. 165.88 < 165.88000000000001 would wrongly mark observations as mandatory
+          final observacionesRequired = (monthCommission - currentAmount) > 0.01 && currentAmount > 0;
           final isMonthPaid = paidMonths.contains(selectedMonth);
           final isMonthFuture = selectedMonth > now.month;
 
@@ -1097,7 +1100,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
            ),
            
            // FASE 2: Inline exclusion banner instead of full screen block
-           if ((_data?['isExcluded'] as bool?) ?? false)
+           if (((_data?['isExcluded'] as bool?) ?? false) || isInformative)
              Container(
                width: double.infinity,
                margin: const EdgeInsets.all(12),
@@ -1122,7 +1125,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
              ),
            
            // === SUMMARY CARDS ===
-           if (!_isLoading && _error == null && !isInformative) ...[
+           if (!Responsive.isLandscapeCompact(context) && !_isLoading && _error == null && !isInformative) ...[
              Container(
                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                child: Row(
@@ -1145,16 +1148,16 @@ class _CommissionsPageState extends State<CommissionsPage> {
                              children: [
                                const Icon(Icons.calendar_today, color: AppTheme.neonBlue, size: 16),
                                const SizedBox(width: 6),
-                               Text(_getMonthName(DateTime.now().month).toUpperCase(), 
-                                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+                                Text(_getMonthName(DateTime.now().month).toUpperCase(), 
+                                    style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 11, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
                              ],
                            ),
                            const SizedBox(height: 6),
                            if (currentMonthData != null) ...[
-                             Text(CurrencyFormatter.format((currentMonthData!['actual'] as num?)?.toDouble() ?? 0),
-                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                             Text('de ${CurrencyFormatter.format((currentMonthData!['target'] as num?)?.toDouble() ?? 0)}',
-                                 style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.6))),
+                              Text(CurrencyFormatter.format((currentMonthData!['actual'] as num?)?.toDouble() ?? 0),
+                                  style: TextStyle(fontSize: Responsive.isSmall(context) ? 14 : 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                              Text('de ${CurrencyFormatter.format((currentMonthData!['target'] as num?)?.toDouble() ?? 0)}',
+                                  style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 9, color: Colors.white.withOpacity(0.6))),
                              const SizedBox(height: 6),
                              // Mini progress bar
                              ClipRRect(
@@ -1186,25 +1189,25 @@ class _CommissionsPageState extends State<CommissionsPage> {
                          gradient: LinearGradient(
                            colors: [AppTheme.neonGreen.withOpacity(0.2), AppTheme.success.withOpacity(0.1)],
                          ),
-                         borderRadius: BorderRadius.circular(12),
-                         border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
-                       ),
-                       child: Column(
-                         crossAxisAlignment: CrossAxisAlignment.start,
-                         children: [
-                           const Row(
-                             children: [
-                               Icon(Icons.trending_up, color: AppTheme.neonGreen, size: 16),
-                               SizedBox(width: 6),
-                               Text('COMISIÓN PROV.', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
-                             ],
-                           ),
-                           const SizedBox(height: 8),
-                           Text(CurrencyFormatter.format(totalProvisionalCommission),
-                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
-                           const SizedBox(height: 2),
-                           Text('Confirmado: ${CurrencyFormatter.format(grandTotal)}',
-                               style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.7))),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.trending_up, color: AppTheme.neonGreen, size: 16),
+                                const SizedBox(width: 6),
+                                Text('COMISIÓN PROV.', style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 11, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(CurrencyFormatter.format(totalProvisionalCommission),
+                                style: TextStyle(fontSize: Responsive.isSmall(context) ? 14 : 18, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                            const SizedBox(height: 2),
+                            Text('Confirmado: ${CurrencyFormatter.format(grandTotal)}',
+                                style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, color: Colors.white.withOpacity(0.7))),
                          ],
                        ),
                      ),
@@ -1228,11 +1231,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
                          children: [
                            Row(
                              children: [
-                               Icon(isOnRhythm ? Icons.trending_up : Icons.speed, 
-                                   color: isOnRhythm ? AppTheme.success : Colors.orange, size: 16),
-                               const SizedBox(width: 6),
-                               Text('RITMO ACTUAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, 
-                                   color: isOnRhythm ? AppTheme.success : Colors.orange)),
+                                Icon(isOnRhythm ? Icons.trending_up : Icons.speed, 
+                                    color: isOnRhythm ? AppTheme.success : Colors.orange, size: 14),
+                                const SizedBox(width: 6),
+                                Text('RITMO ACTUAL', style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, fontWeight: FontWeight.bold, 
+                                    color: isOnRhythm ? AppTheme.success : Colors.orange)),
                              ],
                            ),
                            Text('(a día ${DateTime.now().day})',
@@ -1247,9 +1250,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
                                Row(
                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                  children: [
-                                   Text('Vs Ritmo:', style: TextStyle(fontSize: 10, color: Colors.white70)),
-                                   Text('${rhythmCompliance.toStringAsFixed(1)}%', 
-                                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isOnRhythm ? AppTheme.success : Colors.orange)),
+                                    Text('Vs Ritmo:', style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, color: Colors.white70)),
+                                    Text('${rhythmCompliance.toStringAsFixed(1)}%', 
+                                      style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 12, fontWeight: FontWeight.bold, color: isOnRhythm ? AppTheme.success : Colors.orange)),
                                  ],
                                ),
                                const SizedBox(height: 2),
@@ -1257,17 +1260,17 @@ class _CommissionsPageState extends State<CommissionsPage> {
                                Row(
                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                  children: [
-                                   Text('Vs Obj. Total:', style: TextStyle(fontSize: 10, color: Colors.white70)),
-                                   Text('${overallCompliance.toStringAsFixed(1)}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                    Text('Vs Obj. Total:', style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, color: Colors.white70)),
+                                    Text('${overallCompliance.toStringAsFixed(1)}%', style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 12, fontWeight: FontWeight.bold, color: Colors.white)),
                                  ],
                                ),
                              ],
                            ),
                            
-                           const SizedBox(height: 4),
-                           Text(rhythmStatus,
-                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, 
-                                   color: isOnRhythm ? AppTheme.success : Colors.orange)),
+                            const SizedBox(height: 4),
+                            Text(rhythmStatus,
+                                style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 11, fontWeight: FontWeight.bold, 
+                                    color: isOnRhythm ? AppTheme.success : Colors.orange)),
                          ],
                        ),
                      ),
@@ -1290,7 +1293,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
              : _error != null ? Center(child: Text('Error: $_error', style: const TextStyle(color: AppTheme.error)))
              : isAllMode
                ? _buildAllVendorsTable(breakdown)  // Show ALL vendors table
-             : totalTarget <= 0 && !isInformative // ZERO TARGET WARNING
+             : totalTarget <= 0 && !isInformative && !((_data?['isExcluded'] as bool?) ?? false) // ZERO TARGET WARNING (but NOT if excluded)
                ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(32),
@@ -1507,16 +1510,16 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
               child: Row(
                 children: [
                    // Left: Circle Avatar with Vendor Code
-                  CircleAvatar(
-                    radius: 12,
+                   CircleAvatar(
+                    radius: Responsive.isSmall(context) ? 10 : 12,
                     backgroundColor: isExcluded ? Colors.grey.withOpacity(0.2) : AppTheme.neonBlue.withOpacity(0.1),
-                    child: Text(vendorCode, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: 10)),
+                    child: Text(vendorCode, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : AppTheme.neonBlue, fontSize: Responsive.isSmall(context) ? 8 : 10)),
                   ),
                   const SizedBox(width: 8),
 
-                  // Center: Name
+                   // Center: Name
                   Expanded(
-                    child: Text(vendorName, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis),
+                    child: Text(vendorName, style: TextStyle(fontWeight: FontWeight.bold, color: isExcluded ? Colors.grey : Colors.white, fontSize: Responsive.isSmall(context) ? 11 : 13), overflow: TextOverflow.ellipsis),
                   ),
                   const SizedBox(width: 8),
                   if (isExcluded) ...[
@@ -1536,9 +1539,9 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                       children: [
                         Icon(vendorPositive ? Icons.trending_up : Icons.trending_down, color: statusColor, size: 14),
                         const SizedBox(width: 4),
-                        Text(
+                         Text(
                           'Cumpl: ${vendorPct.toStringAsFixed(1)}% (Vta: ${CurrencyFormatter.format(totalActual)} / Obj: ${CurrencyFormatter.format(totalTarget)})',
-                          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10),
+                          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: Responsive.isSmall(context) ? 8 : 10),
                         ),
                       ],
                     ),
@@ -1554,9 +1557,9 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                             Text('Generado: ${CurrencyFormatter.format(grandTotal)}', style: const TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 12)),
+                              Text('Generado: ${CurrencyFormatter.format(grandTotal)}', style: TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: Responsive.isSmall(context) ? 10 : 12)),
                              Text('Pagado: ${CurrencyFormatter.format(totalPaid)}',
-                               style: const TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: 9)),
+                               style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: Responsive.isSmall(context) ? 8 : 9)),
                           ],
                         ),
                       ],

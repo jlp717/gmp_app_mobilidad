@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../providers/entregas_provider.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Tarjeta de albarán en la lista de entregas
 class EntregaCard extends StatelessWidget {
@@ -22,7 +23,9 @@ class EntregaCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(
+            Responsive.padding(context, small: 12, large: 16),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -59,9 +62,13 @@ class EntregaCard extends StatelessWidget {
                   // Número de albarán
                   Text(
                     'Alb. ${albaran.numeroAlbaran}${albaran.horaPrevista != null ? " (${albaran.horaPrevista})" : ""}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: Responsive.fontSize(
+                        context,
+                        small: 13,
+                        large: 16,
+                      ),
                     ),
                   ),
                   

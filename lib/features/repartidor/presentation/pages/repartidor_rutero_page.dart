@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../entregas/providers/entregas_provider.dart';
 import '../../../../core/api/api_client.dart';
@@ -51,7 +52,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
       vsync: this,
     );
     // Pre-fetch repartidores list once
-    _repartidoresFuture = ApiClient.getList('/repartidores').then(
+    _repartidoresFuture = ApiClient.getList('/auth/repartidores').then(
       (val) => val.map((e) => e as Map<String, dynamic>).toList(),
     );
     
@@ -359,13 +360,17 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   }
 
   Widget _buildSearchAndFilters(EntregasProvider entregas) {
-    return Padding(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          // Clients Filter
-          Expanded(
-            flex: 4,
+          // Clients Filter (responsive - flex instead of fixed width)
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 100,
+              maxWidth: Responsive.value(context, phone: 130, desktop: 160),
+            ),
             child: Container(
               height: 36,
               decoration: BoxDecoration(
@@ -375,7 +380,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               ),
               child: Row(
                 children: [
-                   const SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   const Icon(Icons.person_outline, size: 14, color: AppTheme.textSecondary),
                   const SizedBox(width: 6),
                   Expanded(
@@ -406,12 +411,15 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               ),
             ),
           ),
-          
+
           const SizedBox(width: 6),
 
-          // Albaranes Filter
-          Expanded(
-            flex: 3,
+          // Albaranes Filter (responsive - flex instead of fixed width)
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 90,
+              maxWidth: Responsive.value(context, phone: 110, desktop: 130),
+            ),
             child: Container(
               height: 36,
               decoration: BoxDecoration(
@@ -632,7 +640,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
               backgroundColor: AppTheme.surfaceColor,
               child: ListView.builder(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.only(top: 4, bottom: 100),
+                // Responsive: less bottom padding on phones with bottom nav
+                padding: EdgeInsets.only(
+                  top: 4,
+                  bottom: Responsive.useBottomNav(context) ? 16 : 100,
+                ),
                 itemCount: provider.albaranes.length,
                 itemBuilder: (context, index) {
                   final albaran = provider.albaranes[index];

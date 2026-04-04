@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
@@ -24,6 +25,7 @@ import '../../data/facturas_service.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 
 class FacturasPage extends StatefulWidget {
   const FacturasPage({Key? key}) : super(key: key);
@@ -32,14 +34,15 @@ class FacturasPage extends StatefulWidget {
   State<FacturasPage> createState() => _FacturasPageState();
 }
 
-class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderStateMixin {
+class _FacturasPageState extends State<FacturasPage>
+    with SingleTickerProviderStateMixin {
   // Filters
   int? _selectedYear;
   int? _selectedMonth;
   DateTime? _dateFrom;
   DateTime? _dateTo;
   String _vendedorCodes = '';
-  
+
   // Data
   List<int> _years = [];
   List<Factura> _facturas = [];
@@ -49,7 +52,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
 
   // Search Controllers (Debounce)
   final TextEditingController _clientSearchController = TextEditingController();
-  final TextEditingController _facturaSearchController = TextEditingController();
+  final TextEditingController _facturaSearchController =
+      TextEditingController();
   Timer? _debounceTimer;
 
   // Animation
@@ -62,7 +66,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
     });
@@ -97,15 +101,15 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
 
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final user = auth.currentUser;
-      
+
       if (user == null) throw Exception('No user logged in');
 
       // Handle "View As" logic
       final filter = Provider.of<FilterProvider>(context, listen: false);
-      
+
       // Get codes from AuthProvider (List<String>) and join them
       String codes = auth.vendedorCodes.join(',');
-      
+
       // Fallback if empty (shouldn't happen for valid commercial)
       if (codes.isEmpty && user.vendedorCode != null) {
         codes = user.vendedorCode!;
@@ -116,18 +120,19 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       if (user.role == 'director' || user.isJefeVentas) {
         final currentFilter = filter.selectedVendor;
         if (currentFilter != null && currentFilter.isNotEmpty) {
-           codes = currentFilter;
+          codes = currentFilter;
         }
       }
-      
+
       setState(() {
         _vendedorCodes = codes;
         if (_selectedYear == null) {
-             _selectedYear = DateTime.now().year;
+          _selectedYear = DateTime.now().year;
         }
       });
 
-      debugPrint('[FACTURAS] Loading data. Codes: $codes. Year: $_selectedYear. DateFrom: $_dateFrom. DateTo: $_dateTo');
+      debugPrint(
+          '[FACTURAS] Loading data. Codes: $codes. Year: $_selectedYear. DateFrom: $_dateFrom. DateTo: $_dateTo');
 
       final results = await Future.wait([
         FacturasService.getAvailableYears(codes),
@@ -150,7 +155,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
           dateTo: _formatDateParam(_dateTo),
         ),
       ]);
-      
+
       if (!mounted) return;
 
       setState(() {
@@ -159,7 +164,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
         _summary = results[2] as FacturaSummary?;
         _isLoading = false;
       });
-      
+
       _fadeController.forward();
     } catch (e) {
       if (!mounted) return;
@@ -174,19 +179,18 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   void _onVendorChanged() {
     _loadInitialData(true);
   }
-  
+
   // ... (existing code)
 
   Future<void> _selectDate(BuildContext context, bool isFrom) async {
     // 1. Determine initial date
-    final initialDate = isFrom 
-        ? (_dateFrom ?? DateTime.now()) 
-        : (_dateTo ?? DateTime.now());
-    
+    final initialDate =
+        isFrom ? (_dateFrom ?? DateTime.now()) : (_dateTo ?? DateTime.now());
+
     // 2. Safe clamping to prevent crashes with out-of-bounds dates
     final firstDate = DateTime(2020); // Restricted to reasonable business range
     final lastDate = DateTime(2030);
-    
+
     DateTime clampedInitial = initialDate;
     if (clampedInitial.isBefore(firstDate)) clampedInitial = firstDate;
     if (clampedInitial.isAfter(lastDate)) clampedInitial = lastDate;
@@ -200,36 +204,36 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
         lastDate: lastDate,
         locale: const Locale('es', 'ES'),
       );
-      
+
       if (picked != null) {
         debugPrint('[FACTURAS] Date picked: $picked. IsFrom: $isFrom');
         setState(() {
           if (isFrom) {
             _dateFrom = picked;
             if (_dateTo == null || _dateTo!.isBefore(picked)) {
-               _dateTo = picked; 
+              _dateTo = picked;
             }
           } else {
             _dateTo = picked;
             if (_dateFrom == null || _dateFrom!.isAfter(picked)) {
-               _dateFrom = picked; 
+              _dateFrom = picked;
             }
           }
-          
+
           _selectedMonth = null;
-          _selectedYear = null; 
+          _selectedYear = null;
         });
         _refreshData();
       }
     } catch (e) {
       debugPrint('[FACTURAS] DatePicker Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error abriendo calendario: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Error abriendo calendario: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
-
-
 
   // ... (existing code)
 
@@ -240,7 +244,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white, // Slighly lighter navy
+        color: isDark
+            ? const Color(0xFF1E293B)
+            : Colors.white, // Slighly lighter navy
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -269,157 +275,183 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                   bottomRight: Radius.circular(4),
                 ),
                 boxShadow: [
-                  BoxShadow(color: AppTheme.neonBlue.withOpacity(0.5), blurRadius: 4),
+                  BoxShadow(
+                      color: AppTheme.neonBlue.withOpacity(0.5), blurRadius: 4),
                 ],
               ),
             ),
           ),
           Material(
             color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {}, // Optional: Show details
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {}, // Optional: Show details
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
                   children: [
-                    // Icon Box
-                    Container(
-                      width: 48, // Slightly larger
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2D5A87).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0xFF2D5A87).withOpacity(0.5),
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.receipt_long_rounded, // Rounded
-                        color: Color(0xFF1976D2), // Brighter blue
-                        size: 26,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    
-                    // Info
-                    Expanded(
-                      flex: 4, // Give more space to Client Name
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            factura.clienteNombre,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900, // MAX weight
-                              fontSize: 19, 
-                              color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF0D47A1), // Lighter blue in dark mode, Deep blue in light
-                              letterSpacing: 0.3,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Icon Box
+                        Container(
+                          width: 48, // Slightly larger
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2D5A87).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFF2D5A87).withOpacity(0.5),
                             ),
-                            maxLines: 2, // Allow 2 lines for long names
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 6),
-                          Row(
+                          child: const Icon(
+                            Icons.receipt_long_rounded, // Rounded
+                            color: Color(0xFF1976D2), // Brighter blue
+                            size: 26,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+
+                        // Info
+                        Expanded(
+                          flex: 4, // Give more space to Client Name
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isDark ? Colors.white.withOpacity(0.12) : Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade400),
-                                ),
-                                child: Text(
-                                  factura.numeroFormateado, // ALBARAN
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black87,
-                                    fontWeight: FontWeight.w900, // Heavy
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
                               Text(
-                                factura.fecha,
+                                factura.clienteNombre,
                                 style: TextStyle(
-                                  color: isDark ? Colors.white70 : Colors.grey[800],
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w900, // MAX weight
+                                  fontSize:
+                                      Responsive.isSmall(context) ? 16 : 19,
+                                  color: isDark
+                                      ? const Color(0xFF90CAF9)
+                                      : const Color(
+                                          0xFF0D47A1), // Lighter blue in dark mode, Deep blue in light
+                                  letterSpacing: 0.3,
+                                ),
+                                maxLines: 2, // Allow 2 lines for long names
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.white.withOpacity(0.12)
+                                          : Colors.grey.shade200,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                          color: isDark
+                                              ? Colors.white24
+                                              : Colors.grey.shade400),
+                                    ),
+                                    child: Text(
+                                      factura.numeroFormateado, // ALBARAN
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black87,
+                                        fontWeight: FontWeight.w900, // Heavy
+                                        fontSize: Responsive.isSmall(context)
+                                            ? 14
+                                            : 16,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    factura.fecha,
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.grey[800],
+                                      fontSize:
+                                          Responsive.isSmall(context) ? 12 : 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(width: 8),
+
+                        // Amount (Right Aligned)
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  '${factura.total.toStringAsFixed(2)} €',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize:
+                                        Responsive.isSmall(context) ? 18 : 22,
+                                    color: isDark
+                                        ? AppTheme.neonGreen
+                                        : const Color(0xFF2E7D32), // Green
+                                  ),
+                                  textAlign: TextAlign.right,
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    
-                    const SizedBox(width: 8),
 
-                    // Amount (Right Aligned)
-                    Expanded(
-                      flex: 2,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
+                    const SizedBox(height: 16),
+                    Divider(
+                        height: 1,
+                        color: isDark ? Colors.white10 : Colors.grey.shade100),
+                    const SizedBox(height: 12),
+
+                    // Actions
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text(
-                            '${factura.total.toStringAsFixed(2)} €',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900, 
-                              fontSize: 22, 
-                              color: isDark ? AppTheme.neonGreen : const Color(0xFF2E7D32), // Green
-                            ),
-                            textAlign: TextAlign.right,
+                          _buildActionButton(
+                            icon: Icons.visibility,
+                            label: 'Ver',
+                            onTap: () => _previewFactura(factura),
+                            isPrimary: false,
+                          ),
+                          _buildActionButton(
+                            icon: Icons.share_outlined,
+                            label: 'Compartir',
+                            onTap: () => _showShareOptions(context, factura),
+                            isPrimary: false,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildActionButton(
+                            icon: Icons.download_outlined,
+                            label: 'Descargar',
+                            onTap: () => _downloadFactura(factura),
+                            isPrimary: true,
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
-                
-                const SizedBox(height: 16),
-                Divider(height: 1, color: isDark ? Colors.white10 : Colors.grey.shade100),
-                const SizedBox(height: 12),
-                
-                // Actions
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      _buildActionButton(
-                        icon: Icons.visibility,
-                        label: 'Ver',
-                        onTap: () => _previewFactura(factura),
-                        isPrimary: false, 
-                      ),
-                      _buildActionButton(
-                        icon: Icons.share_outlined,
-                        label: 'Compartir',
-                        onTap: () => _showShareOptions(context, factura),
-                        isPrimary: false,
-                      ),
-                      const SizedBox(width: 8),
-                      _buildActionButton(
-                        icon: Icons.download_outlined,
-                        label: 'Descargar',
-                        onTap: () => _downloadFactura(factura),
-                        isPrimary: true,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
-    ],
-  ),
-);
-}
+    );
+  }
 
   Widget _buildActionButton({
     required IconData icon,
@@ -428,40 +460,38 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     required bool isPrimary,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isPrimary 
-              ? const Color(0xFF2D5A87).withOpacity(0.1) 
+          color: isPrimary
+              ? const Color(0xFF2D5A87).withOpacity(0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isPrimary 
-                ? const Color(0xFF2D5A87).withOpacity(0.5) 
+            color: isPrimary
+                ? const Color(0xFF2D5A87).withOpacity(0.5)
                 : (isDark ? Colors.white24 : Colors.grey.shade300),
           ),
         ),
         child: Row(
           children: [
-            Icon(
-              icon, 
-              size: 16, 
-              color: isPrimary 
-                  ? (isDark ? AppTheme.neonBlue : const Color(0xFF2D5A87)) 
-                  : (isDark ? Colors.white70 : Colors.grey.shade700)
-            ),
+            Icon(icon,
+                size: 16,
+                color: isPrimary
+                    ? (isDark ? AppTheme.neonBlue : const Color(0xFF2D5A87))
+                    : (isDark ? Colors.white70 : Colors.grey.shade700)),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isPrimary 
-                    ? (isDark ? AppTheme.neonBlue : const Color(0xFF2D5A87)) 
+                color: isPrimary
+                    ? (isDark ? AppTheme.neonBlue : const Color(0xFF2D5A87))
                     : (isDark ? Colors.white70 : Colors.grey.shade700),
               ),
             ),
@@ -470,14 +500,15 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       ),
     );
   }
-  
+
   Future<void> _refreshData() async {
     if (!mounted) return;
     try {
       final codes = _vendedorCodes;
-      
-      debugPrint('[FACTURAS] Refreshing. Codes: $codes. Year: $_selectedYear. Month: $_selectedMonth. Range: ${_formatDateParam(_dateFrom)} - ${_formatDateParam(_dateTo)}');
-      
+
+      debugPrint(
+          '[FACTURAS] Refreshing. Codes: $codes. Year: $_selectedYear. Month: $_selectedMonth. Range: ${_formatDateParam(_dateFrom)} - ${_formatDateParam(_dateTo)}');
+
       final results = await Future.wait([
         FacturasService.getFacturas(
           vendedorCodes: codes,
@@ -498,9 +529,10 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
           dateTo: _formatDateParam(_dateTo),
         ),
       ]);
-      
-      debugPrint('[FACTURAS] Refresh complete. Found ${(results[0] as List).length} facturas.');
-      
+
+      debugPrint(
+          '[FACTURAS] Refresh complete. Found ${(results[0] as List).length} facturas.');
+
       if (!mounted) return;
 
       setState(() {
@@ -514,7 +546,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       );
     }
   }
-  
+
   void _onYearChanged(int? year) {
     if (year != null && year != _selectedYear) {
       setState(() {
@@ -526,7 +558,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       _refreshData();
     }
   }
-  
+
   void _onMonthChanged(int? month) {
     if (month != _selectedMonth) {
       setState(() {
@@ -539,24 +571,41 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     }
   }
 
-
-
   // ============================================================================
   // PDF ACTIONS (with AsyncOperationModal + PdfPreviewScreen)
   // ============================================================================
 
   Future<void> _previewFactura(Factura factura) async {
-    final modal = AsyncOperationModal.show(context, text: 'Cargando previsualización...');
+    final modal =
+        AsyncOperationModal.show(context, text: 'Cargando previsualización...');
     try {
       final bytes = await FacturasService.downloadFacturaPdfBytes(
-        factura.serie, factura.numero, factura.ejercicio,
+        factura.serie,
+        factura.numero,
+        factura.ejercicio,
       );
+
+      // FIX: Validate PDF buffer is not empty/corrupted before navigating to preview
+      // A valid PDF is at minimum ~100 bytes (%PDF-1.x header + trailer)
+      debugPrint('[FACTURAS] PDF bytes received: ${bytes.length}');
+      if (bytes.length < 100) {
+        modal.close();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Error: PDF vacío o corrupto (${bytes.length} bytes). Intenta de nuevo.'),
+              backgroundColor: Colors.red),
+        );
+        return;
+      }
       modal.close();
 
       if (!mounted) return;
 
       final pdfBytes = Uint8List.fromList(bytes);
-      final fileName = 'Factura_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
+      final fileName =
+          'Factura_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
 
       Navigator.push(
         context,
@@ -577,28 +626,38 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
         ),
       );
     } catch (e) {
-      modal.error('Error al previsualizar: $e', onRetry: () => _previewFactura(factura));
+      modal.error('Error al previsualizar: $e',
+          onRetry: () => _previewFactura(factura));
     }
   }
 
   Future<void> _downloadFactura(Factura factura) async {
-    final modal = AsyncOperationModal.show(context, text: 'Descargando factura...');
+    final modal =
+        AsyncOperationModal.show(context, text: 'Preparando factura...');
     try {
-      final tempFile = await FacturasService.downloadFacturaPdf(
-        factura.serie, factura.numero, factura.ejercicio,
+      final file = await FacturasService.downloadFacturaPdf(
+        factura.serie,
+        factura.numero,
+        factura.ejercicio,
       );
 
-      final downloadsDir = Directory('/storage/emulated/0/Download');
-      if (!await downloadsDir.exists()) {
-        await downloadsDir.create(recursive: true);
+      modal.close();
+      if (!mounted) return;
+
+      final result = await OpenFilex.open(file.path);
+      if (result.type != ResultType.done && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo abrir el PDF: ${result.message}'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
       }
-
-      final fileName = 'Factura_${factura.serie}_${factura.numero}_${factura.ejercicio}.pdf';
-      final savedFile = await tempFile.copy('${downloadsDir.path}/$fileName');
-
-      modal.success('✓ Guardado en Descargas: $fileName');
     } catch (e) {
-      modal.error('Error al descargar: $e', onRetry: () => _downloadFactura(factura));
+      if (mounted) {
+        modal.error('Error al descargar: $e',
+            onRetry: () => _downloadFactura(factura));
+      }
     }
   }
 
@@ -606,7 +665,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     final modal = AsyncOperationModal.show(context, text: 'Preparando PDF...');
     try {
       final file = await FacturasService.downloadFacturaPdf(
-        factura.serie, factura.numero, factura.ejercicio,
+        factura.serie,
+        factura.numero,
+        factura.ejercicio,
       );
       modal.close();
 
@@ -615,13 +676,23 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       final text = 'Adjunto: Factura ${factura.numeroFormateado} - '
           '${factura.total.toStringAsFixed(2)} € - Granja Mari Pepa';
 
+      final renderBox = context.findRenderObject() as RenderBox;
+      final size = renderBox.size;
+      final origin = Rect.fromCenter(
+        center: Offset(size.width / 2, size.height / 2),
+        width: 1,
+        height: 1,
+      );
+
       await Share.shareXFiles(
-        [XFile(file.path)],
+        [XFile(file.path, mimeType: 'application/pdf')],
         text: text,
         subject: 'Factura ${factura.numeroFormateado} - Granja Mari Pepa',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
-      modal.error('Error al compartir: $e', onRetry: () => _shareFacturaPdf(factura));
+      modal.error('Error al compartir: $e',
+          onRetry: () => _shareFacturaPdf(factura));
     }
   }
 
@@ -657,9 +728,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                 child: Text(
                   'Compartir Factura',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                 ),
               ),
               ListTile(
@@ -667,7 +738,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                   backgroundColor: Color(0xFF25D366),
                   child: Icon(Icons.chat, color: Colors.white, size: 20),
                 ),
-                title: const Text('WhatsApp', style: TextStyle(color: Colors.white)),
+                title: const Text('WhatsApp',
+                    style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
                   _whatsAppFactura(factura);
@@ -676,9 +748,11 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
               ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: AppTheme.neonBlue,
-                  child: Icon(Icons.email_outlined, color: Colors.white, size: 20),
+                  child:
+                      Icon(Icons.email_outlined, color: Colors.white, size: 20),
                 ),
-                title: const Text('Email', style: TextStyle(color: Colors.white)),
+                title:
+                    const Text('Email', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
                   _emailFactura(factura);
@@ -687,9 +761,11 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
               ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: Colors.grey,
-                  child: Icon(Icons.share_outlined, color: Colors.white, size: 20),
+                  child:
+                      Icon(Icons.share_outlined, color: Colors.white, size: 20),
                 ),
-                title: const Text('Sistema', style: TextStyle(color: Colors.white)),
+                title: const Text('Sistema',
+                    style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
                   _shareFacturaPdf(factura);
@@ -706,7 +782,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   Future<void> _emailFactura(Factura factura) async {
     final result = await EmailFormModal.show(
       context,
-      defaultSubject: 'Factura ${factura.numeroFormateado} - ${factura.clienteNombre}',
+      defaultSubject:
+          'Factura ${factura.numeroFormateado} - ${factura.clienteNombre}',
       defaultBody: 'Hola ${factura.clienteNombre},\n\n'
           'Adjunto le remitimos su factura ${factura.numeroFormateado} '
           'por importe de ${factura.total.toStringAsFixed(2)} €.\n\n'
@@ -730,7 +807,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       );
       modal.success('✓ Email enviado a ${result.email}');
     } catch (e) {
-      modal.error('Error enviando email: $e', onRetry: () => _emailFactura(factura));
+      modal.error('Error enviando email: $e',
+          onRetry: () => _emailFactura(factura));
     }
   }
 
@@ -744,77 +822,103 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
 
     if (result == null || !mounted) return;
 
-    final modal = AsyncOperationModal.show(context, text: 'Preparando PDF para WhatsApp...');
+    final modal = AsyncOperationModal.show(context,
+        text: 'Preparando PDF para WhatsApp...');
     try {
       final file = await FacturasService.downloadFacturaPdf(
-        factura.serie, factura.numero, factura.ejercicio,
+        factura.serie,
+        factura.numero,
+        factura.ejercicio,
       );
       modal.close();
 
       if (!mounted) return;
 
+      final renderBox = context.findRenderObject() as RenderBox;
+      final size = renderBox.size;
+      final origin = Rect.fromCenter(
+        center: Offset(size.width / 2, size.height / 2),
+        width: 1,
+        height: 1,
+      );
+
       await Share.shareXFiles(
-        [XFile(file.path)],
+        [XFile(file.path, mimeType: 'application/pdf')],
         text: result.message,
+        subject: 'Factura ${factura.numeroFormateado}',
+        sharePositionOrigin: origin,
       );
     } catch (e) {
-      modal.error('Error al compartir: $e', onRetry: () => _whatsAppFactura(factura));
+      if (mounted) {
+        modal.error('Error al compartir: $e',
+            onRetry: () => _whatsAppFactura(factura));
+      }
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final auth = context.watch<AuthProvider>();
-    
+
     return Column(
       children: [
         // Header (AppBar replacement)
         Container(
-           padding: const EdgeInsets.all(16),
-           decoration: BoxDecoration(
-             color: AppTheme.surfaceColor,
-             border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
-             boxShadow: [
-               BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, 2))
-             ]
-           ),
-           child: Column(
-             children: [
-               Row(
-                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                 children: [
-                   Row(children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: Colors.teal.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.receipt_long_outlined, color: Colors.teal),
-                      ),
-                      const SizedBox(width: 12),
-                      Text('Mis Facturas', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-                   ]),
-                   // Explicit Refresh Button
-                   IconButton(
-                     icon: const Icon(Icons.refresh),
-                     onPressed: _refreshData,
-                     tooltip: 'Recargar datos',
-                   )
-                 ],
-               ),
-               if (auth.currentUser?.isJefeVentas ?? false) ...[
-                 const SizedBox(height: 12),
-                 Container(
-                   constraints: const BoxConstraints(minHeight: 50),
-                   width: double.infinity,
-                   child: GlobalVendorSelector(
-                     isJefeVentas: true,
-                     onChanged: _onVendorChanged,
-                   ),
-                 ),
-               ]
-             ],
-           ),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: AppTheme.surfaceColor,
+              border: Border(
+                  bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2))
+              ]),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                          color: Colors.teal.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: const Icon(Icons.receipt_long_outlined,
+                          color: Colors.teal),
+                    ),
+                    const SizedBox(width: 12),
+                    Text('Mis Facturas',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold)),
+                  ]),
+                  // Explicit Refresh Button
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _refreshData,
+                    tooltip: 'Recargar datos',
+                  )
+                ],
+              ),
+              if (auth.currentUser?.isJefeVentas ?? false) ...[
+                const SizedBox(height: 12),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 50),
+                  width: double.infinity,
+                  child: GlobalVendorSelector(
+                    isJefeVentas: true,
+                    onChanged: _onVendorChanged,
+                  ),
+                ),
+              ]
+            ],
+          ),
         ),
 
         // Content
@@ -822,31 +926,33 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
           child: Column(
             children: [
               // Summary Cards
-              _buildSummaryCards(),
-              
+              if (!Responsive.isLandscapeCompact(context)) _buildSummaryCards(),
+
               // Inputs & Filters
               _buildFilters(context),
 
               Expanded(
                 child: _isLoading
-                  // OPTIMIZATION: Use SkeletonList for perceived performance
-                  ? const SkeletonList(itemCount: 8, itemHeight: 100)
-                  : _error != null
-                      ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-                      : _facturas.isEmpty
-                          ? _buildEmptyState()
-                          : RefreshIndicator(
-                              onRefresh: _refreshData,
-                              // OPTIMIZATION: Use OptimizedListView for smooth scrolling
-                              child: OptimizedListView(
-                                padding: const EdgeInsets.only(bottom: 80),
-                                itemCount: _facturas.length,
-                                itemBuilder: (context, index) {
-                                  final factura = _facturas[index];
-                                  return _buildFacturaCard(factura);
-                                },
+                    // OPTIMIZATION: Use SkeletonList for perceived performance
+                    ? const SkeletonList(itemCount: 8, itemHeight: 100)
+                    : _error != null
+                        ? Center(
+                            child: Text(_error!,
+                                style: const TextStyle(color: Colors.red)))
+                        : _facturas.isEmpty
+                            ? _buildEmptyState()
+                            : RefreshIndicator(
+                                onRefresh: _refreshData,
+                                // OPTIMIZATION: Use OptimizedListView for smooth scrolling
+                                child: OptimizedListView(
+                                  padding: const EdgeInsets.only(bottom: 80),
+                                  itemCount: _facturas.length,
+                                  itemBuilder: (context, index) {
+                                    final factura = _facturas[index];
+                                    return _buildFacturaCard(factura);
+                                  },
+                                ),
                               ),
-                            ),
               ),
             ],
           ),
@@ -857,32 +963,43 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
 
   Widget _buildSummaryCards() {
     if (_summary == null) return const SizedBox.shrink();
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          _buildSummaryItem(
-            icon: Icons.receipt_long,
-            label: 'Facturas',
-            value: '${_summary!.totalFacturas}',
-            color: Colors.blue,
-          ),
-          const SizedBox(width: 8),
-          _buildSummaryItem(
-            icon: Icons.euro,
-            label: 'Total',
-            value: '${_summary!.totalImporte.toStringAsFixed(2)}€',
-            color: Colors.green,
-          ),
-          const SizedBox(width: 8),
-          _buildSummaryItem(
-            icon: Icons.percent,
-            label: 'Impuestos',
-            value: '${_summary!.totalIva.toStringAsFixed(2)}€',
-            color: Colors.orange,
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Responsive: 2 columns on very narrow screens, 3 on wider
+          final columns = constraints.maxWidth < 400 ? 2 : 3;
+          final itemWidth =
+              (constraints.maxWidth - (columns - 1) * 8) / columns;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildSummaryItem(
+                icon: Icons.receipt_long,
+                label: 'Facturas',
+                value: '${_summary!.totalFacturas}',
+                color: Colors.blue,
+                width: itemWidth,
+              ),
+              _buildSummaryItem(
+                icon: Icons.euro,
+                label: 'Total',
+                value: '${_summary!.totalImporte.toStringAsFixed(0)}€',
+                color: Colors.green,
+                width: itemWidth,
+              ),
+              _buildSummaryItem(
+                icon: Icons.percent,
+                label: 'IVA',
+                value: '${_summary!.totalIva.toStringAsFixed(0)}€',
+                color: Colors.orange,
+                width: itemWidth,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -892,57 +1009,59 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     required String label,
     required String value,
     required Color color,
+    double? width,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E2746) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-          border: Border.all(
-            color: isDark ? Colors.white10 : Colors.grey.shade100,
-          ),
+    final small = Responsive.isSmall(context);
+
+    return Container(
+      width: width,
+      padding: EdgeInsets.symmetric(vertical: small ? 8 : 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E2746) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade100,
         ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 20),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: EdgeInsets.all(small ? 6 : 8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(height: 8),
-            Text(
+            child: Icon(icon, color: color, size: small ? 16 : 20),
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: small ? 14 : 16,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isDark ? Colors.white.withOpacity(0.9) : Colors.grey.shade700,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isDark
+                    ? Colors.white.withOpacity(0.9)
+                    : Colors.grey.shade700,
+                fontSize: small ? 10 : 12,
+                fontWeight: FontWeight.w500,
               ),
-          ],
-        ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -976,7 +1095,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
             ],
           ),
           const SizedBox(height: 8),
-          
+
           // Month & Year Row
           Row(
             children: [
@@ -989,8 +1108,10 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                       child: Text('Todos los meses'),
                     ),
                     ...List.generate(12, (index) {
-                      final monthName = DateFormat('MMMM', 'es_ES').format(DateTime(2024, index + 1));
-                      final capitalized = monthName[0].toUpperCase() + monthName.substring(1);
+                      final monthName = DateFormat('MMMM', 'es_ES')
+                          .format(DateTime(2024, index + 1));
+                      final capitalized =
+                          monthName[0].toUpperCase() + monthName.substring(1);
                       return DropdownMenuItem<int>(
                         value: index + 1,
                         child: Text(capitalized),
@@ -1006,7 +1127,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
               Expanded(
                 child: _buildDropdown<int>(
                   value: _selectedYear,
-                  items: _years.map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
+                  items: _years
+                      .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
+                      .toList(),
                   onChanged: _onYearChanged,
                   hint: 'Año',
                   icon: Icons.calendar_today,
@@ -1015,13 +1138,15 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
             ],
           ),
           const SizedBox(height: 12),
-          
+
           // Date Range Row
           Row(
             children: [
               Expanded(
                 child: _buildDateButton(
-                  label: _dateFrom == null ? 'Desde' : DateFormat('dd/MM/yyyy').format(_dateFrom!),
+                  label: _dateFrom == null
+                      ? 'Desde'
+                      : DateFormat('dd/MM/yyyy').format(_dateFrom!),
                   onTap: () => _selectDate(context, true),
                   isActive: _dateFrom != null,
                 ),
@@ -1029,7 +1154,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
               const SizedBox(width: 8),
               Expanded(
                 child: _buildDateButton(
-                  label: _dateTo == null ? 'Hasta' : DateFormat('dd/MM/yyyy').format(_dateTo!),
+                  label: _dateTo == null
+                      ? 'Hasta'
+                      : DateFormat('dd/MM/yyyy').format(_dateTo!),
                   onTap: () => _selectDate(context, false),
                   isActive: _dateTo != null,
                 ),
@@ -1047,7 +1174,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                 ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
         ],
       ),
@@ -1060,20 +1187,20 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
     required bool isActive,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
-          color: isActive 
+          color: isActive
               ? const Color(0xFF2D5A87).withOpacity(0.1)
               : (isDark ? const Color(0xFF1E2746) : Colors.grey.shade100),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isActive 
-                ? const Color(0xFF2D5A87) 
+            color: isActive
+                ? const Color(0xFF2D5A87)
                 : (isDark ? Colors.white10 : Colors.transparent),
           ),
         ),
@@ -1081,15 +1208,17 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.date_range, 
-              size: 18, 
+              Icons.date_range,
+              size: 18,
               color: isActive ? const Color(0xFF2D5A87) : Colors.grey,
             ),
             const SizedBox(width: 8),
             Text(
               label,
               style: TextStyle(
-                color: isActive ? const Color(0xFF2D5A87) : (isDark ? Colors.white : Colors.black87),
+                color: isActive
+                    ? const Color(0xFF2D5A87)
+                    : (isDark ? Colors.white : Colors.black87),
                 fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               ),
             ),
@@ -1106,8 +1235,10 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Responsive search field height
+    final fieldH = Responsive.value(context, phone: 40, desktop: 48);
     return Container(
-      height: 48,
+      height: fieldH,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
@@ -1127,7 +1258,7 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
       ),
     );
   }
-  
+
   Widget _buildDropdown<T>({
     required T? value,
     required List<DropdownMenuItem<T>> items,
@@ -1137,8 +1268,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Responsive dropdown height
     return Container(
-      height: 48,
+      height: Responsive.value(context, phone: 40, desktop: 48),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,
@@ -1154,7 +1286,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
             children: [
               Icon(icon, size: 18, color: Colors.grey),
               const SizedBox(width: 8),
-              Text(hint, style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)),
+              Text(hint,
+                  style:
+                      TextStyle(color: isDark ? Colors.white38 : Colors.grey)),
             ],
           ),
           icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
@@ -1168,10 +1302,10 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
 
   Widget _buildEmptyState() {
     final hasFilters = _selectedMonth != null ||
-                       _dateFrom != null ||
-                       _dateTo != null ||
-                       _clientSearchController.text.isNotEmpty ||
-                       _facturaSearchController.text.isNotEmpty;
+        _dateFrom != null ||
+        _dateTo != null ||
+        _clientSearchController.text.isNotEmpty ||
+        _facturaSearchController.text.isNotEmpty;
 
     return Center(
       child: Padding(
@@ -1180,7 +1314,9 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              hasFilters ? Icons.search_off_rounded : Icons.receipt_long_outlined,
+              hasFilters
+                  ? Icons.search_off_rounded
+                  : Icons.receipt_long_outlined,
               size: 56,
               color: Colors.white24,
             ),
@@ -1222,7 +1358,8 @@ class _FacturasPageState extends State<FacturasPage> with SingleTickerProviderSt
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white54,
                   side: const BorderSide(color: Colors.white24),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
                 ),
               ),
             ],

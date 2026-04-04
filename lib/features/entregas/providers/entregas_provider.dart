@@ -12,6 +12,7 @@ class EntregaItem {
   final String codigoArticulo;
   final String descripcion;
   final double cantidadPedida;
+  final int bultos;
   final String? unit;
   final double precioUnitario;
   double cantidadEntregada;
@@ -23,6 +24,7 @@ class EntregaItem {
     required this.codigoArticulo,
     required this.descripcion,
     required this.cantidadPedida,
+    this.bultos = 0,
     this.unit,
     this.precioUnitario = 0,
     this.cantidadEntregada = 0,
@@ -36,6 +38,7 @@ class EntregaItem {
       codigoArticulo: json['codigoArticulo']?.toString() ?? '',
       descripcion: json['descripcion']?.toString() ?? '',
       cantidadPedida: ((json['cantidadPedida'] ?? json['QTY'] ?? 0) as num).toDouble(),
+      bultos: ((json['bultos'] ?? 0) as num).toInt(),
       unit: json['UNIT']?.toString() ?? json['unit']?.toString(), // Handle both cases
       precioUnitario: ((json['precioUnitario'] ?? json['PRICE'] ?? 0) as num).toDouble(),
       cantidadEntregada: ((json['cantidadEntregada'] ?? 0) as num).toDouble(),
@@ -45,6 +48,23 @@ class EntregaItem {
   }
 
   bool get entregadoCompleto => cantidadEntregada >= cantidadPedida;
+}
+
+/// IVA breakdown per tax rate (e.g., 4%, 10%, 21%)
+class IvaBreakdownItem {
+  final double base;
+  final double pct;
+  final double iva;
+
+  IvaBreakdownItem({required this.base, required this.pct, required this.iva});
+
+  factory IvaBreakdownItem.fromJson(Map<String, dynamic> json) {
+    return IvaBreakdownItem(
+      base: ((json['base'] ?? 0) as num).toDouble(),
+      pct: ((json['pct'] ?? 0) as num).toDouble(),
+      iva: ((json['iva'] ?? 0) as num).toDouble(),
+    );
+  }
 }
 
 /// Albarán completo para entrega
@@ -65,6 +85,11 @@ class AlbaranEntrega {
   final String emailCliente;
   final String fecha;
   final double importeTotal;
+  final double importeBruto;   // Gross amount pre-discount (reference only)
+  final double importeNeto;    // Sum of tax bases (without IVA)
+  final double importeIva;     // Sum of all IVA amounts
+  final List<IvaBreakdownItem> ivaBreakdown; // Per-rate IVA detail
+  final String? checksum;      // Backend verification: netoSum + ivaSum
   final String formaPago;
   final String formaPagoDesc;  // e.g., "CRÉDITO", "CONTADO"
   final String tipoPago;       // e.g., "CREDITO", "CONTADO", "REPOSICION"
@@ -76,6 +101,10 @@ class AlbaranEntrega {
   final String codigoVendedor;
   final String nombreVendedor;
   final String codigoRepartidor; // Para Jefe de Ventas
+  final String nombreRepartidor;
+  final int? ordenPreparacion;
+  final bool discrepancy;
+  final double lineSum;
   EstadoEntrega estado;
   List<EntregaItem> items;
   String? observaciones;
@@ -101,6 +130,11 @@ class AlbaranEntrega {
     this.emailCliente = '',
     required this.fecha,
     required this.importeTotal,
+    this.importeBruto = 0,
+    this.importeNeto = 0,
+    this.importeIva = 0,
+    this.ivaBreakdown = const [],
+    this.checksum,
     this.formaPago = '',
     this.formaPagoDesc = '',
     this.tipoPago = '',
@@ -112,6 +146,10 @@ class AlbaranEntrega {
     this.codigoVendedor = '',
     this.nombreVendedor = '',
     this.codigoRepartidor = '',
+    this.nombreRepartidor = '',
+    this.ordenPreparacion,
+    this.discrepancy = false,
+    this.lineSum = 0,
     this.estado = EstadoEntrega.pendiente,
     this.items = const [],
     this.observaciones,
@@ -140,6 +178,14 @@ class AlbaranEntrega {
       emailCliente: json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
       fecha: json['fecha']?.toString() ?? '',
       importeTotal: ((json['importe'] ?? json['importeTotal'] ?? 0) as num).toDouble(),
+      importeBruto: ((json['importeBruto'] ?? 0) as num).toDouble(),
+      importeNeto: ((json['netoSum'] ?? 0) as num).toDouble(),
+      importeIva: ((json['ivaSum'] ?? 0) as num).toDouble(),
+      ivaBreakdown: (json['ivaBreakdown'] as List<dynamic>?)
+              ?.map((e) => IvaBreakdownItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      checksum: json['checksum']?.toString(),
       formaPago: json['formaPago']?.toString() ?? '',
       formaPagoDesc: json['formaPagoDesc']?.toString() ?? '',
       tipoPago: json['tipoPago']?.toString() ?? '',
@@ -151,6 +197,10 @@ class AlbaranEntrega {
       codigoVendedor: json['codigoVendedor']?.toString() ?? '',
       nombreVendedor: json['nombreVendedor']?.toString() ?? '',
       codigoRepartidor: json['codigoRepartidor']?.toString() ?? '',
+      nombreRepartidor: json['nombreRepartidor']?.toString() ?? '',
+      ordenPreparacion: json['ordenPreparacion'] as int?,
+      discrepancy: json['discrepancy'] == true,
+      lineSum: ((json['lineSum'] ?? 0) as num).toDouble(),
       estado: EstadoEntrega.fromString((json['estado'] ?? 'PENDIENTE') as String),
       items: (json['items'] as List<dynamic>?)
               ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
@@ -472,11 +522,11 @@ class EntregasProvider extends ChangeNotifier {
         'albaranNum': albaran.numeroAlbaran,
         'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
         'fecha': albaran.fecha,
-        'subtotal': albaran.importeTotal,
-        'iva': 0,
+        'subtotal': albaran.importeNeto > 0 ? albaran.importeNeto : albaran.importeTotal,
+        'iva': albaran.importeIva,
         'total': albaran.importeTotal,
         'formaPago': albaran.formaPagoDesc,
-        'repartidor': albaran.codigoRepartidor,
+        'repartidor': albaran.nombreRepartidor.isNotEmpty ? albaran.nombreRepartidor : albaran.codigoRepartidor,
       });
       if (response['success'] == true) {
         return response;
@@ -507,11 +557,11 @@ class EntregasProvider extends ChangeNotifier {
         'albaranNum': albaran.numeroAlbaran,
         'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
         'fecha': albaran.fecha,
-        'subtotal': albaran.importeTotal,
-        'iva': 0,
+        'subtotal': albaran.importeNeto > 0 ? albaran.importeNeto : albaran.importeTotal,
+        'iva': albaran.importeIva,
         'total': albaran.importeTotal,
         'formaPago': albaran.formaPagoDesc,
-        'repartidor': albaran.codigoRepartidor,
+        'repartidor': albaran.nombreRepartidor.isNotEmpty ? albaran.nombreRepartidor : albaran.codigoRepartidor,
       });
       return response['success'] == true;
     } catch (e) {

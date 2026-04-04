@@ -40,7 +40,8 @@ function buildOdbcConnectionString(): string {
   const uid = process.env.ODBC_UID || '';
   const pwd = process.env.ODBC_PWD || '';
   // Usar DSN configurado en Windows ODBC con credenciales
-  return `DSN=GMP;UID=${uid};PWD=${pwd};NAM=1;`;
+  // CCSID=1208 ensures IBM i returns UTF-8 (fixes Ñ, tildes, accents)
+  return `DSN=GMP;UID=${uid};PWD=${pwd};NAM=1;CCSID=1208;`;
 }
 
 export const config = {
@@ -67,8 +68,20 @@ export const config = {
 
   // JWT - Autenticación
   jwt: {
-    accessSecret: process.env.JWT_ACCESS_SECRET || 'dev-access-secret-change-in-production-32chars',
-    refreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-in-production-32chars',
+    accessSecret: (() => {
+      const secret = process.env.JWT_ACCESS_SECRET;
+      if (!secret || secret.length < 32) {
+        throw new Error('JWT_ACCESS_SECRET must be set in environment and be at least 32 characters. Generate with: openssl rand -hex 32');
+      }
+      return secret;
+    })(),
+    refreshSecret: (() => {
+      const secret = process.env.JWT_REFRESH_SECRET;
+      if (!secret || secret.length < 32) {
+        throw new Error('JWT_REFRESH_SECRET must be set in environment and be at least 32 characters. Generate with: openssl rand -hex 32');
+      }
+      return secret;
+    })(),
     accessExpires: process.env.JWT_ACCESS_EXPIRES || '15m',
     refreshExpires: process.env.JWT_REFRESH_EXPIRES || '7d',
   },

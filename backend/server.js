@@ -9,9 +9,18 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const logger = require('./middleware/logger');
-const verifyToken = require('./middleware/auth');
+const { verifyToken } = require('./middleware/auth');
 const { initDb, query } = require('./config/db');
-const { globalLimiter } = require('./middleware/security');
+const { 
+    globalLimiter, 
+    createSecurityHeaders, 
+    validateContentType, 
+    cobrosLimiter, 
+    pedidosLimiter,
+    detectSuspiciousAgents,
+    validateContentLength,
+    addRequestId
+} = require('./middleware/security');
 const { loadMetadataCache } = require('./services/metadataCache');
 const { preloadCache } = require('./services/cache-preloader');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
@@ -22,6 +31,8 @@ const { initCache, getCacheStats } = require('./services/redis-cache');
 const { networkOptimizer, responseCoalescing } = require('./middleware/network-optimizer');
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
+const { AdvancedRateLimiter } = require('./src/core/infrastructure/security/advanced-rate-limiter');
+const { refreshTokenManager } = require('./src/core/infrastructure/security/refresh-token-manager');
 
 // =============================================================================
 // FEATURE TOGGLE: USE_TS_ROUTES
@@ -30,10 +41,19 @@ const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('.
 // =============================================================================
 const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
 
+// =============================================================================
+// FEATURE TOGGLE: USE_DDD_ROUTES
+// Set USE_DDD_ROUTES=true to use DDD module routes (from src/modules/)
+// Set USE_DDD_ROUTES=false (default) to use legacy JavaScript routes
+// This toggle is independent of USE_TS_ROUTES
+// =============================================================================
+const USE_DDD_ROUTES = process.env.USE_DDD_ROUTES === 'true';
+
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
-  userActionsRoutes, facturasRoutes, warehouseRoutes;
+  userActionsRoutes, facturasRoutes, warehouseRoutes, productsRoutes, 
+  pedidosRoutes, cobrosRoutes, kpiModule;
 
 if (USE_TS_ROUTES) {
   // ==================== COMPILED TYPESCRIPT ROUTES ====================
@@ -83,13 +103,42 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   objectivesRoutes = require('./routes/objectives');
   exportRoutes = require('./routes/export');
   chatbotRoutes = require('./routes/chatbot');
-  commissionsRoutes = require('./routes/commissions');
+  const commissionsModule = require('./routes/commissions');
+  commissionsRoutes = commissionsModule.router;
   filtersRoutes = require('./routes/filters');
   entregasRoutes = require('./routes/entregas');
   repartidorRoutes = require('./routes/repartidor');
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
   warehouseRoutes = require('./routes/warehouse');
+  productsRoutes = require('./routes/products');
+  pedidosRoutes = require('./routes/pedidos');
+  cobrosRoutes = require('./routes/cobros');
+  // Módulo KPI Glacius (DB2/ODBC + Redis)
+  try {
+    kpiModule = require('./kpi');
+  } catch (err) {
+    logger.warn(`⚠️ KPI module not available: ${err.message}`);
+  }
+}
+
+// ==================== DDD MODULE ROUTES ====================
+let dddAuthRoutes, dddPedidosRoutes, dddCobrosRoutes, dddEntregasRoutes, dddRuteroRoutes;
+
+if (USE_DDD_ROUTES) {
+  try {
+    const dddAdapters = require('./src/shared/routes/ddd-adapters');
+    dddAuthRoutes = dddAdapters.createAuthRoutes();
+    dddPedidosRoutes = dddAdapters.createPedidosRoutes();
+    dddCobrosRoutes = dddAdapters.createCobrosRoutes();
+    dddEntregasRoutes = dddAdapters.createEntregasRoutes();
+    dddRuteroRoutes = dddAdapters.createRuteroRoutes();
+    logger.info('✅ DDD module routes loaded (src/modules/)');
+  } catch (err) {
+    logger.error(`❌ Failed to load DDD routes: ${err.message}`);
+    logger.warn('⚠️ Falling back to legacy JavaScript routes');
+    process.env.USE_DDD_ROUTES = 'false';
+  }
 }
 
 const app = express();
@@ -97,15 +146,32 @@ app.set('trust proxy', 1); // Required for rate limiting behind proxies (ngrok)
 const PORT = process.env.PORT || 3334;
 
 // Middleware — Security
+function parseCorsOrigin(value) {
+    if (process.env.NODE_ENV === 'production') {
+        if (!value || value === 'true' || value === '*') return false;
+        return value.split(',').map(o => o.trim()).filter(Boolean);
+    }
+    if (value === 'true' || value === '*') return true;
+    if (value) return value.split(',').map(o => o.trim()).filter(Boolean);
+    return true;
+}
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || true, // Restrict in production via CORS_ORIGIN env var
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400 // Cache preflight for 24h
+    origin: parseCorsOrigin(process.env.CORS_ORIGIN),
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Request-ID'],
+    exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+    credentials: true,
+    maxAge: 86400
 }));
+app.use(addRequestId);
+app.use(detectSuspiciousAgents);
+app.use(validateContentLength);
+app.use(createSecurityHeaders());
 app.use(helmet());
 app.use(compression());
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use(validateContentType);
 
 // ==================== OPTIMIZATION MIDDLEWARE ====================
 app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers
@@ -130,10 +196,58 @@ app.use((req, res, next) => {
 // Rate Limiting
 app.use('/api/', globalLimiter);
 
+// Advanced rate limiter for login endpoint (prevent brute force)
+const advancedRateLimiter = new AdvancedRateLimiter();
+app.use('/api/auth/login', advancedRateLimiter.middleware());
+
+// Refresh token endpoint
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'refreshToken required' });
+    }
+    const tokens = refreshTokenManager.rotateToken(refreshToken);
+    res.json(tokens);
+  } catch (err) {
+    if (err.name === 'TokenError') {
+      return res.status(401).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', verifyToken, async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (refreshToken) {
+      refreshTokenManager.revokeToken(refreshToken);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Cache stats endpoint (admin only)
+app.get('/api/admin/cache-stats', verifyToken, (req, res) => {
+  const { performanceCache } = require('./src/core/infrastructure/cache/performance-cache');
+  res.json({
+    performance: performanceCache.getStats(),
+    timestamp: new Date().toISOString()
+  });
+});
+
 // =============================================================================
 // PUBLIC ROUTES (No Auth Required)
 // =============================================================================
-app.use('/api/auth', authRoutes);
+if (process.env.USE_DDD_ROUTES === 'true' && dddAuthRoutes) {
+  app.use('/api/auth', dddAuthRoutes);
+  logger.info('✅ DDD auth routes mounted (public)');
+} else {
+  app.use('/api/auth', authRoutes);
+}
 
 // Health check (Public for monitoring)
 app.get('/api/health', async (req, res) => {
@@ -148,7 +262,7 @@ app.get('/api/health', async (req, res) => {
       dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' }
     });
   } catch (error) {
-    res.status(500).json({ status: 'error', error: error.message });
+    res.status(500).json({ status: 'error', error: 'Internal server error' });
   }
 });
 
@@ -175,28 +289,57 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/chatbot', chatbotRoutes);
   app.use('/api/commissions', commissionsRoutes);
   app.use('/api/filters', filtersRoutes);
-  app.use('/api/entregas', entregasRoutes);
   app.use('/api/repartidor', repartidorRoutes);
   app.use('/api/logs', userActionsRoutes);
   app.use('/api/facturas', facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);
+
+  // DDD routes (mount before legacy — Express first-match wins)
+  if (process.env.USE_DDD_ROUTES === 'true') {
+    app.use('/api/auth', dddAuthRoutes);
+    app.use('/api/pedidos', pedidosLimiter, dddPedidosRoutes);
+    app.use('/api/cobros', cobrosLimiter, dddCobrosRoutes);
+    app.use('/api/entregas', dddEntregasRoutes);
+    app.use('/api/rutero', dddRuteroRoutes);
+    logger.info('✅ DDD routes mounted at /api/{auth,pedidos,cobros,entregas,rutero}');
+  } else {
+    // Legacy fallback
+    app.use('/api/entregas', entregasRoutes);
+    app.use('/api/products', productsRoutes);
+    app.use('/api/pedidos', pedidosLimiter, pedidosRoutes);
+    app.use('/api/cobros', cobrosLimiter, cobrosRoutes);
+  }
+  // KPI Glacius module (DB2/ODBC-backed alerts)
+  if (kpiModule) {
+    app.use('/api/kpi', kpiModule.kpiRoutes);
+    logger.info('✅ KPI Glacius routes mounted at /api/kpi');
+  }
 }
 
 // Start server
 async function startServer() {
+  // Validate configuration before starting (throws if JWT secrets missing)
+  const { validateConfig } = require('./config/env');
+  validateConfig();
+  logger.info('✅ Configuration validated successfully');
+
   await initDb();
 
-  // Ensure Delivery Status Table Exists (Safe Strategy for DB2 i5/OS)
-  // NOTE: SYSIBM.SYSTABLES does not exist on i5/OS. Use direct SELECT to probe.
+  // ─── PHASE 1: Verify/create DB schema using DIRECT connections ────────
+  // Uses getPool().connect() directly, NOT query(), to avoid retry/pool-recreation logic.
+  const { getPool } = require('./config/db');
+
+  // Delivery Status table
   try {
-    // Try a lightweight probe query on the table itself
-    await query(`SELECT COUNT(*) as CNT FROM JAVIER.DELIVERY_STATUS`, false, false);
-    logger.info('✅ JAVIER.DELIVERY_STATUS table verified and ready.'); setDeliveryStatusAvailable(true);
-  } catch (probeErr) {
-    // Table likely doesn't exist (SQL0204) — attempt to create it
-    logger.warn(`⚠️ DELIVERY_STATUS probe failed (${probeErr.message}). Attempting to create table...`);
+    const pool = getPool();
+    const conn = await pool.connect();
     try {
-      await query(`
+      await conn.query(`SELECT COUNT(*) as CNT FROM JAVIER.DELIVERY_STATUS`);
+      logger.info('✅ JAVIER.DELIVERY_STATUS table verified and ready.');
+      setDeliveryStatusAvailable(true);
+    } catch (probeErr) {
+      try {
+        await conn.query(`
             CREATE TABLE JAVIER.DELIVERY_STATUS (
                 ID VARCHAR(64) NOT NULL PRIMARY KEY,
                 STATUS VARCHAR(20) DEFAULT 'PENDIENTE',
@@ -207,39 +350,116 @@ async function startServer() {
                 UPDATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
                 REPARTIDOR_ID VARCHAR(20)
             )
-        `, false, false);
-      logger.info('✅ JAVIER.DELIVERY_STATUS table created successfully.');
-      setDeliveryStatusAvailable(true);
-    } catch (createErr) {
-      // Table might already exist (race condition) or we lack DDL permissions
-      if (createErr.message && createErr.message.includes('SQL0601')) {
-        logger.info('✅ JAVIER.DELIVERY_STATUS already exists (confirmed via SQL0601).');
+        `);
+        logger.info('✅ JAVIER.DELIVERY_STATUS table created successfully.');
         setDeliveryStatusAvailable(true);
-      } else {
-        logger.error(`❌ Cannot create DELIVERY_STATUS table: ${createErr.message}`);
-        logger.warn('⚠️ Delivery status tracking will use in-memory fallback. Deliveries module will still work but status changes won\'t persist across restarts.');
+      } catch (createErr) {
+        if (createErr.message && createErr.message.includes('SQL0601')) {
+          logger.info('✅ JAVIER.DELIVERY_STATUS already exists.');
+          setDeliveryStatusAvailable(true);
+        } else {
+          logger.warn(`⚠️ Cannot create DELIVERY_STATUS table: ${createErr.message}`);
+          logger.warn('⚠️ Delivery status tracking will use in-memory fallback.');
+        }
       }
+    } finally {
+      try { await conn.close(); } catch (_) { }
     }
+  } catch (e) {
+    logger.warn(`⚠️ DELIVERY_STATUS setup skipped: ${e.message}`);
   }
 
-  // Initialize Redis cache (non-blocking - works without Redis too)
+  // ─── PHASE 2: Create/verify DB schema (direct connections, no pool recreation) ───
+  try {
+    const { initWarehouseTables } = require('./routes/warehouse');
+    await initWarehouseTables();
+  } catch (whErr) {
+    logger.warn(`⚠️ Warehouse table setup error (non-fatal): ${whErr.message}`);
+  }
+
+  try {
+    const { initCommissionTables } = require('./routes/commissions');
+    await initCommissionTables();
+  } catch (commErr) {
+    logger.warn(`⚠️ Commission table setup error (non-fatal): ${commErr.message}`);
+  }
+
+  // ─── PHASE 3: Initialize caches (pool is stable, schema is ready) ─────
   initCache()
     .then(() => logger.info('✅ Redis cache initialized'))
     .catch(err => logger.warn(`⚠️ Redis unavailable (using L1 only): ${err.message}`));
 
-  // Start server first so it's responsive
+  logger.info('📦 Pre-loading critical caches before accepting requests…');
+  const cacheStart = Date.now();
+
+  try {
+    await preloadCache(PORT);
+    logger.info(`✅ LACLAE cache ready (${Date.now() - cacheStart}ms)`);
+  } catch (err) {
+    logger.warn(`⚠️ LACLAE preload error (non-fatal): ${err.message}`);
+  }
+
+  try {
+    await loadMetadataCache();
+    logger.info(`✅ Metadata cache ready (${Date.now() - cacheStart}ms total)`);
+  } catch (err) {
+    logger.warn(`⚠️ Metadata cache error (non-fatal): ${err.message}`);
+  }
+
+  // ─── PHASE 3.5: Initialize Pedidos tables ───
+  try {
+    const pedidosService = require('./services/pedidos.service');
+    await pedidosService.initPedidosTables();
+    logger.info('✅ Pedidos tables initialized');
+  } catch (err) {
+    logger.warn(`⚠️ Pedidos table init error (non-fatal): ${err.message}`);
+  }
+
+  // ─── PHASE 3.6: Initialize KPI Glacius module (DB2/ODBC + Redis) ───
+  if (kpiModule) {
+    try {
+      await kpiModule.initKpiModule();
+      logger.info('✅ KPI Glacius module initialized');
+    } catch (kpiErr) {
+      logger.warn(`⚠️ KPI module init error (non-fatal): ${kpiErr.message}`);
+    }
+  }
+
+  // ─── PHASE 3.7: Initialize DDD modules (if enabled) ───
+  if (process.env.USE_DDD_ROUTES === 'true') {
+    try {
+      const { Db2ConnectionPool } = require('./src/core/infrastructure/database/db2-connection-pool');
+      const { ResponseCache } = require('./src/core/infrastructure/cache/response-cache');
+      const dddDb = new Db2ConnectionPool();
+      await dddDb.initialize();
+      logger.info('✅ DDD connection pool initialized');
+
+      const dddCache = new ResponseCache();
+      logger.info('✅ DDD response cache initialized');
+    } catch (dddErr) {
+      logger.error(`❌ DDD module init error: ${dddErr.message}`);
+      logger.warn('⚠️ Falling back to legacy routes');
+      process.env.USE_DDD_ROUTES = 'false';
+    }
+  }
+
+  // ─── PHASE 4: Start server (schema ready + caches warm) ───────────────
   app.listen(PORT, '0.0.0.0', () => {
+    const dddStatus = process.env.USE_DDD_ROUTES === 'true' ? 'DDD Routes ✅' : 'Legacy Routes';
     logger.info('═'.repeat(60));
     logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);
     logger.info(`  Listening on ALL interfaces (0.0.0.0:${PORT})`);
     logger.info(`  Connected to DB2 via ODBC - Real Data`);
     logger.info(`  Security: HMAC TOKEN AUTH 🔒`);
+    logger.info(`  Route Mode: ${dddStatus}`);
     logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
+    logger.info(`  Caches: LACLAE + Metadata pre-loaded ✅`);
     logger.info('═'.repeat(60));
 
-    // Start System Preload (Cache Warmup)
-    preloadCache(PORT).catch(err => logger.warn(`Preload error: ${err.message}`));
-    loadMetadataCache().catch(err => logger.warn(`Metadata cache error: ${err.message}`));
+    // Signal PM2 that we are ready (caches are warm, safe to receive traffic)
+    if (process.send) {
+      process.send('ready');
+    }
   });
 }
 
@@ -254,7 +474,7 @@ app.get('/api/optimization/cache-stats', verifyToken, (req, res) => {
       cacheStats: stats,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -271,7 +491,7 @@ app.get('/api/optimization/query-stats', verifyToken, (req, res) => {
       indexSuggestions: optimizedQuery.suggestIndexes(),
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -291,7 +511,7 @@ app.get('/api/optimization/audit-log', verifyToken, (req, res) => {
       entries: filtered.slice(-parseInt(limit)).reverse() // Most recent first
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -306,7 +526,7 @@ app.get('/api/optimization/active-sessions', verifyToken, (req, res) => {
       sessions
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -329,7 +549,11 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error(`🔥 UNHANDLED REJECTION: ${reason}`);
+  process.exit(1);
 });
 
-startServer();
+startServer().catch((err) => {
+  logger.error(`🔥 Failed to start server: ${err.message}`);
+  process.exit(1);
+});
 

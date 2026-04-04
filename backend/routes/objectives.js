@@ -1,15 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const {
     getCurrentDate,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    buildColumnaVendedorFilter,
+    VENDOR_COLUMN,
+    getVendorColumn,
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
-    getBSales
+    getBSales,
+    sanitizeForSQL,
+    sanitizeCodeList
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const { redisCache, TTL } = require('../services/redis-cache');
@@ -34,24 +39,27 @@ const {
  * Get all clients currently managed by a vendor (from current year or most recent data)
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
-    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
-    const rows = await query(`
+    // Uses getVendorColumn(year) for date-aware column (LCCDVD before March 2026, R1_T8CDVD after)
+    const safeVendorCode = sanitizeForSQL(vendorCode);
+    const col = getVendorColumn(currentYear);
+    const rows = await queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.LCCDVD = '${vendorCode}'
-          AND L.LCAADC = ${currentYear}
+        WHERE L.${col} = ?
+          AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
-    `, false);
+    `, [safeVendorCode, currentYear], false);
 
     // If no clients in current year, try previous year
     if (rows.length === 0) {
-        const prevRows = await query(`
+        const prevCol = getVendorColumn(currentYear - 1);
+        const prevRows = await queryWithParams(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.LCCDVD = '${vendorCode}'
-              AND L.LCAADC = ${currentYear - 1}
+            WHERE L.${prevCol} = ?
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
-        `, false);
+        `, [safeVendorCode, currentYear - 1], false);
         return prevRows.map(r => r.CLIENT_CODE);
     }
 
@@ -65,7 +73,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
 async function getClientsMonthlySales(clientCodes, year) {
     if (!clientCodes || clientCodes.length === 0) return {};
 
-    const clientList = clientCodes.map(c => `'${c}'`).join(',');
+    const clientList = clientCodes.map(c => `'${sanitizeForSQL(c)}'`).join(',');
 
     // PERF: Removed TRIM(L.LCCDCL) - DB2 CHAR comparison handles trailing spaces
     const rows = await query(`
@@ -197,33 +205,33 @@ router.get('/', async (req, res) => {
             }
         }
 
-        // Ventas del mes actual (usando LAC)
-        // Aplicamos vendedorFilter para que coincida con lo solicitado (Global o Vendedor)
-        const currentSales = await query(`
+        // Parallelize 3 independent sales queries
+        const [currentSales, lastYearSales, prevYearAnnual] = await Promise.all([
+            // Ventas del mes actual (usando LAC)
+            query(`
       SELECT 
         COALESCE(SUM(IMPORTEVENTA), 0) as sales,
         COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
         COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
       FROM DSEDAC.LAC L
       WHERE ANODOCUMENTO = ${targetYear} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
-    `);
-
-        // Ventas del mismo mes año anterior (usando LAC)
-        const lastYearSales = await query(`
+    `),
+            // Ventas del mismo mes año anterior (usando LAC)
+            query(`
       SELECT 
         COALESCE(SUM(IMPORTEVENTA), 0) as sales,
         COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
         COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
       FROM DSEDAC.LAC
       WHERE ANODOCUMENTO = ${targetYear - 1} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
-    `);
-
-        // NEW: Need Annual Totals of Previous Year for Seasonality Calculation
-        const prevYearAnnual = await query(`
+    `),
+            // Annual Totals of Previous Year for Seasonality Calculation
+            query(`
             SELECT COALESCE(SUM(IMPORTEVENTA), 0) as TOTAL_SALES
             FROM DSEDAC.LAC
             WHERE ANODOCUMENTO = ${targetYear - 1} ${vendedorFilter}
-        `, false);
+        `, false)
+        ]);
 
         const curr = currentSales[0] || {};
         const last = lastYearSales[0] || {};
@@ -356,8 +364,8 @@ router.get('/evolution', async (req, res) => {
         const uniqueYears = [...new Set(allYears)];
         const yearsFilter = uniqueYears.join(',');
 
-        // Use LACLAE-specific vendor filter (uses LCCDVD column)
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        // Use Date-Aware filter (handles LCCDVD for <March 2026 and R1_T8CDVD for >=March 2026)
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, uniqueYears, 'L');
 
         // Get Active Days for calculating pace 
         // Logic: if multiple vendors selected, we might average or select first? 
@@ -650,87 +658,78 @@ router.get('/matrix', async (req, res) => {
         yearsArray.forEach(y => allYearsToFetch.add(y - 1));
         const yearsFilter = Array.from(allYearsToFetch).join(',');
 
-        // --- NEW: Client Contact & Observations ---
+        // --- NEW: Client Contact & Observations (parallelized) ---
         let contactInfo = { phone: '', phone2: '', email: '', phones: [] };
         let editableNotes = null;
 
-        // Get phones (separate try-catch to not break if one fails)
-        try {
-            const contactRows = await query(`
+        const [contactRows, notesRows] = await Promise.all([
+            query(`
                 SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2 
                 FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
-            `);
-            if (contactRows.length > 0) {
-                const c = contactRows[0];
-                const phones = [];
-                if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
-                if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
-
-                contactInfo = {
-                    phone: c.PHONE?.trim() || '',
-                    phone2: c.PHONE2?.trim() || '',
-                    email: '',
-                    phones: phones
-                };
-            }
-        } catch (e) {
-            logger.warn(`Could not load contact info: ${e.message}`);
-        }
-
-        // Get editable notes (separate try-catch - table may not exist)
-        try {
-            const notesRows = await query(`
+            `).catch(e => { logger.warn(`Could not load contact info: ${e.message}`); return []; }),
+            query(`
                 SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES 
-                WHERE CLIENT_CODE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
-            `, false);
-            if (notesRows.length > 0) {
-                editableNotes = {
-                    text: notesRows[0].OBSERVACIONES,
-                    modifiedBy: notesRows[0].MODIFIED_BY
-                };
-            }
-        } catch (e) {
-            // Table may not exist - this is OK, just skip notes
-            logger.debug(`Notes table not available: ${e.message}`);
+                WHERE CLIENT_CODE = '${sanitizeForSQL(clientCode)}' FETCH FIRST 1 ROWS ONLY
+            `, false).catch(e => { logger.debug(`Notes table not available: ${e.message}`); return []; })
+        ]);
+
+        if (contactRows.length > 0) {
+            const c = contactRows[0];
+            const phones = [];
+            if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
+            if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
+            contactInfo = {
+                phone: c.PHONE?.trim() || '',
+                phone2: c.PHONE2?.trim() || '',
+                email: '',
+                phones: phones
+            };
+        }
+        if (notesRows.length > 0) {
+            editableNotes = {
+                text: notesRows[0].OBSERVACIONES,
+                modifiedBy: notesRows[0].MODIFIED_BY
+            };
         }
         // -------------------------------------------
 
         // Build filter conditions (using LACLAE column names)
         let filterConditions = '';
         if (productCode && productCode.trim()) {
-            filterConditions += ` AND UPPER(L.LCCDRF) LIKE '%${productCode.trim().toUpperCase()}%'`;
+            filterConditions += ` AND UPPER(L.LCCDRF) LIKE '%${sanitizeForSQL(productCode.trim()).toUpperCase()}%'`;
         }
         if (productName && productName.trim()) {
-            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE '%${productName.trim().toUpperCase()}%' OR UPPER(L.LCDESC) LIKE '%${productName.trim().toUpperCase()}%')`;
+            const safeProdName = sanitizeForSQL(productName.trim()).toUpperCase();
+            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE '%${safeProdName}%' OR UPPER(L.LCDESC) LIKE '%${safeProdName}%')`;
         }
         // Legacy family/subfamily filters (mantener compatibilidad)
         if (familyCode && familyCode.trim()) {
-            filterConditions += ` AND A.CODIGOFAMILIA = '${familyCode.trim()}'`;
+            filterConditions += ` AND A.CODIGOFAMILIA = '${sanitizeForSQL(familyCode.trim())}'`;
         }
         if (subfamilyCode && subfamilyCode.trim()) {
-            filterConditions += ` AND A.CODIGOSUBFAMILIA = '${subfamilyCode.trim()}'`;
+            filterConditions += ` AND A.CODIGOSUBFAMILIA = '${sanitizeForSQL(subfamilyCode.trim())}'`;
         }
 
         // NEW: FI hierarchical filters (join con ARTX)
         let needsArtxJoin = false;
         if (fi1 && fi1.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO01) = '${fi1.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO01) = '${sanitizeForSQL(fi1.trim())}'`;
             needsArtxJoin = true;
         }
         if (fi2 && fi2.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO02) = '${fi2.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO02) = '${sanitizeForSQL(fi2.trim())}'`;
             needsArtxJoin = true;
         }
         if (fi3 && fi3.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO03) = '${fi3.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO03) = '${sanitizeForSQL(fi3.trim())}'`;
             needsArtxJoin = true;
         }
         if (fi4 && fi4.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO04) = '${fi4.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO04) = '${sanitizeForSQL(fi4.trim())}'`;
             needsArtxJoin = true;
         }
         if (fi5 && fi5.trim()) {
-            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = '${fi5.trim()}'`;
+            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = '${sanitizeForSQL(fi5.trim())}'`;
         }
 
         // Build ARTX join if needed
@@ -775,6 +774,7 @@ router.get('/matrix', async (req, res) => {
         ${filterConditions}
       GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
       ORDER BY SALES DESC
+      FETCH FIRST 50000 ROWS ONLY
     `);
 
         // Get family names and available filters properly
@@ -1687,11 +1687,11 @@ router.get('/by-client', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes, 'L');
 
         let extraFilters = '';
-        if (city && city.trim()) extraFilters += ` AND UPPER(C.POBLACION) = '${city.trim().toUpperCase()}'`;
-        if (code && code.trim()) extraFilters += ` AND C.CODIGOCLIENTE LIKE '%${code.trim()}%'`;
-        if (nif && nif.trim()) extraFilters += ` AND C.NIF LIKE '%${nif.trim()}%'`;
+        if (city && city.trim()) extraFilters += ` AND UPPER(C.POBLACION) = '${sanitizeForSQL(city.trim()).toUpperCase()}'`;
+        if (code && code.trim()) extraFilters += ` AND C.CODIGOCLIENTE LIKE '%${sanitizeForSQL(code.trim())}%'`;
+        if (nif && nif.trim()) extraFilters += ` AND C.NIF LIKE '%${sanitizeForSQL(nif.trim())}%'`;
         if (name && name.trim()) {
-            const safeName = name.trim().toUpperCase().replace(/'/g, "''");
+            const safeName = sanitizeForSQL(name.trim()).toUpperCase();
             extraFilters += ` AND (UPPER(C.NOMBRECLIENTE) LIKE '%${safeName}%' OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeName}%')`;
         }
 
@@ -1706,8 +1706,8 @@ router.get('/by-client', async (req, res) => {
         let currentRows = [];
 
         if (cachedClientCodes && cachedClientCodes.length > 0) {
-            // Use cached client codes for fast filtering
-            const clientCodesFilter = cachedClientCodes.map(c => `'${c}'`).join(',');
+            // Use cached client codes for fast filtering - SECURITY: sanitize codes
+            const clientCodesFilter = cachedClientCodes.map(c => `'${sanitizeForSQL(c)}'`).join(',');
 
             // Query 0: Count clients from cache (filtered by extra filters if any)
             if (extraFilters) {
@@ -1782,9 +1782,20 @@ router.get('/by-client', async (req, res) => {
         const retrievedCodes = currentRows.map(r => `'${r.CODE}'`).join(',');
 
         let prevSalesMap = new Map();
+        let objectiveConfigMap = new Map();
+        let defaultObjectiveData = { percentage: 10 };
+        let fixedTargetsMap = new Map();
+        const vendorCodesArray = vendedorCodes ? vendedorCodes.split(',').map(v => v.trim()) : [];
 
         if (retrievedCodes.length > 0) {
-            const prevRows = await query(`
+            // Parallelize 3 independent queries: prevSales + OBJ_CONFIG + COMMERCIAL_TARGETS
+            const now = getCurrentDate();
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+
+            const [prevRows, confRows, fixedRows] = await Promise.all([
+                // Previous year sales for retrieved clients
+                query(`
               SELECT 
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as PREV_SALES
@@ -1794,82 +1805,56 @@ router.get('/by-client', async (req, res) => {
                 AND ${LACLAE_SALES_FILTER}
                 AND L.LCCDCL IN (${retrievedCodes})
               GROUP BY L.LCCDCL
-            `);
-
-            prevRows.forEach(r => {
-                prevSalesMap.set(r.CODE?.trim() || '', parseFloat(r.PREV_SALES) || 0);
-            });
-        }
-
-        // Fetch Objective Configuration from JAVIER.OBJ_CONFIG
-        // Get config for retrieved clients AND the default ('*')
-        let objectiveConfigMap = new Map();
-        let defaultObjectiveData = { percentage: 10 }; // Fallback hardcoded if DB empty
-
-        if (retrievedCodes.length > 0) {
-            const objConfQuery = `
+            `),
+                // Objective configuration
+                query(`
                 SELECT CODIGOCLIENTE, TARGET_PERCENTAGE 
                 FROM JAVIER.OBJ_CONFIG 
                 WHERE CODIGOCLIENTE IN (${retrievedCodes}, '*') 
                    OR CODIGOCLIENTE = '*'
-             `;
-
-            try {
-                const confRows = await query(objConfQuery);
-                confRows.forEach(r => {
-                    const code = r.CODIGOCLIENTE?.trim();
-                    const pct = parseFloat(r.TARGET_PERCENTAGE) || 0;
-                    if (code === '*') {
-                        defaultObjectiveData.percentage = pct;
-                    } else {
-                        objectiveConfigMap.set(code, pct);
-                    }
-                });
-            } catch (err) {
-                logger.warn(`Could not load objective config: ${err.message}`);
-            }
-        }
-
-        // NEW: Fetch fixed monthly targets from COMMERCIAL_TARGETS for vendors with fixed amounts
-        // This is for new commercials like #15 who have fixed objectives (e.g., 25,000€/month)
-        let fixedTargetsMap = new Map();
-        const vendorCodesArray = vendedorCodes ? vendedorCodes.split(',').map(v => v.trim()) : [];
-
-        if (vendorCodesArray.length > 0) {
-            const now = getCurrentDate();
-            const currentMonth = now.getMonth() + 1;
-            const currentYear = now.getFullYear();
-
-            try {
-                const vendorList = vendorCodesArray.map(v => `'${v}'`).join(',');
-                const fixedRows = await query(`
+             `).catch(err => { logger.warn(`Could not load objective config: ${err.message}`); return []; }),
+                // Fixed monthly targets from COMMERCIAL_TARGETS
+                vendorCodesArray.length > 0
+                    ? query(`
                     SELECT CODIGOVENDEDOR, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA
                     FROM JAVIER.COMMERCIAL_TARGETS
-                    WHERE CODIGOVENDEDOR IN (${vendorList})
+                    WHERE CODIGOVENDEDOR IN (${vendorCodesArray.map(v => `'${v}'`).join(',')})
                       AND ANIO = ${currentYear}
                       AND (MES = ${currentMonth} OR MES IS NULL)
                       AND ACTIVO = 1
                     ORDER BY MES DESC
                     FETCH FIRST 1 ROWS ONLY
-                `, false);
+                `, false).catch(err => { logger.warn(`Could not load fixed commercial targets: ${err.message}`); return []; })
+                    : Promise.resolve([])
+            ]);
 
-                fixedRows.forEach(r => {
-                    const vendorCode = r.CODIGOVENDEDOR?.trim();
-                    if (vendorCode) {
-                        // Store as vendor-level target (applies to all clients of this vendor)
-                        fixedTargetsMap.set(`VENDOR_${vendorCode}`, {
-                            importe: parseFloat(r.IMPORTE_OBJETIVO) || 0,
-                            baseComision: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
-                            porcentaje: parseFloat(r.PORCENTAJE_MEJORA) || 10
-                        });
-                    }
-                });
+            prevRows.forEach(r => {
+                prevSalesMap.set(r.CODE?.trim() || '', parseFloat(r.PREV_SALES) || 0);
+            });
 
-                if (fixedTargetsMap.size > 0) {
-                    logger.info(`[OBJECTIVES] Loaded ${fixedTargetsMap.size} fixed commercial targets`);
+            confRows.forEach(r => {
+                const code = r.CODIGOCLIENTE?.trim();
+                const pct = parseFloat(r.TARGET_PERCENTAGE) || 0;
+                if (code === '*') {
+                    defaultObjectiveData.percentage = pct;
+                } else {
+                    objectiveConfigMap.set(code, pct);
                 }
-            } catch (err) {
-                logger.warn(`Could not load fixed commercial targets: ${err.message}`);
+            });
+
+            fixedRows.forEach(r => {
+                const vendorCode = r.CODIGOVENDEDOR?.trim();
+                if (vendorCode) {
+                    fixedTargetsMap.set(`VENDOR_${vendorCode}`, {
+                        importe: parseFloat(r.IMPORTE_OBJETIVO) || 0,
+                        baseComision: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
+                        porcentaje: parseFloat(r.PORCENTAJE_MEJORA) || 10
+                    });
+                }
+            });
+
+            if (fixedTargetsMap.size > 0) {
+                logger.info(`[OBJECTIVES] Loaded ${fixedTargetsMap.size} fixed commercial targets`);
             }
         }
 

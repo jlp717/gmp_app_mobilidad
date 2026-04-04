@@ -177,11 +177,13 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ),
-          // M.ACUM column - total margin in €
+          // M.ACUM column - FIX: show % not € for consistency with row data
+          // Previously showed CurrencyFormatter.format(totalMargin) which displayed €
+          // Individual rows show accMarginPct%, so total should too
           Expanded(
             flex: 2,
             child: Text(
-              CurrencyFormatter.format(totalMargin),
+              '${marginPct.toStringAsFixed(1)}%',
               textAlign: TextAlign.right,
               style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
             ),
@@ -328,17 +330,20 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               ),
             ),
             
-            // ACCUMULATED MARGIN - use same color logic as MARG
+            // ACCUMULATED MARGIN — show own margin% for leaf nodes too
             Expanded(
               flex: 2,
               child: Builder(
                 builder: (context) {
                   final Color accMarginColor = accMarginPct > 20 ? AppTheme.neonGreen : (accMarginPct > 10 ? Colors.amber : AppTheme.error);
+                  // Show margin% for ALL nodes, with bold for parents
+                  final displayPct = hasChildren ? accMarginPct : marginPercent;
+                  final Color displayColor = hasChildren ? accMarginColor : marginColor;
                   return Text(
-                    hasChildren ? '${accMarginPct.toStringAsFixed(1)}%' : '-',
+                    '${displayPct.toStringAsFixed(1)}%',
                     textAlign: TextAlign.right,
                     style: TextStyle(
-                      color: hasChildren ? accMarginColor : Colors.white24,
+                      color: displayColor,
                       fontSize: 12,
                       fontWeight: hasChildren ? FontWeight.bold : FontWeight.normal,
                     ),

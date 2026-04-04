@@ -7,7 +7,9 @@ const {
   buildVendedorFilterLACLAE,
   formatCurrency,
   MIN_YEAR,
-  LACLAE_SALES_FILTER
+  LACLAE_SALES_FILTER,
+  sanitizeForSQL,
+  sanitizeCodeList
 } = require('../utils/common');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
@@ -27,7 +29,7 @@ const getClientsHandler = async (req, res) => {
     let safeSearch = '';
     let searchFilter = '';
     if (search) {
-      safeSearch = search.replace(/'/g, "''").trim().toUpperCase();
+      safeSearch = sanitizeForSQL(search.trim()).toUpperCase();
       searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE '%${safeSearch}%'
                       OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeSearch}%'
                       OR C.CODIGOCLIENTE LIKE '%${safeSearch}%'
@@ -80,28 +82,42 @@ const getClientsHandler = async (req, res) => {
         COALESCE(S.TOTAL_MARGIN, 0) as totalMargin,
         C.ANOBAJA as yearInactive,
         TRIM(V.NOMBREVENDEDOR) as vendorName,
-        S.LAST_VENDOR as vendorCode
+        LV.LAST_VENDOR as vendorCode
       FROM DSEDAC.CLI C
       LEFT JOIN (
-        SELECT 
+        SELECT
           LCCDCL as CLIENT_CODE,
           SUM(LCIMVT) as TOTAL_PURCHASES,
           SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
           COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
-          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE,
-          MAX(LCCDVD) as LAST_VENDOR
+          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
         FROM DSED.LACLAE
         WHERE LCAADC >= ${MIN_YEAR}
           AND TPDC = 'LAC'
           AND LCTPVT IN ('CC', 'VC')
           AND LCCLLN IN ('AB', 'VT')
           AND LCSRAB NOT IN ('N', 'Z')
-          ${vendedorFilter.replace(/L\./g, '')}
+          ${clientCodesFilter ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL') : vendedorFilter.replace(/L\./g, '')}
         GROUP BY LCCDCL
       ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-      LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
+      -- Get vendor from most recent transaction (DB2 compatible)
+      -- When cache is active, use C.CODIGOCLIENTE (always resolves, even without matching sales)
+      -- When no cache (fallback), use S.CLIENT_CODE (only resolves for clients with vendor-filtered sales)
+      LEFT JOIN LATERAL (
+        SELECT LCCDVD as LAST_VENDOR
+        FROM DSED.LACLAE
+        WHERE LCCDCL = ${clientCodesFilter ? 'C.CODIGOCLIENTE' : 'S.CLIENT_CODE'}
+          AND LCAADC >= ${MIN_YEAR}
+          AND TPDC = 'LAC'
+          AND LCTPVT IN ('CC', 'VC')
+          AND LCCLLN IN ('AB', 'VT')
+          AND LCSRAB NOT IN ('N', 'Z')
+        ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+        FETCH FIRST 1 ROWS ONLY
+      ) LV ON 1=1
+      LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
-        ${clientCodesFilter || `AND S.LAST_VENDOR IS NOT NULL`}
+        ${clientCodesFilter || `AND LV.LAST_VENDOR IS NOT NULL`}
         ${searchFilter}
       ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
       OFFSET ${parseInt(offset)} ROWS
@@ -235,22 +251,23 @@ router.put('/notes', async (req, res) => {
       }
     }
 
-    const safeNotes = notes ? notes.replace(/'/g, "''") : '';
-    const existing = await query(`SELECT CLIENT_CODE FROM JAVIER.CLIENT_NOTES WHERE CLIENT_CODE = '${clientCode}'`, false);
+    const safeNotes = notes ? notes : '';
+    const safeClientCode = sanitizeForSQL(clientCode);
+    const existing = await queryWithParams(`SELECT CLIENT_CODE FROM JAVIER.CLIENT_NOTES WHERE CLIENT_CODE = ?`, [safeClientCode], false);
 
     if (existing.length > 0) {
-      await query(`
+      await queryWithParams(`
                 UPDATE JAVIER.CLIENT_NOTES 
-                SET OBSERVACIONES = '${safeNotes}', 
+                SET OBSERVACIONES = ?, 
                     MODIFIED_BY = 'JAVIER', 
                     MODIFIED_AT = CURRENT_TIMESTAMP 
-                WHERE CLIENT_CODE = '${clientCode}'
-            `, false);
+                WHERE CLIENT_CODE = ?
+            `, [safeNotes, safeClientCode], false);
     } else {
-      await query(`
+      await queryWithParams(`
                 INSERT INTO JAVIER.CLIENT_NOTES (CLIENT_CODE, OBSERVACIONES, MODIFIED_BY, MODIFIED_AT)
-                VALUES ('${clientCode}', '${safeNotes}', 'JAVIER', CURRENT_TIMESTAMP)
-            `, false);
+                VALUES (?, ?, 'JAVIER', CURRENT_TIMESTAMP)
+            `, [safeClientCode, safeNotes], false);
     }
 
     res.json({ success: true });
@@ -383,7 +400,7 @@ router.get('/:code', async (req, res) => {
     const pendingCVC = parseFloat(paymentStatus[0]?.PENDING) || 0;
     const totalCAC = parseFloat(cacValidation[0]?.TOTALINVOICED) || 0;
     if (Math.abs(pendingCVC - totalCAC) > 100) {
-        logger.warn(`[CLIENT ${safeClientCode}] CVC/CAC discrepancy: CVC pending=${pendingCVC.toFixed(2)}, CAC total=${totalCAC.toFixed(2)}, diff=${(pendingCVC - totalCAC).toFixed(2)}`);
+      logger.warn(`[CLIENT ${safeClientCode}] CVC/CAC discrepancy: CVC pending=${pendingCVC.toFixed(2)}, CAC total=${totalCAC.toFixed(2)}, diff=${(pendingCVC - totalCAC).toFixed(2)}`);
     }
 
     const c = clientInfo[0];
@@ -510,8 +527,8 @@ router.put('/:code/notes', async (req, res) => {
       return res.status(400).json({ error: 'Campo notes requerido' });
     }
 
-    const safeNotes = notes.substring(0, 500).replace(/'/g, "''");
-    const safeVendor = (vendorName || vendorCode || 'UNKNOWN').substring(0, 50).replace(/'/g, "''");
+    const safeNotes = notes.substring(0, 500);
+    const safeVendor = (vendorName || vendorCode || 'UNKNOWN').substring(0, 50);
 
     // Ensure table exists
     try {
@@ -528,16 +545,17 @@ router.put('/:code/notes', async (req, res) => {
     }
 
     // UPSERT: Update if exists, insert if not (MERGE statement for DB2)
-    await query(`
+    const safeClientCode = sanitizeForSQL(clientCode);
+    await queryWithParams(`
       MERGE INTO JAVIER.CLIENT_NOTES AS target
-      USING (VALUES ('${clientCode}')) AS source(CLIENT_CODE)
+      USING (VALUES (?)) AS source(CLIENT_CODE)
       ON target.CLIENT_CODE = source.CLIENT_CODE
       WHEN MATCHED THEN
-        UPDATE SET OBSERVACIONES = '${safeNotes}', MODIFIED_BY = '${safeVendor}', MODIFIED_AT = CURRENT_TIMESTAMP
+        UPDATE SET OBSERVACIONES = ?, MODIFIED_BY = ?, MODIFIED_AT = CURRENT_TIMESTAMP
       WHEN NOT MATCHED THEN
         INSERT (CLIENT_CODE, OBSERVACIONES, MODIFIED_BY, MODIFIED_AT)
-        VALUES ('${clientCode}', '${safeNotes}', '${safeVendor}', CURRENT_TIMESTAMP)
-    `, false);
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    `, [safeClientCode, safeNotes, safeVendor, safeClientCode, safeNotes, safeVendor]);
 
     logger.info(`[NOTES] Client ${clientCode} notes updated by ${safeVendor}`);
     res.json({ success: true, message: 'Notas guardadas correctamente' });
@@ -610,7 +628,7 @@ router.get('/compare', async (req, res) => {
 
     // Sanitize input for IN clause
     const clientCodes = codes.split(',')
-      .map(c => `'${c.trim().replace(/'/g, "''")}'`)
+      .map(c => `'${sanitizeForSQL(c.trim())}'`)
       .join(',');
 
     const now = getCurrentDate();

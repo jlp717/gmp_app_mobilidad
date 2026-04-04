@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Futuristic week navigator with holographic design
 /// Features:
@@ -153,7 +154,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
             _buildDayStrip(),
             
             // Progress bar
-            _buildProgressBar(progress),
+            if (!Responsive.isLandscapeCompact(context))
+              _buildProgressBar(progress),
           ],
         ),
       ),
@@ -162,7 +164,12 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
 
   Widget _buildWeekHeader(int weekNum, String weekRange) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: 16, 
+        vertical: Responsive.isLandscapeCompact(context) 
+            ? 2 
+            : 8 * Responsive.landscapeScale(context)
+      ),
       child: Row(
         children: [
           // Previous week button
@@ -206,9 +213,9 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                           const SizedBox(width: 6),
                           Text(
                             'SEMANA $weekNum',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.neonBlue,
-                              fontSize: 12,
+                              fontSize: Responsive.isSmall(context) ? 10 : 12,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 1.2,
                             ),
@@ -219,13 +226,14 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  weekRange,
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 11,
+                if (!Responsive.isLandscapeCompact(context))
+                  Text(
+                    weekRange,
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: Responsive.isSmall(context) ? 9 : 11,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -242,7 +250,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
           const SizedBox(width: 12),
           
           // Client count badge
-          _buildClientBadge(),
+          if (!Responsive.isLandscapeCompact(context))
+            _buildClientBadge(),
         ],
       ),
     );
@@ -308,10 +317,10 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
               const SizedBox(width: 6),
               Text(
                 '${widget.totalClients}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppTheme.neonBlue,
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: Responsive.isSmall(context) ? 11 : 13,
                 ),
               ),
             ],
@@ -324,7 +333,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   Widget _buildDayStrip() {
     if (widget.weekDays.isEmpty) {
       return Container(
-        height: 55,
+        height: Responsive.value(context, phone: 48, desktop: 55),
         alignment: Alignment.center,
         child: widget.isLoading
             ? const CircularProgressIndicator(
@@ -339,8 +348,13 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     }
 
     return Container(
-      height: 55,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      height: Responsive.isLandscapeCompact(context)
+          ? 32
+          : Responsive.value(context, phone: 55, desktop: 60),
+      padding: EdgeInsets.symmetric(
+          horizontal: 6, 
+          vertical: Responsive.isLandscapeCompact(context) ? 2 : 4
+      ),
       child: Row(
         children: widget.weekDays.asMap().entries.map((entry) {
           final index = entry.key;
@@ -423,7 +437,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                 Text(
                   dayLetter,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: Responsive.isSmall(context) ? 8 : 10,
                     fontWeight: FontWeight.bold,
                     color: isSelected ? AppTheme.darkBase : AppTheme.textSecondary,
                   ),
@@ -433,7 +447,9 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                 Text(
                   count > 0 ? '$count' : '-',
                   style: TextStyle(
-                    fontSize: isSelected ? 18 : 16,
+                    fontSize: isSelected
+                        ? (Responsive.isSmall(context) ? 14 : 18)
+                        : (Responsive.isSmall(context) ? 12 : 16),
                     fontWeight: FontWeight.w900,
                     color: isSelected
                         ? AppTheme.darkBase

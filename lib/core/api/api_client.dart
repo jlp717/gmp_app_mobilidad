@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'isolate_transformer.dart';
 import 'api_config.dart';
 import '../cache/cache_service.dart';
 import '../services/network_service.dart';
+import '../services/device_fingerprint.dart';
 
 /// API Client for all backend communications
 /// Enhanced with automatic server detection and fallback
@@ -18,17 +21,24 @@ class ApiClient {
   static final Map<String, Future<dynamic>> _pendingRequests = {};
 
   /// Callback for 401 Unauthorized events (Global Logout)
+  /// This is called when the server returns 401, indicating session expired
   static VoidCallback? onUnauthorized;
+
+  /// Flag to prevent duplicate logout calls
+  static bool _isLoggingOut = false;
 
   /// Initialize the API client with automatic server detection
   static Future<void> initialize() async {
     if (_isInitialized) return;
-    
+
     try {
+      // Collect device fingerprint for audit traceability
+      await DeviceFingerprint.initialize();
       // Inicializar NetworkService para detectar servidor automáticamente
       await ApiConfig.initialize();
       _isInitialized = true;
-      debugPrint('[ApiClient] ✅ Inicializado con servidor: ${ApiConfig.baseUrl}');
+      debugPrint(
+          '[ApiClient] ✅ Inicializado con servidor: ${ApiConfig.baseUrl}');
     } catch (e) {
       debugPrint('[ApiClient] ⚠️ Error en inicialización: $e');
       // Continuar con configuración por defecto
@@ -46,6 +56,7 @@ class ApiClient {
   /// - Gzip compression for faster transfers
   /// - Connection Keep-Alive for connection reuse
   /// - Optimized timeouts for mobile networks
+  /// - Certificate pinning for production
   static Dio _createDio() {
     final dio = Dio(BaseOptions(
       baseUrl: ApiConfig.baseUrl,
@@ -57,12 +68,35 @@ class ApiClient {
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip, deflate', // Enable gzip compression
         'Connection': 'keep-alive', // Connection pooling
+        // AUDIT: Device fingerprint on every request
+        ...DeviceFingerprint.headers,
       },
       // Enable response compression
       responseType: ResponseType.json,
       // Only accept 2xx responses as successful — 4xx/5xx trigger DioException
       validateStatus: (status) => status != null && status >= 200 && status < 300,
     ));
+
+    // Configure certificate pinning for production
+    (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+      final client = HttpClient();
+      client.badCertificateCallback = (X509Certificate cert, String host, int port) {
+        // Allow development IPs without pinning
+        const devHosts = ['127.0.0.1', '10.0.2.2', '192.168.1.52', '172.31.192.1', 'localhost'];
+        if (devHosts.contains(host)) return true;
+        
+        // Production: pin certificate SHA256 fingerprint
+        // TODO: Update with actual production certificate fingerprint
+        const pinnedCertSha256 = '';
+        if (pinnedCertSha256.isNotEmpty) {
+          return cert.sha1 == pinnedCertSha256;
+        }
+        
+        // If no fingerprint configured yet, allow (will be tightened in production)
+        return kDebugMode;
+      };
+      return client;
+    };
 
     // OPTIMIZATION: Parse JSON in background isolate
     dio.transformer = IsolateTransformer();
@@ -101,6 +135,22 @@ class ApiClient {
     }
   }
 
+  /// Get current auth token (for Image.network headers etc.)
+  static String? get authToken {
+    final header = dio.options.headers['Authorization']?.toString();
+    if (header != null && header.startsWith('Bearer ')) {
+      return header.substring(7);
+    }
+    return null;
+  }
+
+  /// Auth headers map for Image.network, url_launcher, etc.
+  static Map<String, String> get authHeaders {
+    final token = authToken;
+    if (token != null) return {'Authorization': 'Bearer $token'};
+    return {};
+  }
+
   /// Set authentication token
   static void setAuthToken(String token) {
     dio.options.headers['Authorization'] = 'Bearer $token';
@@ -112,7 +162,7 @@ class ApiClient {
   }
 
   /// GET request with optional caching
-  /// 
+  ///
   /// [cacheKey] - If provided, response will be cached and returned from cache if valid
   /// [cacheTTL] - Cache time-to-live, defaults to CacheService.defaultTTL
   /// [forceRefresh] - If true, bypasses cache and fetches fresh data
@@ -142,8 +192,10 @@ class ApiClient {
       );
       final rawData = response.data;
       if (rawData is! Map) {
-         if (rawData is List) throw ApiException('Response is a List, use getList() instead');
-         throw ApiException('Expected Map response but got ${rawData.runtimeType}');
+        if (rawData is List)
+          throw ApiException('Response is a List, use getList() instead');
+        throw ApiException(
+            'Expected Map response but got ${rawData.runtimeType}');
       }
       final data = Map<String, dynamic>.from(rawData);
 
@@ -158,7 +210,7 @@ class ApiClient {
         try {
           final cached = CacheService.get(cacheKey);
           if (cached != null && cached is Map) {
-             return Map<String, dynamic>.from(cached);
+            return Map<String, dynamic>.from(cached);
           }
         } catch (_) {}
       }
@@ -179,10 +231,10 @@ class ApiClient {
       try {
         final cached = CacheService.get(cacheKey);
         if (cached != null && cached is List) {
-           return cached;
+          return cached;
         }
       } catch (e) {
-         // Continue to network
+        // Continue to network
       }
     }
 
@@ -191,10 +243,10 @@ class ApiClient {
         endpoint,
         queryParameters: queryParameters,
       );
-      
+
       final data = response.data;
       List<dynamic> result;
-      
+
       if (data is List) {
         result = data;
       } else if (data is Map && data.containsKey('data')) {
@@ -254,6 +306,26 @@ class ApiClient {
     }
   }
 
+  /// POST with custom timeout (for heavy endpoints)
+  static Future<Map<String, dynamic>> postWithTimeout(
+    String endpoint,
+    Map<String, dynamic> data, {
+    Duration? receiveTimeout,
+  }) async {
+    try {
+      final response = await dio.post(
+        endpoint,
+        data: data,
+        options: receiveTimeout != null
+            ? Options(receiveTimeout: receiveTimeout)
+            : null,
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   /// PUT request
   static Future<Map<String, dynamic>> put(
     String endpoint, {
@@ -269,46 +341,111 @@ class ApiClient {
 
   static bool _isNetworkError(DioException e) {
     return e.type == DioExceptionType.connectionError ||
-           e.type == DioExceptionType.connectionTimeout ||
-           e.type == DioExceptionType.unknown;
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.unknown;
   }
 
   static ApiException _handleError(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout) {
-      return ApiException('Timeout de conexión - Verifica tu red', statusCode: 0);
+      return ApiException(
+        'Timeout de conexión. Verifica tu conexión a internet e inténtalo de nuevo.',
+        statusCode: 0
+      );
     } else if (e.type == DioExceptionType.connectionError) {
-      return ApiException('Error de conexión - Verifica tu red WiFi', statusCode: 0);
+      // Verificar si es error de socket (sin internet)
+      if (e.error is SocketException || 
+          (e.error?.toString().contains('SocketException') ?? false)) {
+        return ApiException(
+          'No hay conexión a internet. Verifica tu WiFi o datos móviles.',
+          statusCode: 0
+        );
+      }
+      return ApiException(
+        'Error de conexión. Verifica tu conexión a internet.',
+        statusCode: 0
+      );
     } else if (e.type == DioExceptionType.receiveTimeout) {
-      return ApiException('El servidor está tardando demasiado', statusCode: 0);
+      return ApiException(
+        'El servidor está tardando demasiado. Inténtalo de nuevo.',
+        statusCode: 0
+      );
+    } else if (e.type == DioExceptionType.sendTimeout) {
+      return ApiException(
+        'Error al enviar datos. Verifica tu conexión.',
+        statusCode: 0
+      );
     } else if (e.response != null) {
       final statusCode = e.response?.statusCode ?? 0;
       final data = e.response?.data;
-      
+
       // Extract server error message
       String? serverMessage;
       if (data is Map<String, dynamic>) {
-        serverMessage = data['error'] as String? ?? data['message'] as String?;
+        final error = data['error'] as String?;
+        final details = data['details'] as String?;
+        serverMessage = details != null && details.isNotEmpty
+            ? '$error: $details'
+            : (error ?? data['message'] as String?);
       }
-      
+
       if (statusCode == 401) {
-        // Trigger global logout on 401, unless it's the login endpoint
         final isLoginRequest = e.requestOptions.path.contains('/auth/login');
-        if (!isLoginRequest) {
+        if (!isLoginRequest && !_isLoggingOut) {
+          _isLoggingOut = true;
+          debugPrint('[ApiClient] 401 detected - triggering logout');
           onUnauthorized?.call();
+          // Reset flag after short delay to allow re-login
+          Future.delayed(const Duration(seconds: 2), () => _isLoggingOut = false);
         }
-        return ApiException(serverMessage ?? 'Credenciales inválidas', statusCode: 401);
+        return ApiException(
+          serverMessage ?? 'Credenciales inválidas. Verifica usuario y PIN.',
+          statusCode: 401
+        );
       } else if (statusCode == 403) {
-        return ApiException(serverMessage ?? 'Acceso denegado', statusCode: 403);
+        return ApiException(
+          serverMessage ?? 'Acceso denegado. No tienes permisos.',
+          statusCode: 403
+        );
+      } else if (statusCode == 404) {
+        return ApiException(
+          serverMessage ?? 'Recurso no encontrado.',
+          statusCode: 404
+        );
       } else if (statusCode == 429) {
-        return ApiException(serverMessage ?? 'Demasiados intentos - Espera un momento', statusCode: 429);
+        return ApiException(
+          serverMessage ?? 'Demasiados intentos. Espera un momento.',
+          statusCode: 429
+        );
+      } else if (statusCode >= 500) {
+        return ApiException(
+          'Error del servidor ($statusCode). Inténtalo más tarde.',
+          statusCode: statusCode
+        );
       }
-      return ApiException(serverMessage ?? 'Error: $statusCode', statusCode: statusCode);
+      return ApiException(
+        serverMessage ?? 'Error ($statusCode)',
+        statusCode: statusCode
+      );
     } else if (e.type == DioExceptionType.unknown) {
-      if (e.error.toString().contains('SocketException')) {
-        return ApiException('No se pudo conectar al servidor', statusCode: 0);
+      final errorMsg = e.error?.toString().toLowerCase() ?? '';
+      if (errorMsg.contains('socket')) {
+        return ApiException(
+          'No hay conexión a internet. Verifica WiFi o datos móviles.',
+          statusCode: 0
+        );
+      } else if (errorMsg.contains('ssl') || errorMsg.contains('certificate')) {
+        return ApiException(
+          'Error de seguridad. Verifica tu conexión.',
+          statusCode: 0
+        );
       }
     }
-    return ApiException('Error de red', statusCode: 0);
+    
+    // Default error
+    return ApiException(
+      'Error de conexión. Verifica tu internet e inténtalo de nuevo.',
+      statusCode: 0
+    );
   }
 
   /// Deduplicated GET request - prevents duplicate concurrent API calls
@@ -363,8 +500,9 @@ class _RetryInterceptor extends Interceptor {
     final retryCount = err.requestOptions.extra['retryCount'] as int? ?? 0;
 
     if (shouldRetry && retryCount < _maxRetries) {
-      debugPrint('[ApiClient] Retrying request (${retryCount + 1}/$_maxRetries)...');
-      
+      debugPrint(
+          '[ApiClient] Retrying request (${retryCount + 1}/$_maxRetries)...');
+
       // Exponential backoff
       final delay = _retryDelay * (retryCount + 1);
       await Future<void>.delayed(delay);

@@ -1,11 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import '../api/api_client.dart';
 import '../api/api_config.dart';
 import '../models/user_model.dart';
 import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../cache/cache_service.dart';
 import '../services/cache_prewarmer.dart';
+import '../services/secure_storage.dart';
+import 'filter_provider.dart';
 
 /// Authentication provider with role detection
 class AuthProvider with ChangeNotifier {
@@ -14,7 +18,8 @@ class AuthProvider with ChangeNotifier {
   String? _error;
   bool _initialized = false;
   bool _isMandatoryUpdate = false;
-  String _playStoreUrl = 'https://play.google.com/store/apps/details?id=com.jlp.gmp_mobilidad';
+  String _playStoreUrl =
+      'https://play.google.com/store/apps/details?id=com.jlp.gmp_mobilidad';
   bool _updateAvailable = false;
   String _updateMessage = '';
   List<String> _vendedorCodes = [];
@@ -38,24 +43,28 @@ class AuthProvider with ChangeNotifier {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = int.parse(packageInfo.buildNumber);
-      
+
       // SENIOR APPROACH: Fetch minimum required version from server
       // For now, we mock the check. In a real scenario, this comes from /health or /config
       final response = await ApiClient.get('/health/version-check');
-      
+
       if (response != null && response['success'] == true) {
-        final minRequiredVersion = int.tryParse(response['minVersion']?.toString() ?? '0') ?? 0;
-        final latestVersion = int.tryParse(response['latestVersion']?.toString() ?? '0') ?? 0;
-        
+        final minRequiredVersion =
+            int.tryParse(response['minVersion']?.toString() ?? '0') ?? 0;
+        final latestVersion =
+            int.tryParse(response['latestVersion']?.toString() ?? '0') ?? 0;
+
         if (currentVersion < minRequiredVersion) {
           _updateAvailable = true;
           _isMandatoryUpdate = true;
-          _updateMessage = (response['message'] as String?) ?? 'Es necesaria una nueva versión para continuar.';
+          _updateMessage = (response['message'] as String?) ??
+              'Es necesaria una nueva versión para continuar.';
           notifyListeners();
         } else if (currentVersion < latestVersion) {
           _updateAvailable = true;
           _isMandatoryUpdate = false;
-          _updateMessage = (response['message'] as String?) ?? 'Hay una nueva versión disponible.';
+          _updateMessage = (response['message'] as String?) ??
+              'Hay una nueva versión disponible.';
           notifyListeners();
         }
       }
@@ -67,58 +76,100 @@ class AuthProvider with ChangeNotifier {
   AuthProvider() {
     // Bind global 401 unauthorized event to logout
     ApiClient.onUnauthorized = () {
-      debugPrint('[AuthProvider] 401 Detected - Logging out...');
-      logout();
+      debugPrint('[AuthProvider] 401 Detected - Logging out (session expired)...');
+      logout(sessionExpired: true);
     };
-    
+
     // Initial update check
     checkForUpdates();
   }
 
   /// Login with username and password
   Future<bool> login(String username, String password) async {
-    debugPrint('[AuthProvider] login() called with user: $username');
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
       if (kDebugMode) debugPrint('[AuthProvider] Calling API login...');
-      
+
+      // Validate input
+      if (username.isEmpty || password.isEmpty) {
+        _error = 'Usuario y contraseña requeridos';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
       final response = await ApiClient.post(
         ApiConfig.login,
         {'username': username, 'password': password},
       );
 
-      debugPrint('[AuthProvider] Response received: ${response.keys}');
+      if (kDebugMode)
+        debugPrint('[AuthProvider] Response received: ${response.keys}');
 
-      if (response != null && response['user'] != null) {
-        _currentUser = UserModel.fromJson(response['user'] as Map<String, dynamic>);
-        
+      // Validate response
+      if (response == null) {
+        _error = 'No se pudo conectar con el servidor';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (response['user'] != null) {
+        _currentUser =
+            UserModel.fromJson(response['user'] as Map<String, dynamic>);
+
         // Handle vendedor codes
         if (response['vendedorCodes'] != null) {
-          _vendedorCodes = List<String>.from(response['vendedorCodes'] as Iterable);
+          _vendedorCodes =
+              List<String>.from(response['vendedorCodes'] as Iterable);
         }
-        
-        ApiClient.setAuthToken(response['token'] as String);
 
-        // Save to persistent storage
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_token', response['token'] as String);
-        await prefs.setString('user_data', jsonEncode(response['user']));
-        await prefs.setStringList('vendedor_codes', _vendedorCodes);
+        // Validate token exists
+        final token = response['token'] as String?;
+        if (token == null || token.isEmpty) {
+          _error = 'Respuesta inválida del servidor: token faltante';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+
+        ApiClient.setAuthToken(token);
+
+        // Save sensitive data to secure storage (non-blocking)
+        try {
+          await SecureStorage.writeSecureData('user_token', token);
+          await SecureStorage.writeSecureData(
+              'user_data', jsonEncode(response['user']));
+        } catch (storageError) {
+          debugPrint('[AuthProvider] SecureStorage error: $storageError');
+          // Continue anyway - we have the token in memory
+        }
+
+        // Non-sensitive data stays in SharedPreferences
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setStringList('vendedor_codes', _vendedorCodes);
+        } catch (prefsError) {
+          debugPrint('[AuthProvider] SharedPreferences error: $prefsError');
+        }
 
         _isLoading = false;
         notifyListeners();
         if (kDebugMode) debugPrint('[AuthProvider] Login SUCCESS');
-        
+
         // OPTIMIZATION: Pre-warm cache for instant data access
         // Run in background without awaiting to not block UI
-        CachePreWarmer.preWarmCache(this);
-        
+        unawaited(CachePreWarmer.preWarmCache(this));
+
         return true;
       } else {
-        throw Exception('Respuesta inválida del servidor');
+        _error = response['error']?.toString() ?? 'Respuesta inválida del servidor';
+        _isLoading = false;
+        notifyListeners();
+        return false;
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[AuthProvider] Login ERROR: $e');
@@ -133,20 +184,21 @@ class AuthProvider with ChangeNotifier {
   Future<bool> tryAutoLogin() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('user_token');
-      final userDataStr = prefs.getString('user_data');
+      final token = await SecureStorage.readSecureData('user_token');
+      final userDataStr = await SecureStorage.readSecureData('user_data');
       final codes = prefs.getStringList('vendedor_codes');
 
       if (token != null && userDataStr != null) {
         ApiClient.setAuthToken(token);
-        _currentUser = UserModel.fromJson(jsonDecode(userDataStr) as Map<String, dynamic>);
+        _currentUser =
+            UserModel.fromJson(jsonDecode(userDataStr) as Map<String, dynamic>);
         if (codes != null) _vendedorCodes = codes;
-        
+
         notifyListeners();
-        
+
         // OPTIMIZATION: Pre-warm cache on auto-login too
         CachePreWarmer.preWarmCache(this);
-        
+
         return true;
       }
       return false;
@@ -155,16 +207,49 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// Logout — clears only auth-related data (not all preferences)
-  Future<void> logout() async {
+  /// Logout — clears auth data AND all cached data (defense-in-depth)
+  /// Ensures no data from a previous user leaks to the next user on shared devices
+  /// [sessionExpired] - if true, shows session expired message to user
+  Future<void> logout({bool sessionExpired = false}) async {
     _currentUser = null;
     _vendedorCodes = [];
+    _isLoading = false;
+    _error = sessionExpired ? 'Tu sesión ha expirado. Por favor, inicia sesión de nuevo.' : null;
     ApiClient.clearAuthToken();
+
+    // Clear sensitive data from secure storage
+    await SecureStorage.deleteSecureData('user_token');
+    await SecureStorage.deleteSecureData('user_data');
+
+    // Clear non-sensitive data from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('user_token');
-    await prefs.remove('user_data');
     await prefs.remove('vendedor_codes');
+    await prefs.remove('global_filter_vendor');
+
+    // CRITICAL: Clear ALL cached API data (Hive + memory)
+    // This prevents data from leaking between users on shared tablets
+    try {
+      await CacheService.clearAll();
+      CacheService.clearMemoryCache();
+      CachePreWarmer.reset();
+      debugPrint('[AuthProvider] All caches cleared on logout');
+    } catch (e) {
+      debugPrint('[AuthProvider] Cache clear error: $e');
+    }
+
+    // Notify listeners IMMEDIATELY so UI can navigate to login
     notifyListeners();
+
+    // Small delay to allow UI to react before clearing filters
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Clear global filters
+    try {
+      // Clear filter provider directly (method is void, not Future)
+      FilterProvider().clear();
+    } catch (e) {
+      debugPrint('[AuthProvider] Filter clear error: $e');
+    }
   }
 
   /// Switch user role (Jefe / Repartidor)
@@ -176,34 +261,27 @@ class AuthProvider with ChangeNotifier {
     try {
       final response = await ApiClient.post(
         '/auth/switch-role',
-        {
-          'userId': _currentUser?.code,
-          'newRole': newRole,
-          'viewAs': viewAs
-        },
+        {'userId': _currentUser?.code, 'newRole': newRole, 'viewAs': viewAs},
       );
 
       if (response != null && response['success'] == true) {
         // Update token
         if (response['token'] != null) {
           ApiClient.setAuthToken(response['token'] as String);
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('user_token', response['token'] as String);
-          
+          await SecureStorage.writeSecureData(
+              'user_token', response['token'] as String);
+
           // Update local user model with new role
           if (_currentUser != null) {
-             _currentUser = _currentUser!.copyWith(role: newRole);
-             
-             // If debugging, print to verify
-             debugPrint('[AuthProvider] Local user role updated to: ${_currentUser!.userRole}');
+            _currentUser = _currentUser!.copyWith(role: newRole);
           }
         }
-        
+
         _isLoading = false;
         notifyListeners();
         return true;
       }
-      
+
       throw Exception('Failed to switch role');
     } catch (e) {
       _error = e.toString();

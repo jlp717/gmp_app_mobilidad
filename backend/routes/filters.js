@@ -13,7 +13,8 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
+const { sanitizeForSQL } = require('../utils/common');
 
 // Cache para los filtros (se refresca cada 5 minutos)
 let filtersCache = {
@@ -221,8 +222,8 @@ router.get('/fi3', async (req, res) => {
         if (fi2Code || fi1Code) {
             // Construir condición dinámica
             let whereConditions = [];
-            if (fi1Code) whereConditions.push(`x.FILTRO01 = '${fi1Code.trim().padEnd(10)}'`);
-            if (fi2Code) whereConditions.push(`x.FILTRO02 = '${fi2Code.trim().padEnd(10)}'`);
+            if (fi1Code) whereConditions.push(`x.FILTRO01 = '${sanitizeForSQL(fi1Code.trim()).padEnd(10)}'`);
+            if (fi2Code) whereConditions.push(`x.FILTRO02 = '${sanitizeForSQL(fi2Code.trim()).padEnd(10)}'`);
 
             const fi3Sql = `
                 SELECT DISTINCT FILTRO03
@@ -269,9 +270,9 @@ router.get('/fi4', async (req, res) => {
 
         if (fi1Code || fi2Code || fi3Code) {
             let whereConditions = [];
-            if (fi1Code) whereConditions.push(`x.FILTRO01 = '${fi1Code.trim().padEnd(10)}'`);
-            if (fi2Code) whereConditions.push(`x.FILTRO02 = '${fi2Code.trim().padEnd(10)}'`);
-            if (fi3Code) whereConditions.push(`x.FILTRO03 = '${fi3Code.trim().padEnd(10)}'`);
+            if (fi1Code) whereConditions.push(`x.FILTRO01 = '${sanitizeForSQL(fi1Code.trim()).padEnd(10)}'`);
+            if (fi2Code) whereConditions.push(`x.FILTRO02 = '${sanitizeForSQL(fi2Code.trim()).padEnd(10)}'`);
+            if (fi3Code) whereConditions.push(`x.FILTRO03 = '${sanitizeForSQL(fi3Code.trim()).padEnd(10)}'`);
 
             const fi4Sql = `
                 SELECT DISTINCT FILTRO04
@@ -364,7 +365,7 @@ router.get('/articles', async (req, res) => {
         if (fi5) whereConditions.push(`TRIM(a.CODIGOSECCIONLARGA) = '${fi5.trim()}'`);
 
         if (search) {
-            const term = search.toUpperCase().replace(/'/g, "''").trim();
+            const term = sanitizeForSQL(search.toUpperCase().trim());
             whereConditions.push(`(UPPER(a.DESCRIPCIONARTICULO) LIKE '%${term}%' OR a.CODIGOARTICULO LIKE '%${term}%')`);
         }
 

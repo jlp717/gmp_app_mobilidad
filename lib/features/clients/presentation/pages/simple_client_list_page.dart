@@ -13,6 +13,9 @@ import 'package:provider/provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 
 /// Simple Clients List Page with debounced search
 class SimpleClientListPage extends StatefulWidget {
@@ -34,6 +37,10 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   // final _currencyFormat = NumberFormat.currency(symbol: '€', decimalDigits: 0);
   Timer? _debounceTimer;
   final TextEditingController _searchController = TextEditingController();
+
+  String _selectedAlertType = 'ALL';
+  bool _onlyWithAlerts = false;
+  List<String>? _clientsWithAlertsCodes;
 
   List<Map<String, dynamic>> _availableVendors = [];
   String? _selectedVendorCode = ''; // Default to empty string (All) for Manager view, so it matches dropdown item
@@ -87,8 +94,23 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
         search: query,
       );
 
+      // Apply KPI Alerts filtering
+      List<Map<String, dynamic>> filteredResults = results;
+      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+        final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
+          vendedorCodes: codesToPass,
+          type: _selectedAlertType,
+        );
+        
+        final codesSet = alertCodes.toSet();
+        filteredResults = results.where((c) {
+          final code = c['code']?.toString() ?? '';
+          return codesSet.contains(code);
+        }).toList();
+      }
+
       setState(() {
-        _clients = results;
+        _clients = filteredResults;
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
@@ -271,23 +293,24 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
 
         // Header & Filters
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
           child: Column(
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.people, color: AppTheme.neonGreen, size: 28),
-                  const SizedBox(width: 12),
-                  Text('Clientes', style: Theme.of(context).textTheme.headlineMedium),
-                  const Spacer(),
-                  Text(
-                    '${_clients.length} clientes',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.textSecondary,
+              if (!Responsive.isLandscapeCompact(context))
+                Row(
+                  children: [
+                    Icon(Icons.people, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 22, desktop: 28)),
+                    const SizedBox(width: 12),
+                    Text('Clientes', style: Theme.of(context).textTheme.headlineMedium),
+                    const Spacer(),
+                    Text(
+                      '${_clients.length} clientes',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
               if (widget.isJefeVentas) ...[
                  const SizedBox(height: 12),
                  GlobalVendorSelector(
@@ -302,9 +325,12 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
           ),
         ),
 
+        // KPI Filters Bar
+        _buildKpiFilters(),
+
         // Search Bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16)),
           child: TextField(
             decoration: InputDecoration(
               hintText: 'Buscar cliente, NIF, Ciudad, Código...',
@@ -334,7 +360,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   Widget _buildContent() {
     if (_isLoading) {
       return Padding(
-        padding: const EdgeInsets.all(40.0),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 24, large: 40)),
         child: ModernLoading(message: 'Cargando cartera de clientes...'),
       );
     }
@@ -378,7 +404,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
     return RefreshIndicator(
       onRefresh: () => _loadClients(query: _searchQuery),
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16)),
         itemCount: _clients.length,
         itemBuilder: (context, index) {
           final client = _clients[index];
@@ -389,6 +415,111 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
             onWhatsAppTap: () => _openWhatsApp(client),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildKpiFilters() {
+    final alertTypes = {
+      'ALL': 'Todas las Alertas',
+      'DESVIACION_VENTAS': 'Ventas vs Objetivo',
+      'CUOTA_SIN_COMPRA': 'Sin Compras',
+      'DESVIACION_REFERENCIACION': 'Productos Pendientes',
+      'PROMOCION': 'Promociones',
+      'ALTA_CLIENTE': 'Cliente Nuevo',
+      'AVISO': 'Avisos',
+      'MEDIOS_CLIENTE': 'Equipamiento',
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _selectedAlertType != 'ALL' ? AppTheme.neonPink : AppTheme.borderColor,
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedAlertType,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceColor,
+                      icon: const Icon(Icons.filter_list, size: 20),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _selectedAlertType != 'ALL' ? AppTheme.neonPink : AppTheme.textPrimary,
+                        fontWeight: _selectedAlertType != 'ALL' ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      items: alertTypes.entries.map((e) => DropdownMenuItem(
+                        value: e.key,
+                        child: Text(e.value),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedAlertType = value);
+                          _loadClients(query: _searchQuery);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilterChip(
+                label: const Text('Con Alertas'),
+                selected: _onlyWithAlerts,
+                selectedColor: AppTheme.neonPink.withOpacity(0.2),
+                checkmarkColor: AppTheme.neonPink,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  color: _onlyWithAlerts ? AppTheme.neonPink : AppTheme.textSecondary,
+                  fontWeight: _onlyWithAlerts ? FontWeight.bold : FontWeight.normal,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: _onlyWithAlerts ? AppTheme.neonPink : AppTheme.borderColor,
+                  ),
+                ),
+                onSelected: (val) {
+                  setState(() => _onlyWithAlerts = val);
+                  _loadClients(query: _searchQuery);
+                },
+              ),
+            ],
+          ),
+          if (_selectedAlertType != 'ALL' || _onlyWithAlerts)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 4),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedAlertType = 'ALL';
+                    _onlyWithAlerts = false;
+                  });
+                  _loadClients(query: _searchQuery);
+                },
+                child: const Text(
+                  'Limpiar filtros KPI',
+                  style: TextStyle(
+                    color: AppTheme.neonPink,
+                    fontSize: 11,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -413,6 +544,10 @@ class _ClientCard extends StatelessWidget {
     final numOrders = (client['numOrders'] as int?) ?? 0;
     final lastPurchase = (client['lastPurchase'] as String?) ?? '';
 
+    final avatarRadius = Responsive.value(context, phone: 20, desktop: 28);
+    final avatarFontSize = Responsive.fontSize(context, small: 15, large: 20);
+    final cardPadding = Responsive.padding(context, small: 12, large: 16);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       color: AppTheme.surfaceColor,
@@ -420,7 +555,7 @@ class _ClientCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(cardPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -429,14 +564,14 @@ class _ClientCard extends StatelessWidget {
                 children: [
                   // Avatar
                   CircleAvatar(
-                    radius: 28,
+                    radius: avatarRadius,
                     backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppTheme.neonGreen,
                         fontWeight: FontWeight.bold,
-                        fontSize: 20,
+                        fontSize: avatarFontSize,
                       ),
                     ),
                   ),
@@ -555,6 +690,10 @@ class _ClientCard extends StatelessWidget {
                 ],
               ),
               
+              // KPI Glacius badges
+              if (code.isNotEmpty)
+                ClientAlertsWidget(clientId: code, compact: true),
+
               // Route & Days Badges
               _buildRouteDaysRow(),
             ],

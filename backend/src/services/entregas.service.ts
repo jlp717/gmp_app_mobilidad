@@ -71,6 +71,8 @@ export interface ActualizarEntregaParams {
 // SERVICIO
 // ============================================
 
+import cobrosService from './cobros.service';
+
 class EntregasService {
     private uploadsPath: string;
 
@@ -108,7 +110,13 @@ class EntregasService {
 
             const whereClause = `CAC.ANODOCUMENTO = YEAR(CURRENT_DATE)
           AND CAC.MESDOCUMENTO = MONTH(CURRENT_DATE)
-          AND CAC.DIADOCUMENTO = DAY(CURRENT_DATE)`;
+          AND CAC.DIADOCUMENTO = DAY(CURRENT_DATE)
+          -- Excluir si ya se ha registrado cobro en nuestra tabla (local)
+          AND NOT EXISTS (
+            SELECT 1 FROM JAVIER.COBROS JC 
+            WHERE JC.CODIGO_CLIENTE = CAC.CODIGOCLIENTEFACTURA 
+              AND JC.REFERENCIA LIKE '%' || CAST(CAC.NUMEROALBARAN AS VARCHAR(20)) || '%'
+          )`;
 
             const dataSql = `
         SELECT
@@ -280,6 +288,31 @@ class EntregasService {
             if (params.firma) {
                 const firmaPath = await this.guardarFirma(registroId, params.firma);
                 await this.registrarDocumento(registroId, 'FIRMA', firmaPath);
+            }
+
+            // Si es UNA ENTREGA completa y es CTR (con cobro), registrar también en JAVIER.COBROS
+            // para que el comercial sepa que ya está cobrado y no le salga en su lista
+            if (params.status === 'ENTREGADO') {
+                const parts = params.itemId.split('-');
+                if (parts.length === 3) {
+                   const ejercicio = parseInt(parts[0]);
+                   const numero = parseInt(parts[2]);
+                   const albaran = await this.obtenerAlbaran(numero, ejercicio);
+                   
+                   if (albaran && albaran.esCTR) {
+                       await cobrosService.registrarCobro({
+                           codigoCliente: albaran.codigoCliente,
+                           referencia: albaran.numeroAlbaran.toString(),
+                           importe: albaran.importeTotal,
+                           formaPago: albaran.formaPago || 'CTR',
+                           tipoUsuario: 'REPARTIDOR',
+                           codigoUsuario: params.repartidorId,
+                           tipoVenta: 'CC', // Default for delivery collections
+                           tipoModo: 'NORMAL',
+                           observaciones: `Cobro automático en entrega: ${params.observaciones || ''}`
+                       });
+                   }
+                }
             }
 
             logger.info(`[ENTREGAS] Entrega registrada: ${registroId}`);

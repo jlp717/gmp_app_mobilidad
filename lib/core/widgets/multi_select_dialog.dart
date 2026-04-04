@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 import 'dart:async';
 
 class MultiSelectDialog<T> extends StatefulWidget {
@@ -80,7 +81,10 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
       backgroundColor: AppTheme.surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+        constraints: BoxConstraints(
+          maxWidth: Responsive.clampWidth(context, 400),
+          maxHeight: Responsive.clampHeight(context, 600),
+        ),
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,

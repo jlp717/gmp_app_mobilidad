@@ -40,19 +40,9 @@ class Factura {
     final double serverTotal = (json['total'] is num ? (json['total'] as num).toDouble() : double.tryParse(json['total']?.toString() ?? '0') ?? 0.0);
     final double base = (json['base'] is num ? (json['base'] as num).toDouble() : double.tryParse(json['base']?.toString() ?? '0') ?? 0.0);
     final double iva = (json['iva'] is num ? (json['iva'] as num).toDouble() : double.tryParse(json['iva']?.toString() ?? '0') ?? 0.0);
-    
-    // SENIOR MATH LOGIC: If total != base + iva, trust the sum if the difference is significant
-    // but also consider multi-base invoices where the list only shows one base.
-    // However, the user complained about a specific case (A-868) where 147.45 + 14.75 != 249.10.
-    // If (base + iva) accurately reflects the invoice, we should show it.
-    // For now, if serverTotal is much larger and base/iva are small, it might be missing other bases.
-    // But if they are the ONLY things shown, it's confusing.
-    // RULE: If total is not base+iva, we prioritize the sum if base+iva > 0.
+    // We trust the total from the server since multi-base invoices
+    // might not expose all bases in the list view.
     double finalTotal = serverTotal;
-    if (base > 0 && (base + iva - serverTotal).abs() > 0.05) {
-       // Only override if the server total seems completely disconnected from the base shown
-       finalTotal = base + iva;
-    }
 
     return Factura(
       id: json['id']?.toString() ?? '',
@@ -506,7 +496,9 @@ class FacturasService {
   static Future<File> downloadFacturaPdf(String serie, int numero, int ejercicio) async {
     try {
       // Use ApiClient to get bytes directly - authentication is handled automatically
-      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf');
+      // FIX: Add timestamp to bust Dio HTTP cache on repeated downloads
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?_t=$ts');
 
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/Factura_${serie}_${numero}_${ejercicio}.pdf');
@@ -521,7 +513,10 @@ class FacturasService {
   /// Download PDF as raw bytes (for in-app preview)
   static Future<List<int>> downloadFacturaPdfBytes(String serie, int numero, int ejercicio) async {
     try {
-      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?preview=true');
+      // FIX: Add timestamp to bust Dio HTTP cache — without this, second request
+      // returns cached response and PDF appears blank/corrupted on re-open
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?preview=true&_t=$ts');
       return bytes;
     } catch (e) {
       debugPrint('Error downloading PDF bytes: $e');

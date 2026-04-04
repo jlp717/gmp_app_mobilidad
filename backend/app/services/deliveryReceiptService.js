@@ -11,7 +11,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../../middleware/logger');
-const { query } = require('../../config/db');
+const { query, queryWithParams } = require('../../config/db');
 
 // Directorio para almacenar recibos temporales
 const receiptsDir = path.join(__dirname, '../../uploads/receipts');
@@ -52,15 +52,15 @@ async function getAlbaranLines(ejercicio, serie, terminal, numero) {
             LAC.IMPORTEVENTA as IMPORTE,
             TRIM(LAC.CODIGOIVA) as COD_IVA
         FROM DSEDAC.LAC LAC
-        WHERE LAC.EJERCICIOALBARAN = ${ejercicio}
-          AND TRIM(LAC.SERIEALBARAN) = '${serie}'
-          AND LAC.TERMINALALBARAN = ${terminal}
-          AND LAC.NUMEROALBARAN = ${numero}
+        WHERE LAC.EJERCICIOALBARAN = ?
+          AND TRIM(LAC.SERIEALBARAN) = ?
+          AND LAC.TERMINALALBARAN = ?
+          AND LAC.NUMEROALBARAN = ?
           AND TRIM(LAC.TIPOLINEA) != 'T'
           AND TRIM(LAC.CODIGOARTICULO) != ''
         ORDER BY LAC.SECUENCIA
     `;
-    return await query(sql, false);
+    return await queryWithParams(sql, [ejercicio, serie, terminal, numero]);
 }
 
 /**
@@ -78,13 +78,13 @@ async function getAlbaranHeader(ejercicio, serie, terminal, numero) {
             TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
             DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
         FROM DSEDAC.CPC
-        WHERE EJERCICIOALBARAN = ${ejercicio}
-          AND TRIM(SERIEALBARAN) = '${serie}'
-          AND TERMINALALBARAN = ${terminal}
-          AND NUMEROALBARAN = ${numero}
+        WHERE EJERCICIOALBARAN = ?
+          AND TRIM(SERIEALBARAN) = ?
+          AND TERMINALALBARAN = ?
+          AND NUMEROALBARAN = ?
         FETCH FIRST 1 ROWS ONLY
     `;
-    const rows = await query(sql, false);
+    const rows = await queryWithParams(sql, [ejercicio, serie, terminal, numero]);
     return rows[0] || null;
 }
 
@@ -143,9 +143,10 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
         ejercicio, serie, terminal, numero,
         albaranNum, facturaNum,
         clientCode, clientName,
-        fecha, formaPago, repartidor,
+        fecha, formaPago, repartidor, ordenPreparacion,
         signatureBase64: inputSigBase64,
-        firmante: inputFirmante
+        firmante: inputFirmante,
+        firmanteDni: inputFirmanteDni
     } = deliveryData;
 
     // Intentar obtener líneas de la BD
@@ -230,12 +231,12 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
     return new Promise((resolve, reject) => {
         try {
             // Calcular altura dinámica con más espacio para cada elemento
-            const lineHeight = 11; // More spacing between product lines
-            const headerHeight = 120;
-            const footerHeight = hasSignature ? 150 : 70; // More space for signature
+            const lineHeight = 12; // More spacing between product lines
+            const headerHeight = 135;
+            const footerHeight = hasSignature ? 150 : 80; // More space for signature
             const ivaGroups = Object.keys(gruposIVA).length;
             const minHeight = headerHeight + (lines.length * lineHeight) + (ivaGroups * 14) + footerHeight + 100;
-            const docHeight = Math.max(400, Math.min(900, minHeight));
+            const docHeight = Math.max(300, Math.min(1200, minHeight));
 
             const doc = new PDFDocument({
                 size: [226, docHeight],
@@ -270,7 +271,7 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
 
             // ═══════════════ TIPO DOCUMENTO + NÚMERO ═══════════════
             const docType = facturaNum ? 'FACTURA' : 'ALBARÁN';
-            const docNum = facturaNum || albaranNum || `${ejercicio}/${serie}${String(terminal).padStart(2, '0')}/${numero}`;
+            const docNum = facturaNum ? `${facturaNum}` : (albaranNum || `${serie}-${terminal}-${numero}`);
 
             doc.fontSize(11).font('Helvetica-Bold')
                 .text(`${docType}: ${docNum}`, L, doc.y, { width: W, align: 'center' });
@@ -278,6 +279,12 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             const fechaStr = fecha || (header ? `${String(header.DIADOCUMENTO).padStart(2, '0')}/${String(header.MESDOCUMENTO).padStart(2, '0')}/${header.ANODOCUMENTO}` : '');
             doc.fontSize(7).font('Helvetica')
                 .text(`Fecha: ${fechaStr}`, { align: 'center' });
+
+            const ordenPrep = ordenPreparacion || (header ? header.ORDEN_PREPARACION : null);
+            if (ordenPrep) {
+                doc.fontSize(6.5).font('Helvetica')
+                    .text(`Orden de preparación: ${ordenPrep}`, { align: 'center' });
+            }
 
             doc.moveDown(0.3);
 
@@ -359,28 +366,31 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             doc.moveDown(0.4);
 
             // ═══════════════ TOTALES ═══════════════
-            const totLabelX = L + 90;
-            const totValX = L + 165;
-            const totW = 38;
+            const totLabelX = L + 80;
+            const totValX = L + 155;
+            const totValW = 55;
 
             // Bultos total
+            let currentY = doc.y;
             doc.fontSize(6).font('Helvetica')
-                .text('Bultos:', totLabelX, doc.y, { width: 70 })
-                .text(String(totalBultos || header?.NUMEROBULTOS || 0), totValX, doc.y - 7, { width: totW, align: 'right' });
-            doc.moveDown(0.3);
+                .text('Bultos:', totLabelX, currentY, { width: 70 });
+            doc.text(String(totalBultos || header?.NUMEROBULTOS || 0), totValX, currentY, { width: totValW, align: 'right' });
+            doc.y = currentY + 9;
 
             // Importe Neto (base imponible)
-            doc.text('Importe Neto:', totLabelX, doc.y, { width: 70 })
-                .text(fmt(baseImponible) + ' €', totValX, doc.y - 7, { width: totW, align: 'right' });
-            doc.moveDown(0.3);
+            currentY = doc.y;
+            doc.text('Importe Neto:', totLabelX, currentY, { width: 70 });
+            doc.text(fmt(baseImponible) + ' €', totValX, currentY, { width: totValW, align: 'right' });
+            doc.y = currentY + 9;
 
             // Desglose IVA por tipo
             const sortedIva = Object.entries(gruposIVA).sort((a, b) => Number(a[0]) - Number(b[0]));
             sortedIva.forEach(([pct, data]) => {
                 if (data.base > 0) {
-                    doc.text(`IVA ${pct}%:`, totLabelX, doc.y, { width: 70 })
-                        .text(fmt(data.iva) + ' €', totValX, doc.y - 7, { width: totW, align: 'right' });
-                    doc.moveDown(0.2);
+                    currentY = doc.y;
+                    doc.text(`IVA ${pct}%:`, totLabelX, currentY, { width: 70 });
+                    doc.text(fmt(data.iva) + ' €', totValX, currentY, { width: totValW, align: 'right' });
+                    doc.y = currentY + 8;
                 }
             });
             doc.moveDown(0.2);
@@ -388,13 +398,14 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
             // TOTAL - línea separadora + total destacado
             doc.strokeColor('#000').lineWidth(0.5)
                 .moveTo(totLabelX, doc.y).lineTo(L + W, doc.y).stroke();
-            doc.moveDown(0.3);
+            doc.moveDown(0.4);
 
+            currentY = doc.y;
             doc.font('Helvetica-Bold').fontSize(10)
-                .text('TOTAL:', totLabelX, doc.y, { width: 65 })
-                .text(fmt(importeTotal) + ' €', totValX, doc.y - 11, { width: totW, align: 'right' });
+                .text('TOTAL:', totLabelX, currentY, { width: 65 });
+            doc.text(fmt(importeTotal) + ' €', totValX, currentY, { width: totValW, align: 'right' });
 
-            doc.moveDown(0.6);
+            doc.y = currentY + 12;
 
             // ═══════════════ FIRMA DEL CLIENTE ═══════════════
             if (hasSignature) {
@@ -423,10 +434,14 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
                     doc.moveDown(0.5);
                 }
 
-                // Firmante name and date
+                // Firmante name, DNI and date
                 if (inputFirmante) {
                     doc.fontSize(5.5).font('Helvetica')
                         .text(`Firmante: ${inputFirmante}`, { align: 'center' });
+                }
+                if (inputFirmanteDni) {
+                    doc.fontSize(5).font('Helvetica')
+                        .text(`DNI/NIF: ${inputFirmanteDni}`, { align: 'center' });
                 }
 
                 const now = new Date();
@@ -441,14 +456,15 @@ async function generateDeliveryReceipt(deliveryData, signaturePath) {
                 .moveTo(L, doc.y).lineTo(L + W, doc.y).stroke();
             doc.moveDown(0.3);
 
-            doc.fontSize(4.5).font('Helvetica')
+            doc.fontSize(5).font('Helvetica')
                 .text('La posesión de este documento NO implica el pago de la misma', { align: 'center' })
                 .text('No se admiten devoluciones una vez aceptada la recepción', { align: 'center' });
 
             if (repartidor) {
+                const cleanRepartidor = repartidor.replace(/^\d+\s+/, '').trim();
                 doc.moveDown(0.2)
                     .fontSize(5.5).font('Helvetica')
-                    .text(`Entregado por: ${repartidor}`, { align: 'center' });
+                    .text(`Entregado por: ${cleanRepartidor}`, { align: 'center' });
             }
 
             doc.end();

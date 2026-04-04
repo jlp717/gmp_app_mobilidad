@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Widget para capturar firma del cliente
 class SignaturePad extends StatefulWidget {
@@ -20,15 +21,15 @@ class _SignaturePadState extends State<SignaturePad> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.5,
-      padding: const EdgeInsets.all(16),
+      height: Responsive.modalHeight(context, portraitFraction: 0.5, landscapeFraction: 0.8),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Header
           Row(
             children: [
-              const Icon(Icons.draw, size: 24),
+              Icon(Icons.draw, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(

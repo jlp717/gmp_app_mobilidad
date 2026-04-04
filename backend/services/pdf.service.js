@@ -170,6 +170,16 @@ async function generateInvoicePDF(facturaData) {
         const header = facturaData.header || {};
         const lines = facturaData.lines || [];
 
+        // AUDIT FIX: Guard against corrupted/sentinel data
+        const totalCheck = parseFloat(header.total) || 0;
+        if (Math.abs(totalCheck) >= 900000) {
+            logger.warn(`⚠️ PDF blocked: sentinel total ${totalCheck} for ${header.serie}-${header.numero}`);
+            throw new Error('Factura con datos anómalos — importe no válido');
+        }
+        if (!header.numero || !header.serie) {
+            throw new Error('Factura sin número o serie — datos incompletos');
+        }
+
         logger.info(`📄 Generando PDF factura - Diseño Profesional v2.0 para ${header.serie}-${header.numero}`);
 
         return new Promise((resolve, reject) => {

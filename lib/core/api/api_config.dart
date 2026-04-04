@@ -1,118 +1,149 @@
 import '../services/network_service.dart';
+import 'package:flutter/foundation.dart';
 
 /// API Configuration and Constants
-/// Ahora usa NetworkService para detección automática de servidor
-enum ApiEnvironment { development, production, autoDetect }
+/// 
+/// ARQUITECTURA PROFESIONAL PARA PRODUCCIÓN:
+/// - La app se usa desde CUALQUIER LUGAR (rutas de reparto, oficinas, etc.)
+/// - SIEMPRE usa https://api.mari-pepa.com en producción
+/// - Solo en desarrollo se permite LAN/local
+enum ApiEnvironment { 
+  development,  // Solo para debugging en oficina
+  production,   // Para todos los comerciales (default)
+}
 
 class ApiConfig {
   // =============================================================================
-  // ENVIRONMENT CONFIGURATION - SENIOR ARCHITECTURE
+  // CONFIGURACIÓN POR DEFECTO: PRODUCCIÓN (HARDCODED)
   // =============================================================================
-  
-  // MODO AUTOMÁTICO: Detecta el mejor servidor disponible
-  // Soporta: Producción, LAN, Emulador, WSA (Windows Subsystem for Android)
-  static ApiEnvironment _currentEnvironment = ApiEnvironment.autoDetect;
-  
-  // -----------------------------------------------------------------------------
-  // 1. DESARROLLO (WiFi Local)
-  static String _developmentIp = '127.0.0.1';
-  static const int _serverPort = 3000;
+  // Los comerciales usan la app desde CUALQUIER LUGAR → SIEMPRE producción
+  static ApiEnvironment _currentEnvironment = ApiEnvironment.production;
 
   // -----------------------------------------------------------------------------
-  // 2. PRODUCCION (Cloudflare Tunnel)
-  static String _productionUrl = 'https://retailers-oct-dale-shows.trycloudflare.com'; 
+  // PRODUCCION (Cloudflare Named Tunnel — dominio fijo permanente)
+  // Accesible desde cualquier lugar con internet
+  // -----------------------------------------------------------------------------
+  static String _productionUrl = 'https://api.mari-pepa.com/api'; // YA incluye /api
+  static const int _serverPort = 3334;
 
+  // -----------------------------------------------------------------------------
+  // DESARROLLO (solo para testing en oficina)
+  // -----------------------------------------------------------------------------
+  static String _developmentIp = '192.168.1.52';
+
+  // =============================================================================
+  // MÉTODOS PÚBLICOS
   // =============================================================================
 
   /// Indica si el servicio de red está inicializado
   static bool get isNetworkReady => NetworkService.isInitialized;
 
-  /// Inicializa la configuración de red (detecta servidor automáticamente)
+  /// Inicializa la configuración de red
+  /// En producción: Usa directamente api.mari-pepa.com
+  /// En desarrollo: Detecta automáticamente
   static Future<void> initialize() async {
-    if (_currentEnvironment == ApiEnvironment.autoDetect) {
+    if (_currentEnvironment == ApiEnvironment.production) {
+      // PRODUCCIÓN: Usar directamente el dominio
+      print('🚀 [ApiConfig] PRODUCCIÓN: $_productionUrl');
+    } else {
+      // DESARROLLO: Detectar servidor
       await NetworkService.initialize();
+      print('🚀 [ApiConfig] DESARROLLO: ${NetworkService.activeBaseUrl}');
     }
   }
 
   /// Obtiene la URL base activa
   static String get baseUrl {
-    switch (_currentEnvironment) {
-      case ApiEnvironment.autoDetect:
-        // Usar NetworkService para detección inteligente
-        return NetworkService.activeBaseUrl;
-      case ApiEnvironment.production:
-        return _productionUrl.endsWith('/api') ? _productionUrl : '$_productionUrl/api';
-      case ApiEnvironment.development:
-        return 'http://$_developmentIp:$_serverPort/api';
+    if (_currentEnvironment == ApiEnvironment.production) {
+      // Producción: URL hardcoded (ya incluye /api)
+      return _productionUrl;
     }
+    // Desarrollo: usar detección automática
+    return NetworkService.activeBaseUrl;
   }
 
-  /// Cambia el entorno en runtime
+  /// Cambia el entorno en runtime (solo para debugging)
   static void setEnvironment(ApiEnvironment env) {
     _currentEnvironment = env;
   }
 
-  /// Actualiza la URL de producción
+  /// Fuerza el uso de producción (útil para testing)
+  static void setProduction() {
+    _currentEnvironment = ApiEnvironment.production;
+  }
+
+  /// Fuerza el uso de desarrollo (útil para testing en oficina)
+  static void setDevelopment() {
+    _currentEnvironment = ApiEnvironment.development;
+  }
+
+  /// Obtiene diagnósticos de red
+  static Future<Map<String, dynamic>> getNetworkDiagnostics() async {
+    if (_currentEnvironment == ApiEnvironment.production) {
+      return {
+        'environment': 'production',
+        'baseUrl': baseUrl,
+        'isReady': true,
+      };
+    }
+    return await NetworkService.getDiagnostics();
+  }
+
+  /// Actualiza la URL de producción (solo si es necesario)
   static void setProductionUrl(String url) {
     _productionUrl = url;
   }
-  
-  /// Actualiza la IP de desarrollo
-  static void setDevelopmentIp(String ip) {
-    _developmentIp = ip;
-  }
 
-  /// Fuerza un servidor específico manualmente
-  static Future<bool> setServerManually(String baseUrl) async {
-    return await NetworkService.setServer(baseUrl);
-  }
-
-  /// Re-detecta el mejor servidor (útil cuando cambia la red)
+  /// Refresca la conexión (para cuando cambia la red)
   static Future<void> refreshConnection() async {
-    await NetworkService.refreshConnection();
+    await NetworkService.initialize();
   }
 
-  /// Obtiene diagnósticos de red para debugging
-  static Future<Map<String, dynamic>> getNetworkDiagnostics() async {
-    return await NetworkService.getDiagnostics();
+  /// Fuerza un servidor manualmente (solo debug)
+  static Future<bool> setServerManually(String baseUrl) async {
+    if (!kDebugMode) return false; // Solo en debug
+    // En producción, siempre usa productionUrl
+    return false;
   }
+
+  // =============================================================================
+  // ENDPOINTS DE LA API
+  // =============================================================================
   
-  // Alternativas para referencia
-  static const String emulatorUrl = 'http://10.0.2.2:3000/api';
-  static const String wsaUrl = 'http://172.31.192.1:3000/api';
-
-
   // Auth Endpoints
   static const String login = '/auth/login';
+  static const String refresh = '/auth/refresh';
+  static const String logout = '/auth/logout';
 
   // Dashboard Endpoints
   static const String dashboardMetrics = '/dashboard/metrics';
   static const String recentSales = '/dashboard/recent-sales';
   static const String salesEvolution = '/dashboard/sales-evolution';
   static const String yoyComparison = '/analytics/yoy-comparison';
+  static const String matrixData = '/dashboard/matrix-data';
 
   // Clients Endpoints
   static const String clientsList = '/clients';
   static const String clientDetail = '/clients';
-  static const String clientCompare = '/clients/compare';
-  static const String clientSalesHistory = '/clients';
 
   // Router (Rutero) Endpoints
   static const String routerCalendar = '/router/calendar';
   static const String ruteroWeek = '/rutero/week';
   static const String ruteroDay = '/rutero/day';
+  static const String ruteroConfig = '/rutero/config';
   static const String ruteroClientStatus = '/rutero/client';
   static const String ruteroClientDetail = '/rutero/client';
-  static const String ruteroConfig = '/rutero/config';
   static const String ruteroCounts = '/rutero/counts';
   static const String ruteroPositions = '/rutero/positions';
   static const String ruteroMoveClients = '/rutero/move_clients';
+  static const String ruteroVendedores = '/rutero/vendedores';
 
   // Objectives Endpoints
   static const String objectives = '/objectives';
   static const String objectivesByClient = '/objectives/by-client';
   static const String objectivesEvolution = '/objectives/evolution';
-  static const String clientMatrix = '/objectives/matrix';
+  static const String clientMatrix = '/objectives/matrix'; // Backend usa /matrix, no /client-matrix
+  static const String objectivesPopulations = '/objectives/populations';
 
   // Analytics Endpoints
   static const String topProducts = '/analytics/top-products';
@@ -127,22 +158,54 @@ class ApiConfig {
   // Vendedores Endpoints
   static const String vendedores = '/vendedores';
 
+  // Pedidos Endpoints
+  static const String pedidosList = '/pedidos';
+  static const String pedidosCreate = '/pedidos/create';
+  static const String pedidosProducts = '/pedidos/products';
+  static const String pedidosRecommendations = '/pedidos/recommendations';
+  static const String pedidosPromotions = '/pedidos/promotions';
+  static const String pedidosClientBalance = '/pedidos/client-balance';
+  static const String pedidosFamilies = '/pedidos/families';
+  static const String pedidosBrands = '/pedidos/brands';
+
+  // Commissions Endpoints
+  static const String commissionsSummary = '/commissions/summary';
+  static const String commissionsYears = '/commissions/years';
+
+  // KPI Alerts Endpoints
+  static const String kpiAlerts = '/kpi/alerts';
+  static const String kpiDashboard = '/kpi/dashboard';
+  static const String kpiEtl = '/kpi/etl';
+  static const String kpiHealth = '/kpi/health';
+
+  // Facturas Endpoints
+  static const String facturasList = '/facturas';
+  static const String facturasYears = '/facturas/years';
+  static const String facturasSummary = '/facturas/summary';
+
   // Export Endpoints
   static const String exportClientReport = '/export/client-report';
 
   // Health Check
   static const String health = '/health';
+  static const String healthVersionCheck = '/health/version-check';
 
-  // Timeouts
+  // =============================================================================
+  // TIMEOUTS
+  // =============================================================================
   static const Duration connectTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 30);
+  static const Duration receiveTimeout = Duration(seconds: 60); // Más largo para producción
 
-  // Date range for data filtering (Dynamic: Current and prev 2 years)
+  // =============================================================================
+  // DATE RANGE
+  // =============================================================================
   static int get currentYear => DateTime.now().year;
   static int get minYear => currentYear - 2;
   static List<int> get availableYears => [currentYear, currentYear - 1, currentYear - 2];
 
-  // Pagination defaults
+  // =============================================================================
+  // PAGINATION
+  // =============================================================================
   static const int defaultPageSize = 50;
   static const int maxPageSize = 200;
 }

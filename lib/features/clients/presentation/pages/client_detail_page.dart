@@ -4,10 +4,12 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/modern_loading.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/clients_service.dart';
 import '../../../sales_history/presentation/widgets/sales_summary_header.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 
 /// Client Detail Page - Shows comprehensive client information from DB2
 class ClientDetailPage extends StatefulWidget {
@@ -126,7 +128,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
       children: [
         // Client Header Card
         _buildClientHeader(client, summary, payments),
-        
+
+        // KPI Alerts
+        ClientAlertsWidget(clientId: widget.clientCode),
+
         // Tab Bar
         Container(
           color: AppTheme.surfaceColor,
@@ -169,86 +174,89 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16), vertical: Responsive.padding(context, small: 6, large: 8)),
       color: AppTheme.surfaceColor,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Editable Notes Banner (if exists)
-          if (editableNotes != null && editableNotes['text'] != null && (editableNotes['text'] as String).isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.warning.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning.withOpacity(0.5)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          editableNotes['text'] as String,
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
-                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 18, color: AppTheme.warning),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _showEditNotesDialog(code, editableNotes['text'] as String?),
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
-            // Show add notes button if no notes
-            InkWell(
-              onTap: () => _showEditNotesDialog(code, null),
-              child: Container(
+          // Editable Notes Banner (if exists and not compact landscape)
+          if (!Responsive.isLandscapeCompact(context)) ...[
+            if (editableNotes != null && editableNotes['text'] != null && (editableNotes['text'] as String).isNotEmpty) ...[
+              Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.1),
+                  color: AppTheme.warning.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                  border: Border.all(color: AppTheme.warning.withOpacity(0.5)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
-                    const SizedBox(width: 6),
-                    const Text('Añadir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                    const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            editableNotes['text'] as String,
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
+                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit, size: 18, color: AppTheme.warning),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _showEditNotesDialog(code, editableNotes['text'] as String?),
+                    ),
                   ],
                 ),
               ),
-            ),
+            ] else ...[
+              // Show add notes button if no notes
+              InkWell(
+                onTap: () => _showEditNotesDialog(code, null),
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonBlue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
+                      const SizedBox(width: 6),
+                      const Text('Añadir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
           
           Row(
             children: [
               CircleAvatar(
-                radius: 20,
+                radius: Responsive.value(context, phone: 16, desktop: 20),
                 backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                  style: const TextStyle(color: AppTheme.neonGreen, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppTheme.neonGreen, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 12),
@@ -263,17 +271,20 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                       overflow: TextOverflow.ellipsis
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      'Cód: $code ${nif.isNotEmpty ? ' • NIF: $nif' : ''}', 
-                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)
-                    ),
+                    if (!Responsive.isLandscapeCompact(context))
+                      Text(
+                        'Cód: $code ${nif.isNotEmpty ? ' • NIF: $nif' : ''}', 
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)
+                      )
+                    else
+                      Text('Cód: $code', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
               // WhatsApp Button
               if (phones.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.chat, size: 20, color: Color(0xFF25D366)), // WhatsApp green
+                  icon: Icon(Icons.chat, size: Responsive.iconSize(context, phone: 18, desktop: 20), color: const Color(0xFF25D366)), // WhatsApp green
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _showWhatsAppDialog(phones),
@@ -282,14 +293,14 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               const SizedBox(width: 8),
               if (phone.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.phone, size: 20, color: AppTheme.success),
+                  icon: Icon(Icons.phone, size: Responsive.iconSize(context, phone: 18, desktop: 20), color: AppTheme.success),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _launchPhone(phone),
                 ),
             ],
           ),
-          if (address.isNotEmpty || city.isNotEmpty) ...[
+          if (!Responsive.isLandscapeCompact(context) && (address.isNotEmpty || city.isNotEmpty)) ...[
             const SizedBox(height: 4),
             Row(
               children: [
@@ -325,7 +336,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     
     return Row(
       children: [
-        const SizedBox(width: 52), // Align with avatar
+        SizedBox(width: Responsive.value(context, phone: 44, desktop: 52)), // Align with avatar
         // Route Badge
         if (route.isNotEmpty) ...[
           Container(
@@ -510,7 +521,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final pendingCount = (payments['pendingCount'] as num?)?.toInt() ?? 0;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -545,7 +556,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
           // Payment Status
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
             decoration: AppTheme.glassMorphism(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -555,7 +566,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   children: [
                     Text('Estado de Pagos', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                     Icon(pendingCount > 0 ? Icons.warning_amber : Icons.check_circle, 
-                         color: pendingCount > 0 ? AppTheme.warning : AppTheme.success),
+                         color: pendingCount > 0 ? AppTheme.warning : AppTheme.success,
+                         size: Responsive.iconSize(context, phone: 20, desktop: 24)),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -592,8 +604,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             Text('Evolución Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Container(
-              height: 200,
-              padding: const EdgeInsets.all(16),
+              height: Responsive.value(context, phone: 150, desktop: 200),
+              padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
               decoration: AppTheme.glassMorphism(),
               child: _buildTrendChart(monthlyTrend),
             ),
@@ -659,7 +671,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       itemCount: topProducts.length,
       itemBuilder: (context, index) {
         final product = topProducts[index];

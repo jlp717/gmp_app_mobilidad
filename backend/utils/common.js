@@ -7,6 +7,67 @@ const getCurrentYear = () => getCurrentDate().getFullYear();
 const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 
 // =============================================================================
+// VENDOR COLUMN FEATURE FLAG (with transition date logic)
+// =============================================================================
+// VENDOR_COLUMN controls which DB2 column is used for vendor filtering:
+//   LCCDVD    = "Quién vendió" (lógica actual de producción)
+//   R1_T8CDVD = "Quién tiene el cliente asignado" (nueva lógica 2026)
+//
+// Set via environment variable. Default: LCCDVD (backward compatible)
+//
+// TRANSITION: From March 2026, use R1_T8CDVD. Jan/Feb 2026 and prior
+// always use LCCDVD so historical data remains unchanged.
+const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'LCCDVD';
+const TRANSITION_YEAR = 2026;
+const TRANSITION_MONTH = 3; // March 2026: new logic starts here
+
+/**
+ * Get the vendor column to use based on the target date.
+ * - Production (LCCDVD env or default): always returns LCCDVD
+ * - New logic (R1_T8CDVD env): returns LCCDVD for dates before March 2026,
+ *   R1_T8CDVD from March 2026 onwards.
+ * @param {number} [year] - Target year (defaults to current)
+ * @param {number} [month] - Target month 1-12 (defaults to current)
+ * @returns {string} 'LCCDVD' or 'R1_T8CDVD'
+ */
+function getVendorColumn(year, month) {
+    if (VENDOR_COLUMN === 'LCCDVD') return 'LCCDVD';
+
+    const now = getCurrentDate();
+    const y = parseInt(year) || now.getFullYear();
+    const m = parseInt(month) || (now.getMonth() + 1);
+
+    if (y < TRANSITION_YEAR || (y === TRANSITION_YEAR && m < TRANSITION_MONTH)) {
+        return 'LCCDVD';
+    }
+
+    return VENDOR_COLUMN; // R1_T8CDVD
+}
+
+/**
+ * Build a CASE expression that returns the correct vendor column per row,
+ * handling the LCCDVD → R1_T8CDVD transition at TRANSITION_MONTH/TRANSITION_YEAR.
+ * Use in SELECT and GROUP BY for multi-year queries on DSED.LACLAE.
+ * 
+ * IMPORTANT: For DSEDAC.LAC table, pass { forLACTable: true } because LAC does NOT
+ * have the R1_T8CDVD column. DB2 validates all column references at parse time,
+ * so even CASE branches that never execute will cause -205 if the column is missing.
+ * 
+ * @param {string} tableAlias - SQL table alias (default 'L')
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.forLACTable=false] - If true, always use LCCDVD (for DSEDAC.LAC which lacks R1_T8CDVD)
+ * @returns {string} SQL CASE expression or simple column reference
+ */
+function getVendorColumnExpr(tableAlias = 'L', { forLACTable = false } = {}) {
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+    if (VENDOR_COLUMN === 'LCCDVD' || forLACTable) return `${prefix}LCCDVD`;
+    // Multi-month transition: rows before March 2026 use LCCDVD, from March 2026+ use R1_T8CDVD
+    return `CASE WHEN ${prefix}LCAADC < ${TRANSITION_YEAR} OR (${prefix}LCAADC = ${TRANSITION_YEAR} AND ${prefix}LCMMDC < ${TRANSITION_MONTH}) THEN ${prefix}LCCDVD ELSE ${prefix}${VENDOR_COLUMN} END`;
+}
+
+logger.info(`[CONFIG] VENDOR_COLUMN = ${VENDOR_COLUMN} (transition: ${TRANSITION_MONTH}/${TRANSITION_YEAR})`);
+
+// =============================================================================
 // SALES FILTER CONSTANTS
 // =============================================================================
 // SALES FILTERS (GOLDEN DATA ALIGNMENT)
@@ -129,10 +190,12 @@ function buildDateFilter(yearParam, monthParam, tableAlias = '') {
     return { year, month, filter: `AND ${prefix}ANODOCUMENTO >= ${MIN_YEAR}` };
 }
 
-// Vendor filter for LACLAE table (uses short column name LCCDVD)
-function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
+// Vendor filter for LACLAE table
+// Uses getVendorColumn(year, month) for date-aware column selection
+function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L', year, month) {
     if (!vendedorCodes || vendedorCodes === 'ALL') return '';
     const prefix = tableAlias ? `${tableAlias}.` : '';
+    const col = getVendorColumn(year, month);
 
     const codeList = vendedorCodes.split(',').map(c => c.trim());
     const hasUnk = codeList.includes('UNK');
@@ -146,12 +209,10 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
 
     const conditions = [];
     if (validCodes.length > 0) {
-        // PERF: Removed TRIM() - DB2 CHAR comparison handles trailing spaces automatically
-        // This allows DB2 to use indexes on LCCDVD column
-        conditions.push(`${prefix}LCCDVD IN (${validCodes})`);
+        conditions.push(`${prefix}${col} IN (${validCodes})`);
     }
     if (hasUnk) {
-        conditions.push(`(${prefix}LCCDVD IS NULL OR ${prefix}LCCDVD = '')`);
+        conditions.push(`(${prefix}${col} IS NULL OR ${prefix}${col} = '')`);
     }
 
     if (conditions.length === 0) return 'AND 1=0';
@@ -159,7 +220,56 @@ function buildVendedorFilterLACLAE(vendedorCodes, tableAlias = 'L') {
     return `AND (${conditions.join(' OR ')})`;
 }
 
-const { query } = require('../config/db');
+/**
+ * Date-Aware Vendor Filter for multi-year SQL queries.
+ * Generates an OR block that handles column transition month-by-month.
+ * Use for evolution/matrix queries spanning multiple years/months.
+ *
+ * IMPORTANT: For DSEDAC.LAC table, pass { forLACTable: true } because LAC does NOT
+ * have the R1_T8CDVD column.
+ *
+ * @param {string} vendedorCodes - Comma separated vendor codes (or 'ALL')
+ * @param {Array<number>} years - Array of years to filter
+ * @param {string} tableAlias - SQL table alias (default 'L')
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.forLACTable=false] - If true, always use LCCDVD (for DSEDAC.LAC which lacks R1_T8CDVD)
+ * @returns {string} SQL snippet with AND prefix
+ */
+function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L', { forLACTable = false } = {}) {
+    if (!vendedorCodes || vendedorCodes === 'ALL') return '';
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+
+    const codeList = vendedorCodes.split(',').map(c => c.trim());
+    const validCodes = codeList
+        .filter(c => /^[a-zA-Z0-9]+$/.test(c))
+        .map(c => `'${c}'`)
+        .join(',');
+
+    if (validCodes.length === 0) return 'AND 1=0';
+
+    // If VENDOR_COLUMN is default LCCDVD, or querying DSEDAC.LAC (no R1_T8CDVD column), no transition needed
+    if (VENDOR_COLUMN === 'LCCDVD' || forLACTable) {
+        return `AND ${prefix}LCCDVD IN (${validCodes})`;
+    }
+
+    // Check if any requested years involve the transition period
+    const involvesTransition = (!Array.isArray(years) || years.length === 0)
+        ? true
+        : years.some(y => y >= (TRANSITION_YEAR - 1));
+
+    if (!involvesTransition) {
+        return `AND ${prefix}LCCDVD IN (${validCodes})`;
+    }
+
+    // Month-based transition: meses < TRANSITION_MONTH use old column,
+    // meses >= TRANSITION_MONTH use new column
+    const oldFilter = `(${prefix}LCMMDC < ${TRANSITION_MONTH} AND ${prefix}LCCDVD IN (${validCodes}))`;
+    const newFilter = `(${prefix}LCMMDC >= ${TRANSITION_MONTH} AND ${prefix}${VENDOR_COLUMN} IN (${validCodes}))`;
+
+    return `AND (${oldFilter} OR ${newFilter})`;
+}
+
+const { query, queryWithParams } = require('../config/db');
 
 // ... (previous helper functions)
 
@@ -168,10 +278,15 @@ const _vendorNameCache = new Map();
 async function getVendorName(vendorCode) {
     if (!vendorCode || vendorCode === 'ALL') return 'Global';
     const trimmed = vendorCode.trim();
+    
+    // Handle comma-separated list (Jefe de Ventas case) - return generic name
+    if (trimmed.includes(',')) {
+        return 'Jefe de Ventas';
+    }
+    
     if (_vendorNameCache.has(trimmed)) return _vendorNameCache.get(trimmed);
     try {
-        // PERF: Removed TRIM() - DB2 CHAR blank-padded comparison works without it
-        const rows = await query(`SELECT NOMBREVENDEDOR FROM DSEDAC.VDD WHERE CODIGOVENDEDOR = '${trimmed}'`, false);
+        const rows = await queryWithParams(`SELECT NOMBREVENDEDOR FROM DSEDAC.VDD WHERE CODIGOVENDEDOR = ?`, [trimmed], false);
         const name = (rows && rows.length > 0) ? rows[0].NOMBREVENDEDOR : vendorCode;
         _vendorNameCache.set(trimmed, name);
         return name;
@@ -206,12 +321,12 @@ async function getBSales(vendorCode, year) {
     try {
         const safeRaw = rawCode.replace(/[^a-zA-Z0-9]/g, '');
         const safeUnpadded = unpaddedCode.replace(/[^a-zA-Z0-9]/g, '');
-        const rows = await query(`
+        const rows = await queryWithParams(`
             SELECT MES, IMPORTE
             FROM JAVIER.VENTAS_B
-            WHERE (CODIGOVENDEDOR = '${safeRaw}' OR CODIGOVENDEDOR = '${safeUnpadded}')
-              AND EJERCICIO = ${parseInt(year)}
-        `, false, false);
+            WHERE (CODIGOVENDEDOR = ? OR CODIGOVENDEDOR = ?)
+              AND EJERCICIO = ?
+        `, [safeRaw, safeUnpadded, parseInt(year)], false, false);
 
         const monthlyMap = {};
         rows.forEach(r => {
@@ -235,6 +350,9 @@ module.exports = {
     getCurrentDate,
     getCurrentYear,
     MIN_YEAR,
+    VENDOR_COLUMN,
+    getVendorColumn,
+    getVendorColumnExpr,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     LAC_TIPOVENTA_FILTER,
@@ -242,9 +360,10 @@ module.exports = {
     formatCurrency,
     buildVendedorFilter,
     buildVendedorFilterLACLAE,
+    buildColumnaVendedorFilter,
     buildDateFilter,
-    getVendorName, // Added Export
-    getBSales, // Shared B-sales lookup
+    getVendorName,
+    getBSales,
     sanitizeForSQL,
     sanitizeCodeList,
 
