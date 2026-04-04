@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    hide Provider, Consumer, ChangeNotifierProvider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as provider_pkg;
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -677,7 +676,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   /// Drawer for phone layout with user info, mode switcher, and actions
-  Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas, AuthState authState) {
+  Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas) {
     return Drawer(
       backgroundColor: AppTheme.surfaceColor,
       width: MediaQuery.of(context).size.width * 0.72,
@@ -698,7 +697,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               title: const Text('Cerrar Sesión', style: TextStyle(color: AppTheme.error, fontSize: 13)),
               onTap: () {
                 Navigator.pop(context);
-                _showLogoutConfirmation(authState);
+                ref.read(authProvider.notifier).logout();
               },
             ),
             const SizedBox(height: 8),
@@ -770,7 +769,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                         children: [
                           _buildCollapseButton(),
                           const SizedBox(height: 8),
-                          _buildLogoutButton(authState),
+                          _buildLogoutButton(),
                         ],
                       ),
                     ),
@@ -804,7 +803,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
             // Main Content
             Expanded(
-              child: _buildCurrentPage(authState?.vendedorCodes ?? [], isJefeVentas),
+              child: _buildCurrentPage(isJefeVentas),
             ),
           ],
         ),
@@ -1065,9 +1064,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
-  Widget _buildLogoutButton(AuthState authState) {
+  Widget _buildLogoutButton() {
     return InkWell(
-      onTap: () => _showLogoutConfirmation(authState),
+      onTap: () => ref.read(authProvider.notifier).logout(),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1214,9 +1213,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
-  Widget _buildCurrentPage(List<String> vendedorCodes, bool isJefeVentas) {
+  Widget _buildCurrentPage(bool isJefeVentas) {
     final authState = ref.read(authProvider).value;
     final user = authState?.user;
+    final vendedorCodes = authState?.vendedorCodes ?? [];
 
     // ===============================================
     // ALMACÉN MODE
@@ -1290,7 +1290,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           );
         }
         if (label == 'Rutero') {
-          return ChangeNotifierProvider(
+          return provider_pkg.ChangeNotifierProvider(
             create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
             child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
           );
@@ -1346,20 +1346,23 @@ class _MainShellState extends ConsumerState<MainShell> {
     // JEFE MODE
     // ===============================================
     if (isJefeVentas) {
+      final vendedorCodes = ref.read(authProvider).value?.vendedorCodes ?? [];
+      final employeeCode = vendedorCodes.join(',');
       return LazyIndexedStack(
         index: _currentIndex,
         children: [
-          _dashboardProvider == null 
-              ? const Center(child: CircularProgressIndicator()) 
-              : ChangeNotifierProvider.value(value: _dashboardProvider!, child: const DashboardContent()),
-          SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
-          RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
-          ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
-          CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          const DashboardContent(),
+          SimpleClientListPage(employeeCode: employeeCode, isJefeVentas: true),
+          RuteroPage(employeeCode: employeeCode, isJefeVentas: true),
+          ObjectivesPage(employeeCode: employeeCode, isJefeVentas: true),
+          CommissionsPage(employeeCode: employeeCode, isJefeVentas: true),
           const FacturasPage(),
-          ChangeNotifierProvider(create: (_) => PedidosProvider(), child: PedidosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true)),
-          KpiDashboardPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
-          CobrosPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true),
+          provider_pkg.ChangeNotifierProvider(
+            create: (_) => PedidosProvider(),
+            child: PedidosPage(employeeCode: employeeCode, isJefeVentas: true),
+          ),
+          KpiDashboardPage(employeeCode: employeeCode, isJefeVentas: true),
+          CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
           const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
             subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
@@ -1390,7 +1393,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         case 'Facturas':
           return const FacturasPage();
         case 'Pedidos':
-          return ChangeNotifierProvider(
+          return provider_pkg.ChangeNotifierProvider(
             create: (_) => PedidosProvider(),
             child: PedidosPage(employeeCode: empCode, isJefeVentas: false),
           );

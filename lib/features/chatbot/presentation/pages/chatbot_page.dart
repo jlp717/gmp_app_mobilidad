@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, Consumer, ChangeNotifierProvider;
+import 'package:provider/provider.dart' as provider;
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
@@ -94,7 +95,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               onSync: () => _provider.clearChat(), // Clear as sync/reset action
             ),
              Expanded(
-                child: ChangeNotifierProvider.value(
+                child: provider.ChangeNotifierProvider.value(
                   value: _provider,
                   child: Column(
                     children: [
@@ -112,7 +113,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
 
   // OLD CHATBOT UI - PRESERVED FOR FUTURE USE
   Widget _buildChatbotInterface(BuildContext context) {
-    return ChangeNotifierProvider.value(
+    return provider.ChangeNotifierProvider.value(
       value: _provider,
       child: Container(
         decoration: BoxDecoration(
@@ -243,7 +244,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
           ),
           
           // Clear chat
-          Consumer<ChatbotProvider>(
+          provider.Consumer<ChatbotProvider>(
             builder: (context, provider, _) {
               if (provider.messages.isEmpty) return const SizedBox();
               return IconButton(
@@ -322,7 +323,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
   }
 
   Widget _buildMessageList() {
-    return Consumer<ChatbotProvider>(
+    return provider.Consumer<ChatbotProvider>(
       builder: (context, provider, _) {
         if (provider.messages.isEmpty) {
           return _buildWelcomeScreen();
@@ -569,7 +570,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
             ),
             const SizedBox(width: 12),
             
-            Consumer<ChatbotProvider>(
+            provider.Consumer<ChatbotProvider>(
               builder: (context, provider, _) {
                 return GestureDetector(
                   onTap: provider.isLoading ? null : _sendMessage,

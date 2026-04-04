@@ -14,17 +14,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/auth_notifier.dart';
 
 
-class CommissionsPage extends StatefulWidget {
+class CommissionsPage extends ConsumerStatefulWidget {
   final String employeeCode;
   final bool isJefeVentas;
 
   const CommissionsPage({super.key, required this.employeeCode, this.isJefeVentas = false});
 
   @override
-  State<CommissionsPage> createState() => _CommissionsPageState();
+  ConsumerState<CommissionsPage> createState() => _CommissionsPageState();
 }
 
-class _CommissionsPageState extends State<CommissionsPage> {
+class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   bool _isLoading = true;
   String? _error;
   Map<String, dynamic>? _data;
@@ -745,7 +745,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final rhythmStatus = rhythmCompliance >= 105 ? 'Adelantado' : (rhythmCompliance >= 95 ? 'En ritmo' : 'Rezagado');
 
     // Get payment authorization status
-    final authState = context.watch(authProvider).value;
+    final authState = ref.watch(authProvider).value;
     final curUserCode = authState?.user?.code?.trim() ?? '';
     // Allow payment for ADMIN users or specifically DIEGO (code 98)
     final normalizedCode = curUserCode.replaceFirst(RegExp(r'^0+'), '');
@@ -1408,7 +1408,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
       });
 
       // Get payment authorization status
-      final authState = context.watch(authProvider).value;
+      final authState = ref.watch(authProvider).value;
       final curCode = (authState?.user?.code?.trim() ?? '').replaceFirst(RegExp(r'^0+'), '');
       final canPay = authState?.user?.tipoVendedor == 'ADMIN'
           || curCode == '98';

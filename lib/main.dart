@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:provider/provider.dart' as provider_pkg;
 
 import 'core/api/api_client.dart';
 import 'core/cache/cache_service.dart';
 import 'core/providers/auth_notifier.dart';
+import 'core/providers/filter_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/main_shell.dart';
@@ -75,7 +77,10 @@ void main() async {
 
   runZonedGuarded(
     () => runApp(
-      const ProviderScope(child: GMPSalesAnalyticsApp()),
+      provider_pkg.ChangeNotifierProvider(
+        create: (_) => FilterProvider(),
+        child: const ProviderScope(child: GMPSalesAnalyticsApp()),
+      ),
     ),
     (error, stackTrace) {
       debugPrint('[ZONE_ERROR] $error\n$stackTrace');

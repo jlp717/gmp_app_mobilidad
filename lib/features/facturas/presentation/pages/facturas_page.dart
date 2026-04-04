@@ -8,7 +8,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -109,7 +109,7 @@ class _FacturasPageState extends State<FacturasPage>
       if (user == null) throw Exception('No user logged in');
 
       // Handle "View As" logic
-      final filter = Provider.of<FilterProvider>(context, listen: false);
+      final filter = provider.Provider.of<FilterProvider>(context, listen: false);
 
       // Get codes from AuthState (List<String>) and join them
       String codes = authState!.vendedorCodes.join(',');

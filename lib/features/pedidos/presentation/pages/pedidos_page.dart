@@ -5,7 +5,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider_pkg;
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
@@ -1777,7 +1777,7 @@ class _PedidosPageState extends State<PedidosPage>
         ),
         actions: [
           // View Promotions button
-          Consumer<PedidosProvider>(
+          provider_pkg.Consumer<PedidosProvider>(
             builder: (ctx, prov, _) {
               if (!prov.hasClient) return const SizedBox.shrink();
               final promos = prov.activePromotionsList;
@@ -1849,7 +1849,7 @@ class _PedidosPageState extends State<PedidosPage>
             },
           ),
           // Save draft button & Auto-save status
-          Consumer<PedidosProvider>(
+          provider_pkg.Consumer<PedidosProvider>(
             builder: (ctx, prov, _) {
               if (!prov.hasLines) return const SizedBox.shrink();
               return Row(
@@ -1893,7 +1893,7 @@ class _PedidosPageState extends State<PedidosPage>
             },
           ),
           // Drafts list button
-          Consumer<PedidosProvider>(
+          provider_pkg.Consumer<PedidosProvider>(
             builder: (ctx, prov, _) {
               final count = prov.draftCount;
               return Stack(
@@ -2033,7 +2033,7 @@ class _PedidosPageState extends State<PedidosPage>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => Provider<PedidosProvider>.value(
+      builder: (_) => provider_pkg.Provider<PedidosProvider>.value(
         value: provider,
         child: DraggableScrollableSheet(
           initialChildSize: 0.85,

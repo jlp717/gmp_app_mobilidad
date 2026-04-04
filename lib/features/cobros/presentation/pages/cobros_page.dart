@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
@@ -109,7 +109,7 @@ class _CobrosPageState extends State<CobrosPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
+    return provider.ChangeNotifierProvider.value(
       value: _cobrosProvider,
       child: Scaffold(
         backgroundColor: AppTheme.darkBase,
@@ -271,7 +271,7 @@ class _CobrosPageState extends State<CobrosPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ChangeNotifierProvider.value(
+              builder: (context) => provider.ChangeNotifierProvider.value(
                 value: _cobrosProvider,
                 child: CobroDetailScreen(
                   codigoCliente: code,

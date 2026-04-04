@@ -30,14 +30,14 @@ import '../widgets/dashboard_chart_factory.dart'; // Add factory import
 /// Professional Dashboard - Power BI Style for Sales Manager
 /// Multi-select filters: Years, Months, Vendors, Clients
 /// Drill-down capabilites
-class DashboardContent extends StatefulWidget {
+class DashboardContent extends ConsumerStatefulWidget {
   const DashboardContent({super.key});
 
   @override
-  State<DashboardContent> createState() => _DashboardContentState();
+  ConsumerState<DashboardContent> createState() => _DashboardContentState();
 }
 
-class _DashboardContentState extends State<DashboardContent> with AutomaticKeepAliveClientMixin {
+class _DashboardContentState extends ConsumerState<DashboardContent> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
   // Multi-select date filters
@@ -434,7 +434,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
-    final isJefeVentas = context.watch(authProvider).value?.isDirector ?? false;
+    final isJefeVentas = ref.watch(authProvider).value?.isDirector ?? false;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart' hide Provider;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, Consumer, ChangeNotifierProvider;
 import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -22,17 +23,17 @@ import 'repartidor_historico_page.dart';
 /// - Smart delivery cards with AI suggestions
 /// - Improved filtering and search
 /// - Director "View As" with auto-reload
-class RepartidorRuteroPage extends StatefulWidget {
+class RepartidorRuteroPage extends ConsumerStatefulWidget {
   final String? repartidorId;
   final Map<String, String>? repartidorNames;
 
   const RepartidorRuteroPage({super.key, this.repartidorId, this.repartidorNames});
 
   @override
-  State<RepartidorRuteroPage> createState() => _RepartidorRuteroPageState();
+  ConsumerState<RepartidorRuteroPage> createState() => _RepartidorRuteroPageState();
 }
 
-class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
+class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     with TickerProviderStateMixin {
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _weekDays = [];
@@ -79,15 +80,14 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   }
 
   Future<void> _loadData() async {
-    final authState = ProviderScope.containerOf(context)
-        .read(authProvider).value;
+    final auth = ref.read(authProvider).value;
     final filter = Provider.of<FilterProvider>(context, listen: false);
     final entregas = Provider.of<EntregasProvider>(context, listen: false);
 
-    String targetId = widget.repartidorId ?? authState?.user?.code ?? '';
+    String targetId = widget.repartidorId ?? auth?.user?.code ?? '';
 
     // View As logic for directors
-    if ((authState?.user?.isDirector ?? false) && filter.selectedVendor != null) {
+    if (auth?.user?.isJefeVentas == true && filter.selectedVendor != null) {
       targetId = filter.selectedVendor!;
     }
     
@@ -150,23 +150,22 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, ref, _) {
-        final authState = ref.watch(authProvider).value;
-        final filter = Provider.of<FilterProvider>(context);
-        final entregas = Provider.of<EntregasProvider>(context);
+    final auth = ref.watch(authProvider).value;
+    final filter = Provider.of<FilterProvider>(context);
+    final entregas = Provider.of<EntregasProvider>(context);
 
-        // Header Name Logic
-        String currentName = authState?.user?.name ?? 'Repartidor';
-        if ((authState?.user?.isDirector ?? false) && filter.selectedVendor != null) {
-          // Just show the vendor code for now
-          currentName = 'Repartidor ${filter.selectedVendor}';
-        }
 
-        return Scaffold(
-          backgroundColor: AppTheme.darkBase,
-          body: Column(
-            children: [
+    // Header Name Logic
+    String currentName = auth?.user?.name ?? 'Repartidor';
+    if (auth?.user?.isJefeVentas == true && filter.selectedVendor != null) {
+      // Just show the vendor code for now
+      currentName = 'Repartidor ${filter.selectedVendor}';
+    }
+
+    return Scaffold(
+      backgroundColor: AppTheme.darkBase,
+      body: Column(
+        children: [
           // HEADER (COMPACT)
           SmartSyncHeader(
             title: 'Rutero',
@@ -217,7 +216,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
             ),
 
           // DIRECTOR FILTER (if applicable)
-          if (authState?.user?.isDirector ?? false) _buildDirectorFilter(authState!, filter, entregas),
+          if (auth?.user?.isJefeVentas == true) _buildDirectorFilter(auth!, filter, entregas),
 
           // SEARCH & FILTER ROW
           _buildSearchAndFilters(entregas),
@@ -240,13 +239,11 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
           ),
         ],
       ),
-        );
-      },
     );
   }
 
   Widget _buildDirectorFilter(
-    AuthState authState,
+    AuthState auth,
     FilterProvider filter,
     EntregasProvider entregas,
   ) {
