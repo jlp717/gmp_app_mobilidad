@@ -319,7 +319,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
 // Start server
 async function startServer() {
   // Validate configuration before starting (throws if JWT secrets missing)
-  const { validateConfig } = require('./src/config/env');
+  const { validateConfig } = require('./config/env');
   validateConfig();
   logger.info('✅ Configuration validated successfully');
 
