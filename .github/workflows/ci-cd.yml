@@ -148,8 +148,8 @@ jobs:
         run: |
           echo "Scanning for hardcoded secrets..."
           FOUND=0
-          # Check for default secrets
-          if grep -r "default-secret\|dev-access-secret\|dev-refresh-secret" backend/src --include="*.js" --include="*.ts" 2>/dev/null; then
+          # Check for default secrets (exclude === comparisons which are security checks)
+          if grep -rn "default-secret\|dev-access-secret\|dev-refresh-secret" backend/src --include="*.js" --include="*.ts" 2>/dev/null | grep -v "===" | grep -v "!==" | grep -v ".test." | grep -v "__tests__"; then
             echo "❌ Found hardcoded default secrets!"
             FOUND=1
           fi
@@ -210,7 +210,7 @@ jobs:
         run: flutter pub get
 
       - name: Generate code
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: dart run build_runner build --delete-conflicting-outputs
         continue-on-error: true
 
       - name: Build APK debug
