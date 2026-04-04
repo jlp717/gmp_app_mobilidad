@@ -103,4 +103,27 @@ class CachePreWarmer {
     CacheService.clearMemoryCache();
     debugPrint('[CachePreWarmer] Reset');
   }
+
+  /// Pre-warm cache using vendor codes directly (for Riverpod AuthNotifier)
+  static Future<void> preWarmCacheForCodes(List<String> vendedorCodes) async {
+    if (_hasPreWarmed) return;
+    if (vendedorCodes.isEmpty) return;
+
+    debugPrint('[CachePreWarmer] 🔥 Starting cache pre-warming (codes)...');
+    try {
+      final codes = vendedorCodes.join(',');
+      final currentYear = DateTime.now().year;
+      final currentMonth = DateTime.now().month;
+
+      await Future.wait([
+        _preWarmFacturas(codes, currentYear, currentMonth),
+        _preWarmCommissions(codes, currentYear),
+      ], eagerError: false);
+
+      _hasPreWarmed = true;
+      debugPrint('[CachePreWarmer] ✅ Pre-warming completed (codes)');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] ⚠️ Pre-warming failed (non-critical): $e');
+    }
+  }
 }

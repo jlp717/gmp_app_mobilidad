@@ -1,88 +1,90 @@
 /**
- * LOGGER - Sistema de Logging Empresarial
- * Configuración Winston para logging estructurado
+ * Winston Logger - Production Grade v4.0.0
+ * 
+ * @agent Observability - Structured logging, file rotation, console output
  */
 
 import winston from 'winston';
-import { config } from '../config/env';
+import path from 'path';
+import fs from 'fs';
 
-const { combine, timestamp, printf, colorize, errors } = winston.format;
+const { combine, timestamp, printf, colorize, errors, json } = winston.format;
 
-// Formato personalizado para desarrollo
-const devFormat = printf(({ level, message, timestamp: ts, stack, ...metadata }) => {
-  let msg = `${ts} [${level}]: ${message}`;
-  
-  if (Object.keys(metadata).length > 0) {
-    msg += ` ${JSON.stringify(metadata)}`;
-  }
-  
-  if (stack) {
-    msg += `\n${stack}`;
-  }
-  
-  return msg;
+// Ensure logs directory exists
+const logDir = path.resolve(process.cwd(), 'logs');
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir, { recursive: true });
+}
+
+// ============================================================
+// FORMATTERS
+// ============================================================
+
+const consoleFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
+  const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : '';
+  return `${timestamp} ${level}: ${stack || message} ${metaStr}`.trim();
 });
 
-// Formato para producción (JSON estructurado)
-const prodFormat = printf(({ level, message, timestamp: ts, ...metadata }) => {
+const fileFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
   return JSON.stringify({
-    timestamp: ts,
+    timestamp,
     level,
-    message,
-    ...metadata,
+    message: stack || message,
+    ...meta,
   });
 });
 
-// Crear logger
+// ============================================================
+// LOGGER INSTANCE
+// ============================================================
+
+const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug');
+
 export const logger = winston.createLogger({
-  level: config.logging.level,
-  format: combine(
-    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-    errors({ stack: true })
-  ),
-  defaultMeta: { service: 'gmp-api' },
+  level: logLevel,
+  defaultMeta: { service: 'gmp-backend' },
   transports: [
-    // Consola
+    // Console (colored, human-readable)
     new winston.transports.Console({
       format: combine(
         colorize(),
-        config.isProduction ? prodFormat : devFormat
+        timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
+        errors({ stack: true }),
+        consoleFormat
+      ),
+    }),
+    // File: all logs (JSON, rotatable)
+    new winston.transports.File({
+      filename: path.join(logDir, 'app.log'),
+      maxSize: 5 * 1024 * 1024, // 5MB
+      maxFiles: 5,
+      format: combine(
+        timestamp(),
+        errors({ stack: true }),
+        fileFormat
+      ),
+    }),
+    // File: errors only
+    new winston.transports.File({
+      filename: path.join(logDir, 'error.log'),
+      level: 'error',
+      maxSize: 5 * 1024 * 1024,
+      maxFiles: 3,
+      format: combine(
+        timestamp(),
+        errors({ stack: true }),
+        fileFormat
       ),
     }),
   ],
 });
 
-// En producción, agregar transporte a archivo
-if (config.isProduction) {
-  logger.add(
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-      format: combine(timestamp(), prodFormat),
-    })
-  );
-  
-  logger.add(
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-      format: combine(timestamp(), prodFormat),
-    })
-  );
-}
+// ============================================================
+// MORGAN STREAM (for HTTP logging)
+// ============================================================
 
-// Stream para Morgan (HTTP logging)
 export const morganStream = {
   write: (message: string) => {
     logger.info(message.trim());
   },
 };
-
-// Métodos helpers para contexto de request
-export const createRequestLogger = (requestId: string) => ({
-  info: (message: string, meta?: object) => logger.info(message, { requestId, ...meta }),
-  warn: (message: string, meta?: object) => logger.warn(message, { requestId, ...meta }),
-  error: (message: string, meta?: object) => logger.error(message, { requestId, ...meta }),
-  debug: (message: string, meta?: object) => logger.debug(message, { requestId, ...meta }),
-});
-
-export default logger;

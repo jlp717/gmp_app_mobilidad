@@ -1,173 +1,217 @@
 /**
- * CONFIGURACIÓN DE ENTORNO
- * Carga y valida variables de entorno con valores por defecto seguros
+ * Environment Configuration - Production Grade v4.0.0
+ * 
+ * @agent Security - Validated secrets, no fallbacks
+ * @agent Architect - Single source of truth for all env vars
  */
 
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Cargar .env según entorno
-const envFile = process.env.NODE_ENV === 'production' 
-  ? '.env.production' 
-  : '.env';
+// Load env file based on environment
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+dotenv.config({ path: path.resolve(__dirname, '../../', envFile) });
 
-dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+// ============================================================
+// HELPERS
+// ============================================================
 
-// Función helper para obtener números
-function getNumber(key: string, defaultValue: number): number {
-  const value = process.env[key];
-  if (!value) return defaultValue;
-  const parsed = parseInt(value, 10);
-  return isNaN(parsed) ? defaultValue : parsed;
+function getEnv(key: string, defaultValue?: string): string {
+  const value = process.env[key] || defaultValue;
+  if (value === undefined) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value;
 }
 
-// Función helper para obtener booleanos
-function getBoolean(key: string, defaultValue: boolean): boolean {
+function getNumber(key: string, defaultValue?: number): number {
   const value = process.env[key];
-  if (!value) return defaultValue;
-  return value.toLowerCase() === 'true';
+  if (value === undefined) return defaultValue!;
+  const num = Number(value);
+  if (isNaN(num)) throw new Error(`Invalid number for ${key}: ${value}`);
+  return num;
 }
 
-// Función helper para obtener arrays
-function getArray(key: string, defaultValue: string[]): string[] {
+function getBoolean(key: string, defaultValue = false): boolean {
+  const value = process.env[key];
+  if (value === undefined) return defaultValue;
+  return value.toLowerCase() === 'true' || value === '1';
+}
+
+function getArray(key: string, defaultValue: string[] = []): string[] {
   const value = process.env[key];
   if (!value) return defaultValue;
   return value.split(',').map(s => s.trim()).filter(Boolean);
 }
 
-// Función para construir connection string ODBC
-function buildOdbcConnectionString(): string {
-  const uid = process.env.ODBC_UID || '';
-  const pwd = process.env.ODBC_PWD || '';
-  // Usar DSN configurado en Windows ODBC con credenciales
-  // CCSID=1208 ensures IBM i returns UTF-8 (fixes Ñ, tildes, accents)
-  return `DSN=GMP;UID=${uid};PWD=${pwd};NAM=1;CCSID=1208;`;
-}
+// ============================================================
+// DATABASE CONFIG
+// ============================================================
 
-export const config = {
-  // Entorno
-  env: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
-  port: getNumber('PORT', 3001),
-  host: process.env.HOST || '0.0.0.0',
-  isProduction: process.env.NODE_ENV === 'production',
-  isDevelopment: process.env.NODE_ENV !== 'production',
+export const database = {
+  odbcDsn: getEnv('ODBC_DSN', ''),
+  odbcUid: process.env.ODBC_UID || '',
+  odbcPwd: process.env.ODBC_PWD || '',
+  poolMin: getNumber('DB_POOL_MIN', 2),
+  poolMax: getNumber('DB_POOL_MAX', 10),
+  poolIncrement: getNumber('DB_POOL_INCREMENT', 2),
+  poolTimeout: getNumber('DB_POOL_TIMEOUT', 30),
+  keepAliveInterval: getNumber('DB_KEEP_ALIVE_INTERVAL', 120), // seconds
+  maxRetries: getNumber('DB_MAX_RETRIES', 3),
+  retryDelay: getNumber('DB_RETRY_DELAY', 1000), // ms
+};
 
-  // Base de datos ODBC
-  odbc: {
-    // Construir connection string desde variables separadas
-    connectionString: buildOdbcConnectionString(),
-    uid: process.env.ODBC_UID || '',
-    pwd: process.env.ODBC_PWD || '',
-    pool: {
-      min: getNumber('ODBC_POOL_MIN', 5),
-      max: getNumber('ODBC_POOL_MAX', 50),
-      idleTimeout: getNumber('ODBC_POOL_IDLE_TIMEOUT', 30000),
-      acquireTimeout: getNumber('ODBC_POOL_ACQUIRE_TIMEOUT', 30000),
-    },
+// ============================================================
+// JWT / AUTH CONFIG
+// ============================================================
+
+export const auth = {
+  accessTokenSecret: getEnv('JWT_SECRET'),
+  refreshTokenSecret: getEnv('JWT_REFRESH_SECRET'),
+  accessTokenExpiry: getEnv('JWT_ACCESS_EXPIRY', '1h'),
+  refreshTokenExpiry: getEnv('JWT_REFRESH_EXPIRY', '7d'),
+  bcryptRounds: getNumber('BCRYPT_ROUNDS', 12),
+  maxSessionsPerUser: getNumber('MAX_SESSIONS_PER_USER', 5),
+  lockoutThreshold: getNumber('LOCKOUT_THRESHOLD', 5),
+  lockoutDuration: getNumber('LOCKOUT_DURATION', 15 * 60 * 1000), // 15 min
+};
+
+// ============================================================
+// REDIS CONFIG
+// ============================================================
+
+export const redis = {
+  url: getEnv('REDIS_URL', 'redis://localhost:6379'),
+  password: process.env.REDIS_PASSWORD || undefined,
+  keyPrefix: getEnv('REDIS_KEY_PREFIX', 'gmp:'),
+  ttl: {
+    short: getNumber('REDIS_TTL_SHORT', 300),     // 5 min
+    medium: getNumber('REDIS_TTL_MEDIUM', 1800),   // 30 min
+    long: getNumber('REDIS_TTL_LONG', 86400),      // 24 h
+    realtime: getNumber('REDIS_TTL_REALTIME', 60), // 1 min
+    // Role-specific TTLs for dashboard cache
+    jefeVentas: getNumber('REDIS_TTL_JEFE', 600),  // 10 min
+    comercial: getNumber('REDIS_TTL_COMERCIAL', 1800), // 30 min
+    repartidor: getNumber('REDIS_TTL_REPARTIDOR', 900), // 15 min
   },
+  maxRetries: getNumber('REDIS_MAX_RETRIES', 3),
+  retryDelay: getNumber('REDIS_RETRY_DELAY', 1000),
+};
 
-  // JWT - Autenticación
-  jwt: {
-    accessSecret: (() => {
-      const secret = process.env.JWT_ACCESS_SECRET;
-      if (!secret || secret.length < 32) {
-        throw new Error('JWT_ACCESS_SECRET must be set in environment and be at least 32 characters. Generate with: openssl rand -hex 32');
-      }
-      return secret;
-    })(),
-    refreshSecret: (() => {
-      const secret = process.env.JWT_REFRESH_SECRET;
-      if (!secret || secret.length < 32) {
-        throw new Error('JWT_REFRESH_SECRET must be set in environment and be at least 32 characters. Generate with: openssl rand -hex 32');
-      }
-      return secret;
-    })(),
-    accessExpires: process.env.JWT_ACCESS_EXPIRES || '15m',
-    refreshExpires: process.env.JWT_REFRESH_EXPIRES || '7d',
+// ============================================================
+// SERVER CONFIG
+// ============================================================
+
+export const server = {
+  port: getNumber('PORT', 3334),
+  host: getEnv('HOST', '0.0.0.0'),
+  env: getEnv('NODE_ENV', 'development'),
+  trustProxy: getBoolean('TRUST_PROXY', true),
+};
+
+// ============================================================
+// CORS CONFIG
+// ============================================================
+
+export const cors = {
+  origins: getArray('CORS_ORIGIN', ['*']),
+};
+
+// ============================================================
+// RATE LIMITING
+// ============================================================
+
+export const rateLimit = {
+  global: {
+    windowMs: getNumber('RATE_LIMIT_GLOBAL_WINDOW', 15 * 60 * 1000), // 15 min
+    maxRequests: getNumber('RATE_LIMIT_GLOBAL_MAX', 100),
   },
-
-  // Redis - Caching
-  redis: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-    password: process.env.REDIS_PASSWORD || undefined,
-    ttl: {
-      default: getNumber('REDIS_TTL_DEFAULT', 3600),
-      products: getNumber('REDIS_TTL_PRODUCTS', 86400),
-      promotions: getNumber('REDIS_TTL_PROMOTIONS', 1800),
-    },
+  login: {
+    windowMs: getNumber('RATE_LIMIT_LOGIN_WINDOW', 15 * 60 * 1000),
+    maxRequests: getNumber('RATE_LIMIT_LOGIN_MAX', 5),
   },
-
-  // CORS
-  cors: {
-    origins: getArray('CORS_ORIGINS', ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8081']),
+  cobros: {
+    windowMs: getNumber('RATE_LIMIT_COBROS_WINDOW', 15 * 60 * 1000),
+    maxRequests: getNumber('RATE_LIMIT_COBROS_MAX', 30),
   },
-
-  // Seguridad
-  security: {
-    bcryptRounds: getNumber('BCRYPT_ROUNDS', 12),
-    maxLoginAttempts: getNumber('MAX_LOGIN_ATTEMPTS', 5),
-    lockTimeMinutes: getNumber('LOCK_TIME_MINUTES', 30),
-    sessionTtl: getNumber('SESSION_TTL', 3600),
-    maxSessionsPerUser: getNumber('MAX_SESSIONS_PER_USER', 5),
-  },
-
-  // Rate Limiting
-  rateLimit: {
-    windowMs: getNumber('RATE_LIMIT_WINDOW_MS', 900000), // 15 minutos
-    maxRequests: getNumber('RATE_LIMIT_MAX_REQUESTS', 100),
-    loginLimit: getNumber('LOGIN_RATE_LIMIT', 5),
-    loginWindow: getNumber('LOGIN_RATE_WINDOW', 900000),
-  },
-
-  // Email
-  email: {
-    host: process.env.SMTP_HOST || '',
-    port: getNumber('SMTP_PORT', 587),
-    secure: getBoolean('SMTP_SECURE', false),
-    user: process.env.SMTP_USER || '',
-    password: process.env.SMTP_PASSWORD || '',
-    from: process.env.SMTP_FROM || 'noreply@example.com',
-  },
-
-  // Empresa
-  empresa: {
-    nombre: process.env.EMPRESA_NOMBRE || 'Granja Mari Pepa',
-    cif: process.env.EMPRESA_CIF || '',
-    telefono: process.env.EMPRESA_TELEFONO || '',
-    email: process.env.EMPRESA_EMAIL || '',
-  },
-
-  // URLs
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
-  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
-
-  // Logging
-  logging: {
-    level: process.env.LOG_LEVEL || 'info',
-    format: process.env.LOG_FORMAT || 'combined',
-  },
-
-  // Circuit Breaker
-  circuitBreaker: {
-    timeout: getNumber('CIRCUIT_BREAKER_TIMEOUT', 15000),
-    errorThreshold: getNumber('CIRCUIT_BREAKER_ERROR_THRESHOLD', 50),
-    resetTimeout: getNumber('CIRCUIT_BREAKER_RESET_TIMEOUT', 30000),
+  pedidos: {
+    windowMs: getNumber('RATE_LIMIT_PEDIDOS_WINDOW', 15 * 60 * 1000),
+    maxRequests: getNumber('RATE_LIMIT_PEDIDOS_MAX', 50),
   },
 };
 
-// Validar configuración crítica en producción
+// ============================================================
+// LOGGING
+// ============================================================
+
+export const logging = {
+  level: getEnv('LOG_LEVEL', 'info'),
+  format: getEnv('LOG_FORMAT', 'combined'),
+  file: getEnv('LOG_FILE', 'logs/app.log'),
+};
+
+// ============================================================
+// EMAIL CONFIG
+// ============================================================
+
+export const email = {
+  host: getEnv('SMTP_HOST', 'localhost'),
+  port: getNumber('SMTP_PORT', 587),
+  secure: getBoolean('SMTP_SECURE', false),
+  user: process.env.SMTP_USER || '',
+  pass: process.env.SMTP_PASS || '',
+  from: getEnv('SMTP_FROM', 'noreply@gmpapp.com'),
+};
+
+// ============================================================
+// APP CONFIG
+// ============================================================
+
+export const app = {
+  companyName: getEnv('COMPANY_NAME', 'Granja Mari Pepa'),
+  minYear: getNumber('MIN_YEAR', 2020),
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+};
+
+// ============================================================
+// EXPORTED CONFIG OBJECT
+// ============================================================
+
+export const config = {
+  env: server.env,
+  port: server.port,
+  host: server.host,
+  database,
+  auth,
+  redis,
+  cors,
+  rateLimit,
+  logging,
+  email,
+  app,
+};
+
+// ============================================================
+// CONFIG VALIDATION (production gate)
+// ============================================================
+
 export function validateConfig(): void {
-  if (config.isProduction) {
-    if (!config.odbc.connectionString) {
-      throw new Error('ODBC_CONNECTION_STRING es requerido en producción');
-    }
-    if (config.jwt.accessSecret.includes('dev-')) {
-      throw new Error('JWT_ACCESS_SECRET debe ser cambiado en producción');
-    }
-    if (config.jwt.refreshSecret.includes('dev-')) {
-      throw new Error('JWT_REFRESH_SECRET debe ser cambiado en producción');
-    }
+  const errors: string[] = [];
+
+  // JWT secrets are MANDATORY - no fallbacks
+  if (!auth.accessTokenSecret || auth.accessTokenSecret.length < 32) {
+    errors.push('JWT_SECRET must be at least 32 characters');
+  }
+  if (!auth.refreshTokenSecret || auth.refreshTokenSecret.length < 32) {
+    errors.push('JWT_REFRESH_SECRET must be at least 32 characters');
+  }
+
+  // DB connection
+  if (!database.odbcDsn) {
+    errors.push('ODBC_DSN is required');
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Configuration validation failed:\n${errors.map(e => `  - ${e}`).join('\n')}`);
   }
 }
-
-export default config;

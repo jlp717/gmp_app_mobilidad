@@ -1,166 +1,108 @@
 /**
- * MIDDLEWARE DE MANEJO DE ERRORES
- * Gestión centralizada de errores y respuestas
+ * Error Handling Middleware - Production Grade v4.0.0
+ * 
+ * @agent Code Quality - Consistent error format, proper HTTP status codes
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
-import { config } from '../config/env';
 
-/**
- * Clase personalizada para errores de la API
- */
-export class ApiError extends Error {
-  statusCode: number;
-  code: string;
-  isOperational: boolean;
+// ============================================================
+// CUSTOM ERROR CLASSES
+// ============================================================
 
+export class AppError extends Error {
   constructor(
+    public statusCode: number,
     message: string,
-    statusCode: number = 500,
-    code: string = 'INTERNAL_ERROR',
-    isOperational: boolean = true
+    public code?: string,
+    public isOperational = true
   ) {
     super(message);
-    this.statusCode = statusCode;
-    this.code = code;
-    this.isOperational = isOperational;
-
+    this.name = 'AppError';
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
-/**
- * Errores predefinidos
- */
-export const Errors = {
-  NotFound: (message = 'Recurso no encontrado') => 
-    new ApiError(message, 404, 'NOT_FOUND'),
-  
-  Unauthorized: (message = 'No autorizado') => 
-    new ApiError(message, 401, 'UNAUTHORIZED'),
-  
-  Forbidden: (message = 'Acceso prohibido') => 
-    new ApiError(message, 403, 'FORBIDDEN'),
-  
-  BadRequest: (message = 'Petición inválida') => 
-    new ApiError(message, 400, 'BAD_REQUEST'),
-  
-  Validation: (message = 'Error de validación') => 
-    new ApiError(message, 400, 'VALIDATION_ERROR'),
-  
-  RateLimit: (message = 'Límite de peticiones excedido') => 
-    new ApiError(message, 429, 'RATE_LIMIT'),
-  
-  Internal: (message = 'Error interno del servidor') => 
-    new ApiError(message, 500, 'INTERNAL_ERROR', false),
-  
-  Database: (message = 'Error de base de datos') => 
-    new ApiError(message, 500, 'DATABASE_ERROR', false),
-};
+export class NotFoundError extends AppError {
+  constructor(resource: string) {
+    super(404, `${resource} not found`, 'NOT_FOUND');
+  }
+}
 
-/**
- * Middleware para rutas no encontradas
- */
-export function notFoundHandler(req: Request, res: Response, _next: NextFunction): void {
-  logger.warn(`Ruta no encontrada: ${req.method} ${req.path}`);
+export class ValidationError extends AppError {
+  constructor(message: string, public details?: Record<string, string>[]) {
+    super(400, message, 'VALIDATION_ERROR');
+  }
+}
+
+export class UnauthorizedError extends AppError {
+  constructor(message = 'Unauthorized') {
+    super(401, message, 'UNAUTHORIZED');
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(message = 'Forbidden') {
+    super(403, message, 'FORBIDDEN');
+  }
+}
+
+// ============================================================
+// NOT FOUND HANDLER (404)
+// ============================================================
+
+export function notFoundHandler(req: Request, res: Response): void {
+  logger.warn(`404 - ${req.method} ${req.originalUrl}`);
   
   res.status(404).json({
-    success: false,
-    error: 'Endpoint no encontrado',
+    error: 'Not Found',
     code: 'NOT_FOUND',
-    path: req.path,
+    message: `Route ${req.method} ${req.originalUrl} not found`,
+    path: req.originalUrl,
     method: req.method,
   });
 }
 
-/**
- * Middleware principal de manejo de errores
- */
+// ============================================================
+// GLOBAL ERROR HANDLER
+// ============================================================
+
 export function errorHandler(
-  err: Error | ApiError,
-  req: Request,
+  err: Error,
+  _req: Request,
   res: Response,
   _next: NextFunction
 ): void {
-  // Determinar si es un error operacional o de programación
-  const isApiError = err instanceof ApiError;
-  const statusCode = isApiError ? err.statusCode : 500;
-  const code = isApiError ? err.code : 'INTERNAL_ERROR';
-  const isOperational = isApiError ? err.isOperational : false;
-
-  // Logging
-  if (isOperational) {
-    logger.warn(`Error operacional [${code}]:`, {
-      message: err.message,
-      path: req.path,
-      method: req.method,
-      requestId: req.requestId,
-    });
+  // Log error
+  if (err instanceof AppError && err.isOperational) {
+    logger.warn(`${err.statusCode} - ${err.message} - ${err.code}`);
   } else {
-    logger.error('Error no manejado:', {
+    logger.error('Unhandled error:', {
       message: err.message,
       stack: err.stack,
-      path: req.path,
-      method: req.method,
-      requestId: req.requestId,
+      name: err.name,
     });
   }
 
-  // Respuesta al cliente
+  // Don't leak internal details in production
+  const isProduction = process.env.NODE_ENV === 'production';
+  
   const response: Record<string, unknown> = {
-    success: false,
-    error: isOperational ? err.message : 'Error interno del servidor',
-    code,
-    requestId: req.requestId,
+    error: err instanceof AppError ? err.message : 'Internal Server Error',
+    code: err instanceof AppError ? err.code : 'INTERNAL_ERROR',
   };
 
-  // En desarrollo, incluir stack trace
-  if (config.isDevelopment && !isOperational) {
+  // Add details for validation errors
+  if (err instanceof ValidationError && err.details) {
+    response.details = err.details;
+  }
+
+  // Stack trace only in development
+  if (!isProduction && err.stack) {
     response.stack = err.stack;
   }
 
+  const statusCode = err instanceof AppError ? err.statusCode : 500;
   res.status(statusCode).json(response);
 }
-
-/**
- * Logger de peticiones
- */
-export function requestLogger(req: Request, res: Response, next: NextFunction): void {
-  const start = Date.now();
-
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    const level = res.statusCode >= 400 ? 'warn' : 'info';
-
-    logger[level](`${req.method} ${req.path}`, {
-      statusCode: res.statusCode,
-      duration: `${duration}ms`,
-      requestId: req.requestId,
-      ip: req.ip,
-    });
-  });
-
-  next();
-}
-
-/**
- * Wrapper para async handlers
- * Captura errores de funciones async y los pasa al error handler
- */
-export function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
-) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
-}
-
-export default {
-  ApiError,
-  Errors,
-  notFoundHandler,
-  errorHandler,
-  requestLogger,
-  asyncHandler,
-};
