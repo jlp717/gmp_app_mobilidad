@@ -13,7 +13,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../../../core/providers/auth_provider.dart';
+import 'package:provider/provider.dart' hide Provider, Consumer, ChangeNotifierProvider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/widgets/optimized_list.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/widgets/async_operation_modal.dart';
@@ -99,16 +101,18 @@ class _FacturasPageState extends State<FacturasPage>
         setState(() => _isLoading = true);
       }
 
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      final user = auth.currentUser;
+      final authState = ProviderScope.containerOf(context)
+          .read(authProvider)
+          .value;
+      final user = authState?.user;
 
       if (user == null) throw Exception('No user logged in');
 
       // Handle "View As" logic
       final filter = Provider.of<FilterProvider>(context, listen: false);
 
-      // Get codes from AuthProvider (List<String>) and join them
-      String codes = auth.vendedorCodes.join(',');
+      // Get codes from AuthState (List<String>) and join them
+      String codes = authState!.vendedorCodes.join(',');
 
       // Fallback if empty (shouldn't happen for valid commercial)
       if (codes.isEmpty && user.vendedorCode != null) {
@@ -860,10 +864,12 @@ class _FacturasPageState extends State<FacturasPage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final auth = context.watch<AuthProvider>();
 
-    return Column(
-      children: [
+    return Consumer(
+      builder: (context, ref, _) {
+        final authState = ref.watch(authProvider).value;
+        return Column(
+          children: [
         // Header (AppBar replacement)
         Container(
           padding: const EdgeInsets.all(16),
@@ -906,7 +912,7 @@ class _FacturasPageState extends State<FacturasPage>
                   )
                 ],
               ),
-              if (auth.currentUser?.isJefeVentas ?? false) ...[
+              if (authState?.user?.isJefeVentas ?? false) ...[
                 const SizedBox(height: 12),
                 Container(
                   constraints: const BoxConstraints(minHeight: 50),
@@ -958,6 +964,8 @@ class _FacturasPageState extends State<FacturasPage>
           ),
         ),
       ],
+        );
+      },
     );
   }
 

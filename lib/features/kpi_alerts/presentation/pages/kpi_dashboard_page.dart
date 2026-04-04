@@ -3,9 +3,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import 'package:gmp_app_mobilidad/core/providers/auth_provider.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
@@ -49,7 +50,10 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
       return filterCode; // null = all, or specific vendor
     }
     // Comercial: always their own code
-    return context.read<AuthProvider>().currentUser?.vendedorCode;
+    final authState = ProviderScope.containerOf(context)
+        .read(authProvider)
+        .value;
+    return authState?.user?.vendedorCode;
   }
 
   Future<void> _loadDashboard() async {

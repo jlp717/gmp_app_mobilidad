@@ -8,7 +8,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/api/api_client.dart';
 import '../../providers/sales_history_provider.dart';
-import '../../../../core/providers/auth_provider.dart';
+import 'package:provider/provider.dart' hide Provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import 'package:intl/intl.dart';
 import '../widgets/sales_summary_header.dart';
 import '../../../../core/widgets/shimmer_skeleton.dart';
@@ -34,10 +36,12 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final authState = ProviderScope.containerOf(context)
+          .read(authProvider)
+          .value;
       final history = Provider.of<SalesHistoryProvider>(context, listen: false);
 
-      history.setVendedorCodes(auth.vendedorCodes.join(','));
+      history.setVendedorCodes(authState?.vendedorCodes.join(',') ?? '');
 
       if (widget.initialClientCode != null) {
         _clientController.text = widget.initialClientCode!;

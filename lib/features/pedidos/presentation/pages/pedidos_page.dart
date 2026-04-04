@@ -11,7 +11,9 @@ import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
-import '../../../../core/providers/auth_provider.dart';
+import 'package:provider/provider.dart' hide Provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import '../../providers/pedidos_provider.dart';
 import '../../data/pedidos_service.dart';
 import '../widgets/product_search_widget.dart';
@@ -160,8 +162,11 @@ class _PedidosPageState extends State<PedidosPage>
   }
 
   String get _vendedorCodes {
-    final auth = context.read<AuthProvider>();
-    String codes = auth.vendedorCodes.join(',');
+    final vendedorCodes = ProviderScope.containerOf(context)
+        .read(authProvider)
+        .value
+        ?.vendedorCodes ?? [];
+    String codes = vendedorCodes.join(',');
     // JEFE_VENTAS: respect global "Ver como" filter
     if (widget.isJefeVentas) {
       final filter = context.read<FilterProvider>();

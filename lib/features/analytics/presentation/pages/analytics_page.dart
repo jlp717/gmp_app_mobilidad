@@ -4,7 +4,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/providers/dashboard_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/date_formatter.dart';

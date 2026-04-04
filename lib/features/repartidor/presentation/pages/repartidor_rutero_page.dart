@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import '../../../../core/providers/auth_provider.dart';
+import 'package:provider/provider.dart' hide Provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
@@ -78,14 +79,15 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
   }
 
   Future<void> _loadData() async {
-    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final authState = ProviderScope.containerOf(context)
+        .read(authProvider).value;
     final filter = Provider.of<FilterProvider>(context, listen: false);
     final entregas = Provider.of<EntregasProvider>(context, listen: false);
 
-    String targetId = widget.repartidorId ?? auth.currentUser?.code ?? '';
+    String targetId = widget.repartidorId ?? authState?.user?.code ?? '';
 
     // View As logic for directors
-    if (auth.isDirector && filter.selectedVendor != null) {
+    if ((authState?.user?.isDirector ?? false) && filter.selectedVendor != null) {
       targetId = filter.selectedVendor!;
     }
     
@@ -148,22 +150,23 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    final filter = Provider.of<FilterProvider>(context);
-    final entregas = Provider.of<EntregasProvider>(context);
+    return Consumer(
+      builder: (context, ref, _) {
+        final authState = ref.watch(authProvider).value;
+        final filter = Provider.of<FilterProvider>(context);
+        final entregas = Provider.of<EntregasProvider>(context);
 
+        // Header Name Logic
+        String currentName = authState?.user?.name ?? 'Repartidor';
+        if ((authState?.user?.isDirector ?? false) && filter.selectedVendor != null) {
+          // Just show the vendor code for now
+          currentName = 'Repartidor ${filter.selectedVendor}';
+        }
 
-    // Header Name Logic
-    String currentName = auth.currentUser?.name ?? 'Repartidor';
-    if (auth.isDirector && filter.selectedVendor != null) {
-      // Just show the vendor code for now
-      currentName = 'Repartidor ${filter.selectedVendor}';
-    }
-
-    return Scaffold(
-      backgroundColor: AppTheme.darkBase,
-      body: Column(
-        children: [
+        return Scaffold(
+          backgroundColor: AppTheme.darkBase,
+          body: Column(
+            children: [
           // HEADER (COMPACT)
           SmartSyncHeader(
             title: 'Rutero',
@@ -214,7 +217,7 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
             ),
 
           // DIRECTOR FILTER (if applicable)
-          if (auth.isDirector) _buildDirectorFilter(auth, filter, entregas),
+          if (authState?.user?.isDirector ?? false) _buildDirectorFilter(authState!, filter, entregas),
 
           // SEARCH & FILTER ROW
           _buildSearchAndFilters(entregas),
@@ -237,11 +240,13 @@ class _RepartidorRuteroPageState extends State<RepartidorRuteroPage>
           ),
         ],
       ),
+        );
+      },
     );
   }
 
   Widget _buildDirectorFilter(
-    AuthProvider auth,
+    AuthState authState,
     FilterProvider filter,
     EntregasProvider entregas,
   ) {

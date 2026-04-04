@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/utils/responsive.dart';
 
 class RoleSelectionDialog extends StatefulWidget {
@@ -151,9 +151,9 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
   }
 
   Future<void> _confirmRole() async {
-    final auth = context.read<AuthProvider>();
+    final ref = ProviderScope.containerOf(context);
     try {
-      final success = await auth.switchRole(_selectedRole);
+      final success = await ref.read(authProvider.notifier).switchRole(_selectedRole);
       if (success) {
         if (mounted) {
             Navigator.of(context).pop();
@@ -162,8 +162,9 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
         }
       } else {
         if (mounted) {
+          final error = ref.read(authProvider).value?.error;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: ${auth.error ?? "Failed to switch role"}'))
+            SnackBar(content: Text('Error: ${error ?? "Failed to switch role"}'))
           );
         }
       }

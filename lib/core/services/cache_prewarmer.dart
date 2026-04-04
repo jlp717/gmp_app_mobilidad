@@ -6,43 +6,34 @@
 import 'package:flutter/foundation.dart';
 import '../cache/cache_service.dart';
 import '../api/api_client.dart';
-import '../providers/auth_provider.dart';
 
 /// Service to pre-warm cache with critical data
 class CachePreWarmer {
   static bool _hasPreWarmed = false;
 
   /// Pre-warm cache with essential data for the current user
-  /// Call this after successful login
-  static Future<void> preWarmCache(AuthProvider auth) async {
+  /// Call this after successful login with auth state data
+  static Future<void> preWarmCache({
+    required List<String> vendedorCodes,
+    required bool isJefeVentas,
+  }) async {
     if (_hasPreWarmed) return;
-    
-    final user = auth.currentUser;
-    if (user == null) return;
+    if (vendedorCodes.isEmpty) return;
 
     debugPrint('[CachePreWarmer] 🔥 Starting cache pre-warming...');
-    final stopwatch = Stopwatch()..start();
-
     try {
-      final vendorCodes = auth.vendedorCodes.join(',');
+      final codes = vendedorCodes.join(',');
       final currentYear = DateTime.now().year;
       final currentMonth = DateTime.now().month;
 
-      // Parallel pre-fetch of critical data
       await Future.wait([
-        // Facturas data
-        _preWarmFacturas(vendorCodes, currentYear, currentMonth),
-        
-        // Commissions data
-        _preWarmCommissions(vendorCodes, currentYear),
-        
-        // Vendedores list (for directors)
-        if (user.role == 'director') _preWarmVendedores(),
+        _preWarmFacturas(codes, currentYear, currentMonth),
+        if (isJefeVentas) _preWarmVendedores(),
+        _preWarmCommissions(codes, currentYear),
       ], eagerError: false);
 
       _hasPreWarmed = true;
-      stopwatch.stop();
-      debugPrint('[CachePreWarmer] ✅ Pre-warming completed in ${stopwatch.elapsedMilliseconds}ms');
+      debugPrint('[CachePreWarmer] ✅ Pre-warming completed');
     } catch (e) {
       debugPrint('[CachePreWarmer] ⚠️ Pre-warming failed (non-critical): $e');
     }

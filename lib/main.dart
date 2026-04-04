@@ -17,13 +17,11 @@ import 'features/dashboard/presentation/pages/main_shell.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Global error handling
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     debugPrint('[FLUTTER_ERROR] ${details.exceptionAsString()}');
   };
 
-  // Custom error widget for release builds
   if (kReleaseMode) {
     ErrorWidget.builder = (FlutterErrorDetails details) {
       return Material(
@@ -34,14 +32,19 @@ void main() async {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange.shade300),
+                Icon(Icons.warning_amber_rounded,
+                    size: 48, color: Colors.orange.shade300),
                 const SizedBox(height: 16),
-                const Text('Se ha producido un error', style: TextStyle(color: Colors.white, fontSize: 16)),
+                const Text('Se ha producido un error',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
                 const SizedBox(height: 8),
                 Text('Error: ${details.exceptionAsString()}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 8),
-                const Text('Vuelve atrás o reinicia la app', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                const Text('Vuelve atrás o reinicia la app',
+                    style:
+                        TextStyle(color: Colors.white70, fontSize: 13)),
               ],
             ),
           ),
@@ -53,9 +56,9 @@ void main() async {
   try {
     await CacheService.init();
     debugPrint('[MAIN] ✅ Cache initialized');
-
     await ApiClient.initialize();
-    debugPrint('[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}');
+    debugPrint(
+        '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}');
   } catch (e, stack) {
     debugPrint('[MAIN] ❌ Initialization error: $e');
     debugPrint('[MAIN] Stack: $stack');
@@ -70,12 +73,9 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Catch unhandled async errors
   runZonedGuarded(
     () => runApp(
-      const ProviderScope(
-        child: GMPSalesAnalyticsApp(),
-      ),
+      const ProviderScope(child: GMPSalesAnalyticsApp()),
     ),
     (error, stackTrace) {
       debugPrint('[ZONE_ERROR] $error\n$stackTrace');
@@ -87,7 +87,8 @@ class GMPSalesAnalyticsApp extends ConsumerStatefulWidget {
   const GMPSalesAnalyticsApp({super.key});
 
   @override
-  ConsumerState<GMPSalesAnalyticsApp> createState() => _GMPSalesAnalyticsAppState();
+  ConsumerState<GMPSalesAnalyticsApp> createState() =>
+      _GMPSalesAnalyticsAppState();
 }
 
 class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp> {
@@ -145,7 +146,6 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp> {
 
   @override
   Widget build(BuildContext context) {
-    // Trigger GoRouter redirect on auth changes
     ref.listen(authProvider, (previous, next) {
       _authChangeSignal.value++;
     });

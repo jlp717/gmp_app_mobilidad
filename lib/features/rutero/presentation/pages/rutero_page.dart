@@ -10,10 +10,11 @@ import '../widgets/rutero_reorder_modal.dart';
 import '../widgets/rutero_dialogs.dart'; // NEW: Import dialogs
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/widgets/modern_loading.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' hide Provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
-import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 
@@ -1268,8 +1269,10 @@ class _RuteroPageState extends State<RuteroPage>
     }
 
     // Personal identification
-    final auth = context.read<AuthProvider>();
-    final nombreComercial = auth.currentUser?.name ?? 'tu comercial';
+    final authState = ProviderScope.containerOf(context)
+        .read(authProvider)
+        .value;
+    final nombreComercial = authState?.user?.name ?? 'tu comercial';
     final manana = DateTime.now().add(const Duration(days: 1));
     final fecha = '${manana.day}/${manana.month}/${manana.year}';
 

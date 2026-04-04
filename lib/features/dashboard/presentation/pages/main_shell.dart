@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide Provider, Consumer, ChangeNotifierProvider;
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/providers/dashboard_provider.dart';
+import '../../../../core/providers/dashboard_notifier.dart';
 import '../../../../core/widgets/coming_soon_placeholder.dart';
 import '../../../clients/presentation/pages/simple_client_list_page.dart';
 import '../../../rutero/presentation/pages/rutero_page.dart';
@@ -40,64 +42,52 @@ import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
 /// Panel de Control (Dashboard) is only visible for Jefe de Ventas
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends ConsumerState<MainShell> {
   int _currentIndex = 0;
-  AuthProvider? _authProvider;
-  DashboardProvider? _dashboardProvider;
   bool _isNavExpanded = true;
 
-  // State for Jefe Repartidor View
   String? _selectedRepartidor = 'ALL';
   List<Map<String, dynamic>> _repartidoresOptions = [];
   bool _isLoadingRepartidores = false;
 
-  // Toggle state
   bool _forceRepartidorMode = false;
   bool _forceAlmacenMode = false;
 
-  // Navigate from Clientes → Histórico with preselected client
   String? _pendingClientId;
   String? _pendingClientName;
 
   @override
   void initState() {
     super.initState();
-    // Listen for auth changes (logout/session expired)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _authProvider = context.read<AuthProvider>();
-      // Note: Can't add listener here as context is not available in initState
-    });
-    // Verify connection on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnection();
       _checkForUpdates();
 
-      // Init mode based on real user role
-      final auth = context.read<AuthProvider>();
-      if (auth.currentUser?.isRepartidor == true) {
-         _forceRepartidorMode = true;
+      final authState = ref.read(authProvider).value;
+      final role = authState?.user?.role ?? '';
+      if (role == 'REPARTIDOR') {
+        _forceRepartidorMode = true;
       }
 
-      // Listen to FilterProvider changes to refresh DashboardProvider
-      final filterProvider = context.read<FilterProvider>();
-      filterProvider.addListener(_onFilterChanged);
+      try {
+        final filterProvider = context.read<FilterProvider>();
+        filterProvider.addListener(_onFilterChanged);
+      } catch (_) {}
     });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Listen for auth state changes
-    final auth = context.watch<AuthProvider>();
-    if (!auth.isAuthenticated && mounted) {
-      // User logged out or session expired - navigate to login
+    final authState = ref.watch(authProvider).value;
+    if (!(authState?.isAuthenticated ?? false) && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           Navigator.of(context).pushReplacementNamed('/login');
@@ -107,10 +97,10 @@ class _MainShellState extends State<MainShell> {
   }
 
   bool get _isRepartidorEffective {
-    final auth = context.read<AuthProvider>();
+    final authState = ref.read(authProvider).value;
     if (_forceRepartidorMode) return true;
     if (_forceAlmacenMode) return false;
-    return auth.currentUser?.isRepartidor ?? false;
+    return authState?.user?.isRepartidor ?? false;
   }
 
   bool get _isAlmacenEffective {
@@ -119,21 +109,23 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _onFilterChanged() {
-    if (_dashboardProvider == null) return;
     // FIX: Only propagate vendor filter to dashboard when user is on Panel tab
     // Previously, filtering by vendor in Clientes/Objetivos would contaminate
     // the dashboard's own filter state
     if (_currentIndex != 0) return; // Panel is always index 0 for Jefe
 
     final filterProvider = context.read<FilterProvider>();
-    final authProvider = context.read<AuthProvider>();
+    final authState = ref.read(authProvider).value;
     final selectedVendor = filterProvider.selectedVendor;
 
     if (selectedVendor != null && selectedVendor.isNotEmpty) {
-      _dashboardProvider!.updateVendedorCodes(selectedVendor.split(','));
+      // Use Riverpod dashboardProvider to update vendor codes
+      final ref = ProviderScope.containerOf(context);
+      ref.read(dashboardProvider.notifier).updateVendorCodes(selectedVendor.split(','));
     } else {
       // No filter = show all vendor codes
-      _dashboardProvider!.updateVendedorCodes(authProvider.vendedorCodes);
+      final ref = ProviderScope.containerOf(context);
+      ref.read(dashboardProvider.notifier).updateVendorCodes(authState?.vendedorCodes ?? []);
     }
   }
 
@@ -150,10 +142,10 @@ class _MainShellState extends State<MainShell> {
 
 
   void _checkForUpdates() {
-    final auth = context.read<AuthProvider>();
-    if (!auth.updateAvailable) return;
+    final authState = ref.read(authProvider).value;
+    if (!(authState?.updateAvailable ?? false)) return;
 
-    final bool isMandatory = auth.isMandatoryUpdate;
+    final bool isMandatory = authState?.isMandatoryUpdate ?? false;
 
     showDialog(
       context: context,
@@ -170,7 +162,7 @@ class _MainShellState extends State<MainShell> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                auth.updateMessage.isNotEmpty ? auth.updateMessage : 'Hay una nueva versión de la app con mejoras críticas.',
+                (authState?.updateMessage.isNotEmpty ?? false) ? authState!.updateMessage : 'Hay una nueva versión de la app con mejoras críticas.',
                 style: const TextStyle(color: Colors.white70),
               ),
               if (isMandatory) ...[
@@ -203,7 +195,7 @@ class _MainShellState extends State<MainShell> {
               ),
               onPressed: () {
                 launchUrl(
-                  Uri.parse(auth.playStoreUrl),
+                  Uri.parse(authState?.playStoreUrl ?? ''),
                   mode: LaunchMode.externalApplication,
                 );
               },
@@ -216,21 +208,13 @@ class _MainShellState extends State<MainShell> {
   }
 
   Future<void> _checkConnection() async {
-    final authProvider = context.read<AuthProvider>();
-      if (authProvider.currentUser != null) {
-        final now = DateTime.now();
-        
-        // Only create dashboard provider for Jefe de Ventas
-        if (authProvider.currentUser!.isJefeVentas) {
-          setState(() {
-            _dashboardProvider = DashboardProvider(
-              authProvider.vendedorCodes,
-              isJefeVentas: true,
-              year: now.year,
-              month: now.month,
-            );
-            _dashboardProvider!.fetchDashboardData();
-          });
+    final authState = ref.read(authProvider).value;
+    final user = authState?.user;
+    if (user != null) {
+      final now = DateTime.now();
+
+      if (user.isJefeVentas) {
+        ref.read(dashboardProvider.notifier).fetchAll(year: now.year, month: now.month);
           // Fetch repartidores
           _fetchRepartidores();
         } else {
@@ -243,17 +227,17 @@ class _MainShellState extends State<MainShell> {
   }
 
   // Show futuristic logout confirmation modal
-  Future<void> _showLogoutConfirmation(AuthProvider authProvider) async {
+  Future<void> _showLogoutConfirmation(AuthState authState) async {
     final shouldLogout = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black54,
       builder: (context) => _LogoutConfirmationDialog(
-        userName: authProvider.currentUser?.name ?? 'Usuario',
+        userName: authState.user?.name ?? 'Usuario',
       ),
     );
-    
+
     if (shouldLogout == true) {
-      authProvider.logout();
+      ProviderScope.containerOf(context).read(authProvider.notifier).logout();
     }
   }
 
@@ -301,8 +285,8 @@ class _MainShellState extends State<MainShell> {
   // Get navigation destinations based on user role
   List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
     final items = <_NavItem>[];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final user = authProvider.currentUser;
+    final authState = ref.read(authProvider).value;
+    final user = authState?.user;
 
     // ===============================================
     // ALMACÉN MODE
@@ -371,7 +355,7 @@ class _MainShellState extends State<MainShell> {
         color: AppTheme.neonBlue,
       ));
       // Comisiones only for real repartidores with showCommissions enabled
-      if (!isJefe && (authProvider.currentUser?.showCommissions ?? false)) {
+      if (!isJefe && (authState?.user?.showCommissions ?? false)) {
         items.add(_NavItem(
           icon: Icons.euro_outlined,
           selectedIcon: Icons.euro,
@@ -425,7 +409,7 @@ class _MainShellState extends State<MainShell> {
     ));
     
     // Comisiones: Jefe always sees it; comercial raso only if showCommissions
-    if (isJefeVentas || (authProvider.currentUser?.showCommissions ?? false)) {
+    if (isJefeVentas || (authState?.user?.showCommissions ?? false)) {
       items.add(_NavItem(
         icon: Icons.euro_outlined,
         selectedIcon: Icons.euro,
@@ -482,8 +466,8 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
-    final user = authProvider.currentUser;
+    final authState = ref.watch(authProvider).value;
+    final user = authState?.user;
 
     if (user == null) {
       return const Scaffold(
@@ -491,22 +475,19 @@ class _MainShellState extends State<MainShell> {
       );
     }
 
-    final isJefeVentas = user.isJefeVentas; 
-    // Init default selection for Jefe in Repartidor Mode
+    final isJefeVentas = user.isJefeVentas;
     if (_forceRepartidorMode && isJefeVentas && _selectedRepartidor == null) {
-       _selectedRepartidor = 'ALL';
+      _selectedRepartidor = 'ALL';
     }
 
-    final navItems = _getNavItems(isJefeVentas, authProvider.vendedorCodes);
+    final navItems = _getNavItems(isJefeVentas, authState!.vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
-
-    // Responsive: phones use bottom nav, tablets use sidebar
     final useBottomNav = Responsive.useBottomNav(context);
 
     if (useBottomNav) {
-      return _buildPhoneLayout(navItems, safeIndex, authProvider, user, isJefeVentas);
+      return _buildPhoneLayout(navItems, safeIndex, user, isJefeVentas);
     }
-    return _buildTabletLayout(navItems, safeIndex, authProvider, user, isJefeVentas);
+    return _buildTabletLayout(navItems, safeIndex, user, isJefeVentas);
   }
 
   // ---------------------------------------------------------------------------
@@ -515,21 +496,18 @@ class _MainShellState extends State<MainShell> {
   Widget _buildPhoneLayout(
     List<_NavItem> navItems,
     int safeIndex,
-    AuthProvider authProvider,
     UserModel user,
     bool isJefeVentas,
   ) {
-    // Max 5 items in bottom nav; if more, last slot becomes "More"
     final maxBottomItems = 5;
     final hasOverflow = navItems.length > maxBottomItems;
     final bottomItems = hasOverflow ? navItems.sublist(0, maxBottomItems - 1) : navItems;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // Drawer for user profile, mode switcher, settings, logout
-      drawer: _buildPhoneDrawer(user, isJefeVentas, authProvider),
+      drawer: _buildPhoneDrawer(user, isJefeVentas),
       body: SafeArea(
-        child: _buildCurrentPage(authProvider.vendedorCodes, isJefeVentas),
+        child: _buildCurrentPage(isJefeVentas),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -699,7 +677,7 @@ class _MainShellState extends State<MainShell> {
   }
 
   /// Drawer for phone layout with user info, mode switcher, and actions
-  Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas, AuthProvider authProvider) {
+  Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas, AuthState authState) {
     return Drawer(
       backgroundColor: AppTheme.surfaceColor,
       width: MediaQuery.of(context).size.width * 0.72,
@@ -720,7 +698,7 @@ class _MainShellState extends State<MainShell> {
               title: const Text('Cerrar Sesión', style: TextStyle(color: AppTheme.error, fontSize: 13)),
               onTap: () {
                 Navigator.pop(context);
-                _showLogoutConfirmation(authProvider);
+                _showLogoutConfirmation(authState);
               },
             ),
             const SizedBox(height: 8),
@@ -736,7 +714,6 @@ class _MainShellState extends State<MainShell> {
   Widget _buildTabletLayout(
     List<_NavItem> navItems,
     int safeIndex,
-    AuthProvider authProvider,
     UserModel user,
     bool isJefeVentas,
   ) {
@@ -793,7 +770,7 @@ class _MainShellState extends State<MainShell> {
                         children: [
                           _buildCollapseButton(),
                           const SizedBox(height: 8),
-                          _buildLogoutButton(authProvider),
+                          _buildLogoutButton(authState),
                         ],
                       ),
                     ),
@@ -827,7 +804,7 @@ class _MainShellState extends State<MainShell> {
 
             // Main Content
             Expanded(
-              child: _buildCurrentPage(authProvider.vendedorCodes, isJefeVentas),
+              child: _buildCurrentPage(authState?.vendedorCodes ?? [], isJefeVentas),
             ),
           ],
         ),
@@ -1088,9 +1065,9 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _buildLogoutButton(AuthProvider authProvider) {
+  Widget _buildLogoutButton(AuthState authState) {
     return InkWell(
-      onTap: () => _showLogoutConfirmation(authProvider),
+      onTap: () => _showLogoutConfirmation(authState),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1238,8 +1215,8 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildCurrentPage(List<String> vendedorCodes, bool isJefeVentas) {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final user = authProvider.currentUser;
+    final authState = ref.read(authProvider).value;
+    final user = authState?.user;
 
     // ===============================================
     // ALMACÉN MODE

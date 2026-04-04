@@ -3,11 +3,13 @@ import 'dart:async';
 // ignore: unused_import
 import 'dart:ui'; 
 import 'package:flutter/foundation.dart'; // For compute
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' hide Provider;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/dashboard_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/dashboard_notifier.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/widgets/modern_loading.dart';
@@ -243,16 +245,25 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
 
     });
     
-    final provider = Provider.of<DashboardProvider>(context, listen: false);
-    
+    final dashboardState = ProviderScope.containerOf(context)
+        .read(dashboardProvider)
+        .value;
+
     try {
       final params = <String, String>{};
-      
+
       // Vendor codes
       if (_selectedVendedor != null && _selectedVendedor!.isNotEmpty) {
         params['vendedorCodes'] = _selectedVendedor!;
-      } else if (provider.vendedorCodes.isNotEmpty) {
-        params['vendedorCodes'] = provider.vendedorCodes.join(',');
+      } else if (dashboardState != null) {
+        // Get vendor codes from auth state
+        final authState = ProviderScope.containerOf(context)
+            .read(authProvider)
+            .value;
+        final codes = authState?.vendedorCodes ?? [];
+        if (codes.isNotEmpty) {
+          params['vendedorCodes'] = codes.join(',');
+        }
       }
 
       // Client Codes
@@ -423,8 +434,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
-    final provider = Provider.of<DashboardProvider>(context);
-    final isJefeVentas = provider.isJefeVentas;
+    final isJefeVentas = context.watch(authProvider).value?.isDirector ?? false;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,

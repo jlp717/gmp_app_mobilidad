@@ -10,7 +10,8 @@ import '../../data/commissions_service.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
-import '../../../../core/providers/auth_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/auth_notifier.dart';
 
 
 class CommissionsPage extends StatefulWidget {
@@ -231,7 +232,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final conceptController = TextEditingController(text: 'Pago Comisiones');
     final observacionesController = TextEditingController();
 
-    final adminCode = context.read<AuthProvider>().currentUser?.code ?? '';
+    final adminCode = ProviderScope.containerOf(context)
+        .read(authProvider)
+        .value
+        ?.user
+        ?.code ?? '';
 
     showDialog(
       context: context,
@@ -740,11 +745,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
     final rhythmStatus = rhythmCompliance >= 105 ? 'Adelantado' : (rhythmCompliance >= 95 ? 'En ritmo' : 'Rezagado');
 
     // Get payment authorization status
-    final authProvider = context.watch<AuthProvider>();
-    final curUserCode = authProvider.currentUser?.code?.trim() ?? '';
+    final authState = context.watch(authProvider).value;
+    final curUserCode = authState?.user?.code?.trim() ?? '';
     // Allow payment for ADMIN users or specifically DIEGO (code 98)
     final normalizedCode = curUserCode.replaceFirst(RegExp(r'^0+'), '');
-    final canPay = authProvider.currentUser?.tipoVendedor == 'ADMIN' 
+    final canPay = authState?.user?.tipoVendedor == 'ADMIN'
         || normalizedCode == '98';
 
 
@@ -1403,9 +1408,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
       });
 
       // Get payment authorization status
-      final authProvider = context.watch<AuthProvider>();
-      final curCode = (authProvider.currentUser?.code?.trim() ?? '').replaceFirst(RegExp(r'^0+'), '');
-      final canPay = authProvider.currentUser?.tipoVendedor == 'ADMIN'
+      final authState = context.watch(authProvider).value;
+      final curCode = (authState?.user?.code?.trim() ?? '').replaceFirst(RegExp(r'^0+'), '');
+      final canPay = authState?.user?.tipoVendedor == 'ADMIN'
           || curCode == '98';
 
       return Container(

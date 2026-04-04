@@ -2,9 +2,9 @@
 // Diseño futurista con colores neon, agrupación por tipo, y visibilidad por rol
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/core/providers/auth_provider.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 
 /// Widget que muestra las alertas KPI Glacius de un cliente.
@@ -69,8 +69,10 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 
   bool get _isJefe {
     try {
-      final auth = context.read<AuthProvider>();
-      return auth.currentUser?.isDirector ?? false;
+      final authState = ProviderScope.containerOf(context)
+          .read(authProvider)
+          .value;
+      return authState?.user?.isDirector ?? false;
     } catch (_) {
       return false;
     }

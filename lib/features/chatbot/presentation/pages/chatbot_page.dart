@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../providers/chatbot_provider.dart';
 import '../widgets/chat_message_bubble.dart';
@@ -77,8 +76,10 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
     // Check role for custom message
     bool isJefe = false;
     try {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      isJefe = auth.isDirector || widget.vendedorCodes.length > 1;
+      final authState = ProviderScope.containerOf(context)
+          .read(authProvider)
+          .value;
+      isJefe = (authState?.user?.isDirector ?? false) || widget.vendedorCodes.length > 1;
     } catch (_) {}
 
     return Scaffold( // Wrapped in Scaffold for safety

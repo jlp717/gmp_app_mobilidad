@@ -6,7 +6,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/providers/auth_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import '../../providers/cobros_provider.dart';
 import '../../../clients/data/clients_service.dart';
 import 'cobro_detail_screen.dart';
@@ -69,8 +70,10 @@ class _CobrosPageState extends State<CobrosPage> {
     final selectedVendor = filterProvider.selectedVendor;
     
     // Get all vendor codes from auth provider
-    final authProvider = context.read<AuthProvider>();
-    final allVendorCodes = authProvider.vendedorCodes;
+    final authState = ProviderScope.containerOf(context)
+        .read(authProvider)
+        .value;
+    final allVendorCodes = authState?.vendedorCodes ?? [];
     
     // Determine which vendors to use
     if (selectedVendor != null && selectedVendor.isNotEmpty) {

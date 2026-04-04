@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:math' as math;
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/utils/responsive.dart';
 import '../widgets/role_selection_dialog.dart';
 
@@ -69,8 +69,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Future<void> _tryAutoLogin() async {
-    final auth = context.read<AuthProvider>();
-    if (await auth.tryAutoLogin()) {
+    // Auto-login is handled automatically by AuthNotifier.build()
+    // Just check if already authenticated
+    final authState = ProviderScope.containerOf(context).read(authProvider).value;
+    if (authState?.isAuthenticated == true) {
       if (mounted) context.go('/dashboard');
     }
   }
@@ -88,10 +90,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     if (!_formKey.currentState!.validate()) return;
 
-    final auth = context.read<AuthProvider>();
+    final ref = ProviderScope.containerOf(context);
     debugPrint('[LoginPage] Attempting login for: ${_usernameController.text}');
 
-    final success = await auth.login(
+    final success = await ref.read(authProvider.notifier).login(
       _usernameController.text.trim(),
       _passwordController.text,
     );
@@ -100,11 +102,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     // Debug: Print the actual error
     if (!success) {
-      debugPrint('[LoginPage] Login FAILED. Error: ${auth.error}');
+      debugPrint('[LoginPage] Login FAILED. Error: ${ref.read(authProvider).value?.error}');
     }
 
     if (success) {
-      final user = auth.currentUser;
+      final user = ref.read(authProvider).value?.user;
       debugPrint(
           '[LoginPage] Login Success. Role: ${user?.role}, IsJefe: ${user?.isJefeVentas}');
 
@@ -119,7 +121,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
         if (!mounted) return;
 
-        // Use Future.microtask to ensure we are out of the current frame/event loop if needed
+        // Use Future.microtask to ensure we are out of current frame
         Future.microtask(() async {
           if (!mounted) return;
           await showDialog(
@@ -134,7 +136,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     } else {
       setState(() {
         _hasError = true;
-        _errorMessage = auth.error ?? 'Credenciales incorrectas';
+        _errorMessage = ref.read(authProvider).value?.error ?? 'Credenciales incorrectas';
       });
 
       debugPrint(
@@ -591,16 +593,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             const SizedBox(height: 32),
 
             // Login button
-            Consumer<AuthProvider>(
-              builder: (context, auth, _) {
+            Consumer(
+              builder: (context, ref, _) {
+                final authState = ref.watch(authProvider);
+                final isLoading = authState.isLoading;
                 return GestureDetector(
-                  onTap: auth.isLoading ? null : _handleLogin,
+                  onTap: isLoading ? null : _handleLogin,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     height: 56,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
-                      gradient: auth.isLoading
+                      gradient: isLoading
                           ? null
                           : const LinearGradient(
                               begin: Alignment.centerLeft,
@@ -612,8 +616,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               ],
                             ),
                       color:
-                          auth.isLoading ? Colors.white.withOpacity(0.1) : null,
-                      boxShadow: auth.isLoading
+                          isLoading ? Colors.white.withOpacity(0.1) : null,
+                      boxShadow: isLoading
                           ? []
                           : [
                               BoxShadow(
@@ -625,7 +629,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             ],
                     ),
                     child: Center(
-                      child: auth.isLoading
+                      child: isLoading
                           ? SizedBox(
                               width: 24,
                               height: 24,
