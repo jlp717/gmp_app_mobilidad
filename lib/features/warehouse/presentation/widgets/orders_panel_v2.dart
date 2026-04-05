@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as provider;
 
 import '../../../../core/theme/app_theme.dart';
 import '../../application/load_planner_provider.dart';
@@ -60,8 +61,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<LoadPlannerProvider>(
-      builder: (context, provider, _) {
+    return provider.Consumer<LoadPlannerProvider>(
+      builder: (context, state, _) {
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -85,7 +86,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               _buildSearchBar(),
 
               // Bulk action buttons
-              _buildBulkActions(provider),
+              _buildBulkActions(state),
 
               // Filter chips
               _buildFilterChips(),
@@ -137,7 +138,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                           const Icon(Icons.people_rounded, size: 13),
                           const SizedBox(width: 4),
                           Text(
-                            'Clientes (${provider.clientSummaries.length})',
+                            'Clientes (${state.clientSummaries.length})',
                           ),
                         ],
                       ),
@@ -149,7 +150,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                         children: [
                           const Icon(Icons.inventory_2_rounded, size: 13),
                           const SizedBox(width: 4),
-                          Text('Cajas (${provider.placedBoxes.length})'),
+                          Text('Cajas (${state.placedBoxes.length})'),
                         ],
                       ),
                     ),
@@ -161,15 +162,15 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                           Icon(
                             Icons.warning_rounded,
                             size: 13,
-                            color: provider.overflowBoxes.isNotEmpty
+                            color: state.overflowBoxes.isNotEmpty
                                 ? AppTheme.error
                                 : null,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Fuera (${provider.overflowBoxes.length})',
+                            'Fuera (${state.overflowBoxes.length})',
                             style: TextStyle(
-                              color: provider.overflowBoxes.isNotEmpty
+                              color: state.overflowBoxes.isNotEmpty
                                   ? AppTheme.error
                                   : null,
                             ),
@@ -186,9 +187,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildClientsTab(provider),
-                    _buildBoxesTab(provider),
-                    _buildOverflowTab(provider),
+                    _buildClientsTab(state),
+                    _buildBoxesTab(state),
+                    _buildOverflowTab(state),
                   ],
                 ),
               ),

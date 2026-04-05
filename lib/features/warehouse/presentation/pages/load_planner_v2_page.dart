@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as provider;
 
 import '../../../../core/theme/app_theme.dart';
 import '../../application/load_planner_provider.dart';
@@ -88,7 +89,7 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
 
           // Metrics
           RepaintBoundary(
-            child: Consumer<LoadPlannerProvider>(
+            child: provider.Consumer<LoadPlannerProvider>(
               builder: (_, p, __) => MetricsBar(
                 metrics: p.metrics,
                 saveState: p.saveState,
@@ -98,20 +99,20 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
 
           // Main content
           Expanded(
-            child: Consumer<LoadPlannerProvider>(
-              builder: (context, provider, _) {
-                if (provider.isLoading) {
+            child: provider.Consumer<LoadPlannerProvider>(
+              builder: (context, state, _) {
+                if (state.isLoading) {
                   return _buildShimmerLoading();
                 }
 
-                if (provider.error != null) {
-                  return _buildError(provider.error!);
+                if (state.error != null) {
+                  return _buildError(state.error!);
                 }
 
                 if (isWide) {
-                  return _buildTabletLayout(provider);
+                  return _buildTabletLayout(state);
                 } else {
-                  return _buildPhoneLayout(provider);
+                  return _buildPhoneLayout(state);
                 }
               },
             ),
@@ -469,7 +470,7 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => ChangeNotifierProvider.value(
+      builder: (_) => provider.ChangeNotifierProvider.value(
         value: context.read<LoadPlannerProvider>(),
         child: DraggableScrollableSheet(
           initialChildSize: 0.5,

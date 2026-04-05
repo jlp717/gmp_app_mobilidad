@@ -9,7 +9,7 @@ void main() {
       vectorStore = HNSWVectorStore(
         maxConnections: 8,
         maxLayers: 4,
-        expansionFactor: 100.0,
+        expansionFactor: 100,
       );
     });
 
@@ -115,8 +115,8 @@ void main() {
         key: 'test_key',
         value: {'data': 'test_value', 'number': 42},
         type: MemoryType.general,
-        createdAt: DateTime(2024, 1, 1, 12, 0),
-        updatedAt: DateTime(2024, 1, 1, 14, 0),
+        createdAt: DateTime(2024, 1, 1, 12),
+        updatedAt: DateTime(2024, 1, 1, 14),
         expiresAt: 1704117600000, // 2024-01-01 15:00:00 UTC
       );
 
@@ -139,7 +139,6 @@ void main() {
         type: MemoryType.state,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        expiresAt: null,
       );
 
       // Act
@@ -160,7 +159,7 @@ void main() {
         entityType: 'pedido',
         entityId: 'order_456',
         data: {'items': ['item1', 'item2'], 'total': 100.0},
-        createdAt: DateTime(2024, 1, 1),
+        createdAt: DateTime(2024),
         retryCount: 2,
       );
 

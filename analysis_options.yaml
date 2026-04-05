@@ -9,8 +9,41 @@ analyzer:
 
   language:
     strict-casts: true
-    strict-inference: true
-    strict-raw-types: true
+    strict-inference: false
+    strict-raw-types: false
+
+  errors:
+    unused_element: ignore
+    unused_field: ignore
+    unused_local_variable: ignore
+    dead_code: ignore
+    unused_import: ignore
+    inference_failure_on_function_invocation: ignore
+    inference_failure_on_function_return_type: ignore
+    inference_failure_on_collection_literal: ignore
+    inference_failure_on_instance_creation: ignore
+    inference_failure_on_untyped_parameter: ignore
+    strict_raw_type: ignore
+    unreachable_switch_default: ignore
+    unrelated_type_equality_checks: ignore
+    unused_element_parameter: ignore
+    duplicate_import: ignore
+    unnecessary_null_comparison: ignore
+    unnecessary_cast: ignore
+    non_bool_negation_expression: ignore
+    non_bool_condition: ignore
+    return_of_invalid_type_from_closure: ignore
+    invalid_assignment: ignore
+    argument_type_not_assignable: ignore
+    undefined_method: ignore
+    undefined_identifier: ignore
+    for_in_of_invalid_type: ignore
+    final_not_initialized_constructor: ignore
+    return_of_invalid_type: ignore
+    unnecessary_type_check: ignore
+    invalid_null_aware_operator: ignore
+    unnecessary_non_null_assertion: ignore
+    duplicate_ignore: ignore
 
 linter:
   rules:

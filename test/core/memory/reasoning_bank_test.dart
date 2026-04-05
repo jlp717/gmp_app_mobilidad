@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/memory/memory.dart';
-import 'package:collection/collection.dart';
 
 void main() {
   group('ReasoningBank Tests', () {
@@ -22,7 +21,7 @@ void main() {
           productName: 'Producto Test',
           family: 'Familia A',
           brand: 'Marca X',
-          price: 100.0,
+          price: 100,
         );
 
         final embedding2 = reasoningBank.generateProductEmbedding(
@@ -30,7 +29,7 @@ void main() {
           productName: 'Producto Test',
           family: 'Familia A',
           brand: 'Marca X',
-          price: 100.0,
+          price: 100,
         );
 
         // Assert
@@ -210,8 +209,8 @@ void main() {
         final orderId = 'order_${DateTime.now().millisecondsSinceEpoch}';
         
         final items = [
-          OrderItem(productCode: 'item1', quantity: 2, price: 50.0),
-          OrderItem(productCode: 'item2', quantity: 1, price: 100.0),
+          OrderItem(productCode: 'item1', quantity: 2, price: 50),
+          OrderItem(productCode: 'item2', quantity: 1, price: 100),
         ];
 
         // Act
@@ -231,13 +230,13 @@ void main() {
         const userId = 'combo_user';
         
         // Analyze multiple orders with same combination
-        for (int i = 0; i < 3; i++) {
+        for (var i = 0; i < 3; i++) {
           await reasoningBank.analyzeOrderPattern(
             orderId: 'order_${userId}_$i',
             userId: userId,
             items: [
-              OrderItem(productCode: 'product_A', quantity: 1, price: 10.0),
-              OrderItem(productCode: 'product_B', quantity: 1, price: 20.0),
+              OrderItem(productCode: 'product_A', quantity: 1, price: 10),
+              OrderItem(productCode: 'product_B', quantity: 1, price: 20),
             ],
           );
         }
@@ -246,7 +245,6 @@ void main() {
         final frequentlyBoughtTogether = reasoningBank.getFrequentlyBoughtTogether(
           userId: userId,
           productCode: 'product_A',
-          k: 5,
         );
 
         // Assert
@@ -260,7 +258,7 @@ void main() {
         const userId = 'learn_user';
         
         // Record multiple interactions of same type
-        for (int i = 0; i < 5; i++) {
+        for (var i = 0; i < 5; i++) {
           await reasoningBank.recordUserInteraction(
             userId: userId,
             productCode: 'product_$i',

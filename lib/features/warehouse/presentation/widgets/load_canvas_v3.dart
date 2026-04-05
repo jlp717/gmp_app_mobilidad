@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as provider;
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -380,12 +381,12 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
     // Ensure WebView is created only when widget is in tree
     _ensureWebView();
 
-    return Consumer<LoadPlannerProvider>(
-      builder: (context, provider, child) {
+    return provider.Consumer<LoadPlannerProvider>(
+      builder: (context, state, child) {
         // Throttled state sync (60fps max)
-        if (_sceneReady && provider.truck != null) {
+        if (_sceneReady && state.truck != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _syncProviderToJs(provider);
+            if (mounted) _syncProviderToJs(state);
           });
         }
 
@@ -396,7 +397,7 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
               WebViewWidget(controller: _controller!),
 
             // Loading overlay while Three.js initializes
-            if (!_sceneReady || provider.truck == null)
+            if (!_sceneReady || state.truck == null)
               Container(
                 color: AppTheme.darkBase,
                 child: const Center(

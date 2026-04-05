@@ -366,7 +366,7 @@ class StreamCache {
 /// Extensions for easy StreamChain creation
 extension StreamChainExtension<T> on Stream<T> {
   /// Convert to StreamChain
-  StreamChain<T> get chain => StreamChain<T>.from(this);
+  StreamChain<T> get chain => StreamChain.from(this);
 
   /// Cache stream emissions
   Stream<T> cache({

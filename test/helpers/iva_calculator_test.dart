@@ -36,7 +36,7 @@ void main() {
     });
 
     test('calculates IVA at 0%', () {
-      expect(calculateIva(100.0, 0), 0.0);
+      expect(calculateIva(100, 0), 0.0);
     });
 
     test('handles zero base', () {
@@ -47,17 +47,17 @@ void main() {
   group('Total Calculations', () {
     test('calculates total from base and IVA', () {
       // Factura 219, client 4300039982
-      final base1 = 297.75;
-      final iva1 = 29.78;
-      final base2 = 40.61;
-      final iva2 = 8.53;
-      final netoSum = base1 + base2; // 338.36
-      final ivaSum = iva1 + iva2;    // 38.31
+      const base1 = 297.75;
+      const iva1 = 29.78;
+      const base2 = 40.61;
+      const iva2 = 8.53;
+      const netoSum = base1 + base2; // 338.36
+      const ivaSum = iva1 + iva2;    // 38.31
       expect(calculateTotal(netoSum, ivaSum), 376.67);
     });
 
     test('total matches when no IVA', () {
-      expect(calculateTotal(100.0, 0.0), 100.0);
+      expect(calculateTotal(100, 0), 100.0);
     });
   });
 
@@ -71,7 +71,7 @@ void main() {
     });
 
     test('handles rounding correctly', () {
-      expect(verifyChecksum(98.73, 6.0, '104.73'), true);
+      expect(verifyChecksum(98.73, 6, '104.73'), true);
     });
   });
 
@@ -80,9 +80,9 @@ void main() {
       // From DB analysis:
       // CAC.IMPORTEBRUTO=164.55, CAC.IMPORTETOTAL=105.53
       // CAC Base1=34.24 (IVA 10%=3.42), Bonif=65.82
-      final base = 34.24;
+      const base = 34.24;
       final iva = calculateIva(base, 10); // 3.42
-      final baseMinusBonif = 164.55 - 65.82; // 98.73 (base imponible)
+      const baseMinusBonif = 164.55 - 65.82; // 98.73 (base imponible)
       expect(iva, 3.42);
       // Total = base imponible + IVA = 98.73 + 6.00 = 104.73
       // But CAC.IMPORTETOTAL = 105.53 (slight difference due to other base categories)
