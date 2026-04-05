@@ -60,6 +60,10 @@ if (accessMode !== 'file') {
   const defaultPaths = [
     '/opt/lampp/htdocs/movilidad/ImagenesGestorDocumentalNuevo',
     '/var/www/html/movilidad/ImagenesGestorDocumentalNuevo',
+    '/opt/gmp-api/uploads/imagenes',
+    '/opt/gmp-api/assets/imagenes',
+    '/srv/www/movilidad/ImagenesGestorDocumentalNuevo',
+    '/data/movilidad/ImagenesGestorDocumentalNuevo',
     '\\\\192.168.1.191\\acisa\\xampp\\htdocs\\movilidad\\ImagenesGestorDocumentalNuevo',
   ];
   for (const p of defaultPaths) {
@@ -196,23 +200,23 @@ async function findImageHttp(code) {
     return result;
   }
 
-  // Fallback: check FOTOS/ subfolder (some products only have images there)
-  const fotosDir = items.find(f => f.endsWith('/') && f.toUpperCase().startsWith('FOTO'));
-  if (fotosDir) {
-    const dirName = fotosDir.replace(/\/$/, '');
+  // Scan all subdirectories for images (FOTOS first, then all others)
+  const subdirs = items.filter(f => f.endsWith('/'));
+  const fotosDirs = subdirs.filter(f => f.toUpperCase().startsWith('FOTO'));
+  const otherSubDirs = subdirs.filter(f => !f.toUpperCase().startsWith('FOTO'));
+  for (const dirEntry of [...fotosDirs, ...otherSubDirs]) {
+    const dirName = dirEntry.replace(/\/$/, '');
     const subItems = await listHttpDirectory(`${code}/${encodeURIComponent(dirName)}/`);
-    if (subItems) {
-      const subImages = subItems.filter(f => {
-        if (f.endsWith('/')) return false;
-        const ext = f.split('.').pop().toLowerCase();
-        return IMAGE_EXTENSIONS.has(ext);
-      });
-      if (subImages.length > 0) {
-        const best = pickBest(subImages);
-        const result = `${code}/${encodeURIComponent(dirName)}/${encodeURIComponent(best)}`;
-        setCache(cacheKey, result);
-        return result;
-      }
+    if (!subItems) continue;
+    const subImages = subItems.filter(f => {
+      if (f.endsWith('/')) return false;
+      return IMAGE_EXTENSIONS.has(f.split('.').pop().toLowerCase());
+    });
+    if (subImages.length > 0) {
+      const best = pickBest(subImages);
+      const result = `${code}/${encodeURIComponent(dirName)}/${encodeURIComponent(best)}`;
+      setCache(cacheKey, result);
+      return result;
     }
   }
 
@@ -244,7 +248,8 @@ async function findFichaHttp(code) {
   const fichaDirs = [];
   const otherDirs = [];
   for (const d of allDirs) {
-    if (d.toUpperCase().startsWith('FICHA')) fichaDirs.push(d);
+    const uDir = d.toUpperCase().replace(/\/$/, '');
+    if (uDir.startsWith('FICHA') || uDir.startsWith('TECNICA')) fichaDirs.push(d);
     else otherDirs.push(d);
   }
   fichaDirs.sort((a, b) => a.length - b.length); // shorter = more canonical
@@ -348,6 +353,19 @@ function findLocalImage(code) {
       if (subImages.length > 0) return pickBestLocal(subImages, path.join(folder, fotosDir));
     }
 
+    // Last resort: scan ALL other subdirectories for images
+    const otherSubDirs = files.filter(f => {
+      try { return !f.toUpperCase().startsWith('FOTO') && fs.statSync(path.join(folder, f)).isDirectory(); }
+      catch { return false; }
+    });
+    for (const dir of otherSubDirs) {
+      try {
+        const subFiles = fs.readdirSync(path.join(folder, dir));
+        const subImages = subFiles.filter(f => IMAGE_EXTENSIONS.has(f.split('.').pop().toLowerCase()));
+        if (subImages.length > 0) return pickBestLocal(subImages, path.join(folder, dir));
+      } catch { /* skip */ }
+    }
+
     return null;
   } catch { return null; }
 }
@@ -367,7 +385,8 @@ function findLocalFicha(code) {
       try {
         if (!fs.statSync(full).isDirectory()) continue;
       } catch { continue; }
-      if (f.toUpperCase().startsWith('FICHA')) fichaDirs.push(f);
+      const uName = f.toUpperCase();
+      if (uName.startsWith('FICHA') || uName.startsWith('TECNICA')) fichaDirs.push(f);
       else otherDirs.push(f);
     }
     fichaDirs.sort((a, b) => a.length - b.length);

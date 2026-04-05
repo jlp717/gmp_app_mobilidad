@@ -5,12 +5,14 @@
 /// Nivel 1: Lista de clientes con búsqueda
 /// Nivel 2: Documentos del cliente con filtros avanzados
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
@@ -1702,8 +1704,15 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         sharePositionOrigin: origin,
       );
     } catch (e) {
-      modal.error('Error al descargar: $e',
-          onRetry: () => _downloadDocument(doc));
+      modal.close();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al descargar documento: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
     }
   }
 
@@ -1769,6 +1778,28 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     if (result == null || !mounted) return;
 
+    // Request storage permission on Android 9 and below (API ≤ 29)
+    if (Platform.isAndroid) {
+      final androidInfo = await DeviceInfoPlugin().androidInfo;
+      if (androidInfo.version.sdkInt <= 29) {
+        var status = await Permission.storage.status;
+        if (!status.isGranted) {
+          status = await Permission.storage.request();
+          if (!status.isGranted) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Permiso de almacenamiento denegado'),
+                  backgroundColor: AppTheme.error,
+                ),
+              );
+            }
+            return;
+          }
+        }
+      }
+    }
+
     final modal =
         AsyncOperationModal.show(context, text: 'Preparando WhatsApp...');
     try {
@@ -1812,11 +1843,19 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: result.message,
+        subject: result.message,
         sharePositionOrigin: origin,
       );
     } catch (e) {
-      modal.error('Error preparando WhatsApp: $e',
-          onRetry: () => _whatsAppDocument(doc));
+      modal.close();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al compartir por WhatsApp: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
     }
   }
 

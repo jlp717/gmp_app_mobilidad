@@ -6,8 +6,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -826,6 +828,29 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     final modal = AsyncOperationModal.show(context,
         text: 'Preparando PDF para WhatsApp...');
     try {
+      // Request storage permission on Android 9 and below (API ≤ 29)
+      if (Platform.isAndroid) {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        if (androidInfo.version.sdkInt <= 29) {
+          var status = await Permission.storage.status;
+          if (!status.isGranted) {
+            status = await Permission.storage.request();
+            if (!status.isGranted) {
+              modal.close();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Permiso de almacenamiento denegado'),
+                    backgroundColor: AppTheme.error,
+                  ),
+                );
+              }
+              return;
+            }
+          }
+        }
+      }
+
       final file = await FacturasService.downloadFacturaPdf(
         factura.serie,
         factura.numero,
@@ -835,24 +860,31 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
       if (!mounted) return;
 
-      final renderBox = context.findRenderObject() as RenderBox;
-      final size = renderBox.size;
-      final origin = Rect.fromCenter(
-        center: Offset(size.width / 2, size.height / 2),
-        width: 1,
-        height: 1,
-      );
+      // Safe RenderBox cast — null on some widget states
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center: Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
 
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: result.message,
-        subject: 'Factura ${factura.numeroFormateado}',
+        subject: result.message,
         sharePositionOrigin: origin,
       );
     } catch (e) {
+      modal.close();
       if (mounted) {
-        modal.error('Error al compartir: $e',
-            onRetry: () => _whatsAppFactura(factura));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al compartir por WhatsApp: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
       }
     }
   }

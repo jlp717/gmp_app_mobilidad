@@ -41,6 +41,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   List<Map<String, dynamic>> _dayClients = [];
   bool _isLoadingWeek = true;
   bool _isLoadingClients = false;
+  bool _isCacheLoading = false; // true while backend cache is still warming up
+  int _cacheRetryCount = 0;
+  static const int _maxCacheRetries = 4;
   String? _error;
   String _searchQuery = '';
   String _sortMode = 'custom'; // 'sales_desc', 'sales_asc', 'route', 'custom'
@@ -131,6 +134,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }
 
   Future<void> _refreshData() async {
+    // Reset retry counters so a manual refresh always starts fresh
+    _cacheRetryCount = 0;
     await _loadWeekData(useDirectEndpoint: true);
     // _loadWeekData calls _loadDayClients internally, so we assume completion updates
     if (mounted) {
@@ -282,6 +287,19 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         _isLoadingWeek = false;
       });
 
+      // If the backend cache is still warming, show indicator and schedule retry
+      final weekCacheStatus = response['cacheStatus'] as String?;
+      if (weekCacheStatus == 'loading' && _cacheRetryCount < _maxCacheRetries) {
+        setState(() => _isCacheLoading = true);
+        _cacheRetryCount++;
+        Future.delayed(const Duration(seconds: 4), () {
+          if (mounted) _loadWeekData(useDirectEndpoint: useDirectEndpoint);
+        });
+        return;
+      } else {
+        setState(() { _isCacheLoading = false; _cacheRetryCount = 0; });
+      }
+
       await _loadDayClients(useDirectEndpoint: useDirectEndpoint);
     } catch (e) {
       setState(() {
@@ -338,6 +356,18 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         }
         _isLoadingClients = false;
       });
+
+      // If the backend cache is still warming, auto-retry with loaded clients
+      final dayCacheStatus = response['cacheStatus'] as String?;
+      if (dayCacheStatus == 'loading' && _dayClients.isEmpty && _cacheRetryCount < _maxCacheRetries) {
+        setState(() => _isCacheLoading = true);
+        _cacheRetryCount++;
+        Future.delayed(const Duration(seconds: 4), () {
+          if (mounted) _loadDayClients(useDirectEndpoint: useDirectEndpoint);
+        });
+      } else if (dayCacheStatus != 'loading') {
+        setState(() { _isCacheLoading = false; _cacheRetryCount = 0; });
+      }
     } catch (e) {
       setState(() {
         _dayClients = [];
@@ -388,6 +418,33 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               isLoading: _isLoadingWeek || _isLoadingClients,
               onSync: _refreshData,
             ),
+
+            // Cache warming banner
+            if (_isCacheLoading)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                color: AppTheme.neonBlue.withOpacity(0.15),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 12, height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: AppTheme.neonBlue,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Preparando datos… se actualizará automáticamente',
+                      style: TextStyle(
+                        color: AppTheme.neonBlue.withOpacity(0.9),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             // Unified Compact Header Region
             _buildUnifiedHeader(isSmallScreen),

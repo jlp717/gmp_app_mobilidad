@@ -45,13 +45,12 @@ const SMTP_CONFIG = {
     maxMessages: 100
 };
 
-// Fallback config: port 587 STARTTLS (used when primary SSL/465 times out)
-const SMTP_CONFIG_FALLBACK = {
-    ...SMTP_CONFIG,
-    port: 587,
-    secure: false,
-    pool: false
-};
+// Fallback ports to try when primary fails (in order)
+const SMTP_FALLBACK_PORTS = [587, 2525];
+
+function buildFallbackConfig(port) {
+    return { ...SMTP_CONFIG, port, secure: port === 465, pool: false };
+}
 
 const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
 const FROM_NAME = 'Granja Mari Pepa';
@@ -199,15 +198,17 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
         throw new Error('Nombre del archivo PDF es requerido');
     }
 
-    const maxRetries = 3;
+    // Ports to try: [primaryPort, 587, 2525]
+    const portsToTry = [SMTP_CONFIG.port, ...SMTP_FALLBACK_PORTS.filter(p => p !== SMTP_CONFIG.port)];
     let lastError;
-    let usingFallback = false;
+    let portIndex = 0; // index into portsToTry
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 1; attempt <= portsToTry.length; attempt++) {
+        const currentPort = portsToTry[portIndex];
         try {
-            const transport = usingFallback
-                ? nodemailer.createTransport(SMTP_CONFIG_FALLBACK)
-                : getTransporter();
+            const transport = portIndex === 0
+                ? getTransporter()
+                : nodemailer.createTransport(buildFallbackConfig(currentPort));
 
             const defaultHtml = `
                 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -275,15 +276,13 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
             const isAuth = error.code === 'EAUTH';
 
             if (isTimeout || isConnection) {
-                // Timeout o conexión caída → invalidar y forzar reconexión
+                // Timeout o conexión caída → intentar siguiente puerto
                 invalidateTransporter();
-                // Si estábamos en puerto 465 (SSL) y hay timeout, cambiar al fallback 587/STARTTLS
-                const currentPort = usingFallback ? SMTP_CONFIG_FALLBACK.port : SMTP_CONFIG.port;
-                if (!usingFallback && (currentPort === 465 || isTimeout)) {
-                    usingFallback = true;
-                    logger.warn(`⚠️ Puerto ${currentPort} SMTP con error (${error.code}), reintentando con puerto 587/STARTTLS...`);
+                portIndex++;
+                if (portIndex < portsToTry.length) {
+                    logger.warn(`⚠️ Puerto ${currentPort} SMTP con error (${error.code}), reintentando con puerto ${portsToTry[portIndex]}...`);
                 } else {
-                    logger.warn(`⚠️ Error conexión (intento ${attempt}/${maxRetries}): ${error.code} - ${error.message}`, { to });
+                    logger.warn(`⚠️ Error conexión en todos los puertos (intento ${attempt}/${portsToTry.length}): ${error.code}`, { to });
                 }
             } else if (isAuth) {
                 // Error autenticación → NO reintentar, es irrecuperable
@@ -295,13 +294,13 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
                 logger.warn(`⚠️ Error email (intento ${attempt}/${maxRetries}): ${error.code} - ${error.message}`, { to });
             }
 
-            // Reintentar solo para errores de red/timeout (no auth)
-            if (attempt < maxRetries && !isAuth) {
-                const delay = Math.pow(2, attempt) * 1000;
-                logger.debug(`Esperando ${delay}ms antes de reintentar...`);
+            // Reintentar con siguiente puerto si no es error de auth
+            if (!isAuth && portIndex < portsToTry.length) {
+                const delay = attempt * 1000;
+                logger.debug(`Esperando ${delay}ms antes de reintentar en puerto ${portsToTry[portIndex]}...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
-            } else if (isAuth) {
-                break; // No retry para auth errors
+            } else {
+                break; // auth error o sin más puertos
             }
         }
     }
@@ -309,10 +308,11 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
     // Todos los reintentos fallaron
     const errorCode = lastError?.code || 'UNKNOWN';
     const isTimeoutError = ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'].includes(errorCode);
+    const triedPorts = portsToTry.slice(0, portIndex + 1).join(', ');
 
     let userFriendlyMessage = lastError?.message || 'Error desconocido enviando email';
     if (isTimeoutError) {
-        userFriendlyMessage = `Timeout conectando al servidor de correo (${SMTP_CONFIG.host}:${SMTP_CONFIG.port}). Verifica que el servidor SMTP está accesible.`;
+        userFriendlyMessage = `Timeout conectando al servidor de correo (${SMTP_CONFIG.host}, puertos ${triedPorts}). Verifica que el servidor SMTP está accesible desde el VPS.`;
     }
 
     logger.error(`❌ Email fallido tras ${maxRetries} intentos`, {

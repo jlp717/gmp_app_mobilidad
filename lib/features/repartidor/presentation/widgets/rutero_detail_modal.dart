@@ -822,8 +822,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         sharePositionOrigin: origin,
       );
     } catch (e) {
+      modal.close();
       if (mounted) {
-        modal.error('Error descargando PDF: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al descargar PDF: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
       }
     }
   }
