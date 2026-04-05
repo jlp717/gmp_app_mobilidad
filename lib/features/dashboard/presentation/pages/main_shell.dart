@@ -57,6 +57,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   bool _forceRepartidorMode = false;
   bool _forceAlmacenMode = false;
+  bool _navigatingToLogin = false;
 
   String? _pendingClientId;
   String? _pendingClientName;
@@ -80,10 +81,11 @@ class _MainShellState extends ConsumerState<MainShell> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final authState = ref.watch(authProvider).value;
-    if (!(authState?.isAuthenticated ?? false) && mounted) {
+    if (!(authState?.isAuthenticated ?? false) && mounted && !_navigatingToLogin) {
+      _navigatingToLogin = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/login');
+          Navigator.maybeOf(context)?.pushReplacementNamed('/login');
         }
       });
     }

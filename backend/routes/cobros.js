@@ -58,10 +58,10 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         let origenExists = false;
         try {
             const colCheck = await query(`
-                SELECT COLNAME FROM SYSCAT.COLUMNS 
-                WHERE TABNAME = 'PEDIDOS_CAB' 
-                  AND COLNAME = 'ORIGEN' 
-                  AND COLSCHEMA = 'JAVIER'
+                SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2 
+                WHERE TABLE_SCHEMA = 'JAVIER'
+                  AND TABLE_NAME = 'PEDIDOS_CAB' 
+                  AND COLUMN_NAME = 'ORIGEN'
                 FETCH FIRST 1 ROW ONLY
             `);
             origenExists = colCheck && colCheck.length > 0;
@@ -224,12 +224,24 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             ? [] 
             : vendedorCodeParam.split(',').map(v => v.trim()).filter(v => v.length > 0);
         
-        const isSingleVendor = vendorCodes.length === 1;
-        const vendorFilter = isAll ? '' : (isSingleVendor 
-            ? `AND TRIM(PC.CODIGOVENDEDOR) = ?`
-            : `AND TRIM(PC.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`
-        );
-        const vendorParams = isAll ? [] : vendorCodes;
+        // For many vendor codes, embed directly in SQL to avoid ODBC parameter limit (CWB0111)
+        // IBM i ODBC driver has issues with 90+ parameters in IN clause
+        const MAX_PARAMS = 50;
+        const useParamBinding = vendorCodes.length <= MAX_PARAMS;
+        
+        let vendorFilter = '';
+        let vendorParams = [];
+        
+        if (!isAll) {
+            if (useParamBinding) {
+                vendorFilter = `AND TRIM(PC.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`;
+                vendorParams = vendorCodes;
+            } else {
+                // Sanitize and embed directly - vendor codes are short alphanumeric strings
+                const sanitized = vendorCodes.map(v => `'${v.replace(/[^a-zA-Z0-9_-]/g, '')}'`).join(',');
+                vendorFilter = `AND TRIM(PC.CODIGOVENDEDOR) IN (${sanitized})`;
+            }
+        }
 
         // Check if COBROS table exists
         let cobrosTableExists = false;
@@ -238,18 +250,21 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             cobrosTableExists = true;
         } catch(e) { /* table doesn't exist yet */ }
 
-        // Check ORIGEN column
+        // Check ORIGEN column using IBM i compatible catalog
         let origenExists = false;
         try {
             const colCheck = await query(`
-                SELECT COLNAME FROM SYSCAT.COLUMNS
-                WHERE TABNAME = 'PEDIDOS_CAB'
-                  AND COLNAME = 'ORIGEN'
-                  AND COLSCHEMA = 'JAVIER'
+                SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
+                WHERE TABLE_SCHEMA = 'JAVIER'
+                  AND TABLE_NAME = 'PEDIDOS_CAB'
+                  AND COLUMN_NAME = 'ORIGEN'
                 FETCH FIRST 1 ROW ONLY
             `);
             origenExists = colCheck && colCheck.length > 0;
-        } catch(e) { /* column doesn't exist */ }
+        } catch(e) {
+            // Fallback: assume column exists if query fails
+            origenExists = true;
+        }
 
         let sql = `
             SELECT
