@@ -14,7 +14,7 @@ import 'stock_alternatives_sheet.dart';
 import '../dialogs/delete_line_dialog.dart';
 import '../utils/pedidos_formatters.dart';
 
-class OrderSummaryWidget extends StatefulWidget {
+class OrderSummaryWidget extends ConsumerStatefulWidget {
   final String vendedorCode;
   final ScrollController? scrollController;
 
@@ -25,10 +25,10 @@ class OrderSummaryWidget extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<OrderSummaryWidget> createState() => _OrderSummaryWidgetState();
+  ConsumerState<OrderSummaryWidget> createState() => _OrderSummaryWidgetState();
 }
 
-class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
+class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
   final TextEditingController _obsCtrl = TextEditingController();
   final TextEditingController _discountCtrl = TextEditingController();
   final FocusNode _discountFocusNode = FocusNode();
@@ -43,7 +43,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<PedidosProvider>();
+    final provider = ref.watch(pedidosProvider);
 
     return Container(
       color: AppTheme.darkBase,
@@ -1024,7 +1024,7 @@ class _OrderSummaryWidgetState extends State<OrderSummaryWidget> {
       ),
     ).then((selected) async {
       if (selected != null && selected['code'] != null) {
-        final provider = context.read<PedidosProvider>();
+        final provider = ref.read(pedidosProvider.notifier);
         final productCode = selected['code'] as String;
         final quantity = selected['qty'] as double;
         final unit = selected['unit'] as String;

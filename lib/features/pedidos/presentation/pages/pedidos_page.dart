@@ -91,7 +91,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           _onVendorFilterChanged();
         });
       }
-      context.read<PedidosProvider>().addListener(_onProviderChange);
+      ref.read(pedidosProvider).addListener(_onProviderChange);
     });
 
     _catalogScrollController.addListener(_onCatalogScroll);
@@ -101,7 +101,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       const Duration(seconds: 60),
       (_) {
         if (mounted) {
-          context.read<PedidosProvider>().refreshCartStock();
+          ref.read(pedidosProvider).refreshCartStock();
         }
       },
     );
@@ -109,7 +109,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   void _onProviderChange() {
     if (!mounted) return;
-    final prov = context.read<PedidosProvider>();
+    final prov = ref.read(pedidosProvider);
     if (prov.isDirty) {
       if (_autoSaveTimer == null || !_autoSaveTimer!.isActive) {
         _autoSaveTimer = Timer(const Duration(seconds: 5), () {
@@ -128,20 +128,20 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     _tabController.dispose();
     _catalogScrollController.dispose();
     try {
-      context.read<PedidosProvider>().removeListener(_onProviderChange);
+      ref.read(pedidosProvider).removeListener(_onProviderChange);
     } catch (_) {}
     super.dispose();
   }
 
   void _onTabChange() {
     if (_tabController.index == 1 && mounted) {
-      context
-          .read<PedidosProvider>()
+      ref
+          .read(pedidosProvider)
           .loadOrderStats(vendedorCodes: _vendedorCodes);
-      _loadOrdersWithFilters(context.read<PedidosProvider>());
+      _loadOrdersWithFilters(ref.read(pedidosProvider));
     }
     if (_tabController.index == 0 && mounted) {
-      context.read<PedidosProvider>().loadComplementaryProducts();
+      ref.read(pedidosProvider).loadComplementaryProducts();
     }
   }
 
@@ -150,7 +150,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       await PedidosFavoritesService.init();
       if (mounted) {
         final favs = PedidosFavoritesService.getFavorites();
-        context.read<PedidosProvider>().initFavorites(favs);
+        ref.read(pedidosProvider).initFavorites(favs);
       }
     } catch (e) {
       debugPrint('[PedidosPage] Favorites init error: $e');
@@ -182,7 +182,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     try {
       await PedidosOfflineService.init();
       // Auto-sync pending orders
-      final provider = context.read<PedidosProvider>();
+      final provider = ref.read(pedidosProvider);
       final synced = await provider.syncPendingOrders();
       if (synced > 0 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -199,7 +199,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   void _loadInitialData() {
-    final provider = context.read<PedidosProvider>();
+    final provider = ref.read(pedidosProvider);
     final codes = _vendedorCodes;
     if (provider.hasClient) {
       provider.loadProducts(
@@ -213,14 +213,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   void _onCatalogScroll() {
     if (_catalogScrollController.position.pixels >=
         _catalogScrollController.position.maxScrollExtent - 200) {
-      final provider = context.read<PedidosProvider>();
+      final provider = ref.read(pedidosProvider);
       if (!provider.hasClient) return;
       provider.loadMoreProducts(_vendedorCodes);
     }
   }
 
   void _onProductTap(Product product) {
-    final provider = context.read<PedidosProvider>();
+    final provider = ref.read(pedidosProvider);
     if (!provider.hasClient) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -238,7 +238,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     final productCode = code.trim();
     if (productCode.isEmpty) return;
 
-    final provider = context.read<PedidosProvider>();
+    final provider = ref.read(pedidosProvider);
     if (!provider.hasClient) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -289,7 +289,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Future<String?> _addGiftPromotionLine(
       String code, String fallbackName, double qty) async {
     if (qty <= 0) return null;
-    final provider = context.read<PedidosProvider>();
+    final provider = ref.read(pedidosProvider);
     if (!provider.hasClient) {
       return 'Selecciona un cliente primero';
     }
@@ -350,7 +350,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   void _showAddToOrderDialog(Product product) {
-    final prov0 = context.read<PedidosProvider>();
+    final prov0 = ref.read(pedidosProvider);
     OrderLine? existingLine;
     for (final line in prov0.lines) {
       if (line.codigoArticulo == product.code) {
@@ -452,7 +452,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             // Load tariffs on first build
             if (loadingTariffs) {
               loadingTariffs = false;
-              final prov = context.read<PedidosProvider>();
+              final prov = ref.read(pedidosProvider);
               PedidosService.getProductDetail(
                 product.code,
                 clientCode: prov.hasClient ? prov.clientCode : null,
@@ -629,7 +629,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                           label: 'Datos producto',
                           color: AppTheme.neonBlue,
                           onTap: () {
-                            final prov = context.read<PedidosProvider>();
+                            final prov = ref.read(pedidosProvider);
                             ProductDetailSheet.show(
                               context,
                               productCode: product.code,
@@ -643,13 +643,13 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                         ),
                         const SizedBox(width: 8),
                         // History button
-                        if (context.read<PedidosProvider>().hasClient)
+                        if (ref.read(pedidosProvider).hasClient)
                           _buildQuickLink(
                             icon: Icons.bar_chart_rounded,
                             label: 'Historial compras',
                             color: AppTheme.neonPurple,
                             onTap: () {
-                              final prov = context.read<PedidosProvider>();
+                              final prov = ref.read(pedidosProvider);
                               ProductHistorySheet.show(
                                 context,
                                 productCode: product.code,
@@ -669,7 +669,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                         height: 40,
                         child: ElevatedButton.icon(
                           onPressed: () async {
-                            final prov = context.read<PedidosProvider>();
+                            final prov = ref.read(pedidosProvider);
                             final selected = await TarifaSelectorModal.show(
                               ctx,
                               product: product,
@@ -1268,7 +1268,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                                 if (inputQty <= 0 && inputUds <= 0) return;
 
                                 final provider =
-                                    context.read<PedidosProvider>();
+                                    ref.read(pedidosProvider);
 
                                 double envases = 0.0;
                                 double unidades = 0.0;
@@ -1371,8 +1371,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                                           const Duration(milliseconds: 300),
                                           () {
                                         if (mounted) {
-                                          context
-                                              .read<PedidosProvider>()
+                                          ref
+                                              .read(pedidosProvider)
                                               .loadComplementaryProducts();
                                         }
                                       });
@@ -1438,8 +1438,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                                 Future.delayed(
                                     const Duration(milliseconds: 300), () {
                                   if (mounted) {
-                                    context
-                                        .read<PedidosProvider>()
+                                    ref
+                                        .read(pedidosProvider)
                                         .loadComplementaryProducts();
                                   }
                                 });
@@ -1772,55 +1772,132 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ),
         actions: [
           // View Promotions button
-          provider_pkg.Consumer<PedidosProvider>(
-            builder: (ctx, prov, _) {
-              if (!prov.hasClient) return const SizedBox.shrink();
-              final promos = prov.activePromotionsList;
-              // Count unique promotions by promoCode, not individual items
-              final uniquePromoCodes =
-                  promos.map((p) => p.promoCode).toSet().length;
-              return Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.local_offer_outlined,
-                        color: AppTheme.neonPurple),
-                    tooltip: 'Ver Promociones',
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => PromotionsListPage(
-                            promotions: promos,
-                            onProductTap: (code, name) =>
-                                _openProductByCode(code, fallbackName: name),
-                            onAddGift: (code, name, qty) =>
-                                _addGiftPromotionLine(code, name, qty),
-                            hasStockResolver: (code) {
-                              for (final p in prov.products) {
-                                if (p.code == code) return p.hasStock;
+          Consumer(builder: (ctx, ref, _) {
+            final prov = ref.watch(pedidosProvider);
+            if (!prov.hasClient) return const SizedBox.shrink();
+            final promos = prov.activePromotionsList;
+            // Count unique promotions by promoCode, not individual items
+            final uniquePromoCodes =
+                promos.map((p) => p.promoCode).toSet().length;
+            return Stack(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.local_offer_outlined,
+                      color: AppTheme.neonPurple),
+                  tooltip: 'Ver Promociones',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => PromotionsListPage(
+                          promotions: promos,
+                          onProductTap: (code, name) =>
+                              _openProductByCode(code, fallbackName: name),
+                          onAddGift: (code, name, qty) =>
+                              _addGiftPromotionLine(code, name, qty),
+                          hasStockResolver: (code) {
+                            for (final p in prov.products) {
+                              if (p.code == code) return p.hasStock;
+                            }
+                            for (final promo in promos) {
+                              if (promo.code == code) {
+                                return promo.hasStock;
                               }
-                              for (final promo in promos) {
-                                if (promo.code == code) {
-                                  return promo.hasStock;
-                                }
+                            }
+                            return null;
+                          },
+                          qtyInOrderResolver: (code) {
+                            for (final line in prov.lines) {
+                              if (line.codigoArticulo == code) {
+                                return line.cantidadEnvases > 0
+                                    ? line.cantidadEnvases
+                                    : line.cantidadUnidades;
                               }
-                              return null;
-                            },
-                            qtyInOrderResolver: (code) {
-                              for (final line in prov.lines) {
-                                if (line.codigoArticulo == code) {
-                                  return line.cantidadEnvases > 0
-                                      ? line.cantidadEnvases
-                                      : line.cantidadUnidades;
-                                }
-                              }
-                              return 0;
-                            },
-                          ),
+                            }
+                            return 0;
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: AppTheme.neonPurple,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '$uniquePromoCodes',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }),
+          // Save draft button & Auto-save status
+          Consumer(builder: (ctx, ref, _) {
+            final prov = ref.watch(pedidosProvider);
+            if (!prov.hasLines) return const SizedBox.shrink();
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (prov.lastAutoSaved != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4.0),
+                    child: Text(
+                      prov.isDirty
+                          ? 'Borrador modificado...'
+                          : '\u{1F4BE} ${prov.lastAutoSaved!.hour.toString().padLeft(2, '0')}:${prov.lastAutoSaved!.minute.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                          color: prov.isDirty
+                              ? Colors.orange
+                              : AppTheme.neonGreen,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                IconButton(
+                  icon:
+                      const Icon(Icons.save_outlined, color: Colors.white70),
+                  tooltip: 'Guardar como borrador manual',
+                  onPressed: () async {
+                    await prov.saveDraft(widget.employeeCode,
+                        isAutoSave: false);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Borrador manual guardado'),
+                          backgroundColor: AppTheme.neonBlue,
+                          duration: Duration(seconds: 2),
                         ),
                       );
-                    },
-                  ),
+                    }
+                  },
+                ),
+              ],
+            );
+          }),
+          // Drafts list button
+          Consumer(builder: (ctx, ref, _) {
+            final prov = ref.watch(pedidosProvider);
+            final count = prov.draftCount;
+            return Stack(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.drafts_outlined,
+                      color: Colors.white70),
+                  tooltip: 'Borradores guardados',
+                  onPressed: () => _showDraftsDialog(prov),
+                ),
+                if (count > 0)
                   Positioned(
                     right: 6,
                     top: 6,
@@ -1831,7 +1908,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                         shape: BoxShape.circle,
                       ),
                       child: Text(
-                        '$uniquePromoCodes',
+                        '$count',
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
@@ -1839,89 +1916,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       ),
                     ),
                   ),
-                ],
-              );
-            },
-          ),
-          // Save draft button & Auto-save status
-          provider_pkg.Consumer<PedidosProvider>(
-            builder: (ctx, prov, _) {
-              if (!prov.hasLines) return const SizedBox.shrink();
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (prov.lastAutoSaved != null)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4.0),
-                      child: Text(
-                        prov.isDirty
-                            ? 'Borrador modificado...'
-                            : '💾 ${prov.lastAutoSaved!.hour.toString().padLeft(2, '0')}:${prov.lastAutoSaved!.minute.toString().padLeft(2, '0')}',
-                        style: TextStyle(
-                            color: prov.isDirty
-                                ? Colors.orange
-                                : AppTheme.neonGreen,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  IconButton(
-                    icon:
-                        const Icon(Icons.save_outlined, color: Colors.white70),
-                    tooltip: 'Guardar como borrador manual',
-                    onPressed: () async {
-                      await prov.saveDraft(widget.employeeCode,
-                          isAutoSave: false);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Borrador manual guardado'),
-                            backgroundColor: AppTheme.neonBlue,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ],
-              );
-            },
-          ),
-          // Drafts list button
-          provider_pkg.Consumer<PedidosProvider>(
-            builder: (ctx, prov, _) {
-              final count = prov.draftCount;
-              return Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.drafts_outlined,
-                        color: Colors.white70),
-                    tooltip: 'Borradores guardados',
-                    onPressed: () => _showDraftsDialog(prov),
-                  ),
-                  if (count > 0)
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: AppTheme.neonPurple,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          '$count',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
+              ],
+            );
+          }),
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -1962,7 +1959,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // â”€â”€ TAB 1: Nuevo Pedido â”€â”€
 
   Widget _buildNuevoPedidoTab() {
-    final provider = context.watch<PedidosProvider>();
+    final provider = ref.watch(pedidosProvider);
     final isPhone = Responsive.isSmall(context);
 
     if (isPhone) {
@@ -2028,17 +2025,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => provider_pkg.Provider<PedidosProvider>.value(
-        value: provider,
-        child: DraggableScrollableSheet(
-          initialChildSize: 0.85,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (_, scrollCtrl) => OrderSummaryWidget(
-            vendedorCode: widget.employeeCode,
-            scrollController: scrollCtrl,
-          ),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollCtrl) => OrderSummaryWidget(
+          vendedorCode: widget.employeeCode,
+          scrollController: scrollCtrl,
         ),
       ),
     );
@@ -2136,7 +2130,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           Expanded(
             child: InkWell(
               onTap: () async {
-                final prov = context.read<PedidosProvider>();
+                final prov = ref.read(pedidosProvider);
                 if (prov.lines.isNotEmpty) {
                   final confirm = await showDialog<bool>(
                     context: context,
@@ -2456,7 +2450,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // ── TAB 2: Mis Pedidos ──
 
   Widget _buildMisPedidosTab() {
-    final provider = context.watch<PedidosProvider>();
+    final provider = ref.watch(pedidosProvider);
     return Column(
       children: [
         OrderKpiDashboard(vendedorCodes: _vendedorCodes),
@@ -2602,11 +2596,11 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   void _showOrderDetail(OrderSummary order) async {
     final result = await OrderDetailSheet.show(context, orderId: order.id);
     if (result == 'cancelled' && mounted) {
-      _loadOrdersWithFilters(context.read<PedidosProvider>());
+      _loadOrdersWithFilters(ref.read(pedidosProvider));
     } else if (result != null && result.startsWith('clone:') && mounted) {
       final cloneId = int.tryParse(result.substring(6));
       if (cloneId != null) {
-        final prov = context.read<PedidosProvider>();
+        final prov = ref.read(pedidosProvider);
         await prov.cloneOrderIntoCart(cloneId);
         _tabController.animateTo(0);
         if (mounted) {
@@ -2623,7 +2617,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Future<void> _duplicateOrder(OrderSummary order) async {
-    final prov = context.read<PedidosProvider>();
+    final prov = ref.read(pedidosProvider);
     await prov.cloneOrderIntoCart(order.id);
     _tabController.animateTo(0);
     if (mounted) {
@@ -2669,8 +2663,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       ),
     );
     if (confirm == true && mounted) {
-      await context.read<PedidosProvider>().cancelExistingOrder(order.id);
-      _loadOrdersWithFilters(context.read<PedidosProvider>());
+      await ref.read(pedidosProvider).cancelExistingOrder(order.id);
+      _loadOrdersWithFilters(ref.read(pedidosProvider));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2683,7 +2677,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Future<void> _confirmBorrador(OrderSummary order) async {
-    final prov = context.read<PedidosProvider>();
+    final prov = ref.read(pedidosProvider);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2772,8 +2766,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
     if (confirm == true && mounted) {
       try {
-        await context.read<PedidosProvider>().cancelExistingOrder(order.id);
-        _loadOrdersWithFilters(context.read<PedidosProvider>());
+        await ref.read(pedidosProvider).cancelExistingOrder(order.id);
+        _loadOrdersWithFilters(ref.read(pedidosProvider));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

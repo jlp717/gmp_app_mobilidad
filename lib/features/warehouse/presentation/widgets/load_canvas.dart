@@ -13,14 +13,14 @@ import '../../domain/models/load_planner_models.dart';
 ///
 /// Communicates with Flutter via JavaScriptChannel (JS→Dart)
 /// and evaluateJavascript (Dart→JS).
-class LoadCanvas extends StatefulWidget {
+class LoadCanvas extends ConsumerStatefulWidget {
   const LoadCanvas({super.key});
 
   @override
   LoadCanvasState createState() => LoadCanvasState();
 }
 
-class LoadCanvasState extends State<LoadCanvas> {
+class LoadCanvasState extends ConsumerState<LoadCanvas> {
   late final WebViewController _controller;
   bool _sceneReady = false;
 
@@ -80,7 +80,7 @@ class LoadCanvasState extends State<LoadCanvas> {
     try {
       final data = jsonDecode(message.message) as Map<String, dynamic>;
       final type = data['type'] as String?;
-      final provider = context.read<LoadPlannerProvider>();
+      final provider = ref.read(loadPlannerProvider);
 
       switch (type) {
         case 'sceneReady':

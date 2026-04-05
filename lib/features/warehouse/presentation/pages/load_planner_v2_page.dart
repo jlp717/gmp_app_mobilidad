@@ -16,7 +16,7 @@ import '../widgets/planner_toolbar.dart';
 ///
 /// Layout: Header → Toolbar → MetricsBar → [Canvas (70%) | Panel (30%)]
 /// Responsive: tablet = side-by-side, phone = canvas + bottom sheet.
-class LoadPlannerV2Page extends StatefulWidget {
+class LoadPlannerV2Page extends ConsumerStatefulWidget {
   final String vehicleCode;
   final String vehicleName;
   final DateTime date;
@@ -29,10 +29,10 @@ class LoadPlannerV2Page extends StatefulWidget {
   });
 
   @override
-  State<LoadPlannerV2Page> createState() => _LoadPlannerV2PageState();
+  ConsumerState<LoadPlannerV2Page> createState() => _LoadPlannerV2PageState();
 }
 
-class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
+class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     with SingleTickerProviderStateMixin {
   bool _panelVisible = true;
   bool _wallsVisible = true;
@@ -49,7 +49,7 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
     )..repeat();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<LoadPlannerProvider>().loadPlan(
+      ref.read(loadPlannerProvider.notifier).loadPlan(
             vehicleCode: widget.vehicleCode,
             date: widget.date,
           );
@@ -167,7 +167,7 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
             icon: Icons.arrow_back_rounded,
             onPressed: () async {
               HapticFeedback.lightImpact();
-              final provider = context.read<LoadPlannerProvider>();
+              final provider = ref.read(loadPlannerProvider);
               if (provider.hasManualChanges &&
                   provider.saveState != SaveState.saved) {
                 await provider.saveLayout();
@@ -578,7 +578,7 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
               child: ElevatedButton.icon(
                 onPressed: () {
                   HapticFeedback.lightImpact();
-                  context.read<LoadPlannerProvider>().loadPlan(
+                  ref.read(loadPlannerProvider.notifier).loadPlan(
                         vehicleCode: widget.vehicleCode,
                         date: widget.date,
                       );

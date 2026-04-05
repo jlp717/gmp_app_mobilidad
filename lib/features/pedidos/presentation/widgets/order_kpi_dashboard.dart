@@ -9,14 +9,14 @@ import '../../../../core/utils/responsive.dart';
 import '../../providers/pedidos_provider.dart';
 import '../utils/pedidos_formatters.dart';
 
-class OrderKpiDashboard extends StatelessWidget {
+class OrderKpiDashboard extends ConsumerWidget {
   final String vendedorCodes;
   const OrderKpiDashboard({Key? key, required this.vendedorCodes})
       : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    final prov = context.watch<PedidosProvider>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prov = ref.watch(pedidosProvider);
     final stats = prov.orderStats;
 
     if (prov.isLoadingStats || stats == null) {

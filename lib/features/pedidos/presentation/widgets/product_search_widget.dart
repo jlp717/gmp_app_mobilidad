@@ -9,7 +9,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../providers/pedidos_provider.dart';
 
-class ProductSearchWidget extends StatefulWidget {
+class ProductSearchWidget extends ConsumerStatefulWidget {
   final String vendedorCodes;
 
   const ProductSearchWidget({
@@ -18,10 +18,10 @@ class ProductSearchWidget extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<ProductSearchWidget> createState() => _ProductSearchWidgetState();
+  ConsumerState<ProductSearchWidget> createState() => _ProductSearchWidgetState();
 }
 
-class _ProductSearchWidgetState extends State<ProductSearchWidget> {
+class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
 
@@ -36,7 +36,7 @@ class _ProductSearchWidgetState extends State<ProductSearchWidget> {
     if (mounted) setState(() {});
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () {
-      final provider = context.read<PedidosProvider>();
+      final provider = ref.read(pedidosProvider.notifier);
       provider.loadProducts(
         vendedorCodes: widget.vendedorCodes,
         search: value.isEmpty ? null : value,
@@ -57,7 +57,7 @@ class _ProductSearchWidgetState extends State<ProductSearchWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<PedidosProvider>();
+    final provider = ref.watch(pedidosProvider);
     final pad = Responsive.contentPadding(context);
 
     return Container(

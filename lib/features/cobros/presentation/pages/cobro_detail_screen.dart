@@ -6,7 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../providers/cobros_provider.dart';
 import '../../data/models/cobros_models.dart';
 
-class CobroDetailScreen extends StatefulWidget {
+class CobroDetailScreen extends ConsumerStatefulWidget {
   final String codigoCliente;
   final String nombreCliente;
 
@@ -17,10 +17,10 @@ class CobroDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<CobroDetailScreen> createState() => _CobroDetailScreenState();
+  ConsumerState<CobroDetailScreen> createState() => _CobroDetailScreenState();
 }
 
-class _CobroDetailScreenState extends State<CobroDetailScreen> {
+class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
 
   // Toggles state
@@ -36,9 +36,7 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context
-          .read<CobrosProvider>()
-          .cargarCobrosPendientes(widget.codigoCliente);
+      ref.read(cobrosProvider).cargarCobrosPendientes(widget.codigoCliente);
     });
   }
 
@@ -46,7 +44,7 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
     double total = 0.0;
     _itemStates.forEach((id, state) {
       if (state == 'COMPLETO') {
-        final prov = context.read<CobrosProvider>();
+        final prov = ref.read(cobrosProvider);
         final item = prov.cobrosPendientes.firstWhere((e) => e.id == id);
         total += item.importePendiente;
       } else if (state == 'PARCIAL') {
@@ -65,7 +63,7 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
     }
 
     // Process all selected items
-    final provider = context.read<CobrosProvider>();
+    final provider = ref.read(cobrosProvider);
     int exitos = 0;
     int fallos = 0;
 
@@ -128,7 +126,7 @@ class _CobroDetailScreenState extends State<CobroDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<CobrosProvider>();
+    final provider = ref.watch(cobrosProvider);
     final pendientes = provider.cobrosPendientes;
     final totalAbonar = _calcularTotalACobrar();
 

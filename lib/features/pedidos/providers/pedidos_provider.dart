@@ -4,9 +4,12 @@
 /// Manages cart (current order), product catalog, and order history
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../data/pedidos_service.dart';
 import '../data/pedidos_offline_service.dart';
+
+final pedidosProvider = ChangeNotifierProvider<PedidosProvider>((ref) => PedidosProvider());
 
 class PedidosProvider with ChangeNotifier {
   // ── Cart State (current order being built) ──

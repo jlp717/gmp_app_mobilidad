@@ -39,7 +39,7 @@ class OrderDetailSheet {
   }
 }
 
-class _OrderDetailBody extends StatefulWidget {
+class _OrderDetailBody extends ConsumerStatefulWidget {
   final int orderId;
   final ScrollController scrollController;
 
@@ -49,10 +49,10 @@ class _OrderDetailBody extends StatefulWidget {
   });
 
   @override
-  State<_OrderDetailBody> createState() => _OrderDetailBodyState();
+  ConsumerState<_OrderDetailBody> createState() => _OrderDetailBodyState();
 }
 
-class _OrderDetailBodyState extends State<_OrderDetailBody> {
+class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   OrderDetail? _detail;
   bool _isLoading = true;
   String? _error;
@@ -121,8 +121,7 @@ class _OrderDetailBodyState extends State<_OrderDetailBody> {
 
     setState(() => _isCancelling = true);
     try {
-      await Provider.of<PedidosProvider>(context, listen: false)
-          .cancelExistingOrder(widget.orderId);
+      await ref.read(pedidosProvider.notifier).cancelExistingOrder(widget.orderId);
       if (mounted) Navigator.pop(context, 'cancelled');
     } catch (e) {
       if (mounted) {
@@ -175,8 +174,7 @@ class _OrderDetailBodyState extends State<_OrderDetailBody> {
 
     setState(() => _isConfirming = true);
     try {
-      await Provider.of<PedidosProvider>(context, listen: false)
-          .confirmExistingOrder(widget.orderId, header.tipoVenta);
+      await ref.read(pedidosProvider.notifier).confirmExistingOrder(widget.orderId, header.tipoVenta);
       if (mounted) Navigator.pop(context, 'confirmed');
     } catch (e) {
       if (mounted) {

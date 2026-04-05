@@ -6,7 +6,6 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/providers/filter_provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/auth_notifier.dart';
 import '../../providers/cobros_provider.dart';
 import '../../../clients/data/clients_service.dart';
@@ -67,11 +66,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
   void _loadPendingSummary() {
     final selectedVendor = ref.read(selectedVendorProvider);
-    
+
     // Get all vendor codes from auth provider
-    final authState = ProviderScope.containerOf(context)
-        .read(authProvider)
-        .value;
+    final authState = ref.watch(authProvider).value;
     final allVendorCodes = authState?.vendedorCodes ?? [];
     
     // Determine which vendors to use
@@ -108,8 +105,10 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: _cobrosProvider,
+    return ProviderScope(
+      overrides: [
+        cobrosProvider.overrideWithValue(_cobrosProvider),
+      ],
       child: Scaffold(
         backgroundColor: AppTheme.darkBase,
         body: Column(
@@ -270,8 +269,10 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ChangeNotifierProvider.value(
-                value: _cobrosProvider,
+              builder: (context) => ProviderScope(
+                overrides: [
+                  cobrosProvider.overrideWithValue(_cobrosProvider),
+                ],
                 child: CobroDetailScreen(
                   codigoCliente: code,
                   nombreCliente: name,

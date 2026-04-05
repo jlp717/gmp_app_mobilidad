@@ -9,7 +9,7 @@ import '../../../../core/utils/responsive.dart';
 import '../../providers/pedidos_provider.dart';
 import '../../data/pedidos_service.dart';
 
-class RecommendationsSection extends StatefulWidget {
+class RecommendationsSection extends ConsumerStatefulWidget {
   final void Function(String code, String name) onProductTap;
 
   const RecommendationsSection({
@@ -18,15 +18,15 @@ class RecommendationsSection extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<RecommendationsSection> createState() => _RecommendationsSectionState();
+  ConsumerState<RecommendationsSection> createState() => _RecommendationsSectionState();
 }
 
-class _RecommendationsSectionState extends State<RecommendationsSection> {
+class _RecommendationsSectionState extends ConsumerState<RecommendationsSection> {
   bool _isExpanded = false;
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<PedidosProvider>();
+    final provider = ref.watch(pedidosProvider);
     final hasHistory = provider.clientHistory.isNotEmpty;
     final hasSimilar = provider.similarClients.isNotEmpty;
 

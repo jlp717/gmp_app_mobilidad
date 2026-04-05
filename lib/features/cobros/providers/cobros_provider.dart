@@ -3,8 +3,13 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/cobros_models.dart';
 import '../../../core/api/api_client.dart';
+
+final cobrosProvider = ChangeNotifierProvider<CobrosProvider>((ref) {
+  throw UnimplementedError('cobrosProvider must be overridden with a concrete instance');
+});
 
 class CobrosProvider extends ChangeNotifier {
   final String employeeCode;
