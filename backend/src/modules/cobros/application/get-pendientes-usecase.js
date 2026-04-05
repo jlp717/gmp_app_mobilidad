@@ -2,7 +2,7 @@
  * Get Pendientes Use Case - Cobros Domain
  */
 const { UseCase } = require('../../../core/application/use-case');
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 class GetPendientesUseCase extends UseCase {
   constructor(cobrosRepository) {

@@ -2,9 +2,9 @@
  * DB2 Connection Pool Manager
  * Wraps the legacy db.js with a cleaner interface for DDD modules
  */
-const { query, queryWithParams, getPool, initDb } = require('../../../config/db');
+const { query, queryWithParams, getPool, initDb } = require('../../../../config/db');
 const odbc = require('odbc');
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 class Db2ConnectionPool {
   constructor() {

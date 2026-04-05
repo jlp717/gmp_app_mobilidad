@@ -3,7 +3,7 @@
  * L1: In-memory Map (fast, per-process)
  * L2: Redis (shared across processes, if available)
  */
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 class ResponseCache {
   constructor() {

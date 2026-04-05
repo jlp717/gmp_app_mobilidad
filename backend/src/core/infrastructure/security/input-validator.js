@@ -2,7 +2,7 @@
  * Input Validator - Zod-based request validation
  * Centralized validation schemas for all endpoints
  */
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 let z;
 try {

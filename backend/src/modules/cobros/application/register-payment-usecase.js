@@ -2,7 +2,7 @@
  * Register Payment Use Case - Cobros Domain
  */
 const { UseCase } = require('../../../core/application/use-case');
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 class PaymentError extends Error {
   constructor(message, code) {

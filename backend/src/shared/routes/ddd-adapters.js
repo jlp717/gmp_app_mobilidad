@@ -21,7 +21,7 @@ const { Db2CobrosRepository } = require('../../modules/cobros');
 const { Db2EntregasRepository } = require('../../modules/entregas');
 const { Db2RuteroRepository } = require('../../modules/rutero');
 const { Db2AuthRepository } = require('../../modules/auth');
-const { Db2ClientsRepository } = require('../../modules/clients/infrastructure/db2-client-repository');
+const { Db2ClientRepository } = require('../../modules/clients/infrastructure/db2-client-repository');
 const { Db2ConnectionPool } = require('../../core/infrastructure/database/db2-connection-pool');
 const { ResponseCache } = require('../../core/infrastructure/cache/response-cache');
 const { performanceCache } = require('../../core/infrastructure/cache/performance-cache');
@@ -107,7 +107,7 @@ function createAuthRoutes() {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
       }
 
-      const { verifyPassword } = require('../../middleware/auth');
+      const { verifyPassword } = require('../../../middleware/auth');
       if (!user._passwordHash) {
         logger.warn(`[DDD-AUTH] User ${username} has no password hash - login denied`);
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
@@ -118,7 +118,7 @@ function createAuthRoutes() {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
       }
 
-      const { signAccessToken, signRefreshToken } = require('../../middleware/auth');
+      const { signAccessToken, signRefreshToken } = require('../../../middleware/auth');
       const accessToken = signAccessToken({
         id: user.id, user: user.code, role: user.role, isJefeVentas: user.isJefeVentas
       });
@@ -128,10 +128,25 @@ function createAuthRoutes() {
 
       await repo.logLoginAttempt(user.id, true, req.ip);
 
+      // Response format must match legacy auth routes (Flutter expects 'token', not 'accessToken')
       res.json({
         success: true,
-        user: { id: user.id, code: user.code, name: user.name, role: user.role, isJefeVentas: user.isJefeVentas },
-        accessToken, refreshToken, expiresIn: 3600
+        user: {
+          id: user.id,
+          code: user.code,
+          name: user.name,
+          role: user.role,
+          isJefeVentas: user.isJefeVentas,
+          vendedorCode: user.code,
+          isRepartidor: user.role === 'REPARTIDOR',
+          showCommissions: true
+        },
+        role: user.role,
+        vendedorCodes: user.vendedorCodes || [user.code],
+        token: accessToken,
+        refreshToken,
+        tokenExpiresIn: 3600,
+        refreshExpiresIn: 604800
       });
     } catch (error) {
       logger.error(`[DDD-AUTH] Login error: ${error.message}`);
