@@ -349,6 +349,8 @@ class ApiClient {
   }
 
   static ApiException _handleError(DioException e) {
+    // Always log raw error details for diagnostics (visible in adb logcat)
+    debugPrint('[ApiClient] DioException type=${e.type} error=${e.error.runtimeType}: ${e.error}');
     if (e.type == DioExceptionType.connectionTimeout) {
       return ApiException(
         'Timeout de conexión. Verifica tu conexión a internet e inténtalo de nuevo.',
@@ -501,6 +503,13 @@ class _RetryInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     final shouldRetry = _shouldRetry(err);
     final retryCount = err.requestOptions.extra['retryCount'] as int? ?? 0;
+
+    if (retryCount == 0) {
+      // Log full request details on first failure
+      debugPrint('[ApiClient] ❌ Request failed: ${err.requestOptions.method} ${err.requestOptions.uri}');
+      debugPrint('[ApiClient] Headers sent: ${err.requestOptions.headers}');
+      debugPrint('[ApiClient] Error type: ${err.type}, Error: ${err.error}');
+    }
 
     if (shouldRetry && retryCount < _maxRetries) {
       debugPrint(
