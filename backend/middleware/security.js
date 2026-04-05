@@ -373,9 +373,19 @@ const suspiciousUserAgents = [
 exports.detectSuspiciousAgents = (req, res, next) => {
     const userAgent = req.get('user-agent') || '';
     
+    // Allow our own app and health checks
     if (!userAgent) {
-        logger.warn(`[Security] Blocked request with empty User-Agent from IP: ${req.ip}`);
+        // Allow health checks without User-Agent (monitoring probes)
+        if (req.path === '/api/health' || req.path === '/health') {
+            return next();
+        }
+        logger.warn(`[Security] Blocked request with empty User-Agent from IP: ${req.ip} on ${req.path}`);
         return res.status(403).json({ error: 'User-Agent header required' });
+    }
+    
+    // Whitelist our own app and Dart runtime
+    if (userAgent.startsWith('GMP-App/') || userAgent.startsWith('Dart/')) {
+        return next();
     }
     
     for (const pattern of suspiciousUserAgents) {
@@ -398,8 +408,10 @@ exports.validateContentLength = (req, res, next) => {
     if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
         const contentLength = parseInt(req.headers['content-length'], 10);
         
+        // Allow chunked transfer encoding (no Content-Length header)
+        // Cloudflare tunnels and some proxies use chunked encoding
         if (isNaN(contentLength)) {
-            return res.status(411).json({ error: 'Content-Length header required' });
+            return next();
         }
         
         if (contentLength > MAX_CONTENT_LENGTH) {

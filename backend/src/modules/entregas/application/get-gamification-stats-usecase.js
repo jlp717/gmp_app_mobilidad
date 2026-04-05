@@ -2,7 +2,7 @@
  * Get Gamification Stats Use Case - Entregas Domain
  */
 const { UseCase } = require('../../../core/application/use-case');
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 class GetGamificationStatsUseCase extends UseCase {
   constructor(entregasRepository) {

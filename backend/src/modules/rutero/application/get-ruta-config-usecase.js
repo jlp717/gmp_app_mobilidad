@@ -2,7 +2,7 @@
  * Get Ruta Config Use Case - Rutero Domain
  */
 const { UseCase } = require('../../../core/application/use-case');
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 class GetRutaConfigUseCase extends UseCase {
   constructor(ruteroRepository) {

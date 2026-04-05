@@ -2,7 +2,7 @@
  * Mark Delivered Use Case - Entregas Domain
  */
 const { UseCase } = require('../../../core/application/use-case');
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 class DeliveryError extends Error {
   constructor(message, code) {

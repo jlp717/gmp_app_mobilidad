@@ -2,7 +2,7 @@
  * Get Commissions Use Case - Rutero Domain
  */
 const { UseCase } = require('../../../core/application/use-case');
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 class GetCommissionsUseCase extends UseCase {
   constructor(ruteroRepository) {

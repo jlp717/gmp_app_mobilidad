@@ -2,7 +2,7 @@
  * Update Order Use Case - Rutero Domain
  */
 const { UseCase } = require('../../../core/application/use-case');
-const logger = require('../../../middleware/logger');
+const logger = require('../../../../middleware/logger');
 
 class RutaConfigError extends Error {
   constructor(message, code) {

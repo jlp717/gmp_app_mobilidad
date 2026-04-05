@@ -160,7 +160,7 @@ function parseCorsOrigin(value) {
 app.use(cors({
     origin: parseCorsOrigin(process.env.CORS_ORIGIN),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Request-ID'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Request-ID', 'X-App-Version', 'X-Device-Model', 'X-Device-OS', 'X-Device-ID', 'User-Agent'],
     exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
     credentials: true,
     maxAge: 86400

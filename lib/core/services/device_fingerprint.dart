@@ -53,6 +53,7 @@ class DeviceFingerprint {
 
   /// Headers to attach to every API request
   static Map<String, String> get headers => {
+    'User-Agent': 'GMP-App/$fullVersion ($deviceModel; $deviceOS)',
     'X-App-Version': fullVersion,
     'X-Device-Model': deviceModel,
     'X-Device-OS': deviceOS,
