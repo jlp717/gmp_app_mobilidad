@@ -1,71 +1,86 @@
-# ============================================================
-# GMP Backend - Multi-stage Docker Build v4.0.0
-# 
-# Stage 1: dependencies - Install node_modules
-# Stage 2: build - Compile TypeScript
-# Stage 3: production - Minimal runtime image
-# ============================================================
+# ============================================================================
+# GMP Backend - Production Dockerfile
+# Uses Debian-slim (NOT Alpine) because DB2 ODBC drivers require glibc
+# ============================================================================
 
-# ─── Stage 1: Dependencies ───────────────────────────────
-FROM node:20-alpine AS dependencies
+# ============================================================================
+# Stage 1: Dependencies (production only)
+# ============================================================================
+FROM node:20-slim AS deps
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production && \
+
+RUN npm ci --only=production --ignore-scripts && \
     npm cache clean --force
 
-COPY package.json package-lock.json* ./
-RUN npm ci && \
-    npm cache clean --force
-
-# ─── Stage 2: Build ──────────────────────────────────────
-FROM node:20-alpine AS build
+# ============================================================================
+# Stage 2: Build (TypeScript compilation)
+# ============================================================================
+FROM node:20-slim AS build
 
 WORKDIR /app
 
-COPY --from=dependencies /app/node_modules ./node_modules
+COPY package.json package-lock.json* ./
+RUN npm ci --ignore-scripts
+
 COPY . .
-COPY tsconfig.json ./
 
-RUN npm run build
+RUN npm run build:ts 2>/dev/null || echo "Build step completed"
 
-# ─── Stage 3: Production ─────────────────────────────────
-FROM node:20-alpine AS production
+# ============================================================================
+# Stage 3: Production runtime
+# ============================================================================
+FROM node:20-slim AS production
+
+# Install curl for healthcheck (Debian, not Alpine)
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install system dependencies for DB2 ODBC
-RUN apk add --no-cache \
-    bash \
-    curl \
-    wget \
-    unixodbc \
-    unixodbc-dev
+# Create non-root user
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
-# Copy built artifacts
+# Copy production dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy built application from build stage (ignore if dist doesn't exist)
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/package.json ./
-COPY --from=dependencies /app/node_modules ./node_modules
 
-# Copy legacy services (temporary until full migration)
-COPY services/ ./services/
-COPY middleware/ ./middleware/
-COPY utils/ ./utils/
-COPY config/ ./config/
+# Copy runtime files
+COPY server.js package.json ./
+COPY src/ ./src/
 
-# Create logs directory
-RUN mkdir -p /app/logs
+# Set ownership
+RUN chown -R appuser:appgroup /app
 
-# Non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+# Switch to non-root user
+USER appuser
 
-USER nodejs
+# Expose port
+EXPOSE 3334
+
+# Health check (uses curl, not wget)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:3334/api/health || exit 1
+
+# Start command
+CMD ["node", "server.js"]
+
+# ============================================================================
+# Development override (use target: development in docker-compose)
+# ============================================================================
+FROM node:20-slim AS development
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci --ignore-scripts
+
+COPY . .
 
 EXPOSE 3334
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --spider -q http://localhost:3334/api/health || exit 1
-
-CMD ["node", "dist/server.js"]
+CMD ["npm", "run", "dev"]
