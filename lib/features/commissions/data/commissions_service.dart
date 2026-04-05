@@ -23,6 +23,8 @@ class CommissionsService {
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 15),
         forceRefresh: forceRefresh,
+        // ALL-vendor query can take up to 60s on first call (no cache)
+        receiveTimeout: const Duration(seconds: 120),
       );
       return response;
     } catch (e) {

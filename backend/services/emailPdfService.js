@@ -19,13 +19,20 @@ const logger = require('../middleware/logger');
 // CONFIGURACIÓN SMTP
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// Primary SMTP config — prefer SMTP_PDF_* vars (explicit PDF config), fall back to SMTP_*
+const _smtpHost = process.env.SMTP_PDF_HOST || process.env.SMTP_HOST || 'mail.mari-pepa.com';
+const _smtpPort = parseInt(process.env.SMTP_PDF_PORT || process.env.SMTP_PORT) || 587;
+const _smtpSecure = (process.env.SMTP_PDF_SECURE || process.env.SMTP_SECURE) === 'true' || _smtpPort === 465;
+const _smtpUser = process.env.SMTP_PDF_USER || process.env.SMTP_USER || 'noreply@mari-pepa.com';
+const _smtpPass = process.env.SMTP_PDF_PASS || process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
+
 const SMTP_CONFIG = {
-    host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
-    port: parseInt(process.env.SMTP_PORT) || 465,
-    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT) === 465,
+    host: _smtpHost,
+    port: _smtpPort,
+    secure: _smtpSecure,
     auth: {
-        user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
-        pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
+        user: _smtpUser,
+        pass: _smtpPass
     },
     connectionTimeout: 10000,
     greetingTimeout: 8000,
@@ -36,6 +43,14 @@ const SMTP_CONFIG = {
     pool: true,
     maxConnections: 5,
     maxMessages: 100
+};
+
+// Fallback config: port 587 STARTTLS (used when primary SSL/465 times out)
+const SMTP_CONFIG_FALLBACK = {
+    ...SMTP_CONFIG,
+    port: 587,
+    secure: false,
+    pool: false
 };
 
 const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
@@ -186,10 +201,13 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
 
     const maxRetries = 3;
     let lastError;
+    let usingFallback = false;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            const transport = getTransporter();
+            const transport = usingFallback
+                ? nodemailer.createTransport(SMTP_CONFIG_FALLBACK)
+                : getTransporter();
 
             const defaultHtml = `
                 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -259,7 +277,14 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
             if (isTimeout || isConnection) {
                 // Timeout o conexión caída → invalidar y forzar reconexión
                 invalidateTransporter();
-                logger.warn(`⚠️ Error conexión (intento ${attempt}/${maxRetries}): ${error.code} - ${error.message}`, { to });
+                // Si estábamos en puerto 465 (SSL) y hay timeout, cambiar al fallback 587/STARTTLS
+                const currentPort = usingFallback ? SMTP_CONFIG_FALLBACK.port : SMTP_CONFIG.port;
+                if (!usingFallback && (currentPort === 465 || isTimeout)) {
+                    usingFallback = true;
+                    logger.warn(`⚠️ Puerto ${currentPort} SMTP con error (${error.code}), reintentando con puerto 587/STARTTLS...`);
+                } else {
+                    logger.warn(`⚠️ Error conexión (intento ${attempt}/${maxRetries}): ${error.code} - ${error.message}`, { to });
+                }
             } else if (isAuth) {
                 // Error autenticación → NO reintentar, es irrecuperable
                 logger.error('❌ Error autenticación SMTP (credenciales inválidas)', {

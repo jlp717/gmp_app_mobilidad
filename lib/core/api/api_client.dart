@@ -175,6 +175,7 @@ class ApiClient {
     String? cacheKey,
     Duration? cacheTTL,
     bool forceRefresh = false,
+    Duration? receiveTimeout,
   }) async {
     // Try cache first if cacheKey provided and not forcing refresh
     if (cacheKey != null && !forceRefresh) {
@@ -192,6 +193,7 @@ class ApiClient {
       final response = await dio.get(
         endpoint,
         queryParameters: queryParameters,
+        options: receiveTimeout != null ? Options(receiveTimeout: receiveTimeout) : null,
       );
       final rawData = response.data;
       if (rawData is! Map) {
