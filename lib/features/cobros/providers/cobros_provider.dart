@@ -7,10 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/cobros_models.dart';
 import '../../../core/api/api_client.dart';
 
-final cobrosProvider = ChangeNotifierProvider<CobrosProvider>((ref) {
-  throw UnimplementedError('cobrosProvider must be overridden with a concrete instance');
-});
-
 class CobrosProvider extends ChangeNotifier {
   final String employeeCode;
   final bool isRepartidor;
@@ -467,3 +463,8 @@ class CobrosProvider extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// Riverpod provider — uses Provider (not ChangeNotifierProvider) so we can overrideWithValue
+final cobrosProvider = Provider<CobrosProvider>((ref) {
+  throw UnimplementedError('Must be overridden with overrideWithValue');
+});
