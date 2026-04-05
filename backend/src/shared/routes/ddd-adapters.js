@@ -15,7 +15,7 @@
  */
 
 const express = require('express');
-const logger = require('../../middleware/logger');
+const logger = require('../../../middleware/logger');
 const { Db2PedidosRepository } = require('../modules/pedidos');
 const { Db2CobrosRepository } = require('../modules/cobros');
 const { Db2EntregasRepository } = require('../modules/entregas');
