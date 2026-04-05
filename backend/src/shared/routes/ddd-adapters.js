@@ -16,15 +16,15 @@
 
 const express = require('express');
 const logger = require('../../../middleware/logger');
-const { Db2PedidosRepository } = require('../modules/pedidos');
-const { Db2CobrosRepository } = require('../modules/cobros');
-const { Db2EntregasRepository } = require('../modules/entregas');
-const { Db2RuteroRepository } = require('../modules/rutero');
-const { Db2AuthRepository } = require('../modules/auth');
-const { Db2ClientsRepository } = require('../modules/clients/infrastructure/db2-client-repository');
-const { Db2ConnectionPool } = require('../core/infrastructure/database/db2-connection-pool');
-const { ResponseCache } = require('../core/infrastructure/cache/response-cache');
-const { performanceCache } = require('../core/infrastructure/cache/performance-cache');
+const { Db2PedidosRepository } = require('../../modules/pedidos');
+const { Db2CobrosRepository } = require('../../modules/cobros');
+const { Db2EntregasRepository } = require('../../modules/entregas');
+const { Db2RuteroRepository } = require('../../modules/rutero');
+const { Db2AuthRepository } = require('../../modules/auth');
+const { Db2ClientsRepository } = require('../../modules/clients/infrastructure/db2-client-repository');
+const { Db2ConnectionPool } = require('../../core/infrastructure/database/db2-connection-pool');
+const { ResponseCache } = require('../../core/infrastructure/cache/response-cache');
+const { performanceCache } = require('../../core/infrastructure/cache/performance-cache');
 const { cachedQuery } = require('../../../services/query-optimizer');
 const { query } = require('../../../config/db');
 const { TTL: RedisTTL } = require('../../../services/redis-cache');

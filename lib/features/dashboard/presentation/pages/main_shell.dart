@@ -57,7 +57,6 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   bool _forceRepartidorMode = false;
   bool _forceAlmacenMode = false;
-  bool _navigatingToLogin = false;
 
   String? _pendingClientId;
   String? _pendingClientName;
@@ -80,15 +79,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final authState = ref.watch(authProvider).value;
-    if (!(authState?.isAuthenticated ?? false) && mounted && !_navigatingToLogin) {
-      _navigatingToLogin = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          Navigator.maybeOf(context)?.pushReplacementNamed('/login');
-        }
-      });
-    }
+    // Auth redirect is handled by GoRouter in main.dart — no manual navigation needed here.
   }
 
   bool get _isRepartidorEffective {

@@ -116,6 +116,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage> with SingleTick
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() { _isLoading = true; _error = null; });
 
     try {
@@ -188,6 +189,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage> with SingleTick
         }
       }
       
+      if (!mounted) return;
       setState(() {
         _yearlyData = parsedYearlyData;
         _yearTotals = parsedYearTotals;
@@ -203,7 +205,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage> with SingleTick
       });
     } catch (e) {
       debugPrint('Error loading objectives: $e');
-      setState(() { _error = e.toString(); _isLoading = false; });
+      if (mounted) setState(() { _error = e.toString(); _isLoading = false; });
     }
   }
 
