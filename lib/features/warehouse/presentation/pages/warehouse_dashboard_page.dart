@@ -4,7 +4,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart' as provider;
 
 import '../../../../core/config/feature_flags.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -282,13 +281,10 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
       onTap: () {
         Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => FeatureFlags.newLoadPlanner
-              ? provider.ChangeNotifierProvider(
-                  create: (_) => LoadPlannerProvider(),
-                  child: LoadPlannerV2Page(
-                    vehicleCode: truck.vehicleCode,
-                    vehicleName: truck.description,
-                    date: _selectedDate,
-                  ),
+              ? LoadPlannerV2Page(
+                  vehicleCode: truck.vehicleCode,
+                  vehicleName: truck.description,
+                  date: _selectedDate,
                 )
               : LoadPlanner3DPage(
                   vehicleCode: truck.vehicleCode,

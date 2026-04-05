@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart' as provider;
 
 import '../../../../core/theme/app_theme.dart';
 import '../../application/load_planner_provider.dart';
@@ -61,8 +60,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 
   @override
   Widget build(BuildContext context) {
-    return provider.Consumer<LoadPlannerProvider>(
-      builder: (context, state, _) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final planner = ref.watch(loadPlannerProvider);
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -86,7 +86,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               _buildSearchBar(),
 
               // Bulk action buttons
-              _buildBulkActions(state),
+              _buildBulkActions(ref),
 
               // Filter chips
               _buildFilterChips(),
@@ -138,7 +138,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                           const Icon(Icons.people_rounded, size: 13),
                           const SizedBox(width: 4),
                           Text(
-                            'Clientes (${state.clientSummaries.length})',
+                            'Clientes (${planner.clientSummaries.length})',
                           ),
                         ],
                       ),
@@ -150,7 +150,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                         children: [
                           const Icon(Icons.inventory_2_rounded, size: 13),
                           const SizedBox(width: 4),
-                          Text('Cajas (${state.placedBoxes.length})'),
+                          Text('Cajas (${planner.placedBoxes.length})'),
                         ],
                       ),
                     ),
@@ -162,15 +162,15 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                           Icon(
                             Icons.warning_rounded,
                             size: 13,
-                            color: state.overflowBoxes.isNotEmpty
+                            color: planner.overflowBoxes.isNotEmpty
                                 ? AppTheme.error
                                 : null,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Fuera (${state.overflowBoxes.length})',
+                            'Fuera (${planner.overflowBoxes.length})',
                             style: TextStyle(
-                              color: state.overflowBoxes.isNotEmpty
+                              color: planner.overflowBoxes.isNotEmpty
                                   ? AppTheme.error
                                   : null,
                             ),
@@ -187,9 +187,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildClientsTab(state),
-                    _buildBoxesTab(state),
-                    _buildOverflowTab(state),
+                    _buildClientsTab(ref),
+                    _buildBoxesTab(ref),
+                    _buildOverflowTab(ref),
                   ],
                 ),
               ),
@@ -263,7 +263,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   // BULK ACTIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildBulkActions(LoadPlannerProvider provider) {
+  Widget _buildBulkActions(WidgetRef ref) {
+    final planner = ref.read(loadPlannerProvider);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Row(
@@ -273,11 +274,11 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               icon: Icons.remove_circle_outline,
               label: 'Quitar todo',
               color: AppTheme.error,
-              onPressed: provider.placedBoxes.isNotEmpty
+              onPressed: planner.placedBoxes.isNotEmpty
                   ? () => _confirmBulkAction(
                         context,
                         'Quitar todas las cajas del camion?',
-                        provider.excludeAllOrders,
+                        () => ref.read(loadPlannerProvider.notifier).excludeAllOrders(),
                       )
                   : null,
             ),
@@ -288,8 +289,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               icon: Icons.add_circle_outline,
               label: 'Añadir todo',
               color: AppTheme.neonGreen,
-              onPressed: provider.overflowBoxes.isNotEmpty
-                  ? provider.includeAllOrders
+              onPressed: planner.overflowBoxes.isNotEmpty
+                  ? () => ref.read(loadPlannerProvider.notifier).includeAllOrders()
                   : null,
             ),
           ),
@@ -459,8 +460,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   // CLIENTS TAB
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildClientsTab(LoadPlannerProvider provider) {
-    final summaries = provider.clientSummaries.where((s) {
+  Widget _buildClientsTab(WidgetRef ref) {
+    final planner = ref.read(loadPlannerProvider);
+    final summaries = planner.clientSummaries.where((s) {
       if (!_matchesSearch(s.clientCode)) return false;
       return true;
     }).toList();
@@ -474,8 +476,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         final s = summaries[i];
         return _ClientRow(
           summary: s,
-          truck: provider.truck,
-          onExclude: () => provider.excludeByClient(s.clientCode),
+          truck: planner.truck,
+          onExclude: () => ref.read(loadPlannerProvider.notifier).excludeByClient(s.clientCode),
         );
       },
     );
@@ -485,14 +487,15 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   // BOXES TAB
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildBoxesTab(LoadPlannerProvider provider) {
+  Widget _buildBoxesTab(WidgetRef ref) {
+    final planner = ref.read(loadPlannerProvider);
     // Group by order number
     final orderMap = <int, List<LoadBox>>{};
-    for (final box in provider.placedBoxes) {
+    for (final box in planner.placedBoxes) {
       orderMap.putIfAbsent(box.orderNumber, () => []).add(box);
     }
-    for (final box in provider.overflowBoxes) {
-      if (provider.isOrderExcluded(box.orderNumber)) {
+    for (final box in planner.overflowBoxes) {
+      if (planner.isOrderExcluded(box.orderNumber)) {
         orderMap.putIfAbsent(box.orderNumber, () => []).add(box);
       }
     }
@@ -520,7 +523,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
       itemCount: orders.length,
       itemBuilder: (_, i) {
         final entry = orders[i];
-        final isExcluded = provider.isOrderExcluded(entry.key);
+        final isExcluded = planner.isOrderExcluded(entry.key);
         final firstBox = entry.value.first;
         final totalWeight =
             entry.value.fold<double>(0, (s, b) => s + b.weight);
@@ -534,9 +537,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           isExcluded: isExcluded,
           onToggle: () {
             if (isExcluded) {
-              provider.includeOrder(entry.key);
+              ref.read(loadPlannerProvider.notifier).includeOrder(entry.key);
             } else {
-              provider.excludeOrder(entry.key);
+              ref.read(loadPlannerProvider.notifier).excludeOrder(entry.key);
             }
           },
         );
@@ -548,8 +551,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   // OVERFLOW TAB
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildOverflowTab(LoadPlannerProvider provider) {
-    final overflow = provider.overflowBoxes.where((b) {
+  Widget _buildOverflowTab(WidgetRef ref) {
+    final planner = ref.read(loadPlannerProvider);
+    final overflow = planner.overflowBoxes.where((b) {
       final searchText = '${b.label} ${b.clientCode} ${b.orderNumber}';
       if (!_matchesSearch(searchText)) return false;
       if (!_passesWeightFilter(b.weight)) return false;

@@ -1,9 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/warehouse_data_service.dart';
 import '../domain/models/load_planner_models.dart';
+
+/// Riverpod provider for LoadPlannerProvider.
+final loadPlannerProvider =
+    ChangeNotifierProvider<LoadPlannerProvider>((ref) => LoadPlannerProvider());
 
 /// Central state manager for Load Planner V2.
 ///

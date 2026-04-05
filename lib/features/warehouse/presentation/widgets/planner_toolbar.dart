@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart' as provider;
 
 import '../../../../core/theme/app_theme.dart';
 import '../../application/load_planner_provider.dart';
@@ -16,8 +15,9 @@ class PlannerToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return provider.Consumer<LoadPlannerProvider>(
-      builder: (context, state, _) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final planner = ref.watch(loadPlannerProvider);
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
@@ -40,7 +40,7 @@ class PlannerToolbar extends StatelessWidget {
             children: [
               // View mode pills
               _PillSegmented<ViewMode>(
-                selected: state.viewMode,
+                selected: planner.viewMode,
                 options: const [
                   (ViewMode.perspective, Icons.view_in_ar_rounded, '3D'),
                   (ViewMode.top, Icons.layers_rounded, 'Planta'),
@@ -48,14 +48,14 @@ class PlannerToolbar extends StatelessWidget {
                 ],
                 onChanged: (v) {
                   HapticFeedback.selectionClick();
-                  state.setViewMode(v);
+                  ref.read(loadPlannerProvider.notifier).setViewMode(v);
                 },
               ),
               const SizedBox(width: 8),
 
               // Color mode pills
               _PillSegmented<ColorMode>(
-                selected: state.colorMode,
+                selected: planner.colorMode,
                 options: const [
                   (ColorMode.product, Icons.inventory_2_rounded, 'Producto'),
                   (ColorMode.client, Icons.people_rounded, 'Cliente'),
@@ -64,7 +64,7 @@ class PlannerToolbar extends StatelessWidget {
                 ],
                 onChanged: (v) {
                   HapticFeedback.selectionClick();
-                  state.setColorMode(v);
+                  ref.read(loadPlannerProvider.notifier).setColorMode(v);
                 },
               ),
 
@@ -74,10 +74,10 @@ class PlannerToolbar extends StatelessWidget {
               _GlowToolButton(
                 icon: Icons.auto_awesome_rounded,
                 tooltip: 'Optimizar carga (max beneficio)',
-                enabled: !state.isOptimizing,
+                enabled: !planner.isOptimizing,
                 onPressed: () {
                   HapticFeedback.mediumImpact();
-                  state.runProfitOptimizer();
+                  ref.read(loadPlannerProvider.notifier).runProfitOptimizer();
                 },
                 color: AppTheme.neonGreen,
               ),
@@ -87,7 +87,7 @@ class PlannerToolbar extends StatelessWidget {
               _GlowToolButton(
                 icon: Icons.view_in_ar_rounded,
                 tooltip: 'Reordenar cajas (bin packing 3D)',
-                enabled: onRepack != null && state.placedBoxes.isNotEmpty,
+                enabled: onRepack != null && planner.placedBoxes.isNotEmpty,
                 onPressed: () {
                   HapticFeedback.mediumImpact();
                   onRepack?.call();
@@ -112,20 +112,20 @@ class PlannerToolbar extends StatelessWidget {
               _GlowToolButton(
                 icon: Icons.undo_rounded,
                 tooltip: 'Deshacer',
-                enabled: state.canUndo,
+                enabled: planner.canUndo,
                 onPressed: () {
                   HapticFeedback.lightImpact();
-                  state.undo();
+                  ref.read(loadPlannerProvider.notifier).undo();
                 },
               ),
               // Redo
               _GlowToolButton(
                 icon: Icons.redo_rounded,
                 tooltip: 'Rehacer',
-                enabled: state.canRedo,
+                enabled: planner.canRedo,
                 onPressed: () {
                   HapticFeedback.lightImpact();
-                  state.redo();
+                  ref.read(loadPlannerProvider.notifier).redo();
                 },
               ),
               const SizedBox(width: 6),
@@ -134,8 +134,8 @@ class PlannerToolbar extends StatelessWidget {
               _GlowToolButton(
                 icon: Icons.refresh_rounded,
                 tooltip: 'Recalcular (descartar cambios)',
-                enabled: state.hasManualChanges,
-                onPressed: () => _confirmReset(context, state),
+                enabled: planner.hasManualChanges,
+                onPressed: () => _confirmReset(context, ref),
                 color: AppTheme.warning,
               ),
             ],
@@ -145,7 +145,7 @@ class PlannerToolbar extends StatelessWidget {
     );
   }
 
-  void _confirmReset(BuildContext context, LoadPlannerProvider provider) {
+  void _confirmReset(BuildContext context, WidgetRef ref) {
     HapticFeedback.mediumImpact();
     showDialog<void>(
       context: context,
@@ -177,7 +177,7 @@ class PlannerToolbar extends StatelessWidget {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              provider.resetToAlgorithm();
+              ref.read(loadPlannerProvider.notifier).resetToAlgorithm();
             },
             child: const Text(
               'Recalcular',

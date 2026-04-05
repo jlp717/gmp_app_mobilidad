@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart' as provider;
 
 import '../../../../core/theme/app_theme.dart';
 import '../../application/load_planner_provider.dart';
@@ -89,30 +88,34 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
 
           // Metrics
           RepaintBoundary(
-            child: provider.Consumer<LoadPlannerProvider>(
-              builder: (_, p, __) => MetricsBar(
-                metrics: p.metrics,
-                saveState: p.saveState,
-              ),
+            child: Consumer(
+              builder: (_, ref, __) {
+                final planner = ref.watch(loadPlannerProvider);
+                return MetricsBar(
+                  metrics: planner.metrics,
+                  saveState: planner.saveState,
+                );
+              },
             ),
           ),
 
           // Main content
           Expanded(
-            child: provider.Consumer<LoadPlannerProvider>(
-              builder: (context, state, _) {
-                if (state.isLoading) {
+            child: Consumer(
+              builder: (context, ref, _) {
+                final planner = ref.watch(loadPlannerProvider);
+                if (planner.isLoading) {
                   return _buildShimmerLoading();
                 }
 
-                if (state.error != null) {
-                  return _buildError(state.error!);
+                if (planner.error != null) {
+                  return _buildError(planner.error!);
                 }
 
                 if (isWide) {
-                  return _buildTabletLayout(state);
+                  return _buildTabletLayout(planner);
                 } else {
-                  return _buildPhoneLayout(state);
+                  return _buildPhoneLayout(planner);
                 }
               },
             ),
@@ -470,51 +473,48 @@ class _LoadPlannerV2PageState extends State<LoadPlannerV2Page>
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => provider.ChangeNotifierProvider.value(
-        value: context.read<LoadPlannerProvider>(),
-        child: DraggableScrollableSheet(
-          initialChildSize: 0.5,
-          minChildSize: 0.3,
-          maxChildSize: 0.85,
-          expand: false,
-          builder: (_, controller) {
-            return Container(
-              decoration: BoxDecoration(
-                color: AppTheme.darkSurface,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(20)),
-                border: Border(
-                  top: BorderSide(
-                    color: AppTheme.neonBlue.withOpacity(0.2),
-                    width: 1,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (_, controller) {
+          return Container(
+            decoration: BoxDecoration(
+              color: AppTheme.darkSurface,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
+              border: Border(
+                top: BorderSide(
+                  color: AppTheme.neonBlue.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.neonBlue.withOpacity(0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Drag handle
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonBlue.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.neonBlue.withOpacity(0.08),
-                    blurRadius: 24,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Drag handle
-                  Container(
-                    margin: const EdgeInsets.symmetric(vertical: 10),
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const Expanded(child: OrdersPanelV2()),
-                ],
-              ),
-            );
-          },
-        ),
+                const Expanded(child: OrdersPanelV2()),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart' as provider;
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -291,13 +290,14 @@ class LoadCanvasState extends State<LoadCanvas> {
 
   @override
   Widget build(BuildContext context) {
-    return provider.Consumer<LoadPlannerProvider>(
-      builder: (context, state, child) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final planner = ref.watch(loadPlannerProvider);
         // Push state changes to JS when provider updates
-        if (_sceneReady && state.truck != null) {
+        if (_sceneReady && planner.truck != null) {
           // Use post-frame callback to avoid calling JS during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _syncProviderToJs(state);
+            if (mounted) _syncProviderToJs(planner);
           });
         }
 
@@ -307,7 +307,7 @@ class LoadCanvasState extends State<LoadCanvas> {
             WebViewWidget(controller: _controller),
 
             // Loading overlay while Three.js initializes
-            if (!_sceneReady || state.truck == null)
+            if (!_sceneReady || planner.truck == null)
               Container(
                 color: AppTheme.darkBase,
                 child: const Center(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart' as provider;
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -1348,10 +1347,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           ObjectivesPage(employeeCode: employeeCode, isJefeVentas: true),
           CommissionsPage(employeeCode: employeeCode, isJefeVentas: true),
           const FacturasPage(),
-          provider.ChangeNotifierProvider(
-            create: (_) => PedidosProvider(),
-            child: PedidosPage(employeeCode: employeeCode, isJefeVentas: true),
-          ),
+          PedidosPage(employeeCode: employeeCode, isJefeVentas: true),
           KpiDashboardPage(employeeCode: employeeCode, isJefeVentas: true),
           CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
           const ComingSoonPlaceholder(
@@ -1384,10 +1380,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         case 'Facturas':
           return const FacturasPage();
         case 'Pedidos':
-          return provider.ChangeNotifierProvider(
-            create: (_) => PedidosProvider(),
-            child: PedidosPage(employeeCode: empCode, isJefeVentas: false),
-          );
+          return PedidosPage(employeeCode: empCode, isJefeVentas: false);
         case 'Glacius':
           return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
         case 'Cobros':
