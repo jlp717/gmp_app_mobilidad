@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart' as provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
@@ -12,7 +12,7 @@ import '../../providers/cobros_provider.dart';
 import '../../../clients/data/clients_service.dart';
 import 'cobro_detail_screen.dart';
 
-class CobrosPage extends StatefulWidget {
+class CobrosPage extends ConsumerStatefulWidget {
   final String employeeCode;
   final bool isJefeVentas;
 
@@ -23,10 +23,10 @@ class CobrosPage extends StatefulWidget {
   });
 
   @override
-  State<CobrosPage> createState() => _CobrosPageState();
+  ConsumerState<CobrosPage> createState() => _CobrosPageState();
 }
 
-class _CobrosPageState extends State<CobrosPage> {
+class _CobrosPageState extends ConsumerState<CobrosPage> {
   late CobrosProvider _cobrosProvider;
 
   List<Map<String, dynamic>> _foundClients = [];
@@ -51,7 +51,7 @@ class _CobrosPageState extends State<CobrosPage> {
     if (!mounted) return;
     setState(() => _isSearchingClients = true);
     try {
-      final currentFilterVendor = context.read<FilterProvider>().selectedVendor;
+      final currentFilterVendor = ref.read(selectedVendorProvider);
       final queryCode = currentFilterVendor ?? widget.employeeCode;
       
       final results = await ClientsService.getClientsList(
@@ -66,8 +66,7 @@ class _CobrosPageState extends State<CobrosPage> {
   }
 
   void _loadPendingSummary() {
-    final filterProvider = context.read<FilterProvider>();
-    final selectedVendor = filterProvider.selectedVendor;
+    final selectedVendor = ref.read(selectedVendorProvider);
     
     // Get all vendor codes from auth provider
     final authState = ProviderScope.containerOf(context)
@@ -109,7 +108,7 @@ class _CobrosPageState extends State<CobrosPage> {
 
   @override
   Widget build(BuildContext context) {
-    return provider.ChangeNotifierProvider.value(
+    return ChangeNotifierProvider.value(
       value: _cobrosProvider,
       child: Scaffold(
         backgroundColor: AppTheme.darkBase,
@@ -271,7 +270,7 @@ class _CobrosPageState extends State<CobrosPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => provider.ChangeNotifierProvider.value(
+              builder: (context) => ChangeNotifierProvider.value(
                 value: _cobrosProvider,
                 child: CobroDetailScreen(
                   codigoCliente: code,

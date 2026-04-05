@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
@@ -51,8 +51,9 @@ bool _isValidDniNie(String value) {
 /// - Clear obligatory vs optional payment indicators
 class RuteroDetailModal extends StatefulWidget {
   final AlbaranEntrega albaran;
+  final WidgetRef ref;
 
-  const RuteroDetailModal({super.key, required this.albaran});
+  const RuteroDetailModal({super.key, required this.albaran, required this.ref});
 
   @override
   State<RuteroDetailModal> createState() => _RuteroDetailModalState();
@@ -361,13 +362,29 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<void> _loadItems() async {
     try {
-      final provider = Provider.of<EntregasProvider>(context, listen: false);
-      final items = await provider.getAlbaranDetalle(
-        widget.albaran.numeroAlbaran,
-        widget.albaran.ejercicio,
-        widget.albaran.serie,
-        widget.albaran.terminal,
-      );
+      List<EntregaItem> items;
+      // If albaran already has items, use them; otherwise fetch from API
+      if (widget.albaran.items.isNotEmpty) {
+        items = widget.albaran.items;
+      } else {
+        final notifier = widget.ref.read(entregasProvider.notifier);
+        final albaranDetalle = await notifier.obtenerDetalleAlbaran(
+          widget.albaran.numeroAlbaran,
+          widget.albaran.ejercicio,
+          widget.albaran.serie,
+          widget.albaran.terminal,
+        );
+        if (albaranDetalle == null) {
+          if (mounted) {
+            setState(() {
+              _itemsError = 'No se pudo cargar el detalle del albaran';
+              _isLoadingItems = false;
+            });
+          }
+          return;
+        }
+        items = albaranDetalle.items;
+      }
 
       // Filter out ghost lines: no product code, or description starts with "Pedido:"
       final filtered = items.where((item) {
@@ -2701,7 +2718,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     setState(() => _isSubmitting = true);
 
     try {
-      final provider = Provider.of<EntregasProvider>(context, listen: false);
+      final notifier = widget.ref.read(entregasProvider.notifier);
 
       // Get signature
       final Uint8List? sigBytes = await _signatureController.toPngBytes();
@@ -2732,7 +2749,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       }
 
       // Submit
-      bool success = await provider.marcarEntregado(
+      bool success = await notifier.marcarEntregado(
         albaranId: widget.albaran.id,
         firma: base64Sig,
         observaciones: finalObs,
@@ -2748,7 +2765,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (success) {
         HapticFeedback.heavyImpact();
         // Sync firma path from provider (marcarEntregado uploaded and got server path)
-        final updated = provider.albaranes.firstWhere(
+        final state = widget.ref.read(entregasProvider);
+        final updated = state.albaranes.firstWhere(
           (a) => a.id == widget.albaran.id,
           orElse: () => widget.albaran,
         );
@@ -2777,7 +2795,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         );
       } else {
         // Handle already delivered error specially
-        final errorMsg = provider.error ?? 'Error al guardar entrega';
+        final state = widget.ref.read(entregasProvider);
+        final errorMsg = state.error ?? 'Error al guardar entrega';
         if (errorMsg.contains('ya fue confirmada')) {
           _showAlreadyDeliveredDialog();
         } else {

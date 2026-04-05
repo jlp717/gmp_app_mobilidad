@@ -1,7 +1,8 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/chatbot_service.dart';
 
-/// Chat message model
+// ── State ────────────────────────────────────────────────────────────────────
+
 class ChatMessage {
   final String content;
   final bool isUser;
@@ -14,86 +15,123 @@ class ChatMessage {
   }) : timestamp = timestamp ?? DateTime.now();
 }
 
-/// [ChatbotProvider] - State management for AI chatbot
-/// 
-/// Manages:
-/// - Message history
-/// - Loading states
-/// - API communication
-class ChatbotProvider extends ChangeNotifier {
-  ChatbotProvider({required this.vendedorCodes});
-
+class ChatbotState {
+  final List<ChatMessage> messages;
+  final bool isLoading;
+  final String? error;
+  final String? currentClientCode;
   final List<String> vendedorCodes;
-  final ChatbotService _service = ChatbotService();
-  
-  final List<ChatMessage> _messages = [];
-  bool _isLoading = false;
-  String? _error;
-  String? _currentClientCode;
 
-  // Getters
-  List<ChatMessage> get messages => List.unmodifiable(_messages);
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  String? get currentClientCode => _currentClientCode;
+  const ChatbotState({
+    this.messages = const [],
+    this.isLoading = false,
+    this.error,
+    this.currentClientCode,
+    this.vendedorCodes = const [],
+  });
 
-  /// Set current client context for the chat
-  void setClientContext(String clientCode) {
-    _currentClientCode = clientCode;
-    notifyListeners();
+  ChatbotState copyWith({
+    List<ChatMessage>? messages,
+    bool? isLoading,
+    Object? error = _sentinel,
+    Object? currentClientCode = _sentinel,
+    List<String>? vendedorCodes,
+  }) {
+    return ChatbotState(
+      messages: messages ?? this.messages,
+      isLoading: isLoading ?? this.isLoading,
+      error: error == _sentinel ? this.error : error as String?,
+      currentClientCode: currentClientCode == _sentinel
+          ? this.currentClientCode
+          : currentClientCode as String?,
+      vendedorCodes: vendedorCodes ?? this.vendedorCodes,
+    );
   }
 
-  /// Send a message to the AI
+  static const _sentinel = Object();
+}
+
+// ── Notifier ─────────────────────────────────────────────────────────────────
+
+class ChatbotNotifier extends Notifier<ChatbotState> {
+  final ChatbotService _service = ChatbotService();
+
+  ChatbotNotifier({List<String> vendedorCodes = const []})
+      : _initialVendedorCodes = vendedorCodes;
+
+  final List<String> _initialVendedorCodes;
+
+  @override
+  ChatbotState build() => ChatbotState(vendedorCodes: _initialVendedorCodes);
+
+  void setClientContext(String clientCode) {
+    state = state.copyWith(currentClientCode: clientCode);
+  }
+
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty) return;
 
-    // Add user message
-    _messages.add(ChatMessage(
-      content: text,
-      isUser: true,
-    ));
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    state = state.copyWith(
+      messages: [...state.messages, ChatMessage(content: text, isUser: true)],
+      isLoading: true,
+      error: null,
+    );
 
     try {
-      // Call API
       final response = await _service.sendMessage(
         message: text,
-        vendedorCodes: vendedorCodes,
-        clientCode: _currentClientCode,
+        vendedorCodes: state.vendedorCodes,
+        clientCode: state.currentClientCode,
       );
 
-      // Add bot response
-      _messages.add(ChatMessage(
-        content: response,
-        isUser: false,
-      ));
+      state = state.copyWith(
+        messages: [
+          ...state.messages,
+          ChatMessage(content: response, isUser: false),
+        ],
+        isLoading: false,
+      );
     } catch (e) {
-      _error = e.toString();
-      _messages.add(ChatMessage(
-        content: 'Lo siento, hubo un error al procesar tu mensaje. Intenta de nuevo.',
-        isUser: false,
-      ));
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      state = state.copyWith(
+        messages: [
+          ...state.messages,
+          ChatMessage(
+            content:
+                'Lo siento, hubo un error al procesar tu mensaje. Intenta de nuevo.',
+            isUser: false,
+          ),
+        ],
+        isLoading: false,
+        error: e.toString(),
+      );
     }
   }
 
-  /// Clear chat history
   void clearChat() {
-    _messages.clear();
-    _error = null;
-    notifyListeners();
+    state = state.copyWith(messages: [], error: null);
   }
 
-  /// Add a system message (for context changes, etc.)
   void addSystemMessage(String text) {
-    _messages.add(ChatMessage(
-      content: text,
-      isUser: false,
-    ));
-    notifyListeners();
+    state = state.copyWith(
+      messages: [
+        ...state.messages,
+        ChatMessage(content: text, isUser: false),
+      ],
+    );
   }
 }
+
+// ── Provider ─────────────────────────────────────────────────────────────────
+
+final chatbotProvider =
+    NotifierProvider<ChatbotNotifier, ChatbotState>(ChatbotNotifier.new);
+
+// ── Selectors ────────────────────────────────────────────────────────────────
+
+final chatMessagesProvider = Provider<List<ChatMessage>>((ref) {
+  return ref.watch(chatbotProvider).messages;
+});
+
+final chatIsLoadingProvider = Provider<bool>((ref) {
+  return ref.watch(chatbotProvider).isLoading;
+});

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart' as provider_pkg;
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -74,11 +73,6 @@ class _MainShellState extends ConsumerState<MainShell> {
       if (role == 'REPARTIDOR') {
         _forceRepartidorMode = true;
       }
-
-      try {
-        final filterProvider = context.read<FilterProvider>();
-        filterProvider.addListener(_onFilterChanged);
-      } catch (_) {}
     });
   }
 
@@ -113,29 +107,23 @@ class _MainShellState extends ConsumerState<MainShell> {
     // the dashboard's own filter state
     if (_currentIndex != 0) return; // Panel is always index 0 for Jefe
 
-    final filterProvider = context.read<FilterProvider>();
+    final filterState = ref.read(filterProvider);
     final authState = ref.read(authProvider).value;
-    final selectedVendor = filterProvider.selectedVendor;
+    final selectedVendor = filterState.selectedVendor;
 
     if (selectedVendor != null && selectedVendor.isNotEmpty) {
       // Use Riverpod dashboardProvider to update vendor codes
-      final ref = ProviderScope.containerOf(context);
-      ref.read(dashboardProvider.notifier).updateVendorCodes(selectedVendor.split(','));
+      final container = ProviderScope.containerOf(context);
+      container.read(dashboardProvider.notifier).updateVendorCodes(selectedVendor.split(','));
     } else {
       // No filter = show all vendor codes
-      final ref = ProviderScope.containerOf(context);
-      ref.read(dashboardProvider.notifier).updateVendorCodes(authState?.vendedorCodes ?? []);
+      final container = ProviderScope.containerOf(context);
+      container.read(dashboardProvider.notifier).updateVendorCodes(authState?.vendedorCodes ?? []);
     }
   }
 
   @override
   void dispose() {
-    // Remove FilterProvider listener to avoid leaks
-    if (mounted) {
-      try {
-        context.read<FilterProvider>().removeListener(_onFilterChanged);
-      } catch (_) {}
-    }
     super.dispose();
   }
 
@@ -465,6 +453,11 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen to filter changes and propagate to dashboard
+    ref.listen(filterProvider, (previous, next) {
+      _onFilterChanged();
+    });
+
     final authState = ref.watch(authProvider).value;
     final user = authState?.user;
 
@@ -1290,10 +1283,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           );
         }
         if (label == 'Rutero') {
-          return provider_pkg.ChangeNotifierProvider(
-            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
-          );
+          return RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap);
         }
         if (label == 'Comisiones') {
           return const ComingSoonPlaceholder(
@@ -1357,7 +1347,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           ObjectivesPage(employeeCode: employeeCode, isJefeVentas: true),
           CommissionsPage(employeeCode: employeeCode, isJefeVentas: true),
           const FacturasPage(),
-          provider_pkg.ChangeNotifierProvider(
+          ChangeNotifierProvider(
             create: (_) => PedidosProvider(),
             child: PedidosPage(employeeCode: employeeCode, isJefeVentas: true),
           ),
@@ -1393,7 +1383,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         case 'Facturas':
           return const FacturasPage();
         case 'Pedidos':
-          return provider_pkg.ChangeNotifierProvider(
+          return ChangeNotifierProvider(
             create: (_) => PedidosProvider(),
             child: PedidosPage(employeeCode: empCode, isJefeVentas: false),
           );

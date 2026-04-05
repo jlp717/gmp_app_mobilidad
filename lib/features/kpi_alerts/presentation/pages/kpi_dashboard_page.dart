@@ -2,7 +2,6 @@
 // JEFE_VENTAS ve todos los clientes, COMERCIAL solo los suyos
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
@@ -13,7 +12,7 @@ import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
-class KpiDashboardPage extends StatefulWidget {
+class KpiDashboardPage extends ConsumerStatefulWidget {
   final String employeeCode;
   final bool isJefeVentas;
 
@@ -24,10 +23,10 @@ class KpiDashboardPage extends StatefulWidget {
   });
 
   @override
-  State<KpiDashboardPage> createState() => _KpiDashboardPageState();
+  ConsumerState<KpiDashboardPage> createState() => _KpiDashboardPageState();
 }
 
-class _KpiDashboardPageState extends State<KpiDashboardPage> {
+class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
   Map<String, dynamic>? _data;
   bool _loading = true;
   String? _error;
@@ -45,8 +44,7 @@ class _KpiDashboardPageState extends State<KpiDashboardPage> {
   String? _resolveVendorCode() {
     if (widget.isJefeVentas) {
       // Jefe: use the global filter selector
-      final filterCode =
-          context.read<FilterProvider>().selectedVendor;
+      final filterCode = ref.read(filterProvider).selectedVendor;
       return filterCode; // null = all, or specific vendor
     }
     // Comercial: always their own code

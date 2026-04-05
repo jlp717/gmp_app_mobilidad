@@ -5,15 +5,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart' as provider_pkg;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
-import 'package:provider/provider.dart' hide Provider;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/auth_notifier.dart';
+import '../../../../core/providers/filter_provider.dart';
 import '../../providers/pedidos_provider.dart';
 import '../../data/pedidos_service.dart';
 import '../widgets/product_search_widget.dart';
@@ -46,7 +45,7 @@ import '../../../../core/widgets/global_vendor_selector.dart';
 import '../../../../core/widgets/smart_product_image.dart';
 import 'promotions_list_page.dart';
 
-class PedidosPage extends StatefulWidget {
+class PedidosPage extends ConsumerStatefulWidget {
   final String employeeCode;
   final bool isJefeVentas;
 
@@ -57,10 +56,10 @@ class PedidosPage extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<PedidosPage> createState() => _PedidosPageState();
+  ConsumerState<PedidosPage> createState() => _PedidosPageState();
 }
 
-class _PedidosPageState extends State<PedidosPage>
+class _PedidosPageState extends ConsumerState<PedidosPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ScrollController _catalogScrollController = ScrollController();
@@ -88,7 +87,9 @@ class _PedidosPageState extends State<PedidosPage>
       _initFavorites();
       // Listen to "Ver como" vendor filter changes
       if (widget.isJefeVentas) {
-        context.read<FilterProvider>().addListener(_onVendorFilterChanged);
+        ref.listen<String?>(selectedVendorProvider, (previous, next) {
+          _onVendorFilterChanged();
+        });
       }
       context.read<PedidosProvider>().addListener(_onProviderChange);
     });
@@ -126,11 +127,6 @@ class _PedidosPageState extends State<PedidosPage>
     _autoSaveTimer?.cancel();
     _tabController.dispose();
     _catalogScrollController.dispose();
-    if (widget.isJefeVentas) {
-      try {
-        context.read<FilterProvider>().removeListener(_onVendorFilterChanged);
-      } catch (_) {}
-    }
     try {
       context.read<PedidosProvider>().removeListener(_onProviderChange);
     } catch (_) {}
@@ -169,8 +165,7 @@ class _PedidosPageState extends State<PedidosPage>
     String codes = vendedorCodes.join(',');
     // JEFE_VENTAS: respect global "Ver como" filter
     if (widget.isJefeVentas) {
-      final filter = context.read<FilterProvider>();
-      final selected = filter.selectedVendor;
+      final selected = ref.read(selectedVendorProvider);
       if (selected != null && selected.isNotEmpty) {
         codes = selected;
       }

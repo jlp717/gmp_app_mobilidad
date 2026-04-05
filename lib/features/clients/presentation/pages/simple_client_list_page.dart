@@ -9,7 +9,6 @@ import '../../../objectives/presentation/pages/enhanced_client_matrix_page.dart'
 
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/widgets/modern_loading.dart';
-import 'package:provider/provider.dart' hide Provider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
@@ -19,17 +18,17 @@ import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/clien
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 
 /// Simple Clients List Page with debounced search
-class SimpleClientListPage extends StatefulWidget {
+class SimpleClientListPage extends ConsumerStatefulWidget {
   final String employeeCode;
   final bool isJefeVentas;
-  
+
   const SimpleClientListPage({super.key, required this.employeeCode, this.isJefeVentas = false});
 
   @override
-  State<SimpleClientListPage> createState() => _SimpleClientListPageState();
+  ConsumerState<SimpleClientListPage> createState() => _SimpleClientListPageState();
 }
 
-class _SimpleClientListPageState extends State<SimpleClientListPage> {
+class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   List<Map<String, dynamic>> _clients = [];
   bool _isLoading = true;
   String? _error;
@@ -85,7 +84,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
       String? codesToPass;
       if (widget.isJefeVentas) {
          // Use FilterProvider
-         codesToPass = context.read<FilterProvider>().selectedVendor; 
+         codesToPass = ref.read(selectedVendorProvider);
       } else {
          codesToPass = widget.employeeCode;
       }

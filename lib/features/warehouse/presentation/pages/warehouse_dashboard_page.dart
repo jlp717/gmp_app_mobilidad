@@ -3,7 +3,7 @@
 /// Muestra los camiones del día con KPIs de carga
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/feature_flags.dart';
 import '../../../../core/theme/app_theme.dart';

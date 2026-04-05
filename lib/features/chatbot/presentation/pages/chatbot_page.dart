@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider, Consumer, ChangeNotifierProvider;
-import 'package:provider/provider.dart' as provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
@@ -13,7 +12,7 @@ import '../widgets/chat_message_bubble.dart';
 /// - Clean professional design without childish emojis
 /// - Quick action pills with icons
 /// - Gradient accents and glowing effects
-class ChatbotPage extends StatefulWidget {
+class ChatbotPage extends ConsumerStatefulWidget {
   const ChatbotPage({
     super.key,
     required this.vendedorCodes,
@@ -22,20 +21,18 @@ class ChatbotPage extends StatefulWidget {
   final List<String> vendedorCodes;
 
   @override
-  State<ChatbotPage> createState() => _ChatbotPageState();
+  ConsumerState<ChatbotPage> createState() => _ChatbotPageState();
 }
 
-class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStateMixin {
+class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  late ChatbotProvider _provider;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
-    _provider = ChatbotProvider(vendedorCodes: widget.vendedorCodes);
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
@@ -50,7 +47,6 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
     _messageController.dispose();
     _scrollController.dispose();
     _pulseController.dispose();
-    _provider.dispose();
     super.dispose();
   }
 
@@ -58,7 +54,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    _provider.sendMessage(text);
+    ref.read(chatbotProvider.notifier).sendMessage(text);
     _messageController.clear();
     
     Future.delayed(const Duration(milliseconds: 100), () {
@@ -83,6 +79,8 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
       isJefe = (authState?.user?.isDirector ?? false) || widget.vendedorCodes.length > 1;
     } catch (_) {}
 
+    final chatbotState = ref.watch(chatbotProvider);
+
     return Scaffold( // Wrapped in Scaffold for safety
       backgroundColor: const Color(0xFF0A0E21),
       body: Column(
@@ -91,19 +89,16 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               title: isJefe ? 'NEXUS AI (Supervisor)' : 'NEXUS AI',
               subtitle: 'Asistente Comercial Inteligente',
               lastSync: DateTime.now(),
-              isLoading: _provider.isLoading,
-              onSync: () => _provider.clearChat(), // Clear as sync/reset action
+              isLoading: chatbotState.isLoading,
+              onSync: () => ref.read(chatbotProvider.notifier).clearChat(), // Clear as sync/reset action
             ),
              Expanded(
-                child: provider.ChangeNotifierProvider.value(
-                  value: _provider,
-                  child: Column(
-                    children: [
-                      _buildQuickActions(),
-                      Expanded(child: _buildMessageList()),
-                      _buildInputArea(),
-                    ],
-                  ),
+                child: Column(
+                  children: [
+                    _buildQuickActions(),
+                    Expanded(child: _buildMessageList()),
+                    _buildInputArea(),
+                  ],
                 ),
              )
         ],
@@ -113,28 +108,25 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
 
   // OLD CHATBOT UI - PRESERVED FOR FUTURE USE
   Widget _buildChatbotInterface(BuildContext context) {
-    return provider.ChangeNotifierProvider.value(
-      value: _provider,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              const Color(0xFF0A0E21),
-              const Color(0xFF0D1320),
-              const Color(0xFF0A0E21),
-            ],
-          ),
-        ),
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildQuickActions(),
-            Expanded(child: _buildMessageList()),
-            _buildInputArea(),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF0A0E21),
+            const Color(0xFF0D1320),
+            const Color(0xFF0A0E21),
           ],
         ),
+      ),
+      child: Column(
+        children: [
+          _buildHeader(),
+          _buildQuickActions(),
+          Expanded(child: _buildMessageList()),
+          _buildInputArea(),
+        ],
       ),
     );
   }
@@ -244,16 +236,12 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
           ),
           
           // Clear chat
-          provider.Consumer<ChatbotProvider>(
-            builder: (context, provider, _) {
-              if (provider.messages.isEmpty) return const SizedBox();
-              return IconButton(
-                icon: Icon(Icons.delete_outline, color: Colors.grey.shade600, size: 22),
-                onPressed: () => provider.clearChat(),
-                tooltip: 'Limpiar',
-              );
-            },
-          ),
+          if (ref.watch(chatbotProvider).messages.isNotEmpty)
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: Colors.grey.shade600, size: 22),
+              onPressed: () => ref.read(chatbotProvider.notifier).clearChat(),
+              tooltip: 'Limpiar',
+            ),
         ],
       ),
     );
@@ -323,32 +311,30 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
   }
 
   Widget _buildMessageList() {
-    return provider.Consumer<ChatbotProvider>(
-      builder: (context, provider, _) {
-        if (provider.messages.isEmpty) {
-          return _buildWelcomeScreen();
+    final chatState = ref.watch(chatbotProvider);
+    
+    if (chatState.messages.isEmpty) {
+      return _buildWelcomeScreen();
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      itemCount: chatState.messages.length + (chatState.isLoading ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == chatState.messages.length && chatState.isLoading) {
+          return const ChatMessageBubble(
+            message: '',
+            isUser: false,
+            isLoading: true,
+          );
         }
 
-        return ListView.builder(
-          controller: _scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          itemCount: provider.messages.length + (provider.isLoading ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index == provider.messages.length && provider.isLoading) {
-              return const ChatMessageBubble(
-                message: '',
-                isUser: false,
-                isLoading: true,
-              );
-            }
-            
-            final message = provider.messages[index];
-            return ChatMessageBubble(
-              message: message.content,
-              isUser: message.isUser,
-              timestamp: message.timestamp,
-            );
-          },
+        final message = chatState.messages[index];
+        return ChatMessageBubble(
+          message: message.content,
+          isUser: message.isUser,
+          timestamp: message.timestamp,
         );
       },
     );
@@ -535,6 +521,8 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
   }
 
   Widget _buildInputArea() {
+    final chatState = ref.watch(chatbotProvider);
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -569,37 +557,33 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               ),
             ),
             const SizedBox(width: 12),
-            
-            provider.Consumer<ChatbotProvider>(
-              builder: (context, provider, _) {
-                return GestureDetector(
-                  onTap: provider.isLoading ? null : _sendMessage,
-                  child: Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: provider.isLoading
-                            ? [Colors.grey.shade800, Colors.grey.shade800]
-                            : [AppTheme.neonBlue, AppTheme.neonPurple],
-                      ),
-                      borderRadius: BorderRadius.circular(27),
-                      boxShadow: provider.isLoading ? [] : [
-                        BoxShadow(
-                          color: AppTheme.neonBlue.withOpacity(0.4),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      provider.isLoading ? Icons.hourglass_top : Icons.send_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+
+            GestureDetector(
+              onTap: chatState.isLoading ? null : _sendMessage,
+              child: Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: chatState.isLoading
+                        ? [Colors.grey.shade800, Colors.grey.shade800]
+                        : [AppTheme.neonBlue, AppTheme.neonPurple],
                   ),
-                );
-              },
+                  borderRadius: BorderRadius.circular(27),
+                  boxShadow: chatState.isLoading ? [] : [
+                    BoxShadow(
+                      color: AppTheme.neonBlue.withOpacity(0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  chatState.isLoading ? Icons.hourglass_top : Icons.send_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
             ),
           ],
         ),

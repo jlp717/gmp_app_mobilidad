@@ -8,12 +8,10 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:provider/provider.dart' as provider;
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'package:provider/provider.dart' hide Provider, Consumer, ChangeNotifierProvider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/widgets/optimized_list.dart';
@@ -29,14 +27,14 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 
-class FacturasPage extends StatefulWidget {
+class FacturasPage extends ConsumerStatefulWidget {
   const FacturasPage({Key? key}) : super(key: key);
 
   @override
-  State<FacturasPage> createState() => _FacturasPageState();
+  ConsumerState<FacturasPage> createState() => _FacturasPageState();
 }
 
-class _FacturasPageState extends State<FacturasPage>
+class _FacturasPageState extends ConsumerState<FacturasPage>
     with SingleTickerProviderStateMixin {
   // Filters
   int? _selectedYear;
@@ -109,7 +107,7 @@ class _FacturasPageState extends State<FacturasPage>
       if (user == null) throw Exception('No user logged in');
 
       // Handle "View As" logic
-      final filter = provider.Provider.of<FilterProvider>(context, listen: false);
+      final selectedVendor = ref.read(selectedVendorProvider);
 
       // Get codes from AuthState (List<String>) and join them
       String codes = authState!.vendedorCodes.join(',');
@@ -122,9 +120,8 @@ class _FacturasPageState extends State<FacturasPage>
       // SENIOR FIX: Reactive Vendor Selection
       // Always re-read the filter provider to ensure we have the latest selection
       if (user.role == 'director' || user.isJefeVentas) {
-        final currentFilter = filter.selectedVendor;
-        if (currentFilter != null && currentFilter.isNotEmpty) {
-          codes = currentFilter;
+        if (selectedVendor != null && selectedVendor.isNotEmpty) {
+          codes = selectedVendor;
         }
       }
 

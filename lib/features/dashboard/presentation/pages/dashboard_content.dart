@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 // ignore: unused_import
-import 'dart:ui'; 
+import 'dart:ui';
 import 'package:flutter/foundation.dart'; // For compute
-import 'package:provider/provider.dart' hide Provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import '../../../../core/theme/app_theme.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/dashboard_notifier.dart';
 import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/api/api_client.dart';

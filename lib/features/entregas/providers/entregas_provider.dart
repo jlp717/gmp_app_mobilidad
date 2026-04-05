@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_config.dart';
 import '../../../core/models/estado_entrega.dart';
 
-// Re-export so existing importers of this file still get EstadoEntrega
 export '../../../core/models/estado_entrega.dart';
 
-/// Item de un albarán (línea de producto)
+// ── Models (kept from original) ──────────────────────────────────────────────
+
 class EntregaItem {
   final String itemId;
   final String codigoArticulo;
@@ -17,7 +18,7 @@ class EntregaItem {
   final double precioUnitario;
   double cantidadEntregada;
   EstadoEntrega estado;
-  String? observacion; // New field for row observation
+  String? observacion;
 
   EntregaItem({
     required this.itemId,
@@ -37,12 +38,16 @@ class EntregaItem {
       itemId: json['itemId']?.toString() ?? '',
       codigoArticulo: json['codigoArticulo']?.toString() ?? '',
       descripcion: json['descripcion']?.toString() ?? '',
-      cantidadPedida: ((json['cantidadPedida'] ?? json['QTY'] ?? 0) as num).toDouble(),
+      cantidadPedida:
+          ((json['cantidadPedida'] ?? json['QTY'] ?? 0) as num).toDouble(),
       bultos: ((json['bultos'] ?? 0) as num).toInt(),
-      unit: json['UNIT']?.toString() ?? json['unit']?.toString(), // Handle both cases
-      precioUnitario: ((json['precioUnitario'] ?? json['PRICE'] ?? 0) as num).toDouble(),
-      cantidadEntregada: ((json['cantidadEntregada'] ?? 0) as num).toDouble(),
-      estado: EstadoEntrega.fromString((json['estado'] ?? 'PENDIENTE') as String),
+      unit: json['UNIT']?.toString() ?? json['unit']?.toString(),
+      precioUnitario:
+          ((json['precioUnitario'] ?? json['PRICE'] ?? 0) as num).toDouble(),
+      cantidadEntregada:
+          ((json['cantidadEntregada'] ?? 0) as num).toDouble(),
+      estado: EstadoEntrega.fromString(
+          (json['estado'] ?? 'PENDIENTE') as String),
       observacion: json['observacion'] as String?,
     );
   }
@@ -50,7 +55,6 @@ class EntregaItem {
   bool get entregadoCompleto => cantidadEntregada >= cantidadPedida;
 }
 
-/// IVA breakdown per tax rate (e.g., 4%, 10%, 21%)
 class IvaBreakdownItem {
   final double base;
   final double pct;
@@ -67,7 +71,6 @@ class IvaBreakdownItem {
   }
 }
 
-/// Albarán completo para entrega
 class AlbaranEntrega {
   final String id;
   final int numeroAlbaran;
@@ -85,22 +88,22 @@ class AlbaranEntrega {
   final String emailCliente;
   final String fecha;
   final double importeTotal;
-  final double importeBruto;   // Gross amount pre-discount (reference only)
-  final double importeNeto;    // Sum of tax bases (without IVA)
-  final double importeIva;     // Sum of all IVA amounts
-  final List<IvaBreakdownItem> ivaBreakdown; // Per-rate IVA detail
-  final String? checksum;      // Backend verification: netoSum + ivaSum
+  final double importeBruto;
+  final double importeNeto;
+  final double importeIva;
+  final List<IvaBreakdownItem> ivaBreakdown;
+  final String? checksum;
   final String formaPago;
-  final String formaPagoDesc;  // e.g., "CRÉDITO", "CONTADO"
-  final String tipoPago;       // e.g., "CREDITO", "CONTADO", "REPOSICION"
-  final int diasPago;          // 0, 7, 30, 60, etc.
-  final bool esCTR;            // MUST collect
-  final bool puedeCobrarse;    // CAN optionally collect
-  final String colorEstado;    // "red", "green", "orange"
+  final String formaPagoDesc;
+  final String tipoPago;
+  final int diasPago;
+  final bool esCTR;
+  final bool puedeCobrarse;
+  final String colorEstado;
   final String ruta;
   final String codigoVendedor;
   final String nombreVendedor;
-  final String codigoRepartidor; // Para Jefe de Ventas
+  final String codigoRepartidor;
   final String nombreRepartidor;
   final int? ordenPreparacion;
   final bool discrepancy;
@@ -159,11 +162,11 @@ class AlbaranEntrega {
     this.horaPrevista,
   });
 
-
   factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
     return AlbaranEntrega(
       id: json['id']?.toString() ?? '',
-      numeroAlbaran: (json['numeroAlbaran'] ?? json['numero'] ?? 0) as int,
+      numeroAlbaran:
+          (json['numeroAlbaran'] ?? json['numero'] ?? 0) as int,
       ejercicio: (json['ejercicio'] ?? DateTime.now().year) as int,
       serie: json['serie']?.toString() ?? '',
       terminal: (json['terminal'] ?? 0) as int,
@@ -175,14 +178,17 @@ class AlbaranEntrega {
       poblacion: json['poblacion']?.toString() ?? '',
       telefono: json['telefono']?.toString() ?? '',
       telefono2: json['telefono2']?.toString() ?? '',
-      emailCliente: json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
+      emailCliente:
+          json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
       fecha: json['fecha']?.toString() ?? '',
-      importeTotal: ((json['importe'] ?? json['importeTotal'] ?? 0) as num).toDouble(),
+      importeTotal:
+          ((json['importe'] ?? json['importeTotal'] ?? 0) as num).toDouble(),
       importeBruto: ((json['importeBruto'] ?? 0) as num).toDouble(),
       importeNeto: ((json['netoSum'] ?? 0) as num).toDouble(),
       importeIva: ((json['ivaSum'] ?? 0) as num).toDouble(),
       ivaBreakdown: (json['ivaBreakdown'] as List<dynamic>?)
-              ?.map((e) => IvaBreakdownItem.fromJson(e as Map<String, dynamic>))
+              ?.map((e) =>
+                  IvaBreakdownItem.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
       checksum: json['checksum']?.toString(),
@@ -201,7 +207,8 @@ class AlbaranEntrega {
       ordenPreparacion: json['ordenPreparacion'] as int?,
       discrepancy: json['discrepancy'] == true,
       lineSum: ((json['lineSum'] ?? 0) as num).toDouble(),
-      estado: EstadoEntrega.fromString((json['estado'] ?? 'PENDIENTE') as String),
+      estado: EstadoEntrega.fromString(
+          (json['estado'] ?? 'PENDIENTE') as String),
       items: (json['items'] as List<dynamic>?)
               ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -215,7 +222,7 @@ class AlbaranEntrega {
 
   static String? _parseHoraPrevista(dynamic val) {
     if (val == null) return null;
-    final s = val.toString().padLeft(6, '0'); 
+    final s = val.toString().padLeft(6, '0');
     if (s.length >= 4) {
       return '${s.substring(0, 2)}:${s.substring(2, 4)}';
     }
@@ -230,347 +237,373 @@ class AlbaranEntrega {
   bool get requiereCobro => esCTR && estado != EstadoEntrega.entregado;
 }
 
-/// Provider de entregas para repartidor
-class EntregasProvider extends ChangeNotifier {
+// ── Riverpod State ────────────────────────────────────────────────────────────
 
-  
-  List<AlbaranEntrega> _albaranes = [];
-  AlbaranEntrega? _albaranSeleccionado;
-  bool _isLoading = false;
-  String? _error;
-  String _repartidorId = '';
-  DateTime _fechaSeleccionada = DateTime.now();
+class EntregasState {
+  final List<AlbaranEntrega> albaranes;
+  final AlbaranEntrega? albaranSeleccionado;
+  final bool isLoading;
+  final String? error;
+  final String repartidorId;
+  final DateTime fechaSeleccionada;
+  final String searchQuery;
+  final String searchClient;
+  final String searchAlbaran;
+  final String sortBy;
+  final String filterTipoPago;
+  final String filterDebeCobrar;
+  final String filterDocTipo;
+  final double resumenTotalBruto;
+  final double resumenTotalACobrar;
+  final double resumenTotalOpcional;
+  final int resumenCompletedCount;
 
-  // Getters
-  List<AlbaranEntrega> get albaranes => _albaranes;
-  AlbaranEntrega? get albaranSeleccionado => _albaranSeleccionado;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  String get repartidorId => _repartidorId;
-  DateTime get fechaSeleccionada => _fechaSeleccionada;
-  
+  EntregasState({
+    this.albaranes = const [],
+    this.albaranSeleccionado,
+    this.isLoading = false,
+    this.error,
+    this.repartidorId = '',
+    DateTime? fechaSeleccionada,
+    this.searchQuery = '',
+    this.searchClient = '',
+    this.searchAlbaran = '',
+    this.sortBy = 'default',
+    this.filterTipoPago = '',
+    this.filterDebeCobrar = '',
+    this.filterDocTipo = '',
+    this.resumenTotalBruto = 0,
+    this.resumenTotalACobrar = 0,
+    this.resumenTotalOpcional = 0,
+    this.resumenCompletedCount = 0,
+  }) : fechaSeleccionada = fechaSeleccionada ?? DateTime.now();
+
+  EntregasState copyWith({
+    List<AlbaranEntrega>? albaranes,
+    Object? albaranSeleccionado = _sentinel,
+    bool? isLoading,
+    Object? error = _sentinel,
+    String? repartidorId,
+    DateTime? fechaSeleccionada,
+    String? searchQuery,
+    String? searchClient,
+    String? searchAlbaran,
+    String? sortBy,
+    String? filterTipoPago,
+    String? filterDebeCobrar,
+    String? filterDocTipo,
+    double? resumenTotalBruto,
+    double? resumenTotalACobrar,
+    double? resumenTotalOpcional,
+    int? resumenCompletedCount,
+  }) {
+    return EntregasState(
+      albaranes: albaranes ?? this.albaranes,
+      albaranSeleccionado: albaranSeleccionado == _sentinel
+          ? this.albaranSeleccionado
+          : albaranSeleccionado as AlbaranEntrega?,
+      isLoading: isLoading ?? this.isLoading,
+      error: error == _sentinel ? this.error : error as String?,
+      repartidorId: repartidorId ?? this.repartidorId,
+      fechaSeleccionada: fechaSeleccionada ?? this.fechaSeleccionada,
+      searchQuery: searchQuery ?? this.searchQuery,
+      searchClient: searchClient ?? this.searchClient,
+      searchAlbaran: searchAlbaran ?? this.searchAlbaran,
+      sortBy: sortBy ?? this.sortBy,
+      filterTipoPago: filterTipoPago ?? this.filterTipoPago,
+      filterDebeCobrar: filterDebeCobrar ?? this.filterDebeCobrar,
+      filterDocTipo: filterDocTipo ?? this.filterDocTipo,
+      resumenTotalBruto: resumenTotalBruto ?? this.resumenTotalBruto,
+      resumenTotalACobrar: resumenTotalACobrar ?? this.resumenTotalACobrar,
+      resumenTotalOpcional:
+          resumenTotalOpcional ?? this.resumenTotalOpcional,
+      resumenCompletedCount:
+          resumenCompletedCount ?? this.resumenCompletedCount,
+    );
+  }
+
+  static const _sentinel = Object();
+
   List<AlbaranEntrega> get albaranesPendientes =>
-      _albaranes.where((a) => a.estado == EstadoEntrega.pendiente).toList();
-  
+      albaranes.where((a) => a.estado == EstadoEntrega.pendiente).toList();
+
   List<AlbaranEntrega> get albaranesEnRuta =>
-      _albaranes.where((a) => a.estado == EstadoEntrega.enRuta).toList();
-  
-  List<AlbaranEntrega> get albaranesEntregados =>
-      _albaranes.where((a) => a.estado == EstadoEntrega.entregado || 
-                              a.estado == EstadoEntrega.parcial).toList();
+      albaranes.where((a) => a.estado == EstadoEntrega.enRuta).toList();
+
+  List<AlbaranEntrega> get albaranesEntregados => albaranes
+      .where((a) => a.estado == EstadoEntrega.entregado ||
+          a.estado == EstadoEntrega.parcial)
+      .toList();
 
   int get totalPendientes => albaranesPendientes.length;
   int get totalEntregados => albaranesEntregados.length;
-  double get progresoTotal => 
-      _albaranes.isNotEmpty ? totalEntregados / _albaranes.length : 0;
+  double get progresoTotal =>
+      albaranes.isNotEmpty ? totalEntregados / albaranes.length : 0;
 
-  double get importeTotalCTR => _albaranes
+  double get importeTotalCTR => albaranes
       .where((a) => a.esCTR && a.estado != EstadoEntrega.entregado)
       .fold(0, (sum, a) => sum + a.importeTotal);
+}
 
-  // Search and sort state
-  String _searchQuery = '';
-  String _searchClient = '';
-  String _searchAlbaran = '';
-  String _sortBy = 'default'; // 'default', 'importe_desc', 'importe_asc'
-  String _filterTipoPago = ''; // 'CONTADO', 'CREDITO', 'DOMICILIADO', etc.
-  String _filterDebeCobrar = ''; // 'S' or 'N'
-  String _filterDocTipo = ''; // 'ALBARAN' or 'FACTURA'
-  
-  // Resumen totals from API
-  double _resumenTotalBruto = 0;
-  double _resumenTotalACobrar = 0;
-  double _resumenTotalOpcional = 0;
-  int _resumenCompletedCount = 0;
+// ── Notifier ─────────────────────────────────────────────────────────────────
 
-  String get searchQuery => _searchQuery;
-  String get searchClient => _searchClient;
-  String get searchAlbaran => _searchAlbaran;
-  String get sortBy => _sortBy;
-  String get filterTipoPago => _filterTipoPago;
-  String get filterDebeCobrar => _filterDebeCobrar;
-  String get filterDocTipo => _filterDocTipo;
-  double get resumenTotalBruto => _resumenTotalBruto;
-  double get resumenTotalACobrar => _resumenTotalACobrar;
-  double get resumenTotalOpcional => _resumenTotalOpcional;
-  int get resumenCompletedCount => _resumenCompletedCount;
-  
+class EntregasNotifier extends Notifier<EntregasState> {
+  @override
+  EntregasState build() => EntregasState();
+
+  void setRepartidor(String repartidorId,
+      {bool autoReload = true, bool forceReload = false}) {
+    final wasChanged = state.repartidorId != repartidorId;
+    if (autoReload && (wasChanged || forceReload)) {
+      state = state.copyWith(repartidorId: repartidorId);
+      cargarAlbaranesPendientes();
+    } else {
+      state = state.copyWith(repartidorId: repartidorId);
+    }
+  }
+
+  void seleccionarFecha(DateTime fecha) {
+    state = state.copyWith(fechaSeleccionada: fecha);
+    cargarAlbaranesPendientes();
+  }
+
   void setSearchQuery(String query) {
-    _searchQuery = query;
-    // Clear specific filters if general is used? Or combine?
-    // User requested split, so maybe we clear general if they use specific?
-    // Keeping simple: use all provided.
+    state = state.copyWith(searchQuery: query);
     cargarAlbaranesPendientes();
   }
 
   void setSearchClient(String query) {
-    _searchClient = query;
+    state = state.copyWith(searchClient: query);
     cargarAlbaranesPendientes();
   }
-  
+
   void setSearchAlbaran(String query) {
-    _searchAlbaran = query;
+    state = state.copyWith(searchAlbaran: query);
     cargarAlbaranesPendientes();
   }
 
   void setSortBy(String sort) {
-    _sortBy = sort;
+    state = state.copyWith(sortBy: sort);
     cargarAlbaranesPendientes();
   }
 
   void setFilterTipoPago(String tipo) {
-    _filterTipoPago = tipo;
+    state = state.copyWith(filterTipoPago: tipo);
     cargarAlbaranesPendientes();
   }
 
   void setFilterDebeCobrar(String debeCobrar) {
-    _filterDebeCobrar = debeCobrar;
+    state = state.copyWith(filterDebeCobrar: debeCobrar);
     cargarAlbaranesPendientes();
   }
 
   void setFilterDocTipo(String docTipo) {
-    _filterDocTipo = docTipo;
+    state = state.copyWith(filterDocTipo: docTipo);
     cargarAlbaranesPendientes();
   }
 
-  /// Inicializar con ID del repartidor
-  void setRepartidor(String repartidorId, {bool autoReload = true, bool forceReload = false}) {
-    final wasChanged = _repartidorId != repartidorId;
-    _repartidorId = repartidorId;
-    print('[ENTREGAS_PROVIDER] setRepartidor: $repartidorId (changed: $wasChanged, autoReload: $autoReload, force: $forceReload)');
-    if (autoReload && (wasChanged || forceReload)) {
-      cargarAlbaranesPendientes();
-    }
-  }
-
-  /// Cambiar fecha seleccionada
-  void seleccionarFecha(DateTime fecha) {
-    _fechaSeleccionada = fecha;
-    cargarAlbaranesPendientes();
-  }
-
-  /// Cargar albaranes pendientes del día
   Future<void> cargarAlbaranesPendientes() async {
-    if (_repartidorId.isEmpty) return;
+    if (state.repartidorId.isEmpty) return;
 
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final formattedDate = '${_fechaSeleccionada.year}-${_fechaSeleccionada.month.toString().padLeft(2, '0')}-${_fechaSeleccionada.day.toString().padLeft(2, '0')}';
-      
-      String url = '/entregas/pendientes/$_repartidorId?date=$formattedDate';
-      
-      // Generic search (legacy support)
-      if (_searchQuery.isNotEmpty) {
-        url += '&search=${Uri.encodeComponent(_searchQuery)}';
+      final formattedDate =
+          '${state.fechaSeleccionada.year}-${state.fechaSeleccionada.month.toString().padLeft(2, '0')}-${state.fechaSeleccionada.day.toString().padLeft(2, '0')}';
+
+      String url =
+          '/entregas/pendientes/${state.repartidorId}?date=$formattedDate';
+
+      if (state.searchQuery.isNotEmpty) {
+        url += '&search=${Uri.encodeComponent(state.searchQuery)}';
       }
-      
-      // Separate filters
-      if (_searchClient.isNotEmpty) {
-        url += '&searchClient=${Uri.encodeComponent(_searchClient)}';
+      if (state.searchClient.isNotEmpty) {
+        url += '&searchClient=${Uri.encodeComponent(state.searchClient)}';
       }
-      if (_searchAlbaran.isNotEmpty) {
-        url += '&searchAlbaran=${Uri.encodeComponent(_searchAlbaran)}';
+      if (state.searchAlbaran.isNotEmpty) {
+        url += '&searchAlbaran=${Uri.encodeComponent(state.searchAlbaran)}';
       }
-      
-      if (_sortBy != 'default') {
-        url += '&sortBy=$_sortBy';
+      if (state.sortBy != 'default') {
+        url += '&sortBy=${state.sortBy}';
       }
-      if (_filterTipoPago.isNotEmpty) {
-        url += '&tipoPago=$_filterTipoPago';
+      if (state.filterTipoPago.isNotEmpty) {
+        url += '&tipoPago=${state.filterTipoPago}';
       }
-      if (_filterDebeCobrar.isNotEmpty) {
-        url += '&debeCobrar=$_filterDebeCobrar';
+      if (state.filterDebeCobrar.isNotEmpty) {
+        url += '&debeCobrar=${state.filterDebeCobrar}';
       }
-      if (_filterDocTipo.isNotEmpty) {
-        url += '&docTipo=$_filterDocTipo';
+      if (state.filterDocTipo.isNotEmpty) {
+        url += '&docTipo=${state.filterDocTipo}';
       }
-      
+
       final response = await ApiClient.get(url);
 
       if (response['success'] == true) {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
-        _albaranes = lista.map((e) => AlbaranEntrega.fromJson(e as Map<String, dynamic>)).toList();
-        
-        // Parse resumen totals
+        final albaranes = lista
+            .map((e) => AlbaranEntrega.fromJson(e as Map<String, dynamic>))
+            .toList();
+
         final resumen = response['resumen'] as Map<String, dynamic>? ?? {};
-        _resumenTotalBruto = ((resumen['totalBruto'] ?? 0) as num).toDouble();
-        _resumenTotalACobrar = ((resumen['totalACobrar'] ?? 0) as num).toDouble();
-        _resumenTotalOpcional = ((resumen['totalOpcional'] ?? 0) as num).toDouble();
-        _resumenCompletedCount = (resumen['completedCount'] ?? 0) as int;
-        
-        print('[ENTREGAS_PROVIDER] Loaded ${_albaranes.length} albaranes for $_fechaSeleccionada, completed=$_resumenCompletedCount');
+        state = state.copyWith(
+          albaranes: albaranes,
+          isLoading: false,
+          resumenTotalBruto:
+              ((resumen['totalBruto'] ?? 0) as num).toDouble(),
+          resumenTotalACobrar:
+              ((resumen['totalACobrar'] ?? 0) as num).toDouble(),
+          resumenTotalOpcional:
+              ((resumen['totalOpcional'] ?? 0) as num).toDouble(),
+          resumenCompletedCount: (resumen['completedCount'] ?? 0) as int,
+        );
       } else {
-        _error = (response['error'] ?? 'Error cargando entregas') as String;
+        state = state.copyWith(
+          isLoading: false,
+          error: (response['error'] ?? 'Error cargando entregas') as String,
+        );
       }
     } catch (e) {
-      _error = 'Error de conexión: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Error de conexión: $e',
+      );
     }
   }
 
-  /// Convenience method to get items directly
-  Future<List<EntregaItem>> getAlbaranDetalle(int numero, int ejercicio, String serie, int terminal) async {
-    print('[ENTREGAS_PROVIDER] getAlbaranDetalle($numero, $ejercicio, $serie, $terminal)');
+  Future<AlbaranEntrega?> obtenerDetalleAlbaran(
+      int numero, int ejercicio, String serie, int terminal) async {
     try {
-      final detalle = await obtenerDetalleAlbaran(numero, ejercicio, serie, terminal);
-      if (detalle == null) {
-        print('[ENTREGAS_PROVIDER] getAlbaranDetalle returned null');
-        return [];
-      }
-      print('[ENTREGAS_PROVIDER] getAlbaranDetalle returned ${detalle.items.length} items');
-      return detalle.items;
-    } catch (e) {
-      print('[ENTREGAS_PROVIDER] getAlbaranDetalle error: $e');
-      return [];
-    }
-  }
-
-  Future<AlbaranEntrega?> obtenerDetalleAlbaran(int numero, int ejercicio, String serie, int terminal) async {
-    try {
-      print('[ENTREGAS_PROVIDER] Fetching albaran detail: $numero/$ejercicio?serie=$serie&terminal=$terminal');
-      // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
       final response = await ApiClient.get(
         '/entregas/albaran/$numero/$ejercicio?serie=$serie&terminal=$terminal',
       );
 
-      print('[ENTREGAS_PROVIDER] Albaran detail response: success=${response['success']}');
-      
       if (response['success'] == true && response['albaran'] != null) {
-        _albaranSeleccionado = AlbaranEntrega.fromJson(response['albaran'] as Map<String, dynamic>);
-        print('[ENTREGAS_PROVIDER] Parsed albaran with ${_albaranSeleccionado?.items.length ?? 0} items');
-        notifyListeners();
-        return _albaranSeleccionado;
-      } else {
-        print('[ENTREGAS_PROVIDER] Albaran detail failed: ${response['error']}');
+        final albaran =
+            AlbaranEntrega.fromJson(response['albaran'] as Map<String, dynamic>);
+        state = state.copyWith(albaranSeleccionado: albaran);
+        return albaran;
       }
     } catch (e) {
-      print('[ENTREGAS_PROVIDER] obtenerDetalleAlbaran error: $e');
-      _error = 'Error obteniendo detalle: $e';
-      notifyListeners();
+      state = state.copyWith(error: 'Error obteniendo detalle: $e');
     }
     return null;
   }
 
-  /// Marcar albarán como entregado
   Future<bool> marcarEntregado({
     required String albaranId,
     String? observaciones,
-    String? firma, // base64
+    String? firma,
     List<String>? fotos,
     double? latitud,
     double? longitud,
-    // Signer info
     String? clientCode,
     String? dni,
     String? nombre,
   }) async {
     String? firmaPath;
-    
-    // 1. Upload signature if exists
+
     if (firma != null) {
       try {
-        print('[ENTREGAS_PROVIDER] Uploading signature...');
         final res = await ApiClient.post('/entregas/uploads/signature', {
-           'entregaId': albaranId,
-           'firma': firma,
-           'clientCode': clientCode,
-           'dni': dni,
-           'nombre': nombre,
+          'entregaId': albaranId,
+          'firma': firma,
+          'clientCode': clientCode,
+          'dni': dni,
+          'nombre': nombre,
         });
         if (res['success'] == true) {
-           firmaPath = res['path'] as String?;
-           print('[ENTREGAS_PROVIDER] Signature saved: $firmaPath');
+          firmaPath = res['path'] as String?;
         }
       } catch (e) {
-        print('[ENTREGAS_PROVIDER] Error uploading signature: $e');
-        // Continue? Or fail? Let's continue but log it.
-        // Actually if signature fails, we should probably warn, but for now continue.
+        debugPrint('Error uploading signature: $e');
       }
     }
 
-    // 2. Update status
     return await _actualizarEstado(
       itemId: albaranId,
       estado: EstadoEntrega.entregado,
       observaciones: observaciones,
-      firma: firmaPath, // Send path, not base64
+      firma: firmaPath,
       fotos: fotos,
       latitud: latitud,
       longitud: longitud,
     );
   }
 
-  /// Generar recibo de entrega PDF (retorna base64 y fileName)
   Future<Map<String, dynamic>?> generateReceipt({
     required AlbaranEntrega albaran,
   }) async {
     try {
       final response = await ApiClient.post('/entregas/receipt/${albaran.id}', {
         'signaturePath': albaran.firma,
-        'items': albaran.items.map((i) => {
-          'cantidad': i.cantidadPedida,
-          'descripcion': i.descripcion,
-          'precio': i.precioUnitario,
-        }).toList(),
+        'items': albaran.items
+            .map((i) => {
+                  'cantidad': i.cantidadPedida,
+                  'descripcion': i.descripcion,
+                  'precio': i.precioUnitario,
+                })
+            .toList(),
         'clientCode': albaran.codigoCliente,
         'clientName': albaran.nombreCliente,
         'albaranNum': albaran.numeroAlbaran,
-        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
+        'facturaNum':
+            albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
         'fecha': albaran.fecha,
-        'subtotal': albaran.importeNeto > 0 ? albaran.importeNeto : albaran.importeTotal,
+        'subtotal': albaran.importeNeto > 0
+            ? albaran.importeNeto
+            : albaran.importeTotal,
         'iva': albaran.importeIva,
         'total': albaran.importeTotal,
         'formaPago': albaran.formaPagoDesc,
-        'repartidor': albaran.nombreRepartidor.isNotEmpty ? albaran.nombreRepartidor : albaran.codigoRepartidor,
+        'repartidor': albaran.nombreRepartidor.isNotEmpty
+            ? albaran.nombreRepartidor
+            : albaran.codigoRepartidor,
       });
-      if (response['success'] == true) {
-        return response;
-      }
+      if (response['success'] == true) return response;
       return null;
     } catch (e) {
-      print('[ENTREGAS_PROVIDER] Error generating receipt: $e');
       return null;
     }
   }
 
-  /// Enviar recibo por email
   Future<bool> sendReceiptByEmail({
     required AlbaranEntrega albaran,
     required String email,
   }) async {
     try {
-      final response = await ApiClient.post('/entregas/receipt/${albaran.id}/email', {
+      final response =
+          await ApiClient.post('/entregas/receipt/${albaran.id}/email', {
         'email': email,
         'signaturePath': albaran.firma,
-        'items': albaran.items.map((i) => {
-          'cantidad': i.cantidadPedida,
-          'descripcion': i.descripcion,
-          'precio': i.precioUnitario,
-        }).toList(),
+        'items': albaran.items
+            .map((i) => {
+                  'cantidad': i.cantidadPedida,
+                  'descripcion': i.descripcion,
+                  'precio': i.precioUnitario,
+                })
+            .toList(),
         'clientCode': albaran.codigoCliente,
         'clientName': albaran.nombreCliente,
         'albaranNum': albaran.numeroAlbaran,
-        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
+        'facturaNum':
+            albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
         'fecha': albaran.fecha,
-        'subtotal': albaran.importeNeto > 0 ? albaran.importeNeto : albaran.importeTotal,
+        'subtotal': albaran.importeNeto > 0
+            ? albaran.importeNeto
+            : albaran.importeTotal,
         'iva': albaran.importeIva,
         'total': albaran.importeTotal,
         'formaPago': albaran.formaPagoDesc,
-        'repartidor': albaran.nombreRepartidor.isNotEmpty ? albaran.nombreRepartidor : albaran.codigoRepartidor,
+        'repartidor': albaran.nombreRepartidor.isNotEmpty
+            ? albaran.nombreRepartidor
+            : albaran.codigoRepartidor,
       });
       return response['success'] == true;
     } catch (e) {
-      print('[ENTREGAS_PROVIDER] Error sending receipt email: $e');
       return false;
     }
   }
 
-  /// Marcar albarán como parcial
   Future<bool> marcarParcial({
     required String albaranId,
     required String observaciones,
@@ -586,7 +619,6 @@ class EntregasProvider extends ChangeNotifier {
     );
   }
 
-  /// Marcar albarán como no entregado
   Future<bool> marcarNoEntregado({
     required String albaranId,
     required String observaciones,
@@ -600,7 +632,6 @@ class EntregasProvider extends ChangeNotifier {
     );
   }
 
-  /// Actualizar estado interno
   Future<bool> _actualizarEstado({
     required String itemId,
     required EstadoEntrega estado,
@@ -612,13 +643,12 @@ class EntregasProvider extends ChangeNotifier {
     bool forceUpdate = false,
   }) async {
     try {
-      // FIX: ApiConfig.baseUrl ya incluye /api, no duplicar
       final response = await ApiClient.post(
         '/entregas/update',
         {
           'itemId': itemId,
           'status': estado.value,
-          'repartidorId': _repartidorId,
+          'repartidorId': state.repartidorId,
           'observaciones': observaciones,
           'firma': firma,
           'fotos': fotos,
@@ -629,37 +659,49 @@ class EntregasProvider extends ChangeNotifier {
       );
 
       if (response['success'] == true) {
-        // Actualizar estado local
-        final idx = _albaranes.indexWhere((a) => a.id == itemId);
+        final idx = state.albaranes.indexWhere((a) => a.id == itemId);
         if (idx != -1) {
-          _albaranes[idx].estado = estado;
-          _albaranes[idx].observaciones = observaciones;
-          _albaranes[idx].horaEntrega = DateTime.now();
-          if (firma != null) _albaranes[idx].firma = firma;
-          if (fotos != null) _albaranes[idx].fotos = fotos;
+          final updated = List<AlbaranEntrega>.from(state.albaranes);
+          final albaran = updated[idx];
+          albaran.estado = estado;
+          albaran.observaciones = observaciones;
+          albaran.horaEntrega = DateTime.now();
+          if (firma != null) albaran.firma = firma;
+          if (fotos != null) albaran.fotos = fotos;
+          state = state.copyWith(albaranes: updated);
         }
-        notifyListeners();
         return true;
       } else if (response['alreadyDelivered'] == true) {
-        // 409 Conflict - already delivered
-        _error = 'Esta entrega ya fue confirmada anteriormente';
-        notifyListeners();
+        state = state.copyWith(
+            error: 'Esta entrega ya fue confirmada anteriormente');
         return false;
       } else {
-        _error = (response['error'] ?? 'Error desconocido') as String;
-        notifyListeners();
+        state = state.copyWith(
+            error: (response['error'] ?? 'Error desconocido') as String);
         return false;
       }
     } catch (e) {
-      _error = 'Error actualizando: $e';
-      notifyListeners();
+      state = state.copyWith(error: 'Error actualizando: $e');
     }
     return false;
   }
 
-  /// Limpiar selección
   void limpiarSeleccion() {
-    _albaranSeleccionado = null;
-    notifyListeners();
+    state = state.copyWith(albaranSeleccionado: null);
   }
 }
+
+// ── Provider ─────────────────────────────────────────────────────────────────
+
+final entregasProvider =
+    NotifierProvider<EntregasNotifier, EntregasState>(EntregasNotifier.new);
+
+// ── Selectors ────────────────────────────────────────────────────────────────
+
+final entregasPendientesProvider = Provider<List<AlbaranEntrega>>((ref) {
+  return ref.watch(entregasProvider).albaranesPendientes;
+});
+
+final entregasLoadingProvider = Provider<bool>((ref) {
+  return ref.watch(entregasProvider).isLoading;
+});

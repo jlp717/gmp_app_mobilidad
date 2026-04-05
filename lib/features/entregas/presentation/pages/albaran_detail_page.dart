@@ -2,24 +2,24 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../providers/entregas_provider.dart';
+import '../../../entregas/providers/entregas_provider.dart';
 import '../widgets/signature_pad.dart';
 
 /// Página de detalle de albarán con acciones de entrega
-class AlbaranDetailPage extends StatefulWidget {
+class AlbaranDetailPage extends ConsumerStatefulWidget {
   final AlbaranEntrega albaran;
 
   const AlbaranDetailPage({super.key, required this.albaran});
 
   @override
-  State<AlbaranDetailPage> createState() => _AlbaranDetailPageState();
+  ConsumerState<AlbaranDetailPage> createState() => _AlbaranDetailPageState();
 }
 
-class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
+class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
   final TextEditingController _observacionesController =
       TextEditingController();
   final List<String> _fotos = [];
@@ -688,8 +688,8 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
     setState(() => _isProcessing = true);
 
     try {
-      final provider = context.read<EntregasProvider>();
-      final success = await provider.marcarEntregado(
+      final notifier = ref.read(entregasProvider.notifier);
+      final success = await notifier.marcarEntregado(
         albaranId: widget.albaran.id,
         observaciones: _observacionesController.text,
         firma: _firmaBase64,
@@ -699,7 +699,7 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
 
       if (success && mounted) {
         // Sync updated firma path from provider (server returned the stored path)
-        final updated = provider.albaranes.firstWhere(
+        final updated = ref.read(entregasProvider).albaranes.firstWhere(
           (a) => a.id == widget.albaran.id,
           orElse: () => widget.albaran,
         );
@@ -712,7 +712,7 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(provider.error ?? 'Error al registrar'),
+            content: Text(ref.read(entregasProvider).error ?? 'Error al registrar'),
             backgroundColor: Colors.red,
           ),
         );
@@ -741,8 +741,8 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
 
     setState(() => _isProcessing = true);
     try {
-      final provider = context.read<EntregasProvider>();
-      final success = await provider.marcarParcial(
+      final notifier = ref.read(entregasProvider.notifier);
+      final success = await notifier.marcarParcial(
         albaranId: widget.albaran.id,
         observaciones: obs,
         firma: _firmaBase64,
@@ -769,8 +769,8 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
 
     setState(() => _isProcessing = true);
     try {
-      final provider = context.read<EntregasProvider>();
-      final success = await provider.marcarNoEntregado(
+      final notifier = ref.read(entregasProvider.notifier);
+      final success = await notifier.marcarNoEntregado(
         albaranId: widget.albaran.id,
         observaciones: obs,
         fotos: _fotos.isNotEmpty ? _fotos : null,
@@ -820,16 +820,16 @@ class _AlbaranDetailPageState extends State<AlbaranDetailPage> {
 }
 
 /// Diálogo post-entrega con opciones de descarga/envío del ticket
-class _PostDeliveryDialog extends StatefulWidget {
+class _PostDeliveryDialog extends ConsumerStatefulWidget {
   final AlbaranEntrega albaran;
   final bool isResend;
   const _PostDeliveryDialog({required this.albaran, this.isResend = false});
 
   @override
-  State<_PostDeliveryDialog> createState() => _PostDeliveryDialogState();
+  ConsumerState<_PostDeliveryDialog> createState() => _PostDeliveryDialogState();
 }
 
-class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
+class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
   bool _isProcessing = false;
   String? _processingAction;
 
@@ -945,8 +945,8 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
       _processingAction = 'download';
     });
     try {
-      final provider = context.read<EntregasProvider>();
-      final result = await provider.generateReceipt(albaran: widget.albaran);
+      final notifier = ref.read(entregasProvider.notifier);
+      final result = await notifier.generateReceipt(albaran: widget.albaran);
 
       if (result == null || result['pdfBase64'] == null) {
         if (mounted) {
@@ -1010,8 +1010,8 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
       _processingAction = 'whatsapp';
     });
     try {
-      final provider = context.read<EntregasProvider>();
-      final result = await provider.generateReceipt(albaran: widget.albaran);
+      final notifier = ref.read(entregasProvider.notifier);
+      final result = await notifier.generateReceipt(albaran: widget.albaran);
 
       if (result == null || result['pdfBase64'] == null) {
         if (mounted) {
@@ -1114,8 +1114,8 @@ class _PostDeliveryDialogState extends State<_PostDeliveryDialog> {
       _processingAction = 'email';
     });
     try {
-      final provider = context.read<EntregasProvider>();
-      final success = await provider.sendReceiptByEmail(
+      final notifier = ref.read(entregasProvider.notifier);
+      final success = await notifier.sendReceiptByEmail(
         albaran: widget.albaran,
         email: email,
       );

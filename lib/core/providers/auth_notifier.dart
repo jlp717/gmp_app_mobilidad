@@ -344,7 +344,7 @@ class AuthNotifier extends AutoDisposeAsyncNotifier<AuthState> {
 
     // Clear filters
     try {
-      FilterProvider().clear();
+      ref.read(filterProvider.notifier).clear();
     } catch (e) {
       debugPrint('[AuthNotifier] Filter clear error: $e');
     }

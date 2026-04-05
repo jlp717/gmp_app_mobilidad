@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -16,17 +16,17 @@ import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../../core/widgets/error_state_widget.dart';
 
 /// Objectives Page - Track sales goals with multi-select filters
-class ObjectivesPage extends StatefulWidget {
+class ObjectivesPage extends ConsumerStatefulWidget {
   final String employeeCode;
   final bool isJefeVentas;
-  
+
   const ObjectivesPage({super.key, required this.employeeCode, this.isJefeVentas = false});
 
   @override
-  State<ObjectivesPage> createState() => _ObjectivesPageState();
+  ConsumerState<ObjectivesPage> createState() => _ObjectivesPageState();
 }
 
-class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProviderStateMixin {
+class _ObjectivesPageState extends ConsumerState<ObjectivesPage> with SingleTickerProviderStateMixin {
   // Data
   Map<String, dynamic> _objectives = {};
   List<Map<String, dynamic>> _clientsObjectives = [];
@@ -97,7 +97,7 @@ class _ObjectivesPageState extends State<ObjectivesPage> with SingleTickerProvid
   /// Obtiene el código del vendedor a usar (seleccionado o el propio)
   String get _activeVendedorCode {
     if (!mounted) return widget.employeeCode;
-    final filterCode = context.read<FilterProvider>().selectedVendor;
+    final filterCode = ref.read(filterProvider).selectedVendor;
     return filterCode ?? _selectedVendedor ?? widget.employeeCode;
   }
   

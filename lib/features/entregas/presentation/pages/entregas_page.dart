@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../providers/entregas_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../entregas/providers/entregas_provider.dart';
 import '../widgets/entrega_card.dart';
 import '../widgets/entregas_header.dart';
 import 'albaran_detail_page.dart';
@@ -11,14 +11,14 @@ import '../../../../core/widgets/error_state_widget.dart';
 import '../../../../core/widgets/optimized_list.dart';
 
 /// Página principal de entregas para el repartidor
-class EntregasPage extends StatefulWidget {
+class EntregasPage extends ConsumerStatefulWidget {
   const EntregasPage({super.key});
 
   @override
-  State<EntregasPage> createState() => _EntregasPageState();
+  ConsumerState<EntregasPage> createState() => _EntregasPageState();
 }
 
-class _EntregasPageState extends State<EntregasPage>
+class _EntregasPageState extends ConsumerState<EntregasPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
@@ -26,10 +26,10 @@ class _EntregasPageState extends State<EntregasPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    
+
     // Cargar entregas al iniciar
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<EntregasProvider>().cargarAlbaranesPendientes();
+      ref.read(entregasProvider.notifier).cargarAlbaranesPendientes();
     });
   }
 
@@ -41,14 +41,16 @@ class _EntregasPageState extends State<EntregasPage>
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(entregasProvider);
+
     return Scaffold(
       backgroundColor: AppTheme.surfaceColor,
       body: SafeArea(
         child: Column(
           children: [
             // Header con resumen
-            EntregasHeader(),
-            
+            const EntregasHeader(),
+
             // Tabs
             Container(
               color: AppTheme.surfaceColor,
@@ -59,15 +61,13 @@ class _EntregasPageState extends State<EntregasPage>
                 indicatorColor: Theme.of(context).primaryColor,
                 tabs: [
                   Tab(
-                    child: Consumer<EntregasProvider>(
-                      builder: (_, p, __) => Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.pending_actions, size: 18),
-                          const SizedBox(width: 4),
-                          Text('Pendientes (${p.totalPendientes})'),
-                        ],
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.pending_actions, size: 18),
+                        const SizedBox(width: 4),
+                        Text('Pendientes (${state.totalPendientes})'),
+                      ],
                     ),
                   ),
                   const Tab(
@@ -81,33 +81,31 @@ class _EntregasPageState extends State<EntregasPage>
                     ),
                   ),
                   Tab(
-                    child: Consumer<EntregasProvider>(
-                      builder: (_, p, __) => Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.check_circle, size: 18),
-                          const SizedBox(width: 4),
-                          Text('Entregados (${p.totalEntregados})'),
-                        ],
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_circle, size: 18),
+                        const SizedBox(width: 4),
+                        Text('Entregados (${state.totalEntregados})'),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-            
+
             // Contenido
             Expanded(
-              child: Consumer<EntregasProvider>(
-                builder: (context, provider, _) {
-                  if (provider.isLoading) {
+              child: Builder(
+                builder: (context) {
+                  if (state.isLoading) {
                     return const SkeletonList(itemCount: 5, itemHeight: 100);
                   }
 
-                  if (provider.error != null) {
+                  if (state.error != null) {
                     return ErrorStateWidget(
-                      message: provider.error!,
-                      onRetry: () => provider.cargarAlbaranesPendientes(),
+                      message: state.error!,
+                      onRetry: () => ref.read(entregasProvider.notifier).cargarAlbaranesPendientes(),
                     );
                   }
 
@@ -115,13 +113,13 @@ class _EntregasPageState extends State<EntregasPage>
                     controller: _tabController,
                     children: [
                       // Tab Pendientes
-                      _buildListaAlbaranes(provider.albaranesPendientes),
-                      
+                      _buildListaAlbaranes(state.albaranesPendientes),
+
                       // Tab En Ruta
-                      _buildListaAlbaranes(provider.albaranesEnRuta),
-                      
+                      _buildListaAlbaranes(state.albaranesEnRuta),
+
                       // Tab Entregados
-                      _buildListaAlbaranes(provider.albaranesEntregados),
+                      _buildListaAlbaranes(state.albaranesEntregados),
                     ],
                   );
                 },
@@ -132,7 +130,7 @@ class _EntregasPageState extends State<EntregasPage>
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          context.read<EntregasProvider>().cargarAlbaranesPendientes();
+          ref.read(entregasProvider.notifier).cargarAlbaranesPendientes();
         },
         icon: const Icon(Icons.refresh),
         label: const Text('Actualizar'),
@@ -173,7 +171,7 @@ class _EntregasPageState extends State<EntregasPage>
     }
 
     return RefreshIndicator(
-      onRefresh: () => context.read<EntregasProvider>().cargarAlbaranesPendientes(),
+      onRefresh: () => ref.read(entregasProvider.notifier).cargarAlbaranesPendientes(),
       child: OptimizedListView(
         padding: EdgeInsets.all(
           Responsive.padding(context, small: 10, large: 16),
@@ -193,10 +191,7 @@ class _EntregasPageState extends State<EntregasPage>
   void _abrirDetalle(AlbaranEntrega albaran) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider.value(
-          value: context.read<EntregasProvider>(),
-          child: AlbaranDetailPage(albaran: albaran),
-        ),
+        builder: (_) => AlbaranDetailPage(albaran: albaran),
       ),
     );
   }

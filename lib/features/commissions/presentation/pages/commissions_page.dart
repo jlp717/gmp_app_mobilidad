@@ -7,7 +7,6 @@ import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/commissions_service.dart';
-import 'package:provider/provider.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,7 +49,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       // Use Provider if mounted, otherwise local fallback (init)
       String? filterCode;
       if (mounted) {
-        filterCode = context.read<FilterProvider>().selectedVendor;
+        filterCode = ref.read(selectedVendorProvider);
       }
 
       // For jefe de ventas: if no specific filter or 'ALL', request ALL vendors

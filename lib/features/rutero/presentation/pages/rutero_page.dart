@@ -10,7 +10,6 @@ import '../widgets/rutero_reorder_modal.dart';
 import '../widgets/rutero_dialogs.dart'; // NEW: Import dialogs
 import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
 import '../../../../core/widgets/modern_loading.dart';
-import 'package:provider/provider.dart' hide Provider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
@@ -20,7 +19,7 @@ import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.da
 
 /// Rutero Page - Premium Design with Visit/Delivery Toggle
 /// Shows clients to visit/deliver each day with YoY comparison
-class RuteroPage extends StatefulWidget {
+class RuteroPage extends ConsumerStatefulWidget {
   final String employeeCode;
   final bool isJefeVentas;
 
@@ -28,10 +27,10 @@ class RuteroPage extends StatefulWidget {
       {super.key, required this.employeeCode, this.isJefeVentas = false});
 
   @override
-  State<RuteroPage> createState() => _RuteroPageState();
+  ConsumerState<RuteroPage> createState() => _RuteroPageState();
 }
 
-class _RuteroPageState extends State<RuteroPage>
+class _RuteroPageState extends ConsumerState<RuteroPage>
     with SingleTickerProviderStateMixin {
   // Data state
   Map<String, int> _weekData = {};
@@ -233,7 +232,7 @@ class _RuteroPageState extends State<RuteroPage>
   /// Para GETs: puede ser una lista comma-separated (todos los vendedores)
   String get _activeVendedorCode {
     if (!mounted) return widget.employeeCode;
-    final filterCode = context.read<FilterProvider>().selectedVendor;
+    final filterCode = ref.read(filterProvider).selectedVendor;
     return filterCode ?? widget.employeeCode;
   }
 
@@ -241,7 +240,7 @@ class _RuteroPageState extends State<RuteroPage>
   /// Retorna null si hay múltiples vendedores y no se ha seleccionado uno específico.
   String? get _singleVendedorCode {
     if (!mounted) return null;
-    final filterCode = context.read<FilterProvider>().selectedVendor;
+    final filterCode = ref.read(filterProvider).selectedVendor;
     if (filterCode != null) return filterCode;
     // Si employeeCode no contiene comas, es un solo vendedor
     if (!widget.employeeCode.contains(',')) return widget.employeeCode;

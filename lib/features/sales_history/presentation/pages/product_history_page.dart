@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
@@ -8,8 +8,6 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/api/api_client.dart';
 import '../../providers/sales_history_provider.dart';
-import 'package:provider/provider.dart' hide Provider;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/auth_notifier.dart';
 import 'package:intl/intl.dart';
 import '../widgets/sales_summary_header.dart';
@@ -18,16 +16,16 @@ import '../../../../core/widgets/error_state_widget.dart';
 import '../../domain/product_history_item.dart';
 import '../../../../core/widgets/smart_product_image.dart';
 
-class ProductHistoryPage extends StatefulWidget {
+class ProductHistoryPage extends ConsumerStatefulWidget {
   final String? initialClientCode;
 
   const ProductHistoryPage({super.key, this.initialClientCode});
 
   @override
-  State<ProductHistoryPage> createState() => _ProductHistoryPageState();
+  ConsumerState<ProductHistoryPage> createState() => _ProductHistoryPageState();
 }
 
-class _ProductHistoryPageState extends State<ProductHistoryPage> {
+class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _clientController = TextEditingController();
   DateTimeRange? _selectedDateRange;
@@ -36,10 +34,8 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authState = ProviderScope.containerOf(context)
-          .read(authProvider)
-          .value;
-      final history = Provider.of<SalesHistoryProvider>(context, listen: false);
+      final authState = ref.read(authProvider).value;
+      final history = ref.read(salesHistoryProvider.notifier);
 
       history.setVendedorCodes(authState?.vendedorCodes.join(',') ?? '');
 
@@ -68,7 +64,7 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
   }
 
   void _onSearchSubmit(String val) {
-    Provider.of<SalesHistoryProvider>(context, listen: false)
+    ref.read(salesHistoryProvider.notifier)
       ..setProductSearch(val)
       ..loadHistory(reset: true);
   }
@@ -99,8 +95,7 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
       final start = DateFormat('yyyy-MM-dd').format(picked.start);
       final end = DateFormat('yyyy-MM-dd').format(picked.end);
 
-      Provider.of<SalesHistoryProvider>(context, listen: false)
-          .setDateRange(start, end);
+      ref.read(salesHistoryProvider.notifier).setDateRange(start, end);
     }
   }
 
@@ -109,15 +104,15 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
     _clientController.clear();
     setState(() => _selectedDateRange = null);
 
-    final p = Provider.of<SalesHistoryProvider>(context, listen: false);
-    p.setClientCode(null);
-    p.setProductSearch('');
-    p.setDateRange(null, null); // Will trigger load
+    final notifier = ref.read(salesHistoryProvider.notifier);
+    notifier.setClientCode(null);
+    notifier.setProductSearch('');
+    notifier.setDateRange(null, null); // Will trigger load
   }
 
   @override
   Widget build(BuildContext context) {
-    final history = Provider.of<SalesHistoryProvider>(context);
+    final historyState = ref.watch(salesHistoryProvider);
 
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
@@ -129,7 +124,7 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
           IconButton(
             icon: const Icon(Icons.sync, color: AppColors.primary),
             tooltip: 'Sincronizar',
-            onPressed: () => history.loadHistory(reset: true),
+            onPressed: () => ref.read(salesHistoryProvider.notifier).loadHistory(reset: true),
           ),
         ],
       ),
@@ -159,7 +154,7 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
                               const Icon(Icons.person, color: Colors.white54),
                         ),
                         onSubmitted: (val) =>
-                            history.setClientCode(val.isEmpty ? null : val),
+                            ref.read(salesHistoryProvider.notifier).setClientCode(val.isEmpty ? null : val),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -204,25 +199,25 @@ class _ProductHistoryPageState extends State<ProductHistoryPage> {
           ),
 
           // Summary Header (Comparison)
-          if (!history.isLoading && history.summary != null)
-            _buildSummaryHeader(context, history.summary!),
+          if (!historyState.isLoading && historyState.summary != null)
+            _buildSummaryHeader(context, historyState.summary!),
 
           // Results — adaptive layout
           Expanded(
-            child: history.isLoading
+            child: historyState.isLoading
                 ? const SkeletonList(itemCount: 6, itemHeight: 60)
-                : history.error != null
-                    ? ErrorStateWidget(message: 'Error: ${history.error}')
-                    : history.items.isEmpty
+                : historyState.error != null
+                    ? ErrorStateWidget(message: 'Error: ${historyState.error}')
+                    : historyState.items.isEmpty
                         ? const Center(
                             child: Text('No hay datos',
                                 style: TextStyle(color: Colors.white54)))
                         : OrientationBuilder(
                             builder: (context, orientation) {
                               if (orientation == Orientation.portrait) {
-                                return _buildPortraitCards(history.items);
+                                return _buildPortraitCards(historyState.items);
                               } else {
-                                return _buildLandscapeTable(history.items);
+                                return _buildLandscapeTable(historyState.items);
                               }
                             },
                           ),

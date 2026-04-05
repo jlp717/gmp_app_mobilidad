@@ -3,7 +3,7 @@
 /// Shows 4 KPI cards, status counters, 7-day trend chart, and top clients.
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../providers/pedidos_provider.dart';

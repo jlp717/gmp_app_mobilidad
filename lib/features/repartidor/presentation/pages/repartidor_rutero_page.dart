@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    hide Provider, Consumer, ChangeNotifierProvider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/auth_notifier.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -81,14 +79,14 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
 
   Future<void> _loadData() async {
     final auth = ref.read(authProvider).value;
-    final filter = Provider.of<FilterProvider>(context, listen: false);
-    final entregas = Provider.of<EntregasProvider>(context, listen: false);
+    final selectedVendor = ref.read(selectedVendorProvider);
+    final entregas = ref.read(entregasProvider.notifier);
 
     String targetId = widget.repartidorId ?? auth?.user?.code ?? '';
 
     // View As logic for directors
-    if (auth?.user?.isJefeVentas == true && filter.selectedVendor != null) {
-      targetId = filter.selectedVendor!;
+    if (auth?.user?.isJefeVentas == true && selectedVendor != null) {
+      targetId = selectedVendor;
     }
     
     // NOTE: Multi-ID (comma-separated) IS supported by /pendientes endpoint
@@ -133,7 +131,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     HapticFeedback.selectionClick();
     setState(() => _selectedDate = date);
     
-    final entregas = Provider.of<EntregasProvider>(context, listen: false);
+    final entregas = ref.read(entregasProvider.notifier);
     entregas.seleccionarFecha(date);
     
     // Animate list
@@ -151,15 +149,15 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider).value;
-    final filter = Provider.of<FilterProvider>(context);
-    final entregas = Provider.of<EntregasProvider>(context);
+    final selectedVendor = ref.watch(selectedVendorProvider);
+    final entregas = ref.watch(entregasProvider);
 
 
     // Header Name Logic
     String currentName = auth?.user?.name ?? 'Repartidor';
-    if (auth?.user?.isJefeVentas == true && filter.selectedVendor != null) {
+    if (auth?.user?.isJefeVentas == true && selectedVendor != null) {
       // Just show the vendor code for now
-      currentName = 'Repartidor ${filter.selectedVendor}';
+      currentName = 'Repartidor ${selectedVendor}';
     }
 
     return Scaffold(
@@ -216,7 +214,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
 
           // DIRECTOR FILTER (if applicable)
-          if (auth?.user?.isJefeVentas == true) _buildDirectorFilter(auth!, filter, entregas),
+          if (auth?.user?.isJefeVentas == true) _buildDirectorFilter(auth!, ref.watch(filterProvider), entregas),
 
           // SEARCH & FILTER ROW
           _buildSearchAndFilters(entregas),
@@ -244,9 +242,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
 
   Widget _buildDirectorFilter(
     AuthState auth,
-    FilterProvider filter,
-    EntregasProvider entregas,
+    dynamic filterState,
+    EntregasState entregas,
   ) {
+    final filterNotifier = ref.read(filterProvider.notifier);
+    final selectedVendor = filterState.selectedVendor as String?;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: FutureBuilder<List<Map<String, dynamic>>>(
@@ -282,7 +282,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                 Expanded(
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
-                      value: filter.selectedVendor,
+                      value: selectedVendor,
                       hint: Text(
                         'Ver como repartidor...',
                         style: TextStyle(
@@ -318,7 +318,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       onChanged: (val) {
                         if (val != null) {
                           HapticFeedback.selectionClick();
-                          filter.setVendor(val);
+                          filterNotifier.setVendor(val);
                           
                           // Manually trigger reload and pivot _lastLoadedId to prevent
                           // duplicate/conflicting loads from didChangeDependencies
@@ -327,8 +327,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                           }
                           
                           // Force immediate reload
-                          entregas.setRepartidor(val, forceReload: true);
-                          entregas.seleccionarFecha(_selectedDate);
+                          ref.read(entregasProvider.notifier).setRepartidor(val, forceReload: true);
+                          ref.read(entregasProvider.notifier).seleccionarFecha(_selectedDate);
                           _loadWeekData(val);
                         }
                       },
@@ -345,9 +345,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   tooltip: 'Recargar datos',
                   onPressed: () {
                     HapticFeedback.lightImpact();
-                    if (filter.selectedVendor != null) {
-                      entregas.setRepartidor(filter.selectedVendor!);
-                      entregas.cargarAlbaranesPendientes();
+                    if (selectedVendor != null) {
+                      ref.read(entregasProvider.notifier).setRepartidor(selectedVendor);
+                      ref.read(entregasProvider.notifier).cargarAlbaranesPendientes();
                     }
                   },
                   padding: EdgeInsets.zero,
@@ -361,7 +361,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     );
   }
 
-  Widget _buildSearchAndFilters(EntregasProvider entregas) {
+  Widget _buildSearchAndFilters(EntregasState entregas) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -396,7 +396,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      onChanged: (v) => entregas.setSearchClient(v),
+                      onChanged: (v) => ref.read(entregasProvider.notifier).setSearchClient(v),
                     ),
                   ),
                   if (_searchClientController.text.isNotEmpty)
@@ -404,7 +404,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       icon: const Icon(Icons.clear, size: 14),
                       onPressed: () {
                         _searchClientController.clear();
-                        entregas.setSearchClient('');
+                        ref.read(entregasProvider.notifier).setSearchClient('');
                       },
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -445,7 +445,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      onChanged: (v) => entregas.setSearchAlbaran(v),
+                      onChanged: (v) => ref.read(entregasProvider.notifier).setSearchAlbaran(v),
                     ),
                   ),
                   if (_searchAlbaranController.text.isNotEmpty)
@@ -453,7 +453,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       icon: const Icon(Icons.clear, size: 14),
                       onPressed: () {
                         _searchAlbaranController.clear();
-                        entregas.setSearchAlbaran('');
+                        ref.read(entregasProvider.notifier).setSearchAlbaran('');
                       },
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -473,12 +473,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             icon: Icons.euro,
             onTap: () {
               HapticFeedback.selectionClick();
-              entregas.setFilterDebeCobrar(
+              ref.read(entregasProvider.notifier).setFilterDebeCobrar(
                 entregas.filterDebeCobrar == 'S' ? '' : 'S',
               );
             },
           ),
-          
+
           const SizedBox(width: 6),
 
           _buildQuickFilterChip(
@@ -488,7 +488,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             icon: Icons.credit_card,
             onTap: () {
               HapticFeedback.selectionClick();
-              entregas.setFilterTipoPago(
+              ref.read(entregasProvider.notifier).setFilterTipoPago(
                 entregas.filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
               );
             },
@@ -540,7 +540,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                 onChanged: (val) {
                   if (val != null) {
                     HapticFeedback.selectionClick();
-                    entregas.setSortBy(val);
+                    ref.read(entregasProvider.notifier).setSortBy(val);
                   }
                 },
               ),
@@ -618,7 +618,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     );
   }
 
-  Widget _buildClientList(EntregasProvider provider) {
+  Widget _buildClientList(EntregasState provider) {
     if (provider.albaranes.isEmpty) {
       return _buildEmptyState();
     }
@@ -769,19 +769,16 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   }
 
   void _showDetailDialog(AlbaranEntrega albaran) {
-    final entregasProvider = Provider.of<EntregasProvider>(context, listen: false);
+    final entregasNotifier = ref.read(entregasProvider.notifier);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => ChangeNotifierProvider.value(
-        value: entregasProvider,
-        child: RuteroDetailModal(albaran: albaran),
-      ),
+      builder: (ctx) => RuteroDetailModal(albaran: albaran, ref: ref),
     ).then((_) {
       if (mounted) {
-        entregasProvider.cargarAlbaranesPendientes();
+        entregasNotifier.cargarAlbaranesPendientes();
       }
     });
   }
@@ -814,7 +811,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     }
 
     // 2. Perform Quick Complete
-    final provider = Provider.of<EntregasProvider>(context, listen: false);
+    final provider = ref.read(entregasProvider.notifier);
     
     // Optimistic UI update or wait? 
     // Let's show loading snackbar then success
@@ -862,7 +859,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         HapticFeedback.heavyImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al completar: ${provider.error ?? "Desconocido"}'),
+            content: Text('Error al completar: ${ref.read(entregasProvider).error ?? "Desconocido"}'),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -1010,8 +1007,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               color: AppTheme.obligatorio,
               onTap: () {
                 Navigator.pop(ctx);
-                final entregas = Provider.of<EntregasProvider>(context, listen: false);
-                entregas.setFilterDebeCobrar('S');
+                ref.read(entregasProvider.notifier).setFilterDebeCobrar('S');
               },
             ),
             const SizedBox(height: 12),
@@ -1087,3 +1083,4 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     );
   }
 }
+
