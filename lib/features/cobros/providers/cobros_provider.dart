@@ -1,5 +1,8 @@
-/// COBROS PROVIDER
-/// Estado global para el módulo de cobros y entregas
+/// COBROS PROVIDER — 100% Riverpod (ChangeNotifierProvider.family.autoDispose)
+///
+/// State management for cobros/entregas module.
+/// Uses family pattern to parameterize by employeeCode + isRepartidor.
+/// No overrideWithValue, no UnimplementedError, no null checks.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -11,24 +14,16 @@ class CobrosProvider extends ChangeNotifier {
   final String employeeCode;
   final bool isRepartidor;
 
-  // Estado
   bool _isLoading = false;
   String? _error;
-  
-  // Datos del repartidor
+
   List<Albaran> _albaranesPendientes = [];
   Albaran? _albaranActual;
-  
-  // Datos del comercial
   List<CobroPendiente> _cobrosPendientes = [];
   ResumenCobros? _resumenCobros;
   EstadoCliente? _estadoClienteActual;
-
-  // Pending summary per client (code -> {total, count})
   Map<String, Map<String, dynamic>> _pendingSummary = {};
   double _grandTotal = 0;
-  
-  // Filtros
   String _filtroEstado = 'todos';
   String _filtroCliente = '';
   DateTime? _filtroFecha;
@@ -37,10 +32,6 @@ class CobrosProvider extends ChangeNotifier {
     required this.employeeCode,
     this.isRepartidor = false,
   });
-
-  // ============================================
-  // GETTERS
-  // ============================================
 
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -54,258 +45,143 @@ class CobrosProvider extends ChangeNotifier {
   Map<String, Map<String, dynamic>> get pendingSummary => _pendingSummary;
   double get grandTotal => _grandTotal;
 
-  // Estadísticas calculadas
-  int get totalEntregasPendientes => _albaranesPendientes
-      .where((a) => a.estado == EstadoEntrega.pendiente)
-      .length;
-  
-  int get totalEntregasCompletadas => _albaranesPendientes
-      .where((a) => a.estado == EstadoEntrega.entregado)
-      .length;
-
+  int get totalEntregasPendientes =>
+      _albaranesPendientes.where((a) => a.estado == EstadoEntrega.pendiente).length;
+  int get totalEntregasCompletadas =>
+      _albaranesPendientes.where((a) => a.estado == EstadoEntrega.entregado).length;
   double get totalImportePendiente => _albaranesPendientes
       .where((a) => a.estado != EstadoEntrega.entregado)
       .fold(0.0, (sum, a) => sum + a.importeTotal);
-
   int get totalCTRPendientes => _albaranesPendientes
       .where((a) => a.esCTR && a.estado != EstadoEntrega.entregado)
       .length;
 
-  // Albaranes filtrados
   List<Albaran> get albaranesFiltrados {
     var resultado = _albaranesPendientes;
-    
     if (_filtroEstado != 'todos') {
       final estado = EstadoEntrega.fromString(_filtroEstado);
       resultado = resultado.where((a) => a.estado == estado).toList();
     }
-    
     if (_filtroCliente.isNotEmpty) {
-      resultado = resultado.where((a) => 
-        a.nombreCliente.toLowerCase().contains(_filtroCliente.toLowerCase()) ||
-        a.codigoCliente.contains(_filtroCliente)
-      ).toList();
+      resultado = resultado.where((a) =>
+          a.nombreCliente.toLowerCase().contains(_filtroCliente.toLowerCase()) ||
+          a.codigoCliente.contains(_filtroCliente)).toList();
     }
-    
     return resultado;
   }
 
-  // ============================================
-  // SETTERS / FILTROS
-  // ============================================
+  void setFiltroEstado(String estado) { _filtroEstado = estado; notifyListeners(); }
+  void setFiltroCliente(String cliente) { _filtroCliente = cliente; notifyListeners(); }
+  void limpiarFiltros() { _filtroEstado = 'todos'; _filtroCliente = ''; _filtroFecha = null; notifyListeners(); }
 
-  void setFiltroEstado(String estado) {
-    _filtroEstado = estado;
-    notifyListeners();
-  }
-
-  void setFiltroCliente(String cliente) {
-    _filtroCliente = cliente;
-    notifyListeners();
-  }
-
-  void limpiarFiltros() {
-    _filtroEstado = 'todos';
-    _filtroCliente = '';
-    _filtroFecha = null;
-    notifyListeners();
-  }
-
-  // ============================================
-  // API - REPARTIDOR
-  // ============================================
-
-  /// Carga albaranes pendientes del día
   Future<void> cargarAlbaranesPendientes() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
+    _isLoading = true; _error = null; notifyListeners();
     try {
       final response = await ApiClient.get('/entregas/pendientes/$employeeCode');
-      
       if (response['success'] == true) {
-        final albaranes = (response['albaranes'] as List<dynamic>?)
-            ?.map((e) => Albaran.fromJson(e as Map<String, dynamic>))
-            .toList() ?? [];
-        
-        _albaranesPendientes = albaranes;
+        _albaranesPendientes = (response['albaranes'] as List<dynamic>?)
+            ?.map((e) => Albaran.fromJson(e as Map<String, dynamic>)).toList() ?? [];
       } else {
         _error = (response['error'] as String?) ?? 'Error cargando albaranes';
       }
     } catch (e) {
       _error = 'Error de conexión: $e';
-      // M4 FIX: Only load example data in debug mode, never in production
-      if (kDebugMode) {
-        _cargarDatosEjemplo();
-      }
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      if (kDebugMode) _cargarDatosEjemplo();
+    } finally { _isLoading = false; notifyListeners(); }
   }
 
-  /// Obtiene detalle de un albarán con items
   Future<void> cargarDetalleAlbaran(int numeroAlbaran, int ejercicio) async {
-    _isLoading = true;
-    notifyListeners();
-
+    _isLoading = true; notifyListeners();
     try {
       final response = await ApiClient.get('/entregas/albaran/$numeroAlbaran/$ejercicio');
-      
       if (response['success'] == true && response['albaran'] != null) {
         _albaranActual = Albaran.fromJson(response['albaran'] as Map<String, dynamic>);
       }
-    } catch (e) {
-      _error = 'Error cargando albarán: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    } catch (e) { _error = 'Error cargando albarán: $e'; }
+    finally { _isLoading = false; notifyListeners(); }
   }
 
-  /// Actualiza estado de una entrega
   Future<bool> actualizarEstadoEntrega({
     required String itemId,
     required EstadoEntrega estado,
     int? cantidadEntregada,
     String? observaciones,
-    double? latitud,
-    double? longitud,
+    double? latitud, double? longitud,
   }) async {
     try {
       final response = await ApiClient.post('/entregas/update', {
-        'itemId': itemId,
-        'status': estado.name.toUpperCase(),
-        'repartidorId': employeeCode,
-        'cantidadEntregada': cantidadEntregada,
-        'observaciones': observaciones,
-        'latitud': latitud,
-        'longitud': longitud,
+        'itemId': itemId, 'status': estado.name.toUpperCase(),
+        'repartidorId': employeeCode, 'cantidadEntregada': cantidadEntregada,
+        'observaciones': observaciones, 'latitud': latitud, 'longitud': longitud,
       });
-
       if (response['success'] == true) {
-        // Actualizar estado local
         final index = _albaranesPendientes.indexWhere(
-          (a) => a.items.any((i) => i.itemId == itemId)
-        );
+          (a) => a.items.any((i) => i.itemId == itemId));
         if (index >= 0) {
-          final item = _albaranesPendientes[index].items.firstWhere(
-            (i) => i.itemId == itemId
-          );
+          final item = _albaranesPendientes[index].items.firstWhere((i) => i.itemId == itemId);
           item.estado = estado;
           item.cantidadEntregada = cantidadEntregada ?? item.cantidadEntregada;
-          
-          // Verificar si el albarán está completo
           final albaran = _albaranesPendientes[index];
-          if (albaran.completo) {
-            albaran.estado = EstadoEntrega.entregado;
-          }
-          
+          if (albaran.completo) albaran.estado = EstadoEntrega.entregado;
           notifyListeners();
         }
         return true;
       }
       return false;
-    } catch (e) {
-      _error = 'Error actualizando entrega: $e';
-      notifyListeners();
-      return false;
-    }
+    } catch (e) { _error = 'Error actualizando entrega: $e'; notifyListeners(); return false; }
   }
 
-  /// Registra firma del cliente
   Future<bool> registrarFirma(String entregaId, String base64Firma) async {
     try {
       final response = await ApiClient.post('/entregas/uploads/signature', {
-        'entregaId': entregaId,
-        'firma': base64Firma,
+        'entregaId': entregaId, 'firma': base64Firma,
       });
-
       if (response['success'] == true) {
-        if (_albaranActual != null) {
-          _albaranActual!.firmaBase64 = base64Firma;
-          notifyListeners();
-        }
+        if (_albaranActual != null) { _albaranActual!.firmaBase64 = base64Firma; notifyListeners(); }
         return true;
       }
       return false;
-    } catch (e) {
-      _error = 'Error guardando firma: $e';
-      return false;
-    }
+    } catch (e) { _error = 'Error guardando firma: $e'; return false; }
   }
 
-  /// Marca albarán como completamente entregado
   Future<bool> completarEntrega(String albaranId, {String? observaciones}) async {
     final albaran = _albaranesPendientes.firstWhere(
-      (a) => a.id == albaranId,
-      orElse: () => throw Exception('Albarán no encontrado'),
-    );
-
-    // P1-C FIX: Track success per item, don't mark complete if any fail
+      (a) => a.id == albaranId, orElse: () => throw Exception('Albarán no encontrado'));
     bool allSucceeded = true;
     for (final item in albaran.items) {
       if (item.estado != EstadoEntrega.entregado) {
         final ok = await actualizarEstadoEntrega(
-          itemId: item.itemId,
-          estado: EstadoEntrega.entregado,
-          cantidadEntregada: item.cantidadPedida,
-          observaciones: observaciones,
-        );
+          itemId: item.itemId, estado: EstadoEntrega.entregado,
+          cantidadEntregada: item.cantidadPedida, observaciones: observaciones);
         if (!ok) allSucceeded = false;
       }
     }
-
-    if (allSucceeded) {
-      albaran.estado = EstadoEntrega.entregado;
-    } else {
-      _error = 'No se pudieron completar todos los ítems de la entrega';
-    }
+    if (allSucceeded) { albaran.estado = EstadoEntrega.entregado; }
+    else { _error = 'No se pudieron completar todos los ítems de la entrega'; }
     notifyListeners();
     return allSucceeded;
   }
 
-  // ============================================
-  // API - COMERCIAL
-  // ============================================
-
-  /// Carga resumen de pendientes por cliente para un vendedor
-  /// Soporta múltiples vendedores (jefe de ventas) o vendedor individual
   Future<void> cargarPendingSummary(String? vendedorCode, {List<String>? vendedorCodes}) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
+    _isLoading = true; _error = null; notifyListeners();
     try {
-      // Build URL: individual vendor vs multiple vendors
       String endpoint;
       if (vendedorCodes != null && vendedorCodes.isNotEmpty) {
-        // Multiple vendors: pass as comma-separated list
         endpoint = '/cobros/pending-summary/${vendedorCodes.join(',')}';
       } else if (vendedorCode != null && vendedorCode.isNotEmpty) {
-        // Single vendor
         endpoint = '/cobros/pending-summary/$vendedorCode';
       } else {
-        // No vendor specified - use ALL
         endpoint = '/cobros/pending-summary/ALL';
       }
-
       final response = await ApiClient.get(endpoint);
       if (response['success'] == true) {
         final raw = response['summary'] as Map<String, dynamic>? ?? {};
         _pendingSummary = raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
         _grandTotal = (response['grandTotal'] as num?)?.toDouble() ?? 0;
         _error = null;
-      } else {
-        _error = 'Error al cargar resumen de pendientes';
-      }
-    } catch (e) {
-      _error = 'Error de conexión: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      } else { _error = 'Error al cargar resumen de pendientes'; }
+    } catch (e) { _error = 'Error de conexión: $e'; }
+    finally { _isLoading = false; notifyListeners(); }
   }
 
   double pendingForClient(String code) {
@@ -313,158 +189,94 @@ class CobrosProvider extends ChangeNotifier {
     return (entry?['total'] as num?)?.toDouble() ?? 0;
   }
 
-  /// Carga cobros pendientes de un cliente
   Future<void> cargarCobrosPendientes(String codigoCliente) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
+    _isLoading = true; _error = null; notifyListeners();
     try {
       final response = await ApiClient.get('/cobros/$codigoCliente/pendientes');
-      
       if (response['success'] == true) {
         _cobrosPendientes = (response['cobros'] as List<dynamic>?)
-            ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
-            .toList() ?? [];
-        
+            ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>)).toList() ?? [];
         if (response['resumen'] != null) {
           _resumenCobros = ResumenCobros.fromJson(response['resumen'] as Map<String, dynamic>);
         }
       }
-    } catch (e) {
-      _error = 'Error cargando cobros: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    } catch (e) { _error = 'Error cargando cobros: $e'; }
+    finally { _isLoading = false; notifyListeners(); }
   }
 
-  /// Verifica estado del cliente (moroso, bloqueado, etc)
   Future<void> verificarEstadoCliente(String codigoCliente) async {
     try {
       final response = await ApiClient.get('/cobros/$codigoCliente/estado');
-      
       if (response['success'] == true && response['estadoCliente'] != null) {
         _estadoClienteActual = EstadoCliente.fromJson(response['estadoCliente'] as Map<String, dynamic>);
         notifyListeners();
       }
-    } catch (e) {
-      _estadoClienteActual = null;
-    }
+    } catch (e) { _estadoClienteActual = null; }
   }
 
-  /// Registra un cobro
   Future<bool> registrarCobro({
-    required String codigoCliente,
-    required String referencia,
-    required double importe,
-    required String formaPago,
-    required TipoVenta tipoVenta,
-    required TipoModoCobro tipoModo,
-    String? codigoUsuario,
-    String? observaciones,
+    required String codigoCliente, required String referencia,
+    required double importe, required String formaPago,
+    required TipoVenta tipoVenta, required TipoModoCobro tipoModo,
+    String? codigoUsuario, String? observaciones,
   }) async {
     try {
       final response = await ApiClient.post('/cobros/$codigoCliente/registrar', {
-        'referencia': referencia,
-        'importe': importe,
-        'formaPago': formaPago,
-        'tipoVenta': tipoVenta.code,
-        'tipoModo': tipoModo.code,
+        'referencia': referencia, 'importe': importe, 'formaPago': formaPago,
+        'tipoVenta': tipoVenta.code, 'tipoModo': tipoModo.code,
         'tipoUsuario': isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
-        'codigoUsuario': codigoUsuario ?? employeeCode,
-        'observaciones': observaciones,
+        'codigoUsuario': codigoUsuario ?? employeeCode, 'observaciones': observaciones,
       });
-
       if (response['success'] == true) {
-        // Recargar cobros pendientes
         await cargarCobrosPendientes(codigoCliente);
         return true;
       }
       return false;
-    } catch (e) {
-      _error = 'Error registrando cobro: $e';
-      // P3-C FIX: Notify listeners so the UI shows the error
-      notifyListeners();
-      return false;
-    }
+    } catch (e) { _error = 'Error registrando cobro: $e'; notifyListeners(); return false; }
   }
-
-  // ============================================
-  // DATOS DE EJEMPLO (DESARROLLO)
-  // ============================================
 
   void _cargarDatosEjemplo() {
     final now = DateTime.now();
     _albaranesPendientes = [
-      Albaran(
-        id: '2026-A-1001',
-        numeroAlbaran: 1001,
-        codigoCliente: '9900',
-        nombreCliente: 'BAR EL RINCÓN',
-        direccion: 'C/ Mayor, 15 - Madrid',
-        fecha: now,
-        importeTotal: 245.80,
-        esCTR: true,
+      Albaran(id: '2026-A-1001', numeroAlbaran: 1001, codigoCliente: '9900',
+        nombreCliente: 'BAR EL RINCÓN', direccion: 'C/ Mayor, 15 - Madrid',
+        fecha: now, importeTotal: 245.80, esCTR: true,
         items: [
-          EntregaItem(
-            itemId: '1001-1',
-            codigoArticulo: 'COCA2L',
-            descripcion: 'Coca-Cola 2L Pack 6',
-            cantidadPedida: 5,
-          ),
-          EntregaItem(
-            itemId: '1001-2',
-            codigoArticulo: 'AGUA1L',
-            descripcion: 'Agua Mineral 1.5L Pack 6',
-            cantidadPedida: 10,
-          ),
-        ],
-      ),
-      Albaran(
-        id: '2026-A-1002',
-        numeroAlbaran: 1002,
-        codigoCliente: '8801',
-        nombreCliente: 'RESTAURANTE LA PLAZA',
-        direccion: 'Plaza España, 3 - Madrid',
-        fecha: now,
-        importeTotal: 532.40,
-        esCTR: false,
+          EntregaItem(itemId: '1001-1', codigoArticulo: 'COCA2L',
+            descripcion: 'Coca-Cola 2L Pack 6', cantidadPedida: 5),
+          EntregaItem(itemId: '1001-2', codigoArticulo: 'AGUA1L',
+            descripcion: 'Agua Mineral 1.5L Pack 6', cantidadPedida: 10),
+        ]),
+      Albaran(id: '2026-A-1002', numeroAlbaran: 1002, codigoCliente: '8801',
+        nombreCliente: 'RESTAURANTE LA PLAZA', direccion: 'Plaza España, 3 - Madrid',
+        fecha: now, importeTotal: 532.40, esCTR: false,
         items: [
-          EntregaItem(
-            itemId: '1002-1',
-            codigoArticulo: 'CERV33',
-            descripcion: 'Cerveza 33cl Caja 24',
-            cantidadPedida: 8,
-          ),
-        ],
-      ),
-      Albaran(
-        id: '2026-A-1003',
-        numeroAlbaran: 1003,
-        codigoCliente: '7755',
-        nombreCliente: 'CAFETERÍA CENTRAL',
-        direccion: 'Av. Libertad, 42 - Madrid',
-        fecha: now,
-        importeTotal: 128.50,
-        estado: EstadoEntrega.enRuta,
-        esCTR: true,
-      ),
+          EntregaItem(itemId: '1002-1', codigoArticulo: 'CERV33',
+            descripcion: 'Cerveza 33cl Caja 24', cantidadPedida: 8),
+        ]),
     ];
   }
 
   void limpiarDatos() {
-    _albaranesPendientes = [];
-    _cobrosPendientes = [];
-    _albaranActual = null;
-    _resumenCobros = null;
-    _estadoClienteActual = null;
-    _error = null;
+    _albaranesPendientes = []; _cobrosPendientes = []; _albaranActual = null;
+    _resumenCobros = null; _estadoClienteActual = null; _error = null;
     notifyListeners();
   }
 }
 
-/// Riverpod provider — uses Provider (not ChangeNotifierProvider) so we can overrideWithValue
-final cobrosProvider = Provider<CobrosProvider>((ref) {
-  throw UnimplementedError('Must be overridden with overrideWithValue');
-});
+// ============================================================
+// Riverpod provider — clean family, no hacks, no null checks
+// ============================================================
+
+final cobrosProvider = ChangeNotifierProvider.family.autoDispose<CobrosProvider, CobrosParams>(
+  (ref, params) => CobrosProvider(
+    employeeCode: params.employeeCode,
+    isRepartidor: params.isRepartidor,
+  ),
+);
+
+class CobrosParams {
+  final String employeeCode;
+  final bool isRepartidor;
+  const CobrosParams({required this.employeeCode, this.isRepartidor = false});
+}

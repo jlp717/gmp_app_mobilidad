@@ -4,25 +4,38 @@ const logger = require('../middleware/logger');
 // SMTP Configuration
 const SMTP_CONFIG = {
     host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1',
+    port: parseInt(process.env.SMTP_PORT) || 465,
+    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT) === 465,
     auth: {
         user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
         pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
     tls: {
         rejectUnauthorized: false
-    }
+    },
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100
 };
 
 let transporter = null;
+let transporterHealthy = false;
+
+function invalidateTransporter() {
+    if (transporter) {
+        try { transporter.close(); } catch (e) { /* ignore */ }
+    }
+    transporter = null;
+    transporterHealthy = false;
+}
 
 function initEmailService() {
-    try {
+    if (!transporter) {
         transporter = nodemailer.createTransport(SMTP_CONFIG);
         logger.info(`Email service initialized for ${SMTP_CONFIG.auth.user}`);
-    } catch (e) {
-        logger.error(`Email service verification failed: ${e.message}`);
     }
 }
 
@@ -574,9 +587,31 @@ async function sendConsolidatedEmail(vendorName, changes) {
     };
 
     try {
-        const info = await transporter.sendMail(mailOptions);
-        logger.info(`📧 Consolidated email sent: ${info.messageId} (${changes.length} changes)`);
-        return true;
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                if (!transporter) initEmailService();
+                const info = await transporter.sendMail(mailOptions);
+                logger.info('✅ Planner email enviado', { vendorName, messageId: info.messageId });
+                return true;
+            } catch (error) {
+                const isTimeout = ['ETIMEDOUT', 'ESOCKETTIMEDOUT'].includes(error.code);
+                const isConnection = ['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'TIMEOUT'].includes(error.code);
+
+                if (isTimeout || isConnection) {
+                    invalidateTransporter();
+                    logger.warn(`⚠️ Planner email error (intento ${attempt}/${maxRetries}): ${error.code}`);
+                } else {
+                    throw error; // Re-lanzar errores no-transitorios
+                }
+
+                if (attempt < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+                }
+            }
+        }
+        logger.error('❌ Planner email fallido tras 3 intentos', { vendorName });
+        return false;
     } catch (error) {
         logger.error(`❌ Error sending consolidated email: ${error.message}`);
         return false;

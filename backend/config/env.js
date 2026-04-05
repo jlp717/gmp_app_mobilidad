@@ -110,8 +110,8 @@ const config = {
   // Email
   email: {
     host: process.env.SMTP_HOST || '',
-    port: getNumber('SMTP_PORT', 587),
-    secure: getBoolean('SMTP_SECURE', false),
+    port: getNumber('SMTP_PORT', 465),
+    secure: getBoolean('SMTP_SECURE', true),
     user: process.env.SMTP_USER || '',
     password: process.env.SMTP_PASSWORD || '',
     from: process.env.SMTP_FROM || 'noreply@example.com',

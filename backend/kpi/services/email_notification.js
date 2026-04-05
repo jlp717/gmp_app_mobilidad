@@ -6,14 +6,15 @@ const logger = require('../../middleware/logger');
 
 const SMTP_CONFIG = {
   host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: process.env.SMTP_SECURE === 'true',
+  port: parseInt(process.env.SMTP_PORT || '465', 10),
+  secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT || '465') === 465,
   auth: {
     user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
-    pass: process.env.SMTP_PASS,
+    pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i',
   },
-  connectionTimeout: 20000,
-  socketTimeout: 30000,
+  connectionTimeout: 10000,
+  greetingTimeout: 8000,
+  socketTimeout: 15000,
   tls: { rejectUnauthorized: false, minVersion: 'TLSv1.2' },
 };
 
@@ -21,6 +22,15 @@ const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
 const FROM_NAME = 'GMP - KPI Glacius';
 
 let transporter = null;
+let transporterHealthy = false;
+
+function invalidateTransporter() {
+  if (transporter) {
+    try { transporter.close(); } catch (e) { /* ignore */ }
+  }
+  transporter = null;
+  transporterHealthy = false;
+}
 
 function getTransporter() {
   if (!transporter) {
@@ -49,19 +59,37 @@ async function sendKpiDigest(recipients, etlResult, summary) {
   const html = buildDigestHtml(etlResult, summary);
   const subject = `KPI Glacius ${etlResult.loadId} — ${etlResult.totalAlerts} alertas (${formatDate()})`;
 
-  try {
-    const info = await getTransporter().sendMail({
-      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
-      to: recipients.join(', '),
-      subject,
-      html,
-    });
-    logger.info(`[kpi:email] Resumen enviado a ${recipients.length} destinatario(s): ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
-  } catch (err) {
-    logger.error(`[kpi:email] Error enviando resumen: ${err.message}`);
-    return { success: false, error: err.message };
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const info = await getTransporter().sendMail({
+        from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+        to: recipients.join(', '),
+        subject,
+        html,
+      });
+      logger.info(`[kpi:email] ✅ Resumen enviado: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } catch (err) {
+      const isTimeout = ['ETIMEDOUT', 'ESOCKETTIMEDOUT'].includes(err.code);
+      const isConnection = ['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'TIMEOUT'].includes(err.code);
+
+      if (isTimeout || isConnection) {
+        invalidateTransporter();
+        logger.warn(`[kpi:email] ⚠️ Error conexión (intento ${attempt}/${maxRetries}): ${err.code}`);
+      } else {
+        logger.error(`[kpi:email] ❌ Error enviando resumen: ${err.message}`);
+        return { success: false, error: err.message };
+      }
+
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
   }
+
+  logger.error('[kpi:email] ❌ Fallido tras 3 intentos');
+  return { success: false, error: 'Timeout SMTP tras múltiples intentos' };
 }
 
 function formatDate() {

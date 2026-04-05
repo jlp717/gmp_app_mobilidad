@@ -75,6 +75,7 @@ class CobroPendiente {
   final String referencia;
   final TipoCobro tipo;
   final DateTime fecha;
+  final DateTime? fechaVencimiento;
   final double importeTotal;
   final double importePendiente;
   final String? formaPago;
@@ -85,6 +86,7 @@ class CobroPendiente {
     required this.referencia,
     required this.tipo,
     required this.fecha,
+    this.fechaVencimiento,
     required this.importeTotal,
     required this.importePendiente,
     this.formaPago,
@@ -96,13 +98,10 @@ class CobroPendiente {
       id: json['id']?.toString() ?? '',
       referencia: (json['referencia'] as String?) ?? '',
       tipo: _parseTipoCobro((json['tipo'] as String?) ?? 'normal'),
-      fecha:
-          DateTime.tryParse((json['fecha'] as String?) ?? '') ?? DateTime.now(),
-      importeTotal:
-          ((json['importeTotal'] ?? json['importe'] ?? 0) as num).toDouble(),
-      importePendiente:
-          ((json['importePendiente'] ?? json['importe'] ?? 0) as num)
-              .toDouble(),
+      fecha: DateTime.tryParse((json['fecha'] as String?) ?? '') ?? DateTime.now(),
+      fechaVencimiento: DateTime.tryParse((json['fechaVencimiento'] as String?) ?? ''),
+      importeTotal: ((json['importeTotal'] ?? json['importe'] ?? 0) as num).toDouble(),
+      importePendiente: ((json['importePendiente'] ?? json['importe'] ?? 0) as num).toDouble(),
       formaPago: json['formaPago'] as String?,
       esCTR: json['esCTR'] == true,
     );

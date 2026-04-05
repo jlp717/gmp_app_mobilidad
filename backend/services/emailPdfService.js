@@ -21,15 +21,15 @@ const logger = require('../middleware/logger');
 
 const SMTP_CONFIG = {
     host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1',
+    port: parseInt(process.env.SMTP_PORT) || 465,
+    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT) === 465,
     auth: {
         user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
         pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
     },
-    connectionTimeout: 20000,
-    greetingTimeout: 15000,
-    socketTimeout: 30000,
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
     tls: {
         rejectUnauthorized: false
     },
@@ -42,10 +42,27 @@ const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
 const FROM_NAME = 'Granja Mari Pepa';
 
 let transporter = null;
+let transporterHealthy = false;
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// INICIALIZACIÓN
+// INICIALIZACIÓN Y HEALTH CHECK
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/**
+ * Invalidar transporter actual (forzar reconexión en próximo envío)
+ */
+function invalidateTransporter() {
+    if (transporter) {
+        try {
+            transporter.close();
+        } catch (e) {
+            // Ignorar errores al cerrar
+        }
+    }
+    transporter = null;
+    transporterHealthy = false;
+    logger.debug('Transporter invalidado, se recreará en próximo envío');
+}
 
 function getTransporter() {
     if (!transporter) {
@@ -58,12 +75,34 @@ function getTransporter() {
     return transporter;
 }
 
+/**
+ * Verificar estado de conexión SMTP
+ */
+async function verifySmtpConnection() {
+    if (transporterHealthy && transporter) {
+        return true;
+    }
+
+    try {
+        const transport = getTransporter();
+        await transport.verify();
+        transporterHealthy = true;
+        logger.debug('SMTP connection verified');
+        return true;
+    } catch (error) {
+        transporterHealthy = false;
+        logger.warn(`SMTP verification failed: ${error.message}`);
+        return false;
+    }
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// CACHÉ DE PDFs EN MEMORIA (TTL = 5 minutos)
+// CACHÉ DE PDFs EN MEMORIA (TTL = 5 minutos, MAX 50 items)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const pdfCache = new Map();
 const PDF_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const PDF_CACHE_MAX_ITEMS = 50; // Límite máximo para evitar memory leak
 
 /**
  * Almacenar PDF en caché temporal
@@ -71,6 +110,13 @@ const PDF_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
  * @param {Buffer} buffer - El PDF generado
  */
 function cachePdf(key, buffer) {
+    // Si el caché está lleno, eliminar el 20% más antiguo (LRU)
+    if (pdfCache.size >= PDF_CACHE_MAX_ITEMS) {
+        const toDelete = [...pdfCache.keys()].slice(0, Math.ceil(PDF_CACHE_MAX_ITEMS * 0.2));
+        toDelete.forEach(k => pdfCache.delete(k));
+        logger.debug(`PDF cache lleno, eliminados ${toDelete.length} items antiguos`);
+    }
+
     pdfCache.set(key, {
         buffer,
         timestamp: Date.now()
@@ -83,7 +129,7 @@ function cachePdf(key, buffer) {
         }
     }
 
-    logger.info(`PDF cached: ${key} (${(buffer.length / 1024).toFixed(1)} KB, ${pdfCache.size} items in cache)`);
+    logger.debug(`PDF cached: ${key} (${(buffer.length / 1024).toFixed(1)} KB, ${pdfCache.size} items)`);
 }
 
 /**
@@ -185,14 +231,18 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
                 }]
             };
 
-            logger.info(`Enviando email a ${to} (intento ${attempt}/${maxRetries})...`);
-            
+            // Log solo en intento 1, reintentos como debug
+            if (attempt === 1) {
+                logger.info(`Enviando email a ${to}...`, { subject, pdfFilename });
+            } else {
+                logger.debug(`Reintento email a ${to} (intento ${attempt}/${maxRetries})...`);
+            }
+
             const info = await transport.sendMail(mailOptions);
 
-            logger.info('Email con PDF enviado correctamente', {
+            logger.info('✅ Email enviado correctamente', {
                 to,
                 subject,
-                pdfFilename,
                 pdfSize: `${(pdfBuffer.length / 1024).toFixed(1)} KB`,
                 messageId: info.messageId
             });
@@ -200,30 +250,54 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
             return { success: true, messageId: info.messageId };
         } catch (error) {
             lastError = error;
-            logger.warn(`Error enviando email (intento ${attempt}/${maxRetries}): ${error.message}`, {
-                to,
-                code: error.code,
-                command: error.command
-            });
-            
-            // Esperar antes de reintentar (exponential backoff)
-            if (attempt < maxRetries) {
-                const delay = attempt * 2000; // 2s, 4s, 6s...
-                logger.info(`Esperando ${delay}ms antes de reintentar...`);
+
+            // Clasificar tipo de error para decidir acción
+            const isTimeout = ['ETIMEDOUT', 'ESOCKETTIMEDOUT'].includes(error.code);
+            const isConnection = ['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'].includes(error.code);
+            const isAuth = error.code === 'EAUTH';
+
+            if (isTimeout || isConnection) {
+                // Timeout o conexión caída → invalidar y forzar reconexión
+                invalidateTransporter();
+                logger.warn(`⚠️ Error conexión (intento ${attempt}/${maxRetries}): ${error.code} - ${error.message}`, { to });
+            } else if (isAuth) {
+                // Error autenticación → NO reintentar, es irrecuperable
+                logger.error('❌ Error autenticación SMTP (credenciales inválidas)', {
+                    user: SMTP_CONFIG.auth.user
+                });
+                throw new Error('Error de autenticación SMTP. Verifica las credenciales del servidor de correo.');
+            } else {
+                logger.warn(`⚠️ Error email (intento ${attempt}/${maxRetries}): ${error.code} - ${error.message}`, { to });
+            }
+
+            // Reintentar solo para errores de red/timeout (no auth)
+            if (attempt < maxRetries && !isAuth) {
+                const delay = Math.pow(2, attempt) * 1000;
+                logger.debug(`Esperando ${delay}ms antes de reintentar...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
+            } else if (isAuth) {
+                break; // No retry para auth errors
             }
         }
     }
 
     // Todos los reintentos fallaron
-    logger.error(`Error enviando email con PDF después de ${maxRetries} intentos`, {
+    const errorCode = lastError?.code || 'UNKNOWN';
+    const isTimeoutError = ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'].includes(errorCode);
+
+    let userFriendlyMessage = lastError?.message || 'Error desconocido enviando email';
+    if (isTimeoutError) {
+        userFriendlyMessage = `Timeout conectando al servidor de correo (${SMTP_CONFIG.host}:${SMTP_CONFIG.port}). Verifica que el servidor SMTP está accesible.`;
+    }
+
+    logger.error(`❌ Email fallido tras ${maxRetries} intentos`, {
         to,
         pdfFilename,
-        error: lastError?.message,
-        code: lastError?.code
+        errorCode,
+        message: userFriendlyMessage
     });
-    
-    throw lastError || new Error('Error enviando email después de múltiples intentos');
+
+    throw new Error(userFriendlyMessage);
 }
 
 /**
@@ -335,5 +409,7 @@ module.exports = {
     generateInvoiceEmailHtml,
     generateDeliveryEmailHtml,
     cachePdf,
-    getCachedPdf
+    getCachedPdf,
+    verifySmtpConnection,
+    invalidateTransporter
 };

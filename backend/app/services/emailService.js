@@ -6,18 +6,18 @@
 const nodemailer = require('nodemailer');
 const logger = require('../../middleware/logger');
 
-// Configuración SMTP - Usa mail.mari-pepa.com:587 (probado y funcional)
+// Configuración SMTP - mail.mari-pepa.com:465 (SSL)
 const SMTP_CONFIG = {
     host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: false,
+    port: parseInt(process.env.SMTP_PORT) || 465,
+    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT) === 465,
     auth: {
         user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
-        pass: process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
+        pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
     },
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
     tls: {
         rejectUnauthorized: false
     }
@@ -26,6 +26,7 @@ const SMTP_CONFIG = {
 const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
 
 let transporter = null;
+let transporterHealthy = false;
 
 function initializeTransporter() {
     if (!transporter) {
@@ -35,64 +36,105 @@ function initializeTransporter() {
     return transporter;
 }
 
+function invalidateTransporter() {
+    if (transporter) {
+        try { transporter.close(); } catch (e) { /* ignore */ }
+    }
+    transporter = null;
+    transporterHealthy = false;
+}
+
 /**
- * Enviar nota de entrega por email
+ * Enviar nota de entrega por email con reintentos inteligentes
  * @param {string} to - Email destino
  * @param {Buffer} pdfBuffer - PDF de la nota de entrega
  * @param {Object} deliveryInfo - Información de la entrega
  */
 async function sendDeliveryReceipt(to, pdfBuffer, deliveryInfo) {
-    try {
-        const transporter = initializeTransporter();
+    const maxRetries = 3;
+    let lastError;
 
-        const { albaranNum, clientName, total, fecha } = deliveryInfo;
+    const { albaranNum, clientName, total, fecha } = deliveryInfo;
 
-        const mailOptions = {
-            from: `"Granja Mari Pepa - Entregas" <${FROM_EMAIL}>`,
-            to: to,
-            subject: `Nota de Entrega - Albarán ${albaranNum}`,
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <div style="background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%); padding: 20px; border-radius: 10px 10px 0 0;">
-                        <h1 style="color: white; margin: 0; text-align: center;">Nota de Entrega</h1>
-                    </div>
-                    <div style="background: #f8f9fa; padding: 25px; border-radius: 0 0 10px 10px;">
-                        <p style="font-size: 16px; color: #333;">
-                            Estimado/a <strong>${clientName}</strong>,
-                        </p>
-                        <p style="font-size: 14px; color: #666;">
-                            Adjunto encontrará el comprobante de entrega del albarán <strong>${albaranNum}</strong>
-                            con fecha <strong>${fecha}</strong>.
-                        </p>
-
-                        <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; border: 1px solid #c8e6c9;">
-                            <p style="font-size: 24px; color: #2c5530; font-weight: bold; margin: 0;">
-                                Total: ${total} €
-                            </p>
-                        </div>
-
-                        <p style="font-size: 12px; color: #999; margin-top: 30px;">
-                            Este email se ha generado automáticamente tras la entrega.<br>
-                            <strong>Granja Mari Pepa</strong> | Teléfono: 639 77 86 56
-                        </p>
-                    </div>
+    const mailOptions = {
+        from: `"Granja Mari Pepa - Entregas" <${FROM_EMAIL}>`,
+        to: to,
+        subject: `Nota de Entrega - Albarán ${albaranNum}`,
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%); padding: 20px; border-radius: 10px 10px 0 0;">
+                    <h1 style="color: white; margin: 0; text-align: center;">Nota de Entrega</h1>
                 </div>
-            `,
-            attachments: [{
-                filename: `Nota_Entrega_${albaranNum}.pdf`,
-                content: pdfBuffer,
-                contentType: 'application/pdf'
-            }]
-        };
+                <div style="background: #f8f9fa; padding: 25px; border-radius: 0 0 10px 10px;">
+                    <p style="font-size: 16px; color: #333;">
+                        Estimado/a <strong>${clientName}</strong>,
+                    </p>
+                    <p style="font-size: 14px; color: #666;">
+                        Adjunto encontrará el comprobante de entrega del albarán <strong>${albaranNum}</strong>
+                        con fecha <strong>${fecha}</strong>.
+                    </p>
 
-        const info = await transporter.sendMail(mailOptions);
-        logger.info('Email de entrega enviado', { to, albaranNum, messageId: info.messageId });
+                    <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; border: 1px solid #c8e6c9;">
+                        <p style="font-size: 24px; color: #2c5530; font-weight: bold; margin: 0;">
+                            Total: ${total} €
+                        </p>
+                    </div>
 
-        return { success: true, messageId: info.messageId };
-    } catch (error) {
-        logger.error('Error enviando email de entrega', { error: error.message, to });
-        throw error;
+                    <p style="font-size: 12px; color: #999; margin-top: 30px;">
+                        Este email se ha generado automáticamente tras la entrega.<br>
+                        <strong>Granja Mari Pepa</strong> | Teléfono: 639 77 86 56
+                    </p>
+                </div>
+            </div>
+        `,
+        attachments: [{
+            filename: `Nota_Entrega_${albaranNum}.pdf`,
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+        }]
+    };
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const transport = initializeTransporter();
+
+            if (attempt === 1) {
+                logger.info(`Enviando entrega email a ${to}...`, { albaranNum });
+            }
+
+            const info = await transport.sendMail(mailOptions);
+            logger.info('✅ Email entrega enviado', { to, albaranNum, messageId: info.messageId });
+            return { success: true, messageId: info.messageId };
+        } catch (error) {
+            lastError = error;
+
+            const isTimeout = ['ETIMEDOUT', 'ESOCKETTIMEDOUT'].includes(error.code);
+            const isConnection = ['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'].includes(error.code);
+            const isAuth = error.code === 'EAUTH';
+
+            if (isTimeout || isConnection) {
+                invalidateTransporter();
+                logger.warn(`⚠️ Error conexión entrega (intento ${attempt}/${maxRetries}): ${error.code}`, { to });
+            } else if (isAuth) {
+                logger.error('❌ Error autenticación SMTP en entregas');
+                throw new Error('Error de autenticación SMTP. Verifica las credenciales.');
+            }
+
+            if (attempt < maxRetries && !isAuth) {
+                await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+            } else if (isAuth) {
+                break;
+            }
+        }
     }
+
+    const errorCode = lastError?.code || 'UNKNOWN';
+    const errorMsg = ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'TIMEOUT'].includes(errorCode)
+        ? `Timeout SMTP (${SMTP_CONFIG.host}:${SMTP_CONFIG.port})`
+        : lastError?.message || 'Error enviando email de entrega';
+
+    logger.error('❌ Email entrega fallido', { to, albaranNum, errorCode });
+    throw new Error(errorMsg);
 }
 
 /**

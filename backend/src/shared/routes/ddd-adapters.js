@@ -21,12 +21,18 @@ const { Db2CobrosRepository } = require('../modules/cobros');
 const { Db2EntregasRepository } = require('../modules/entregas');
 const { Db2RuteroRepository } = require('../modules/rutero');
 const { Db2AuthRepository } = require('../modules/auth');
+const { Db2ClientsRepository } = require('../modules/clients/infrastructure/db2-client-repository');
 const { Db2ConnectionPool } = require('../core/infrastructure/database/db2-connection-pool');
 const { ResponseCache } = require('../core/infrastructure/cache/response-cache');
 const { performanceCache } = require('../core/infrastructure/cache/performance-cache');
+const { cachedQuery } = require('../../../services/query-optimizer');
+const { query } = require('../../../config/db');
+const { TTL: RedisTTL } = require('../../../services/redis-cache');
+const { buildVendedorFilterLACLAE, sanitizeForSQL, MIN_YEAR } = require('../../../utils/common');
+const { getClientCodesFromCache } = require('../../../services/laclae');
 
 // TTL constants (milliseconds)
-const TTL = {
+const TTL_MS = {
   PRODUCT_CATALOG: 5 * 60 * 1000,
   PRODUCT_DETAIL: 2 * 60 * 1000,
   PROMOTIONS: 30 * 60 * 1000,
@@ -61,27 +67,24 @@ function getCache() {
 }
 
 // Cache helper with performance optimization for ALL queries
-async function withCache(cache, key, ttl, fetchFn, res, req) {
+async function withCache(cache, key, ttlMs, fetchFn, res, req) {
   const isAllQuery = req?.query?.vendedorCodes === 'ALL';
-  
+
   if (isAllQuery) {
-    // Use performance cache with aggressive TTL for ALL queries
     const perfCacheKey = `ALL:${key}`;
     const role = req?.user?.role || 'COMERCIAL';
-    const ttlConfig = performanceCache.getTTL(role, true);
-    
-    const result = await performanceCache.get(perfCacheKey, fetchFn, ttlConfig);
+    const ttlSec = performanceCache.getTTL(role, true);
+    const result = await performanceCache.getOrFetch(perfCacheKey, fetchFn, ttlSec);
     res.set('X-Cache-Source', result.source);
     res.set('X-Cache-Hit', result.cached ? 'true' : 'false');
     res.set('X-Query-Type', 'ALL-OPTIMIZED');
     return res.json(result.data);
   }
-  
-  // Standard cache for non-ALL queries
+
   const cached = await cache.get(key);
   if (cached) return res.json(cached);
   const result = await fetchFn();
-  await cache.set(key, result, ttl);
+  await cache.set(key, result, ttlMs);
   return res.json(result);
 }
 
@@ -538,11 +541,155 @@ function createRuteroRoutes() {
   return router;
 }
 
+// =============================================================================
+// CLIENTS ROUTES (DDD) — with forced Redis ALL cache
+// =============================================================================
+function createClientsRoutes() {
+  const router = express.Router();
+
+  router.get('/', async (req, res) => {
+    try {
+      const { vendedorCodes, search, limit = 1000, offset = 0 } = req.query;
+      const isAllQuery = vendedorCodes === 'ALL' || !vendedorCodes;
+      const cacheKey = `ddd:clients:v1:${vendedorCodes || 'all'}:${search || 'none'}:${limit}:${offset}`;
+      const role = req?.user?.role || 'COMERCIAL';
+      const ttlSec = performanceCache.getTTL(role, isAllQuery);
+
+      const result = await performanceCache.getOrFetch(cacheKey, async () => {
+        const vendorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        let clientCodesFilter = '';
+        if (vendedorCodes && !search && vendedorCodes !== 'ALL') {
+          const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
+          if (cachedClientCodes && cachedClientCodes.length > 0) {
+            const CHUNK_SIZE = 1000;
+            const chunks = [];
+            for (let i = 0; i < cachedClientCodes.length; i += CHUNK_SIZE) {
+              const chunk = cachedClientCodes.slice(i, i + CHUNK_SIZE).map(c => `'${c}'`).join(',');
+              chunks.push(`C.CODIGOCLIENTE IN (${chunk})`);
+            }
+            clientCodesFilter = `AND (${chunks.join(' OR ')})`;
+          }
+        }
+
+        let safeSearch = '';
+        let searchFilter = '';
+        if (search) {
+          safeSearch = sanitizeForSQL(search.trim()).toUpperCase();
+          searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE '%${safeSearch}%'
+                          OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeSearch}%'
+                          OR C.CODIGOCLIENTE LIKE '%${safeSearch}%'
+                          OR UPPER(C.POBLACION) LIKE '%${safeSearch}%')`;
+        }
+
+        const clients = await cachedQuery(query, `
+          SELECT
+            C.CODIGOCLIENTE as code,
+            COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) as name,
+            C.NIF as nif,
+            C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
+            C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
+            C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
+            COALESCE(S.TOTAL_PURCHASES, 0) as totalPurchases,
+            COALESCE(S.NUM_ORDERS, 0) as numOrders,
+            COALESCE(S.LAST_PURCHASE_DATE, 0) as lastDateInt,
+            COALESCE(S.TOTAL_MARGIN, 0) as totalMargin,
+            C.ANOBAJA as yearInactive,
+            TRIM(V.NOMBREVENDEDOR) as vendorName,
+            LV.LAST_VENDOR as vendorCode
+          FROM DSEDAC.CLI C
+          LEFT JOIN (
+            SELECT LCCDCL as CLIENT_CODE, SUM(LCIMVT) as TOTAL_PURCHASES,
+              SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
+              COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
+              MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
+            FROM DSED.LACLAE
+            WHERE LCAADC >= ${MIN_YEAR} AND TPDC = 'LAC'
+              AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
+              AND LCSRAB NOT IN ('N', 'Z')
+              ${clientCodesFilter ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL') : vendorFilter.replace(/L\./g, '')}
+            GROUP BY LCCDCL
+          ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
+          LEFT JOIN LATERAL (
+            SELECT LCCDVD as LAST_VENDOR FROM DSED.LACLAE
+            WHERE LCCDCL = ${clientCodesFilter ? 'C.CODIGOCLIENTE' : 'S.CLIENT_CODE'}
+              AND LCAADC >= ${MIN_YEAR} AND TPDC = 'LAC'
+              AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
+              AND LCSRAB NOT IN ('N', 'Z')
+            ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+            FETCH FIRST 1 ROWS ONLY
+          ) LV ON 1=1
+          LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
+          WHERE C.ANOBAJA = 0 ${clientCodesFilter || `AND LV.LAST_VENDOR IS NOT NULL`} ${searchFilter}
+          ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
+          OFFSET ${parseInt(offset)} ROWS FETCH FIRST ${parseInt(limit)} ROWS ONLY
+        `, cacheKey, RedisTTL.LONG);
+
+        return { success: true, clients, count: clients.length, isAllQuery };
+      }, ttlSec);
+
+      res.set('X-Cache-Source', result.source);
+      res.set('X-Query-Type', isAllQuery ? 'ALL-OPTIMIZED' : 'standard');
+      res.json(result.data);
+    } catch (error) {
+      logger.error(`[DDD-CLIENTS] Error: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  return router;
+}
+
+// =============================================================================
+// COMMISSIONS ROUTES (DDD) — with forced Redis ALL cache
+// =============================================================================
+function createCommissionsRoutes() {
+  const router = express.Router();
+
+  router.get('/', async (req, res) => {
+    try {
+      const { vendedorCode, year } = req.query;
+      if (!vendedorCode) return res.status(400).json({ success: false, error: 'vendedorCode required' });
+
+      const selectedYear = year || new Date().getFullYear().toString();
+      const prevYear = (parseInt(selectedYear) - 1).toString();
+      const cacheKey = `ddd:commissions:v1:${vendedorCode}:${selectedYear}`;
+      const role = req?.user?.role || 'COMERCIAL';
+      const ttlSec = performanceCache.getTTL(role, vendedorCode === 'ALL');
+
+      const result = await performanceCache.getOrFetch(cacheKey, async () => {
+        const salesQuery = `
+          SELECT L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
+          FROM DSED.LACLAE L
+          WHERE L.LCAADC IN (${selectedYear}, ${prevYear})
+            AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
+            AND LCSRAB NOT IN ('N', 'Z') AND TPDC = 'LAC'
+            AND R1_T8CDVD = '${vendedorCode.replace(/[^a-zA-Z0-9]/g, '')}'
+          GROUP BY L.LCAADC, LCMMDC
+          ORDER BY YEAR, MONTH
+        `;
+        const salesRows = await cachedQuery(query, salesQuery, `${cacheKey}:sales`, RedisTTL.SHORT);
+
+        return { success: true, salesRows, year: selectedYear, vendorCode: vendedorCode };
+      }, { role: req?.user?.role || 'COMERCIAL', isAllQuery: vendedorCode === 'ALL' });
+
+      res.set('X-Cache-Source', result.source);
+      res.json(result.data);
+    } catch (error) {
+      logger.error(`[DDD-COMMISSIONS] Error: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  return router;
+}
+
 module.exports = {
   createAuthRoutes,
   createPedidosRoutes,
   createCobrosRoutes,
   createEntregasRoutes,
   createRuteroRoutes,
-  TTL
+  createClientsRoutes,
+  createCommissionsRoutes,
+  TTL: TTL_MS
 };

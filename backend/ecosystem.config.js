@@ -21,12 +21,14 @@ module.exports = {
                 NODE_ENV: 'production',
                 PORT: 3334,
                 USE_TS_ROUTES: 'false',
+                USE_DDD_ROUTES: 'true',
                 VENDOR_COLUMN: 'R1_T8CDVD',
             },
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 3334,
                 USE_TS_ROUTES: 'false',
+                USE_DDD_ROUTES: 'true',
                 VENDOR_COLUMN: 'R1_T8CDVD',
             },
             env_ts: {

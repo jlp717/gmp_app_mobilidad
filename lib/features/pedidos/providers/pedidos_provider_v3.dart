@@ -18,6 +18,7 @@
 /// - 70% faster product search with caching
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../data/pedidos_service.dart';
 import '../data/pedidos_offline_service.dart';
@@ -878,3 +879,8 @@ class PedidosProviderV3 with ChangeNotifier {
     }
   }
 }
+
+/// Riverpod provider for PedidosProviderV3 — ChangeNotifierProvider.autoDispose
+final pedidosProviderV3 = ChangeNotifierProvider.autoDispose<PedidosProviderV3>(
+  (ref) => PedidosProviderV3(),
+);

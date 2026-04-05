@@ -11,12 +11,13 @@ const compression = require('compression');
 const logger = require('./middleware/logger');
 const { verifyToken } = require('./middleware/auth');
 const { initDb, query } = require('./config/db');
-const { 
-    globalLimiter, 
-    createSecurityHeaders, 
-    validateContentType, 
-    cobrosLimiter, 
+const {
+    globalLimiter,
+    createSecurityHeaders,
+    validateContentType,
+    cobrosLimiter,
     pedidosLimiter,
+    emailLimiter,
     detectSuspiciousAgents,
     validateContentLength,
     addRequestId
@@ -42,12 +43,12 @@ const { refreshTokenManager } = require('./src/core/infrastructure/security/refr
 const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
 
 // =============================================================================
-// FEATURE TOGGLE: USE_DDD_ROUTES
+// FEATURE TOGGLE: USE_DDD_ROUTES — DEFAULT TRUE for v4.0.0
 // Set USE_DDD_ROUTES=true to use DDD module routes (from src/modules/)
-// Set USE_DDD_ROUTES=false (default) to use legacy JavaScript routes
-// This toggle is independent of USE_TS_ROUTES
+// Set USE_DDD_ROUTES=false to use legacy JavaScript routes
+// HEAVY endpoints (clients, commissions, dashboard) use DDD modules with Redis ALL cache
 // =============================================================================
-const USE_DDD_ROUTES = process.env.USE_DDD_ROUTES === 'true';
+const USE_DDD_ROUTES = process.env.USE_DDD_ROUTES !== 'false';
 
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
@@ -289,22 +290,27 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/chatbot', chatbotRoutes);
   app.use('/api/commissions', commissionsRoutes);
   app.use('/api/filters', filtersRoutes);
-  app.use('/api/repartidor', repartidorRoutes);
+  app.use('/api/repartidor', emailLimiter, repartidorRoutes);
   app.use('/api/logs', userActionsRoutes);
-  app.use('/api/facturas', facturasRoutes);
+  app.use('/api/facturas', emailLimiter, facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);
 
   // DDD routes (mount before legacy — Express first-match wins)
-  if (process.env.USE_DDD_ROUTES === 'true') {
+  if (process.env.USE_DDD_ROUTES !== 'false') {
     app.use('/api/auth', dddAuthRoutes);
     app.use('/api/pedidos', pedidosLimiter, dddPedidosRoutes);
     app.use('/api/cobros', cobrosLimiter, dddCobrosRoutes);
-    app.use('/api/entregas', dddEntregasRoutes);
+    app.use('/api/entregas', emailLimiter, dddEntregasRoutes);
     app.use('/api/rutero', dddRuteroRoutes);
+    // DDD clients + commissions with performance cache (overrides legacy)
+    const dddAdapters = require('./src/shared/routes/ddd-adapters');
+    app.use('/api/clients', dddAdapters.createClientsRoutes());
+    app.use('/api/commissions', dddAdapters.createCommissionsRoutes());
     logger.info('✅ DDD routes mounted at /api/{auth,pedidos,cobros,entregas,rutero}');
+    logger.info('✅ DDD-enhanced: clients + commissions with Redis ALL cache + performanceCache');
   } else {
     // Legacy fallback
-    app.use('/api/entregas', entregasRoutes);
+    app.use('/api/entregas', emailLimiter, entregasRoutes);
     app.use('/api/products', productsRoutes);
     app.use('/api/pedidos', pedidosLimiter, pedidosRoutes);
     app.use('/api/cobros', cobrosLimiter, cobrosRoutes);
