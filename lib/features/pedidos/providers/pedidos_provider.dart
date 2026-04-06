@@ -1071,16 +1071,23 @@ class PedidosProvider with ChangeNotifier {
       final seen = <String>{};
       for (final p in list) {
         final item = PromotionItem.fromJson(p as Map<String, dynamic>);
+        // Normalize numeric values to avoid float string inconsistencies
+        final minQtyStr = item.minQty.toStringAsFixed(2);
+        final giftQtyStr = item.giftQty.toStringAsFixed(2);
+        final promoPriceStr = item.promoPrice.toStringAsFixed(2);
         final key =
-            '${item.promoType}|${item.promoCode}|${item.code}|${item.dateFrom}|${item.dateTo}|${item.minQty}|${item.giftQty}|${item.promoPrice}';
+            '${item.promoType}|${item.promoCode}|${item.code}|${item.dateFrom}|${item.dateTo}|$minQtyStr|$giftQtyStr|$promoPriceStr';
         if (item.code.isNotEmpty && seen.add(key)) {
           _activePromotionsList.add(item);
+          // Store ALL promotions per product (not just the first one)
           _activePromotions.putIfAbsent(item.code, () => item);
         }
       }
+      debugPrint('[PedidosProvider] Loaded ${_activePromotionsList.length} promotions for $_clientCode');
       notifyListeners();
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('[PedidosProvider] loadPromotions error: $e');
+      debugPrint('[PedidosProvider] loadPromotions stack: $stack');
     }
   }
 

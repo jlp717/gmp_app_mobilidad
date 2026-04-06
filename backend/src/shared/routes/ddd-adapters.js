@@ -217,17 +217,23 @@ function createPedidosRoutes() {
       const { clientCode, vendedorCodes } = req.query;
       if (!clientCode) return res.status(400).json({ success: false, error: 'clientCode is required' });
 
-      const cacheKey = `ddd:promotions:${clientCode}:${vendedorCodes || 'ALL'}`;
+      const trimmedClient = String(clientCode).trim();
+      if (!trimmedClient) return res.status(400).json({ success: false, error: 'clientCode cannot be empty' });
+
+      const cacheKey = `ddd:promotions:${trimmedClient}:${vendedorCodes || 'ALL'}`;
       await withCache(cache, cacheKey, TTL_MS.PROMOTIONS, async () => {
         const result = await repo.getPromotions({
-          clientCode: String(clientCode).trim(),
+          clientCode: trimmedClient,
           vendedorCodes: vendedorCodes || 'ALL'
         });
-        return { success: true, promotions: result };
-      }, res);
+        // result is an array of promotion objects from legacy service
+        const promotions = Array.isArray(result) ? result : [];
+        logger.info(`[DDD-PEDIDOS] Promotions for ${trimmedClient}: ${promotions.length} found`);
+        return { success: true, promotions };
+      }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /promotions: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: 'Error cargando promociones' });
     }
   });
 
@@ -371,23 +377,134 @@ function createPedidosRoutes() {
     }
   });
 
+  // GET /api/pedidos/families
+  router.get('/families', async (req, res) => {
+    try {
+      const pedidosService = require('../../../services/pedidos.service');
+      const families = await pedidosService.getProductFamilies();
+      res.json({ success: true, families });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /families: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/brands
+  router.get('/brands', async (req, res) => {
+    try {
+      const pedidosService = require('../../../services/pedidos.service');
+      const brands = await pedidosService.getProductBrands();
+      res.json({ success: true, brands });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /brands: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/client-prices/:clientCode
+  router.get('/client-prices/:clientCode', async (req, res) => {
+    try {
+      const { clientCode } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const prices = await pedidosService.getClientPricing(String(clientCode).trim());
+      res.json({ success: true, prices });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /client-prices: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/similar-products/:code
+  router.get('/similar-products/:code', async (req, res) => {
+    try {
+      const { code } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const similar = await pedidosService.getSimilarProducts(String(code).trim());
+      res.json({ success: true, similar });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /similar-products: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/search-products
+  router.get('/search-products', async (req, res) => {
+    try {
+      const { q, limit = 20, vendedorCodes, clientCode } = req.query;
+      const pedidosService = require('../../../services/pedidos.service');
+      const results = await pedidosService.searchProductsWithStock({
+        query: q,
+        limit: parseInt(limit) || 20,
+        vendedorCodes,
+        clientCode
+      });
+      res.json({ success: true, results });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /search-products: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/product-history/:productCode/:clientCode
+  router.get('/product-history/:productCode/:clientCode', async (req, res) => {
+    try {
+      const { productCode, clientCode } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const history = await pedidosService.getProductHistory(String(productCode).trim(), String(clientCode).trim());
+      res.json({ success: true, history });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /product-history: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/analytics
+  router.get('/analytics', async (req, res) => {
+    try {
+      const { vendedorCodes } = req.query;
+      const pedidosService = require('../../../services/pedidos.service');
+      const analytics = await pedidosService.getOrderAnalytics(vendedorCodes || 'ALL');
+      res.json({ success: true, analytics });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /analytics: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // POST /api/pedidos/complementary
+  router.post('/complementary', async (req, res) => {
+    try {
+      const { productCodes, clientCode } = req.body;
+      if (!productCodes || !Array.isArray(productCodes) || productCodes.length === 0) {
+        return res.status(400).json({ success: false, error: 'productCodes array is required' });
+      }
+      const pedidosService = require('../../../services/pedidos.service');
+      const products = await pedidosService.getComplementaryProducts(productCodes, clientCode);
+      res.json({ success: true, products });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in POST /complementary: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // GET /api/pedidos/ (order list)
   router.get('/', async (req, res) => {
     try {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
-      
-      const { limit, offset, estado } = req.query;
+
+      const { limit, offset, estado, vendedorCodes } = req.query;
       const cacheKey = `ddd:orders-list:${userId}:${limit || 20}:${offset || 0}:${estado || 'all'}`;
       await withCache(cache, cacheKey, TTL_MS.ORDER_HISTORY, async () => {
-        const orders = await repo.getOrderHistory({ 
-          userId, 
-          limit: parseInt(limit) || 20, 
+        const pedidosService = require('../../../services/pedidos.service');
+        const orders = await pedidosService.getOrders({
+          vendedorCodes: vendedorCodes || userId,
+          limit: parseInt(limit) || 50,
           offset: parseInt(offset) || 0,
-          estado: estado ? String(estado).trim() : undefined
+          status: estado ? String(estado).trim() : undefined
         });
         return { success: true, orders };
-      }, res);
+      }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -441,7 +558,7 @@ function createPedidosRoutes() {
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
       const result = await repo.confirmOrderById({ orderId: id, userId });
-      
+
       // Invalidate related caches
       cache.invalidatePattern(`ddd:orders-list:${userId}`);
       cache.invalidatePattern(`ddd:history:${userId}`);
@@ -454,18 +571,109 @@ function createPedidosRoutes() {
     }
   });
 
+  // PUT /api/pedidos/:id/lines
+  router.put('/:id/lines', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const result = await pedidosService.addOrderLine(parseInt(id), req.body);
+      res.json({ success: true, line: result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // PUT /api/pedidos/:id/lines/:lineId
+  router.put('/:id/lines/:lineId', async (req, res) => {
+    try {
+      const { id, lineId } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const result = await pedidosService.updateOrderLine(parseInt(id), parseInt(lineId), req.body);
+      res.json({ success: true, line: result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines/:lineId: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // PUT /api/pedidos/:id/lines/:lineId/delete
+  router.put('/:id/lines/:lineId/delete', async (req, res) => {
+    try {
+      const { id, lineId } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const result = await pedidosService.deleteOrderLine(parseInt(id), parseInt(lineId));
+      res.json({ success: true, line: result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines/:lineId/delete: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // PUT /api/pedidos/:id/status
   router.put('/:id/status', async (req, res) => {
     try {
       const { id } = req.params;
       const { estado, userId } = req.body;
       if (!estado) return res.status(400).json({ success: false, error: 'estado required' });
-      
+
       const result = await repo.updateOrderStatus({ orderId: id, estado, userId: userId || req.user?.code });
       res.json({ success: true, order: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/status: ${error.message}`);
       res.status(error.message.includes('not found') ? 404 : 500).json({ success: false, error: error.message });
+    }
+  });
+
+  // PUT /api/pedidos/:id/cancel
+  router.put('/:id/cancel', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const result = await pedidosService.cancelOrder(parseInt(id), { userId: req.user?.code });
+      res.json({ success: true, order: result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in PUT /:id/cancel: ${error.message}`);
+      res.status(error.message.includes('no se puede') ? 409 : 500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/:id/clone
+  router.get('/:id/clone', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const order = await pedidosService.cloneOrder(parseInt(id));
+      res.json({ success: true, order });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /:id/clone: ${error.message}`);
+      res.status(error.message.includes('not found') ? 404 : 500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/:id/albaran
+  router.get('/:id/albaran', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const albaranes = await pedidosService.getOrderAlbaran(parseInt(id));
+      res.json({ success: true, albaranes });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /:id/albaran: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/:id/pdf
+  router.get('/:id/pdf', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const pdf = await pedidosService.generateOrderPdf(parseInt(id));
+      res.json({ success: true, pdf });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /:id/pdf: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 

@@ -30,6 +30,7 @@ class PromotionsBanner extends StatefulWidget {
 class _PromotionsBannerState extends State<PromotionsBanner> {
   List<PromotionItem> _promotions = [];
   bool _isLoading = true;
+  bool _hasError = false;
   bool _isExpanded = true;
 
   @override
@@ -54,6 +55,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
 
   Future<void> _loadPromotions() async {
     try {
+      setState(() { _hasError = false; });
       final provider = Provider.of<PedidosProvider>(context, listen: false);
       final clientCode = provider.clientCode;
       if (clientCode == null || clientCode.isEmpty) {
@@ -64,7 +66,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         '/pedidos/promotions',
         queryParameters: {'clientCode': clientCode},
         cacheKey: 'pedidos:promotions:$clientCode',
-        cacheTTL: const Duration(minutes: 10),
+        cacheTTL: const Duration(minutes: 30), // Aligned with backend 30min TTL
       );
       final list = response['promotions'] as List? ?? [];
       if (mounted) {
@@ -73,16 +75,50 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
               .map((p) => PromotionItem.fromJson(p as Map<String, dynamic>))
               .toList();
           _isLoading = false;
+          _hasError = false;
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint('[PromotionsBanner] Load error: $e');
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  Future<void> _retry() async {
+    if (mounted) setState(() { _isLoading = true; _hasError = false; });
+    await _loadPromotions();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const SizedBox.shrink();
+    if (_hasError) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 18),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('No se pudieron cargar las ofertas', style: TextStyle(fontSize: 13))),
+            TextButton(
+              onPressed: _retry,
+              child: const Text('Reintentar', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+      );
+    }
     if (_promotions.isEmpty) return const SizedBox.shrink();
 
     return Column(

@@ -25,9 +25,9 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const isProduction = NODE_ENV === 'production';
 
 const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10);
-const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '500', 10);
+const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '2000', 10);
 const LOGIN_RATE_LIMIT_MAX = parseInt(process.env.LOGIN_RATE_LIMIT || '15', 10);
-const API_RATE_LIMIT_MAX = parseInt(process.env.API_RATE_LIMIT || '1000', 10);
+const API_RATE_LIMIT_MAX = parseInt(process.env.API_RATE_LIMIT || '3000', 10);
 
 // CORS configuration
 const parseCorsOrigin = (value) => {

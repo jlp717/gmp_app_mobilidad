@@ -79,29 +79,10 @@ class Db2PedidosRepository extends PedidosRepository {
   }
 
   async getPromotions({ clientCode, vendedorCodes }) {
-    const sql = `
-      SELECT
-        PMRL1.IDPROMO,
-        PMRL1.DESPROMO,
-        PMRL1.TIPO,
-        PMRL1.FECHAINICIO,
-        PMRL1.FECHAFIN,
-        PMRL1.CODIGOCLIENTE,
-        PMPL1.CODART,
-        PMPL1.UNIDADESMIN,
-        PMPL1.UNIDADESMAX,
-        PMPL1.PRECIO
-      FROM JAVIER.PMRL1 PMRL1
-      LEFT JOIN JAVIER.PMPL1 PMPL1 ON PMRL1.IDPROMO = PMPL1.IDPROMO
-      WHERE (TRIM(PMRL1.CODIGOCLIENTE) = '' OR TRIM(PMRL1.CODIGOCLIENTE) = ?)
-        AND PMRL1.FECHAINICIO <= CURRENT_DATE
-        AND PMRL1.FECHAFIN >= CURRENT_DATE
-      ORDER BY PMRL1.IDPROMO, PMPL1.CODART
-      FETCH FIRST 100 ROWS ONLY
-    `;
-
-    const result = await this._db.executeParams(sql, [clientCode]);
-    return result;
+    // Delegate to legacy service which has correct field mapping and
+    // queries both CPESL1 (price promos) and PMRL1/PMPL1 (gift promos)
+    const pedidosService = require('../../../../services/pedidos.service');
+    return await pedidosService.getActivePromotions(clientCode);
   }
 
   // NOTE: Cart methods (getCart, addToCart) are NOT implemented.
@@ -153,27 +134,15 @@ class Db2PedidosRepository extends PedidosRepository {
     });
   }
 
-  async getOrderHistory({ userId, limit = 20, offset = 0 }) {
-    const sql = `
-      SELECT
-        PC.ID,
-        PC.EJERCICIO,
-        PC.NUMEROPEDIDO,
-        PC.SERIEPEDIDO,
-        PC.FECHAPEDIDO,
-        PC.ESTADO,
-        PC.OBSERVACIONES,
-        PC.CODIGOCLIENTE,
-        PC.NOMBRECLIENTE,
-        PC.IMPORTETOTAL as TOTAL
-      FROM JAVIER.PEDIDOS_CAB PC
-      WHERE PC.CODIGOVENDEDOR = ?
-      ORDER BY PC.FECHAPEDIDO DESC
-      FETCH FIRST ${limit} ROWS ONLY OFFSET ${offset} ROWS
-    `;
-
-    const result = await this._db.executeParams(sql, [userId]);
-    return result;
+  async getOrderHistory({ userId, limit = 20, offset = 0, estado = undefined }) {
+    // Delegate to legacy service which has correct SQL
+    const pedidosService = require('../../../../services/pedidos.service');
+    return await pedidosService.getOrders({
+      vendedorCode: userId,
+      limit,
+      offset,
+      estado
+    });
   }
 
   async getOrderStats({ userId }) {

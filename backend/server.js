@@ -303,9 +303,9 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/chatbot', chatbotRoutes);
   app.use('/api/commissions', commissionsRoutes);
   app.use('/api/filters', filtersRoutes);
-  app.use('/api/repartidor', emailLimiter, repartidorRoutes);
+  app.use('/api/repartidor', repartidorRoutes);
   app.use('/api/logs', userActionsRoutes);
-  app.use('/api/facturas', emailLimiter, facturasRoutes);
+  app.use('/api/facturas', facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);
 
   // DDD routes (mount before legacy — Express first-match wins)
@@ -313,7 +313,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
     app.use('/api/auth', dddAuthRoutes);
     app.use('/api/pedidos', pedidosLimiter, dddPedidosRoutes);
     app.use('/api/cobros', cobrosLimiter, dddCobrosRoutes);
-    app.use('/api/entregas', emailLimiter, dddEntregasRoutes);
+    app.use('/api/entregas', dddEntregasRoutes);
     app.use('/api/rutero', dddRuteroRoutes);
     // DDD clients + commissions with performance cache (overrides legacy)
     const dddAdapters = require('./src/shared/routes/ddd-adapters');
@@ -326,7 +326,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
     logger.info('✅ Products image/ficha routes mounted at /api/products/:code/{image,ficha}');
   } else {
     // Legacy fallback
-    app.use('/api/entregas', emailLimiter, entregasRoutes);
+    app.use('/api/entregas', entregasRoutes);
     app.use('/api/products', productsRoutes);
     app.use('/api/pedidos', pedidosLimiter, pedidosRoutes);
     app.use('/api/cobros', cobrosLimiter, cobrosRoutes);

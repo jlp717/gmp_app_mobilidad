@@ -365,9 +365,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         final ytdSales = (status?['ytdSales'] as num?)?.toDouble() ?? 0;
         return ytdSales > 0.01;
       });
-      
-      if (dayCacheStatus == 'loading' && 
-          (_dayClients.isEmpty || !hasAnySales) && 
+
+      if (dayCacheStatus == 'loading' &&
+          (_dayClients.isEmpty || !hasAnySales) &&
           _cacheRetryCount < _maxCacheRetries) {
         setState(() => _isCacheLoading = true);
         _cacheRetryCount++;
@@ -376,12 +376,66 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         });
       } else if (dayCacheStatus != 'loading') {
         setState(() { _isCacheLoading = false; _cacheRetryCount = 0; });
+
+        // CRITICAL FIX: If day-direct returned clients but NO sales data,
+        // fetch the normal endpoint to get sales data and merge it
+        if (useDirectEndpoint && _dayClients.isNotEmpty && !hasAnySales && mounted) {
+          debugPrint('[Rutero] Day-direct returned clients without sales. Fetching sales data from normal endpoint...');
+          await _enrichWithSalesData();
+        }
       }
     } catch (e) {
       setState(() {
         _dayClients = [];
         _isLoadingClients = false;
       });
+    }
+  }
+
+  /// Fetch sales data from normal endpoint and merge into existing clients
+  Future<void> _enrichWithSalesData() async {
+    try {
+      final normalResponse = await ApiClient.get(
+        '${ApiConfig.ruteroDay}/$_selectedDay',
+        queryParameters: {
+          'vendedorCodes': _activeVendedorCode,
+          'role': _selectedRole,
+          'year': _selectedYear,
+          'month': _selectedMonth,
+          'week': _selectedWeek,
+          'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
+        },
+      );
+
+      if (!mounted) return;
+
+      final enrichedClients = (normalResponse['clients'] ?? <dynamic>[]) as List;
+      if (enrichedClients.isEmpty) return;
+
+      // Merge sales data into existing clients
+      final salesMap = <String, Map<String, dynamic>>{};
+      for (final item in enrichedClients) {
+        final client = item as Map<String, dynamic>;
+        final code = client['code'] as String?;
+        final status = client['status'] as Map<String, dynamic>?;
+        if (code != null && status != null) {
+          salesMap[code] = status;
+        }
+      }
+
+      // Update existing clients with sales data
+      setState(() {
+        for (int i = 0; i < _dayClients.length; i++) {
+          final code = _dayClients[i]['code'] as String?;
+          if (code != null && salesMap.containsKey(code)) {
+            _dayClients[i]['status'] = salesMap[code];
+          }
+        }
+      });
+
+      debugPrint('[Rutero] Sales data enriched for ${salesMap.length} clients');
+    } catch (e) {
+      debugPrint('[Rutero] Failed to enrich with sales data: $e');
     }
   }
 
