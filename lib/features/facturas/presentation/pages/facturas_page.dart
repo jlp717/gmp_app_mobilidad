@@ -13,6 +13,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/auth_notifier.dart';
@@ -832,41 +833,28 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     if (result == null || !mounted) return;
 
     final modal = AsyncOperationModal.show(context,
-        text: 'Preparando PDF para WhatsApp...');
+        text: 'Preparando documento...');
     try {
-      // Request storage permission on Android 9 and below (API ≤ 29)
-      if (Platform.isAndroid) {
-        final androidInfo = await DeviceInfoPlugin().androidInfo;
-        if (androidInfo.version.sdkInt <= 29) {
-          var status = await Permission.storage.status;
-          if (!status.isGranted) {
-            status = await Permission.storage.request();
-            if (!status.isGranted) {
-              modal.close();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Permiso de almacenamiento denegado'),
-                    backgroundColor: AppTheme.error,
-                  ),
-                );
-              }
-              return;
-            }
-          }
-        }
-      }
-
+      // Download PDF
       final file = await FacturasService.downloadFacturaPdf(
         factura.serie,
         factura.numero,
         factura.ejercicio,
       );
-      modal.close();
 
+      // Get WhatsApp URL from backend
+      final whatsappUrl = await FacturasService.shareWhatsApp(
+        serie: factura.serie,
+        numero: factura.numero,
+        ejercicio: factura.ejercicio,
+        telefono: result.phone,
+        clienteNombre: factura.clienteNombre,
+      );
+
+      modal.close();
       if (!mounted) return;
 
-      // Safe RenderBox cast — null on some widget states
+      // Share PDF with WhatsApp - this opens system share with PDF ready to attach
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
@@ -882,12 +870,23 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         subject: result.message,
         sharePositionOrigin: origin,
       );
+
+      // If WhatsApp URL available, also open WhatsApp chat
+      if (whatsappUrl != null && whatsappUrl.isNotEmpty) {
+        final uri = Uri.parse(whatsappUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+        }
+      }
     } catch (e) {
       modal.close();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al compartir por WhatsApp: $e'),
+            content: Text('Error al compartir: $e'),
             backgroundColor: AppTheme.error,
           ),
         );

@@ -280,6 +280,19 @@ app.get('/health/version-check', (req, res) => {
   });
 });
 
+// Also mount at /api/health/version-check since Flutter ApiClient adds /api prefix
+app.get('/api/health/version-check', (req, res) => {
+  res.json({
+    status: 'ok',
+    currentVersion: process.env.APP_VERSION || '3.3.1',
+    minVersion: process.env.MIN_APP_VERSION || '3.0.0',
+    latestVersion: process.env.LATEST_APP_VERSION || '3.3.1',
+    updateRequired: false,
+    updateUrl: process.env.UPDATE_URL || null,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // =============================================================================
 // PROTECTED ROUTES (Token Required)
 // =============================================================================

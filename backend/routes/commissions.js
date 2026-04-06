@@ -703,8 +703,10 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
 
 router.get('/summary', async (req, res) => {
     try {
-        const { vendedorCode, year } = req.query;
+        const { vendedorCode, year, forceRefresh } = req.query;
         if (!vendedorCode) return res.status(400).json({ success: false, error: 'Falta codigo vendedor' });
+
+        const shouldForceRefresh = forceRefresh === 'true' || forceRefresh === '1';
 
         // Input sanitization — prevent injection via query params
         const safeVendorCode = vendedorCode.toString().replace(/[^a-zA-Z0-9,]/g, '').substring(0, 50);
@@ -712,7 +714,10 @@ router.get('/summary', async (req, res) => {
 
         // FIX #1: Refresh excluded vendors from DB (with TTL cache)
         await ensureExcludedVendorsLoaded();
-        logger.info(`[COMMISSIONS] /summary request: vendedorCode=${safeVendorCode}, year=${year}`);
+        if (shouldForceRefresh) {
+            logger.info(`[COMMISSIONS] 🔄 Force refresh requested for ${safeVendorCode}`);
+        }
+        logger.info(`[COMMISSIONS] /summary request: vendedorCode=${safeVendorCode}, year=${year}, forceRefresh=${shouldForceRefresh}`);
 
         // AUDIT: Log exactly what data this user is requesting
         auditDataAccess(req, 'COMMISSIONS_VIEW', {
@@ -884,10 +889,13 @@ router.get('/summary', async (req, res) => {
             if (safeVendorCode === 'ALL') {
                 // PERF: Check route-level cache first for ALL mode (most expensive)
                 const allSummaryCacheKey = `comm:summary:ALL:${years.join(',')}`;
-                const cachedResult = await redisCache.get('route', allSummaryCacheKey);
+                const cachedResult = shouldForceRefresh ? null : await redisCache.get('route', allSummaryCacheKey);
                 if (cachedResult) {
                     logger.info(`[COMMISSIONS] ⚡ Cache HIT for ALL summary (${allSummaryCacheKey})`);
                     return res.json({ success: true, ...cachedResult });
+                }
+                if (shouldForceRefresh) {
+                    logger.info(`[COMMISSIONS] 🔄 Force refresh bypassing cache for ALL summary`);
                 }
 
                 // Uses getVendorColumn for date-aware vendor discovery
@@ -955,9 +963,9 @@ router.get('/summary', async (req, res) => {
                     payments: { total: totalPaid, monthly: {}, quarterly: {} }
                 };
 
-                // PERF: Cache the ALL result for 5 minutes
-                await redisCache.set('route', allSummaryCacheKey, yearResult, TTL.SHORT);
-                logger.info(`[COMMISSIONS] 💾 Cached ALL summary (${allSummaryCacheKey})`);
+                // PERF: Cache the ALL result for 15 minutes (expensive computation)
+                await redisCache.set('route', allSummaryCacheKey, yearResult, 900);
+                logger.info(`[COMMISSIONS] 💾 Cached ALL summary for 15min (${allSummaryCacheKey})`);
 
             } else {
                 // Single Vendor
@@ -1113,6 +1121,72 @@ router.post('/pay', async (req, res) => {
     } catch (e) {
         logger.error(`[COMMISSIONS] Payment error: ${e.message}`);
         res.status(500).json({ success: false, error: 'Error al registrar el pago en DB', details: e.message });
+    }
+});
+
+// =============================================================================
+// PDF REPORT — DIEGO ONLY
+// =============================================================================
+
+router.get('/pdf', async (req, res) => {
+    try {
+        const { year, months, range } = req.query;
+        const userName = req.user?.name || req.user?.username || '';
+
+        // AUTHORIZATION: Only DIEGO can access
+        const pdfService = require('../services/commissions-pdf.service');
+        if (!pdfService.isAuthorized(userName)) {
+            logger.warn(`[PDF] Unauthorized PDF attempt by ${userName}`);
+            return res.status(403).json({ success: false, error: 'Solo DIEGO puede generar este informe' });
+        }
+
+        // Parse date range
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+        const targetYear = year ? parseInt(year) : currentYear;
+        
+        let startMonth, endMonth;
+        if (range === '1') {
+            startMonth = currentMonth;
+            endMonth = currentMonth;
+        } else if (range === '2') {
+            startMonth = Math.max(1, currentMonth - 1);
+            endMonth = currentMonth;
+        } else if (range === '3') {
+            startMonth = Math.max(1, currentMonth - 2);
+            endMonth = currentMonth;
+        } else if (months) {
+            // Specific months (e.g., "1,2,3")
+            const monthList = months.split(',').map(m => parseInt(m.trim())).filter(m => !isNaN(m) && m >= 1 && m <= 12);
+            if (monthList.length === 0) return res.status(400).json({ success: false, error: 'Meses inválidos' });
+            startMonth = Math.min(...monthList);
+            endMonth = Math.max(...monthList);
+        } else {
+            // Default: up to current month
+            startMonth = 1;
+            endMonth = currentMonth;
+        }
+
+        logger.info(`[PDF] Generating for DIEGO: ${targetYear}, months ${startMonth}-${endMonth}`);
+
+        // Fetch data
+        const [vendorData, condorData] = await Promise.all([
+            pdfService.getLacSalesData(targetYear, startMonth, endMonth),
+            pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
+        ]);
+
+        // Generate PDF
+        const pdfBuffer = await pdfService.generateCommissionsPdf(vendorData, condorData, targetYear, startMonth, endMonth);
+
+        // Send PDF
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=comisiones_${targetYear}_${startMonth}-${endMonth}.pdf`);
+        res.send(pdfBuffer);
+
+        logger.info(`[PDF] PDF generated successfully for DIEGO (${vendorData.length} vendors)`);
+    } catch (e) {
+        logger.error(`[PDF] Generation error: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Error generando PDF', details: e.message });
     }
 });
 

@@ -14,6 +14,7 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../../core/utils/currency_formatter.dart';
@@ -1778,31 +1779,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     if (result == null || !mounted) return;
 
-    // Request storage permission on Android 9 and below (API ≤ 29)
-    if (Platform.isAndroid) {
-      final androidInfo = await DeviceInfoPlugin().androidInfo;
-      if (androidInfo.version.sdkInt <= 29) {
-        var status = await Permission.storage.status;
-        if (!status.isGranted) {
-          status = await Permission.storage.request();
-          if (!status.isGranted) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Permiso de almacenamiento denegado'),
-                  backgroundColor: AppTheme.error,
-                ),
-              );
-            }
-            return;
-          }
-        }
-      }
-    }
-
-    final modal =
-        AsyncOperationModal.show(context, text: 'Preparando WhatsApp...');
+    final modal = AsyncOperationModal.show(context, text: 'Preparando documento...');
     try {
+      // Download document as PDF
       final bytes = await RepartidorDataService.downloadDocument(
         year: isFactura
             ? (doc.ejercicioFactura ?? doc.ejercicio)
@@ -1821,20 +1800,43 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
       );
-      modal.close();
 
+      // Save PDF to temp file
       final tempDir = await getTemporaryDirectory();
       final fileName = '${typeLabel}_${doc.number}.pdf';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
+      // Get WhatsApp URL from backend
+      final whatsappUrl = await RepartidorDataService.shareWhatsApp(
+        year: isFactura
+            ? (doc.ejercicioFactura ?? doc.ejercicio)
+            : (doc.ejercicio > 0 ? doc.ejercicio : doc.date.year),
+        serie: isFactura ? (doc.serieFactura ?? '') : doc.serie,
+        number: isFactura
+            ? (doc.facturaNumber ?? doc.number)
+            : (doc.albaranNumber ?? doc.number),
+        terminal: doc.terminal,
+        type: isFactura ? 'factura' : 'albaran',
+        telefono: result.phone,
+        clienteNombre: clientName,
+        facturaNumber: doc.facturaNumber,
+        serieFactura: doc.serieFactura,
+        ejercicioFactura: doc.ejercicioFactura,
+        albaranNumber: doc.albaranNumber ?? doc.number,
+        albaranSerie: doc.serie,
+        albaranTerminal: doc.terminal,
+        albaranYear: doc.ejercicio,
+      );
+
+      modal.close();
       if (!mounted) return;
 
+      // Share PDF via system share - user selects WhatsApp
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
-              center:
-                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              center: Offset(renderBox.size.width / 2, renderBox.size.height / 2),
               width: 1,
               height: 1,
             )
@@ -1846,12 +1848,23 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         subject: result.message,
         sharePositionOrigin: origin,
       );
+
+      // If WhatsApp URL available, also open WhatsApp chat
+      if (whatsappUrl != null && whatsappUrl.isNotEmpty) {
+        final uri = Uri.parse(whatsappUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+        }
+      }
     } catch (e) {
       modal.close();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al compartir por WhatsApp: $e'),
+            content: Text('Error al compartir: $e'),
             backgroundColor: AppTheme.error,
           ),
         );

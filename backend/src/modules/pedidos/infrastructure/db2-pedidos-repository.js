@@ -14,68 +14,24 @@ class Db2PedidosRepository extends PedidosRepository {
   }
 
   async searchProducts({ vendedorCodes, clientCode, family, marca, search, limit = 50, offset = 0 }) {
-    // Products come from DSEDAC.ART, prices from DSEDAC.ARA, stock from DSEDAC.ARO
-    const familyFilter = family ? `AND TRIM(ART.CODIGOFAMILIA) = ?` : '';
-    const marcaFilter = marca ? `AND TRIM(ART.CODIGOMARCA) = ?` : '';
-    const searchFilter = search ? `AND (TRIM(ART.DESCRIPCIONARTICULO) LIKE ? OR TRIM(ART.CODIGOARTICULO) LIKE ?)` : '';
-
-    const sql = `
-      SELECT DISTINCT
-        ART.CODIGOARTICULO AS CODART,
-        ART.DESCRIPCIONARTICULO AS DESART,
-        COALESCE(ARA.PRECIOTARIFA, 0) as PRECIO,
-        COALESCE(ARO.UNIDADESDISPONIBLES, 0) as STOCK,
-        ART.UNIDADMEDIDA AS UNIDAD,
-        ART.CODIGOFAMILIA AS FAMILIA,
-        ART.CODIGOMARCA AS MARCA,
-        '' AS IMAGEN
-      FROM DSEDAC.ART ART
-      LEFT JOIN DSEDAC.ARA ARA ON ARA.CODIGOARTICULO = ART.CODIGOARTICULO
-      LEFT JOIN DSEDAC.ARO ARO ON ARO.CODIGOARTICULO = ART.CODIGOARTICULO
-      WHERE ART.BLOQUEADOSN = 'N'
-        AND ART.ANOBAJA = 0
-        AND ART.CODIGOARTICULO <> ''
-        ${familyFilter}
-        ${marcaFilter}
-        ${searchFilter}
-      ORDER BY ART.DESCRIPCIONARTICULO
-      FETCH FIRST ${limit} ROWS ONLY OFFSET ${offset} ROWS
-    `;
-
-    const params = [];
-    if (family) params.push(family);
-    if (marca) params.push(marca);
-    if (search) { params.push(`%${search.toUpperCase()}%`, `%${search.toUpperCase()}%`); }
-
-    const result = await this._db.executeParams(sql, params);
-    const products = result.map(row => Product.fromDbRow(row));
-    return { products, count: result.length };
+    // Delegate to legacy service which has tested SQL with proper client-based pricing
+    const pedidosService = require('../../../../services/pedidos.service');
+    const products = await pedidosService.getProducts({
+      search,
+      clientCode,
+      family,
+      marca,
+      limit,
+      offset
+    });
+    return { products, count: products.length };
   }
 
   async getProductDetail({ code, clientCode, vendedorCodes }) {
-    const sql = `
-      SELECT
-        ART.CODIGOARTICULO AS CODART,
-        ART.DESCRIPCIONARTICULO AS DESART,
-        COALESCE(ARA.PRECIOTARIFA, 0) as PRECIO,
-        COALESCE(ARO.UNIDADESDISPONIBLES, 0) as STOCK,
-        ART.UNIDADMEDIDA AS UNIDAD,
-        ART.CODIGOFAMILIA AS FAMILIA,
-        ART.CODIGOMARCA AS MARCA,
-        '' AS IMAGEN,
-        0 AS PRECIO_MINIMO,
-        1 AS UNIDADES_CAJA
-      FROM DSEDAC.ART ART
-      LEFT JOIN DSEDAC.ARA ARA ON ARA.CODIGOARTICULO = ART.CODIGOARTICULO
-      LEFT JOIN DSEDAC.ARO ARO ON ARO.CODIGOARTICULO = ART.CODIGOARTICULO
-      WHERE TRIM(ART.CODIGOARTICULO) = ?
-        AND ART.BLOQUEADOSN = 'N'
-      FETCH FIRST 1 ROW ONLY
-    `;
-
-    const result = await this._db.executeParams(sql, [code]);
-    if (!result || result.length === 0) return null;
-    return Product.fromDbRow(result[0]);
+    // Delegate to legacy service which has tested SQL
+    const pedidosService = require('../../../../services/pedidos.service');
+    const product = await pedidosService.getProductDetail(code, clientCode);
+    return product;
   }
 
   async getPromotions({ clientCode, vendedorCodes }) {

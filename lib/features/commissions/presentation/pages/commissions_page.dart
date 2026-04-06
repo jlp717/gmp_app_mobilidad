@@ -7,6 +7,8 @@ import '../../../../core/widgets/shimmer_skeleton.dart';
 import '../../../../core/widgets/smart_sync_header.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/commissions_service.dart';
+import '../../data/commissions_pdf_service.dart';
+import '../widgets/pdf_range_dialog.dart';
 import '../../../../core/providers/filter_provider.dart';
 import '../../../../core/widgets/global_vendor_selector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -746,10 +748,21 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     // Get payment authorization status
     final authState = ref.watch(authProvider).value;
     final curUserCode = authState?.user?.code?.trim() ?? '';
+    final curUserName = authState?.user?.name?.toUpperCase() ?? '';
     // Allow payment for ADMIN users or specifically DIEGO (code 98)
     final normalizedCode = curUserCode.replaceFirst(RegExp(r'^0+'), '');
     final canPay = authState?.user?.tipoVendedor == 'ADMIN'
         || normalizedCode == '98';
+    // PDF generation is ONLY for DIEGO
+    final _isDiego = curUserName == 'DIEGO' || normalizedCode == '98';
+
+    // PDF dialog
+    void _showPdfDialog() {
+      showDialog(
+        context: context,
+        builder: (ctx) => PdfRangeDialog(vendorCode: vendorCode),
+      );
+    }
 
 
     // Prepare table rows (interleaving quarters)
@@ -1093,6 +1106,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                      // We need the ID/Code of the current single vendor
                      onPressed: () => _showPayDialog((_data?['vendor'] as String?) ?? widget.employeeCode.split(',').first, 'Vendedor', grandTotal),
                      tooltip: 'Registrar Pago',
+                   ),
+                 if (_isDiego) // PDF button - DIEGO only
+                   IconButton(
+                     icon: const Icon(Icons.picture_as_pdf_rounded, color: AppTheme.success, size: 28),
+                     onPressed: _showPdfDialog,
+                     tooltip: 'Generar Informe PDF',
                    ),
                  IconButton(
                    icon: const Icon(Icons.info_outline, color: AppTheme.neonBlue),

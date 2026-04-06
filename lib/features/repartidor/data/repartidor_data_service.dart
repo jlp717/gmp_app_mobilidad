@@ -636,4 +636,51 @@ class RepartidorDataService {
       throw Exception('Error enviando email: $e');
     }
   }
+
+  /// Compartir documento por WhatsApp - returns URL to open
+  static Future<String?> shareWhatsApp({
+    required int year,
+    required String serie,
+    required int number,
+    required String type,
+    required String telefono,
+    String? clienteNombre,
+    int terminal = 0,
+    // Factura specific
+    int? facturaNumber,
+    String? serieFactura,
+    int? ejercicioFactura,
+    // Albaran specific
+    int? albaranNumber,
+    String? albaranSerie,
+    int? albaranTerminal,
+    int? albaranYear,
+  }) async {
+    try {
+      final response = await ApiClient.post('/repartidor/document/share/whatsapp', {
+        'ejercicio': year,
+        'serie': serie,
+        'numero': number,
+        'type': type,
+        'telefono': telefono,
+        'terminal': terminal,
+        'clienteNombre': clienteNombre,
+        'facturaNumber': facturaNumber,
+        'serieFactura': serieFactura,
+        'ejercicioFactura': ejercicioFactura,
+        'albaranNumber': albaranNumber,
+        'albaranSerie': albaranSerie,
+        'albaranTerminal': albaranTerminal,
+        'albaranYear': albaranYear,
+      });
+
+      if (response['success'] == true && response['whatsappUrl'] != null) {
+        return response['whatsappUrl'] as String?;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error in shareWhatsApp: $e');
+      return null;
+    }
+  }
 }

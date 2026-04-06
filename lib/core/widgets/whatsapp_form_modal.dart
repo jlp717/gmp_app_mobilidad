@@ -161,7 +161,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
               const Padding(
                 padding: EdgeInsets.only(left: 2),
                 child: Text(
-                  'Se abrirá el selector de apps para compartir el PDF con el mensaje.',
+                  'Se compartirá el PDF automáticamente. Seleccione WhatsApp en el menú que aparece.',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                 ),
               ),

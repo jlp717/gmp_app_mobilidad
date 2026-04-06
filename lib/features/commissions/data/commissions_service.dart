@@ -6,19 +6,20 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 class CommissionsService {
   /// Get Commissions Summary - cached for 15 minutes
   static Future<Map<String, dynamic>> getSummary({
-    required String vendedorCode, 
+    required String vendedorCode,
     dynamic year = 2026,
     bool forceRefresh = false,
   }) async {
     try {
       // Changed to 'commissions_v2' to bust old cache that lacked 'isExcluded'
       final cacheKey = 'commissions_v2_${vendedorCode}_$year';
-      
+
       final response = await ApiClient.get(
-        '/commissions/summary', 
+        '/commissions/summary',
         queryParameters: {
           'vendedorCode': vendedorCode,
           'year': year.toString(),
+          if (forceRefresh) 'forceRefresh': 'true',
         },
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 15),
@@ -36,13 +37,13 @@ class CommissionsService {
   static Future<List<dynamic>> getVendedores() async {
     try {
       const cacheKey = 'vendedores_list';
-      
+
       final response = await ApiClient.get(
         '/vendedores',
         cacheKey: cacheKey,
         cacheTTL: CacheService.longTTL, // 24 hours - vendor list rarely changes
       );
-      
+
       // Response is { period: {...}, vendedores: [...] }
       if (response is Map && response.containsKey('vendedores')) {
         return response['vendedores'] as List<dynamic>;

@@ -13,6 +13,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/api/api_client.dart';
@@ -3209,36 +3210,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
     if (result == null || !mounted) return;
 
-    final modal =
-        AsyncOperationModal.show(context, text: 'Preparando WhatsApp...');
+    final modal = AsyncOperationModal.show(context, text: 'Preparando documento...');
     try {
       // Generate receipt PDF via API (use cache if available)
       final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
-      if (pdfData == null) throw Exception('Error generando PDF para WhatsApp');
+      if (pdfData == null) throw Exception('Error generando PDF');
       _cachedPdfBase64 = pdfData;
-
-      // Request storage permission for Android 10 and below
-      if (Platform.isAndroid) {
-        final androidInfo = await DeviceInfoPlugin().androidInfo;
-        if (androidInfo.version.sdkInt <= 29) {
-          var status = await Permission.storage.status;
-          if (!status.isGranted) {
-            status = await Permission.storage.request();
-            if (!status.isGranted) {
-              modal.close();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Permiso de almacenamiento denegado'),
-                    backgroundColor: AppTheme.error,
-                  ),
-                );
-              }
-              return;
-            }
-          }
-        }
-      }
 
       // Save PDF temporarily
       final tempDir = await getTemporaryDirectory();
@@ -3248,18 +3225,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       );
       await file.writeAsBytes(base64Decode(pdfData));
 
+      // Get WhatsApp URL from backend
+      final response = await ApiClient.post(
+        '/entregas/receipt/${widget.albaran.id}/whatsapp',
+        {
+          'telefono': result.phone,
+          'clienteNombre': widget.albaran.nombreCliente,
+        },
+      );
+
       modal.close();
       if (!mounted) return;
 
-      // Share PDF via system share sheet (user picks WhatsApp).
-      // Note: on Android, sending text + file to WhatsApp often causes
-      // WhatsApp to ignore the file. Use subject for the message text
-      // so the file attachment is reliably included.
+      // Share PDF via system share - user selects WhatsApp
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
-              center:
-                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              center: Offset(renderBox.size.width / 2, renderBox.size.height / 2),
               width: 1,
               height: 1,
             )
@@ -3267,13 +3249,25 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
-        subject: result.message,
         text: result.message,
+        subject: result.message,
         sharePositionOrigin: origin,
       );
+
+      // If WhatsApp URL available, also open WhatsApp chat
+      if (response['success'] == true && response['whatsappUrl'] != null) {
+        final whatsappUrl = response['whatsappUrl'] as String;
+        final uri = Uri.parse(whatsappUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+        }
+      }
     } catch (e) {
+      modal.close();
       if (mounted) {
-        modal.close();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al compartir: $e'),

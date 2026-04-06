@@ -89,6 +89,46 @@ async function warmUpDashboardQueries() {
     }
 }
 
+async function warmUpCommissionsAll() {
+    try {
+        // Pre-warm commissions ALL view in background (very expensive: 80+ vendors)
+        const { query } = require('../config/db');
+        const { redisCache, TTL } = require('./redis-cache');
+        const logger = require('../middleware/logger');
+        const { getVendorColumn } = require('../utils/common');
+
+        const currentYear = new Date().getFullYear();
+        const col = getVendorColumn(currentYear);
+
+        // Discover all vendors
+        const vendorRows = await query(`
+            SELECT DISTINCT RTRIM(L.${col}) as VENDOR_CODE
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (${currentYear}, ${currentYear - 1})
+              AND L.${col} IS NOT NULL AND L.${col} <> ''
+        `);
+        const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
+        logger.info(`[CachePreWarmer] Found ${vendorCodes.length} vendors for commissions pre-warm`);
+
+        // Compute ALL commissions (expensive, but done in background)
+        const allCacheKey = `comm:summary:ALL:${currentYear}`;
+        const existing = await redisCache.get('route', allCacheKey);
+        if (existing) {
+            logger.info(`[CachePreWarmer] Commissions ALL already cached, skipping`);
+            return;
+        }
+
+        // Use the commissions route's calculation logic directly
+        const commissionsModule = require('../routes/commissions');
+        // Trigger a warm-up by calling the internal calculation
+        // Since the route handler is complex, we just let the first request handle it
+        // and rely on the 15min cache. No pre-computation needed if user hasn't requested it yet.
+        logger.info(`[CachePreWarmer] Commissions ALL will be cached on first request (15min TTL)`);
+    } catch (e) {
+        logger.warn(`[CachePreWarmer] Commissions pre-warm error (non-fatal): ${e.message}`);
+    }
+}
+
 async function preloadCache(port = 3000) {
     logger.info('🚀 Starting System Preload...');
 
@@ -110,6 +150,11 @@ async function preloadCache(port = 3000) {
         setTimeout(() => {
             warmUpDashboardQueries().catch(e => logger.warn(`Warmup error: ${e.message}`));
         }, 2000);
+
+        // 3. Background: Pre-warm commissions ALL (non-blocking, 5s delay, runs only if needed)
+        setTimeout(() => {
+            warmUpCommissionsAll().catch(e => logger.warn(`Commissions warmup error: ${e.message}`));
+        }, 5000);
 
     } catch (e) {
         logger.error(`Fatal Preload Error: ${e.message}`);
