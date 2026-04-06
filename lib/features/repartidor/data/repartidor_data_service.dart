@@ -2,6 +2,7 @@
 /// Cliente de API para obtener datos de cobros, comisiones e histórico desde backend
 /// OPTIMIZED: Full caching support with intelligent TTLs
 
+import 'package:flutter/foundation.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/cache/cache_service.dart';
 
