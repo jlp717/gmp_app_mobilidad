@@ -47,14 +47,14 @@ const parseCorsOrigin = (value) => {
 exports.globalLimiter = rateLimit({
     windowMs: RATE_LIMIT_WINDOW_MS,
     max: RATE_LIMIT_MAX_REQUESTS,
-    message: { 
+    message: {
         error: 'Demasiadas solicitudes. Por favor, inténtelo de nuevo más tarde.',
         retryAfter: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)
     },
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => `${req.ip || 'unknown'}-${req.get('user-agent') || 'unknown'}`,
-    skip: (req) => req.path === '/api/health'
+    skip: (req) => req.path === '/api/health' || req.path === '/health/version-check'
 });
 
 exports.loginLimiter = rateLimit({

@@ -1,11 +1,11 @@
 /**
  * Cobros Repository Implementation - DB2
- * 
+ *
  * DELEGATES TO LEGACY cobros.js routes for correct SQL
  * The legacy implementation has proper column names and business logic
  */
 const { CobrosRepository } = require('../domain/cobros-repository');
-const { query, queryWithParams } = require('../../../config/db');
+const { query, queryWithParams } = require('../../../../config/db');
 const { v4: uuidv4 } = require('uuid');
 
 class Db2CobrosRepository extends CobrosRepository {
