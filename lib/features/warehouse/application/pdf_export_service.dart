@@ -29,7 +29,7 @@ class PdfExportService {
   }) async {
     final pdf = pw.Document(
       title: 'Plan de Carga - $vehicleCode',
-      author: 'GMP Mobilidad',
+      author: 'GMP Movilidad',
       creator: 'GMP Load Planner',
     );
 

@@ -186,6 +186,40 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
         params.push(marca.trim());
     }
 
+    const currentYear = new Date().getFullYear();
+    const prevYear = currentYear - 1;
+    const clientCodeTrimmed = (clientCode || '').trim();
+
+    // Build purchase history subqueries for ordering (least purchased first)
+    // + year-over-year comparison + hasPurchased flag
+    const salesThisYear = `
+        (SELECT COALESCE(SUM(LC.LCIMVT), 0)
+         FROM DSEDAC.LAC LC
+         WHERE TRIM(LC.CODIGOARTICULO) = A.CODIGOARTICULO
+           AND TRIM(LC.LCCDCL) = ?
+           AND LC.LCAADC = ${currentYear}
+           AND LC.LCTPVT IN ('CC','VC') AND LC.LCCLLN IN ('AB','VT'))
+    `;
+    const salesPrevYear = `
+        (SELECT COALESCE(SUM(LC.LCIMVT), 0)
+         FROM DSEDAC.LAC LC
+         WHERE TRIM(LC.CODIGOARTICULO) = A.CODIGOARTICULO
+           AND TRIM(LC.LCCDCL) = ?
+           AND LC.LCAADC = ${prevYear}
+           AND LC.LCTPVT IN ('CC','VC') AND LC.LCCLLN IN ('AB','VT'))
+    `;
+    const hasPurchased = `
+        CASE WHEN EXISTS (
+            SELECT 1 FROM DSEDAC.LAC LC
+            WHERE TRIM(LC.CODIGOARTICULO) = A.CODIGOARTICULO
+              AND TRIM(LC.LCCDCL) = ?
+              AND LC.LCTPVT IN ('CC','VC') AND LC.LCCLLN IN ('AB','VT')
+        ) THEN 1 ELSE 0 END
+    `;
+
+    // Params for subqueries come before WHERE params
+    const clientCodeForSubqueries = [clientCodeTrimmed, clientCodeTrimmed, clientCodeTrimmed];
+
     const sql = `
         SELECT
             TRIM(A.CODIGOARTICULO) AS code,
@@ -204,7 +238,10 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
             COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo,
             COALESCE(TC.PRECIOTARIFA, 0) AS precioCliente,
             TRIM(COALESCE(A.FORMATO, '')) AS formato,
-            COALESCE(A.PRODUCTOPESADOSN, '') AS productoPesado
+            COALESCE(A.PRODUCTOPESADOSN, '') AS productoPesado,
+            ${salesThisYear} AS salesThisYear,
+            ${salesPrevYear} AS salesPrevYear,
+            ${hasPurchased} AS hasPurchased
         FROM DSEDAC.ART A
         LEFT JOIN (
             SELECT CODIGOARTICULO,
@@ -232,14 +269,17 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
                 FETCH FIRST 1 ROW ONLY
             )
         ${where}
-        ORDER BY A.DESCRIPCIONARTICULO
+        ORDER BY
+            CASE WHEN ${salesThisYear} = 0 AND ${salesPrevYear} = 0 THEN 0 ELSE 1 END,
+            ${salesThisYear} ASC,
+            ${salesPrevYear} ASC,
+            A.DESCRIPCIONARTICULO
         OFFSET ? ROWS FETCH FIRST ? ROWS ONLY`;
 
-    // TC JOIN subquery param must come first (appears before WHERE in SQL text)
-    const clientCodeTrimmed = (clientCode || '').trim();
-    const finalParams = [clientCodeTrimmed, ...params, offset, limit];
+    // Final params: 3 for subqueries + TC subquery + WHERE params + offset + limit
+    const finalParams = [...clientCodeForSubqueries, clientCodeTrimmed, ...params, offset, limit];
 
-    const cacheKey = `pedidos:products:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${offset}:${limit}`;
+    const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${offset}:${limit}`;
 
     try {
         const rows = await cachedQuery(
@@ -248,25 +288,47 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
             cacheKey,
             TTL.SHORT // 5 min
         );
-        return rows.map(r => ({
-            code: (r.CODE || '').trim(),
-            name: (r.NAME || '').trim(),
-            brand: (r.BRAND || '').trim(),
-            family: (r.FAMILY || '').trim(),
-            ean: (r.EAN || '').trim(),
-            unitsPerBox: parseFloat(r.UNITSPERBOX) || 1,
-            unitsFraction: parseFloat(r.UNITSFRACTION) || 0,
-            unitsRetractil: parseFloat(r.UNITSRETRACTIL) || 0,
-            unitMeasure: (r.UNITMEASURE || '').trim(),
-            weight: parseFloat(r.WEIGHT) || 0,
-            stockEnvases: parseFloat(r.STOCKENVASES) || 0,
-            stockUnidades: parseFloat(r.STOCKUNIDADES) || 0,
-            precioTarifa1: parseFloat(r.PRECIOTARIFA1) || 0,
-            precioMinimo: parseFloat(r.PRECIOMINIMO) || 0,
-            precioCliente: parseFloat(r.PRECIOCLIENTE) || 0,
-            formato: (r.FORMATO || '').trim(),
-            productoPesado: (r.PRODUCTOPESADO || '').trim() === 'S',
-        }));
+        return rows.map(r => {
+            const salesTY = parseFloat(r.SALESTHISYEAR) || 0;
+            const salesPY = parseFloat(r.SALESPREVYEAR) || 0;
+            const hasPurchased = parseInt(r.HASPURCHASED) || 0;
+
+            // Determine unit type clarity for UI
+            let unitType = 'unidad'; // default
+            const unitsPerBox = parseFloat(r.UNITSPERBOX) || 0;
+            const unitsFraction = parseFloat(r.UNITSFRACTION) || 0;
+            if (unitsPerBox > 1 && unitsFraction > 0) {
+                unitType = 'ambos'; // Cajas + unidades
+            } else if (unitsPerBox > 1) {
+                unitType = 'caja'; // Solo cajas
+            }
+
+            return {
+                code: (r.CODE || '').trim(),
+                name: (r.NAME || '').trim(),
+                brand: (r.BRAND || '').trim(),
+                family: (r.FAMILY || '').trim(),
+                ean: (r.EAN || '').trim(),
+                unitsPerBox: unitsPerBox,
+                unitsFraction: unitsFraction,
+                unitsRetractil: parseFloat(r.UNITSRETRACTIL) || 0,
+                unitMeasure: (r.UNITMEASURE || '').trim(),
+                weight: parseFloat(r.WEIGHT) || 0,
+                stockEnvases: parseFloat(r.STOCKENVASES) || 0,
+                stockUnidades: parseFloat(r.STOCKUNIDADES) || 0,
+                precioTarifa1: parseFloat(r.PRECIOTARIFA1) || 0,
+                precioMinimo: parseFloat(r.PRECIOMINIMO) || 0,
+                precioCliente: parseFloat(r.PRECIOCLIENTE) || 0,
+                formato: (r.FORMATO || '').trim(),
+                productoPesado: (r.PRODUCTOPESADO || '').trim() === 'S',
+                unitType: unitType,
+                // Purchase analytics for ordering + badges
+                salesThisYear: salesTY,
+                salesPrevYear: salesPY,
+                hasPurchased: hasPurchased === 1,
+                yoyChange: salesPY > 0 ? ((salesTY - salesPY) / salesPY * 100) : (salesTY > 0 ? 100 : 0),
+            };
+        });
     } catch (error) {
         logger.error(`[PEDIDOS] getProducts error: ${error.message}`);
         throw error;
@@ -2831,8 +2893,50 @@ async function generateOrderPdf(orderId) {
     return detail; // Return data, PDF rendering happens in route
 }
 
+/**
+ * Get product purchase history for a specific client
+ * Returns monthly breakdown for last 3 years
+ */
+async function getProductHistory(productCode, clientCode) {
+    if (!productCode || !clientCode) return [];
+
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 2;
+
+    const sql = `
+        SELECT
+            L.LCAADC AS YEAR,
+            L.LCMMDC AS MONTH,
+            SUM(L.LCIMVT) AS SALES,
+            SUM(L.LCIMCT) AS COST,
+            SUM(L.LCCTUD) AS UNITS,
+            COALESCE(L.LCIMVT / NULLIF(SUM(L.LCCTUD), 0), 0) AS AVG_PRICE
+        FROM DSED.LACLAE L
+        WHERE L.LCAADC >= ?
+          AND L.LCCDCL = ?
+          AND TRIM(L.LCCDPR) = ?
+        GROUP BY L.LCAADC, L.LCMMDC
+        ORDER BY L.LCAADC DESC, L.LCMMDC DESC
+    `;
+
+    try {
+        const rows = await queryWithParams(sql, [startYear, clientCode, productCode], false);
+        return rows.map(r => ({
+            year: parseInt(r.YEAR),
+            month: parseInt(r.MONTH),
+            sales: parseFloat(r.SALES) || 0,
+            cost: parseFloat(r.COST) || 0,
+            units: parseFloat(r.UNITS) || 0,
+            avgPrice: parseFloat(r.AVG_PRICE) || 0
+        }));
+    } catch (e) {
+        logger.warn(`[PEDIDOS] getProductHistory error: ${e.message}`);
+        return [];
+    }
+}
+
 // =============================================================================
-// SEARCH PRODUCTS WITH STOCK (for stock alternatives fallback)
+// MODULE EXPORTS
 // =============================================================================
 
 /**
@@ -2948,4 +3052,5 @@ module.exports = {
     calculateLineImporte,
     getOrderStats,
     getOrderAlbaran,
+    getProductHistory,
 };

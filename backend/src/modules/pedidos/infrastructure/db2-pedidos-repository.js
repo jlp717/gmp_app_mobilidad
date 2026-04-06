@@ -129,10 +129,15 @@ class Db2PedidosRepository extends PedidosRepository {
   async createOrder({ userId, clientCode, lines, observations = '' }) {
     const pedidosService = require('../../../../services/pedidos.service');
     return await pedidosService.createOrder({
-      codigoVendedor: userId,
-      codigoCliente: clientCode,
+      clientCode: clientCode,
+      clientName: '', // Will be auto-filled by service from DB
+      vendedorCode: userId,
+      tipoventa: 'CC',
+      almacen: 1,
+      tarifa: 1,
+      observaciones: observations,
       lines: lines,
-      observaciones: observations
+      origen: 'A'
     });
   }
 

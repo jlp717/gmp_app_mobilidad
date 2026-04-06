@@ -420,7 +420,8 @@ function createPedidosRoutes() {
       const { code } = req.params;
       const pedidosService = require('../../../services/pedidos.service');
       const similar = await pedidosService.getSimilarProducts(String(code).trim());
-      res.json({ success: true, similar });
+      // Flutter expects 'alternatives' key
+      res.json({ success: true, alternatives: similar });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /similar-products: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -431,14 +432,15 @@ function createPedidosRoutes() {
   router.get('/search-products', async (req, res) => {
     try {
       const { q, limit = 20, vendedorCodes, clientCode } = req.query;
+      const searchTerm = q ? String(q).trim() : '';
+      if (!searchTerm || searchTerm.length < 2) {
+        return res.json({ success: true, products: [] });
+      }
+
       const pedidosService = require('../../../services/pedidos.service');
-      const results = await pedidosService.searchProductsWithStock({
-        query: q,
-        limit: parseInt(limit) || 20,
-        vendedorCodes,
-        clientCode
-      });
-      res.json({ success: true, results });
+      const results = await pedidosService.searchProductsWithStock(searchTerm, parseInt(limit) || 20);
+      // Flutter expects 'products' key
+      res.json({ success: true, products: results });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /search-products: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -449,9 +451,92 @@ function createPedidosRoutes() {
   router.get('/product-history/:productCode/:clientCode', async (req, res) => {
     try {
       const { productCode, clientCode } = req.params;
-      const pedidosService = require('../../../services/pedidos.service');
-      const history = await pedidosService.getProductHistory(String(productCode).trim(), String(clientCode).trim());
-      res.json({ success: true, history });
+
+      // Query LACLAE for purchase history of this product by this client (3 years)
+      const { queryWithParams } = require('../../../config/db');
+      const currentYear = new Date().getFullYear();
+
+      const sql = `
+        SELECT
+          L.LCAADC AS YEAR,
+          L.LCMMDC AS MONTH,
+          COALESCE(SUM(L.LCIMVT), 0) AS SALES,
+          COALESCE(SUM(L.LCIMCT), 0) AS COST,
+          COALESCE(SUM(L.LCCTUD), 0) AS UNITS
+        FROM DSEDAC.LAC L
+        WHERE TRIM(L.LCCDCL) = ?
+          AND TRIM(L.CODIGOARTICULO) = ?
+          AND L.LCAADC >= ?
+          AND L.LCTPVT IN ('CC', 'VC')
+          AND L.LCCLLN IN ('AB', 'VT')
+        GROUP BY L.LCAADC, L.LCMMDC
+        ORDER BY L.LCAADC DESC, L.LCMMDC DESC
+      `;
+
+      const rows = await queryWithParams(sql, [clientCode, productCode, currentYear - 2], false);
+
+      // Group by year for Flutter's expected format
+      const years = {};
+      let grandTotalSales = 0;
+      let grandTotalCost = 0;
+      let grandTotalUnits = 0;
+
+      for (const row of rows) {
+        const year = String(row.YEAR);
+        const month = parseInt(row.MONTH) || 0;
+        const sales = parseFloat(row.SALES) || 0;
+        const cost = parseFloat(row.COST) || 0;
+        const units = parseFloat(row.UNITS) || 0;
+
+        grandTotalSales += sales;
+        grandTotalCost += cost;
+        grandTotalUnits += units;
+
+        if (!years[year]) {
+          years[year] = { months: {} };
+        }
+        years[year].months[month] = {
+          sales,
+          cost,
+          units,
+          margin: sales - cost,
+          marginPct: sales > 0 ? ((sales - cost) / sales * 100) : 0,
+        };
+      }
+
+      // Add totals per year
+      for (const year of Object.keys(years)) {
+        const months = years[year].months;
+        let ySales = 0, yCost = 0, yUnits = 0;
+        for (const m of Object.values(months)) {
+          ySales += m.sales || 0;
+          yCost += m.cost || 0;
+          yUnits += m.units || 0;
+        }
+        years[year].totals = {
+          sales: ySales,
+          cost: yCost,
+          units: yUnits,
+          margin: ySales - yCost,
+          marginPct: ySales > 0 ? ((ySales - yCost) / ySales * 100) : 0,
+          envases: 0, // Not available in LAC
+          cajas: 0,   // Not available in LAC
+        };
+      }
+
+      res.json({
+        success: true,
+        years,
+        grandTotal: {
+          sales: grandTotalSales,
+          cost: grandTotalCost,
+          units: grandTotalUnits,
+          margin: grandTotalSales - grandTotalCost,
+          marginPct: grandTotalSales > 0 ? ((grandTotalSales - grandTotalCost) / grandTotalSales * 100) : 0,
+          envases: 0,
+          cajas: 0,
+        },
+      });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /product-history: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -463,7 +548,8 @@ function createPedidosRoutes() {
     try {
       const { vendedorCodes } = req.query;
       const pedidosService = require('../../../services/pedidos.service');
-      const analytics = await pedidosService.getOrderAnalytics(vendedorCodes || 'ALL');
+      const vc = vendedorCodes ? String(vendedorCodes).trim() : 'ALL';
+      const analytics = await pedidosService.getOrderAnalytics(vc);
       res.json({ success: true, analytics });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /analytics: ${error.message}`);
@@ -530,13 +616,27 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { clientCode, lines, observations } = req.body;
+      const { clientCode, clientName, vendedorCode, lines, observations, tipoventa, almacen, tarifa } = req.body;
+      // Use explicit vendedorCode from body, fallback to userId (the logged-in user)
+      const actualVendedor = vendedorCode || userId;
+
       if (!clientCode || !lines || !Array.isArray(lines) || lines.length === 0) {
-        return res.status(400).json({ success: false, error: 'clientCode and lines required' });
+        return res.status(400).json({ success: false, error: 'clientCode and lines are required' });
       }
 
-      const result = await repo.createOrder({ userId, clientCode, lines, observations });
-      
+      const pedidosService = require('../../../services/pedidos.service');
+      const result = await pedidosService.createOrder({
+        clientCode: String(clientCode).trim(),
+        clientName: clientName ? String(clientName).trim() : '',
+        vendedorCode: String(actualVendedor).trim(),
+        tipoventa: tipoventa || 'CC',
+        almacen: parseInt(almacen) || 1,
+        tarifa: parseInt(tarifa) || 1,
+        observaciones: observations || '',
+        lines: lines,
+        origen: 'A'
+      });
+
       // Invalidate related caches
       cache.invalidatePattern(`ddd:products:`);
       cache.invalidatePattern(`ddd:orders-list:${userId}`);

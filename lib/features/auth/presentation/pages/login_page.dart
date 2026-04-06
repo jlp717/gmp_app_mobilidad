@@ -375,7 +375,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             colors: [Color(0xFF00D9FF), Color(0xFFBF5AF2)],
           ).createShader(bounds),
           child: const Text(
-            'GMP Mobilidad',
+            'GMP Movilidad',
             style: TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.w700,

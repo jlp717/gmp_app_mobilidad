@@ -54,6 +54,12 @@ class Product {
   final String? fechaAlta;
   final int anoBaja;
   final int mesBaja;
+  // NEW: Purchase history & sales analytics
+  final String? unitType; // 'unidad' | 'caja' | 'ambos'
+  final bool hasPurchased;
+  final double salesThisYear;
+  final double salesPrevYear;
+  final double yoyChange;
 
   Product({
     required this.code,
@@ -98,6 +104,11 @@ class Product {
     this.fechaAlta,
     this.anoBaja = 0,
     this.mesBaja = 0,
+    this.unitType,
+    this.hasPurchased = false,
+    this.salesThisYear = 0,
+    this.salesPrevYear = 0,
+    this.yoyChange = 0,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -150,6 +161,13 @@ class Product {
       mesBaja: json['mesBaja'] is int
           ? json['mesBaja'] as int
           : int.tryParse(json['mesBaja']?.toString() ?? '0') ?? 0,
+      unitType: json['unitType']?.toString().trim().isEmpty ?? true
+          ? null
+          : json['unitType'].toString().trim().toLowerCase(),
+      hasPurchased: json['hasPurchased'] == true,
+      salesThisYear: _toDouble(json['salesThisYear']),
+      salesPrevYear: _toDouble(json['salesPrevYear']),
+      yoyChange: _toDouble(json['yoyChange']),
     );
   }
 
