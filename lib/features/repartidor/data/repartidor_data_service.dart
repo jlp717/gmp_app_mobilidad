@@ -421,7 +421,8 @@ class RepartidorDataService {
         queryParameters: queryParams,
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 15),
-        forceRefresh: true, // Always fresh for history
+        // Only force refresh on first load, use cache on subsequent calls
+        forceRefresh: false,
       );
       
       final docs = (response['documents'] as List? ?? [])

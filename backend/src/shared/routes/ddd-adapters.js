@@ -172,7 +172,7 @@ function createPedidosRoutes() {
       if (!clientCode) return res.status(400).json({ success: false, error: 'clientCode is required' });
 
       const cacheKey = `ddd:products:${vendedorCodes}:${clientCode}:${family || ''}:${marca || ''}:${search || ''}:${limit || 50}:${offset || 0}`;
-      await withCache(cache, cacheKey, TTL.PRODUCT_CATALOG, async () => {
+      await withCache(cache, cacheKey, TTL_MS.PRODUCT_CATALOG, async () => {
         const result = await repo.searchProducts({
           vendedorCodes,
           clientCode: String(clientCode).trim(),
@@ -197,7 +197,7 @@ function createPedidosRoutes() {
       if (!code) return res.status(400).json({ success: false, error: 'Product code required' });
 
       const cacheKey = `ddd:product:${code}:${clientCode || ''}:${vendedorCodes || 'ALL'}`;
-      await withCache(cache, cacheKey, TTL.PRODUCT_DETAIL, async () => {
+      await withCache(cache, cacheKey, TTL_MS.PRODUCT_DETAIL, async () => {
         const product = await repo.getProductDetail({
           code: String(code).trim(),
           clientCode: clientCode ? String(clientCode).trim() : undefined,
@@ -218,7 +218,7 @@ function createPedidosRoutes() {
       if (!clientCode) return res.status(400).json({ success: false, error: 'clientCode is required' });
 
       const cacheKey = `ddd:promotions:${clientCode}:${vendedorCodes || 'ALL'}`;
-      await withCache(cache, cacheKey, TTL.PROMOTIONS, async () => {
+      await withCache(cache, cacheKey, TTL_MS.PROMOTIONS, async () => {
         const result = await repo.getPromotions({
           clientCode: String(clientCode).trim(),
           vendedorCodes: vendedorCodes || 'ALL'
@@ -238,7 +238,7 @@ function createPedidosRoutes() {
 
       const { limit, offset } = req.query;
       const cacheKey = `ddd:history:${userId}:${limit || 20}:${offset || 0}`;
-      await withCache(cache, cacheKey, TTL.ORDER_HISTORY, async () => {
+      await withCache(cache, cacheKey, TTL_MS.ORDER_HISTORY, async () => {
         const orders = await repo.getOrderHistory({ userId, limit: parseInt(limit) || 20, offset: parseInt(offset) || 0 });
         return { success: true, orders };
       }, res);
@@ -254,7 +254,7 @@ function createPedidosRoutes() {
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
       const cacheKey = `ddd:stats:${userId}`;
-      await withCache(cache, cacheKey, TTL.ORDER_STATS, async () => {
+      await withCache(cache, cacheKey, TTL_MS.ORDER_STATS, async () => {
         const stats = await repo.getOrderStats({ userId });
         return { success: true, stats };
       }, res);
@@ -307,6 +307,183 @@ function createPedidosRoutes() {
     }
   });
 
+  // =============================================================================
+  // MISSING ENDPOINTS (ported from legacy pedidos.js)
+  // =============================================================================
+
+  // GET /api/pedidos/client-balance/:clientCode
+  router.get('/client-balance/:clientCode', async (req, res) => {
+    try {
+      const clientCode = String(req.params.clientCode).trim();
+      const pedidosService = require('../../../services/pedidos.service');
+      const balance = await pedidosService.getClientBalance(clientCode);
+      res.json({ success: true, balance });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /client-balance: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/recommendations/:clientCode
+  router.get('/recommendations/:clientCode', async (req, res) => {
+    try {
+      const clientCode = String(req.params.clientCode).trim();
+      const vendedorCode = req.query.vendedorCode ? String(req.query.vendedorCode).trim() : undefined;
+      if (!vendedorCode) {
+        return res.status(400).json({ success: false, error: 'vendedorCode is required' });
+      }
+      const pedidosService = require('../../../services/pedidos.service');
+      const recommendations = await pedidosService.getRecommendations(clientCode, vendedorCode);
+      res.json({ success: true, clientHistory: recommendations.clientHistory, similarClients: recommendations.similarClients });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /recommendations: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/orders/stats (alias to /stats for Flutter app compatibility)
+  router.get('/orders/stats', async (req, res) => {
+    try {
+      const userId = req.user?.code || req.user?.id;
+      if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+      
+      const cacheKey = `ddd:orders-stats:${userId}`;
+      await withCache(cache, cacheKey, TTL_MS.ORDER_STATS, async () => {
+        const stats = await repo.getOrderStats({ userId });
+        return { success: true, stats };
+      }, res);
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /orders/stats: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/products/:code/stock
+  router.get('/products/:code/stock', async (req, res) => {
+    try {
+      const { code } = req.params;
+      const pedidosService = require('../../../services/pedidos.service');
+      const stock = await pedidosService.getProductStock(String(code).trim());
+      res.json({ success: true, stock });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /products/:code/stock: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/ (order list)
+  router.get('/', async (req, res) => {
+    try {
+      const userId = req.user?.code || req.user?.id;
+      if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+      
+      const { limit, offset, estado } = req.query;
+      const cacheKey = `ddd:orders-list:${userId}:${limit || 20}:${offset || 0}:${estado || 'all'}`;
+      await withCache(cache, cacheKey, TTL_MS.ORDER_HISTORY, async () => {
+        const orders = await repo.getOrderHistory({ 
+          userId, 
+          limit: parseInt(limit) || 20, 
+          offset: parseInt(offset) || 0,
+          estado: estado ? String(estado).trim() : undefined
+        });
+        return { success: true, orders };
+      }, res);
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/:id
+  router.get('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const order = await repo.getOrderById(id);
+      if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+      res.json({ success: true, order });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /:id: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // POST /api/pedidos/create
+  router.post('/create', async (req, res) => {
+    try {
+      const userId = req.user?.code || req.user?.id;
+      if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+      const { clientCode, lines, observations } = req.body;
+      if (!clientCode || !lines || !Array.isArray(lines) || lines.length === 0) {
+        return res.status(400).json({ success: false, error: 'clientCode and lines required' });
+      }
+
+      const result = await repo.createOrder({ userId, clientCode, lines, observations });
+      
+      // Invalidate related caches
+      cache.invalidatePattern(`ddd:products:`);
+      cache.invalidatePattern(`ddd:orders-list:${userId}`);
+      cache.invalidatePattern(`ddd:history:${userId}`);
+      cache.invalidatePattern(`ddd:stats:${userId}`);
+
+      res.json({ success: true, order: result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in POST /create: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // PUT /api/pedidos/:id/confirm
+  router.put('/:id/confirm', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.code || req.user?.id;
+      if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+      const result = await repo.confirmOrderById({ orderId: id, userId });
+      
+      // Invalidate related caches
+      cache.invalidatePattern(`ddd:orders-list:${userId}`);
+      cache.invalidatePattern(`ddd:history:${userId}`);
+      cache.invalidatePattern(`ddd:stats:${userId}`);
+
+      res.json({ success: true, order: result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in PUT /:id/confirm: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // PUT /api/pedidos/:id/status
+  router.put('/:id/status', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { estado, userId } = req.body;
+      if (!estado) return res.status(400).json({ success: false, error: 'estado required' });
+      
+      const result = await repo.updateOrderStatus({ orderId: id, estado, userId: userId || req.user?.code });
+      res.json({ success: true, order: result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in PUT /:id/status: ${error.message}`);
+      res.status(error.message.includes('not found') ? 404 : 500).json({ success: false, error: error.message });
+    }
+  });
+
+  // DELETE /api/pedidos/:id
+  router.delete('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.code || req.user?.id;
+      if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+      const result = await repo.deleteOrder({ orderId: id, userId });
+      res.json({ success: true, order: result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in DELETE /:id: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   return router;
 }
 
@@ -324,7 +501,7 @@ function createCobrosRoutes() {
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
 
       const cacheKey = `ddd:cobros:pendientes:${codigoCliente}`;
-      await withCache(cache, cacheKey, TTL.PENDIENTES, async () => {
+      await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
         const pendientes = await repo.getPendientes(String(codigoCliente).trim());
         return { success: true, pendientes };
       }, res);
@@ -363,7 +540,7 @@ function createCobrosRoutes() {
       const { limit, offset } = req.query;
 
       const cacheKey = `ddd:cobros:historico:${codigoCliente}:${limit || 20}:${offset || 0}`;
-      await withCache(cache, cacheKey, TTL.COBROS_HISTORICO, async () => {
+      await withCache(cache, cacheKey, TTL_MS.COBROS_HISTORICO, async () => {
         const historico = await repo.getHistorico({
           clientCode: String(codigoCliente).trim(),
           limit: parseInt(limit) || 20,
@@ -395,7 +572,7 @@ function createEntregasRoutes() {
 
       const { date, status } = req.query;
       const cacheKey = `ddd:albaranes:${repartidorId}:${date || ''}:${status || ''}`;
-      await withCache(cache, cacheKey, TTL.ALBARANES, async () => {
+      await withCache(cache, cacheKey, TTL_MS.ALBARANES, async () => {
         const albaranes = await repo.getAlbaranes({ repartidorId, date, status });
         return { success: true, albaranes };
       }, res);
@@ -409,7 +586,7 @@ function createEntregasRoutes() {
     try {
       const { id } = req.params;
       const cacheKey = `ddd:albaran:${id}`;
-      await withCache(cache, cacheKey, TTL.ALBARAN_DETAIL, async () => {
+      await withCache(cache, cacheKey, TTL_MS.ALBARAN_DETAIL, async () => {
         const albaran = await repo.getAlbaranDetail(id);
         if (!albaran) return { success: false, error: 'Albaran not found' };
         return { success: true, albaran };
@@ -447,7 +624,7 @@ function createEntregasRoutes() {
       if (!repartidorId) return res.status(400).json({ success: false, error: 'repartidorId required' });
 
       const cacheKey = `ddd:gamification:${repartidorId}`;
-      await withCache(cache, cacheKey, TTL.GAMIFICATION, async () => {
+      await withCache(cache, cacheKey, TTL_MS.GAMIFICATION, async () => {
         const stats = await repo.getGamificationStats(repartidorId);
         return { success: true, stats };
       }, res);
@@ -464,7 +641,7 @@ function createEntregasRoutes() {
 
       const { date } = req.query;
       const cacheKey = `ddd:summary:${repartidorId}:${date || ''}`;
-      await withCache(cache, cacheKey, TTL.ROUTE_SUMMARY, async () => {
+      await withCache(cache, cacheKey, TTL_MS.ROUTE_SUMMARY, async () => {
         const summary = await repo.getRouteSummary({ repartidorId, date });
         return { success: true, summary };
       }, res);
@@ -491,7 +668,7 @@ function createRuteroRoutes() {
       if (!vendorCode) return res.status(400).json({ success: false, error: 'vendorCode required' });
 
       const cacheKey = `ddd:ruta-config:${vendorCode}:${date || ''}`;
-      await withCache(cache, cacheKey, TTL.RUTA_CONFIG, async () => {
+      await withCache(cache, cacheKey, TTL_MS.RUTA_CONFIG, async () => {
         const config = await repo.getRutaConfig({ vendorCode, date });
         return { success: true, config };
       }, res);
@@ -527,7 +704,7 @@ function createRuteroRoutes() {
       if (!vendorCode) return res.status(400).json({ success: false, error: 'vendorCode required' });
 
       const cacheKey = `ddd:commissions:${vendorCode}:${date || ''}:${role || ''}`;
-      await withCache(cache, cacheKey, TTL.COMMISSIONS, async () => {
+      await withCache(cache, cacheKey, TTL_MS.COMMISSIONS, async () => {
         const commissions = await repo.getCommissions({ vendorCode, date, role });
         return { success: true, commissions };
       }, res);
@@ -543,7 +720,7 @@ function createRuteroRoutes() {
       if (!vendorCode) return res.status(400).json({ success: false, error: 'vendorCode required' });
 
       const cacheKey = `ddd:rutero-summary:${vendorCode}:${date || ''}`;
-      await withCache(cache, cacheKey, TTL.ROUTE_SUMMARY, async () => {
+      await withCache(cache, cacheKey, TTL_MS.ROUTE_SUMMARY, async () => {
         const summary = await repo.getDaySummary({ vendorCode, date });
         return { success: true, summary };
       }, res);

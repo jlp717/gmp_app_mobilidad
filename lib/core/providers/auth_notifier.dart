@@ -108,7 +108,11 @@ class AuthState {
 // NOTIFIER
 // ============================================================
 
-class AuthNotifier extends AutoDisposeAsyncNotifier<AuthState> {
+// CRITICAL: Do NOT use autoDispose for auth provider.
+// When user presses back button and returns, autoDispose would destroy
+// the provider and force re-initialization, causing session loss and
+// triggering rate limiting from repeated login attempts.
+class AuthNotifier extends AsyncNotifier<AuthState> {
   @override
   Future<AuthState> build() async {
     // Bind global 401 callback
@@ -422,7 +426,7 @@ class AuthNotifier extends AutoDisposeAsyncNotifier<AuthState> {
 // PROVIDER
 // ==========================================================
 
-final authProvider = AsyncNotifierProvider.autoDispose<AuthNotifier, AuthState>(
+final authProvider = AsyncNotifierProvider<AuthNotifier, AuthState>(
   AuthNotifier.new,
 );
 

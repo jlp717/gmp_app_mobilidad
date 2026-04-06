@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,7 +40,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   String? _lastLoadedId;
   final TextEditingController _searchClientController = TextEditingController();
   final TextEditingController _searchAlbaranController = TextEditingController();
-  
+  Timer? _loadDebounceTimer;
+
   late AnimationController _listAnimController;
   // Cache the repartidores future to avoid re-fetching on every rebuild
   Future<List<Map<String, dynamic>>>? _repartidoresFuture;
@@ -73,36 +75,45 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   void dispose() {
     _searchClientController.dispose();
     _searchAlbaranController.dispose();
+    _loadDebounceTimer?.cancel();
     _listAnimController.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
-    final auth = ref.read(authProvider).value;
-    final selectedVendor = ref.read(selectedVendorProvider);
-    final entregas = ref.read(entregasProvider.notifier);
-
-    String targetId = widget.repartidorId ?? auth?.user?.code ?? '';
-
-    // View As logic for directors
-    if (auth?.user?.isJefeVentas == true && selectedVendor != null) {
-      targetId = selectedVendor;
-    }
+    // Cancel any pending load requests (debounce)
+    _loadDebounceTimer?.cancel();
     
-    // NOTE: Multi-ID (comma-separated) IS supported by /pendientes endpoint
-    // The week endpoint needs single ID, handled in _loadWeekData
+    // Debounce for 300ms to prevent rapid successive calls
+    _loadDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      
+      final auth = ref.read(authProvider).value;
+      final selectedVendor = ref.read(selectedVendorProvider);
+      final entregas = ref.read(entregasProvider.notifier);
 
-    if (targetId.isNotEmpty) {
-      if (_lastLoadedId != targetId) {
-        _lastLoadedId = targetId;
+      String targetId = widget.repartidorId ?? auth?.user?.code ?? '';
+
+      // View As logic for directors
+      if (auth?.user?.isJefeVentas == true && selectedVendor != null) {
+        targetId = selectedVendor;
       }
 
-      entregas.setRepartidor(targetId, autoReload: false);
-      entregas.seleccionarFecha(_selectedDate);
-      
-      // Backend supports multi-ID for week endpoint (uses IN clause)
-      _loadWeekData(targetId);
-    }
+      // NOTE: Multi-ID (comma-separated) IS supported by /pendientes endpoint
+      // The week endpoint needs single ID, handled in _loadWeekData
+
+      if (targetId.isNotEmpty) {
+        if (_lastLoadedId != targetId) {
+          _lastLoadedId = targetId;
+        }
+
+        entregas.setRepartidor(targetId, autoReload: false);
+        entregas.seleccionarFecha(_selectedDate);
+
+        // Backend supports multi-ID for week endpoint (uses IN clause)
+        _loadWeekData(targetId);
+      }
+    });
   }
 
   Future<void> _loadWeekData(String repartidorId) async {

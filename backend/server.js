@@ -197,9 +197,9 @@ app.use((req, res, next) => {
 // Rate Limiting
 app.use('/api/', globalLimiter);
 
-// Advanced rate limiter for login endpoint (prevent brute force)
-const advancedRateLimiter = new AdvancedRateLimiter();
-app.use('/api/auth/login', advancedRateLimiter.middleware());
+// NOTE: Login endpoint rate limiting is handled by loginLimiter in routes/auth.js
+// Removed AdvancedRateLimiter from login to prevent duplicate rate limiting that
+// was causing legitimate users to get 429 after pressing back button and re-login
 
 // Refresh token endpoint
 app.post('/api/auth/refresh', async (req, res) => {
@@ -306,8 +306,11 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
     const dddAdapters = require('./src/shared/routes/ddd-adapters');
     app.use('/api/clients', dddAdapters.createClientsRoutes());
     app.use('/api/commissions', dddAdapters.createCommissionsRoutes());
+    // Mount productsRoutes for image/ficha endpoints (not in masterRoutes)
+    app.use('/api/products', productsRoutes);
     logger.info('✅ DDD routes mounted at /api/{auth,pedidos,cobros,entregas,rutero}');
     logger.info('✅ DDD-enhanced: clients + commissions with Redis ALL cache + performanceCache');
+    logger.info('✅ Products image/ficha routes mounted at /api/products/:code/{image,ficha}');
   } else {
     // Legacy fallback
     app.use('/api/entregas', emailLimiter, entregasRoutes);

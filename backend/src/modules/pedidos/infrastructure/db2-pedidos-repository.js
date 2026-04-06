@@ -104,38 +104,16 @@ class Db2PedidosRepository extends PedidosRepository {
     return result;
   }
 
+  // NOTE: Cart methods (getCart, addToCart) are NOT implemented.
+  // The Flutter app manages cart entirely in-memory via PedidosProvider._lines
+  // These methods throw errors to prevent accidental usage
+  
   async getCart(userId) {
-    const sql = `
-      SELECT
-        CC.ID,
-        CC.CODIGO_CLIENTE,
-        CC.CODIGO_PRODUCTO,
-        CC.CANTIDAD,
-        CC.UNIDAD,
-        CC.OBSERVACIONES,
-        CC.FECHA_CREACION
-      FROM JAVIER.CART_CONTENT CC
-      WHERE CC.USER_ID = ?
-      ORDER BY CC.FECHA_CREACION DESC
-      FETCH FIRST 100 ROWS ONLY
-    `;
-
-    const result = await this._db.executeParams(sql, [userId]);
-    return result;
+    throw new Error('Cart is managed in Flutter state (PedidosProvider._lines). No server-side cart needed.');
   }
 
   async addToCart({ userId, clientCode, productCode, quantity, unit = 'UD' }) {
-    const { v4: uuidv4 } = require('uuid');
-    const id = uuidv4();
-
-    const sql = `
-      INSERT INTO JAVIER.CART_CONTENT (
-        ID, USER_ID, CODIGO_CLIENTE, CODIGO_PRODUCTO, CANTIDAD, UNIDAD, FECHA_CREACION
-      ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `;
-
-    await this._db.executeParams(sql, [id, userId, clientCode, productCode, quantity, unit]);
-    return { id, userId, clientCode, productCode, quantity, unit };
+    throw new Error('Cart is managed in Flutter state (PedidosProvider._lines). Use POST /pedidos/create to submit order.');
   }
 
   /**
@@ -154,7 +132,7 @@ class Db2PedidosRepository extends PedidosRepository {
         INSERT INTO JAVIER.PEDIDOS_CAB (
           ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO, CODIGOCLIENTE,
           FECHAPEDIDO, ESTADO, OBSERVACIONES, CODIGO_USUARIO, ORIGEN
-        ) VALUES (?, ?, 1, 'M', ?, CURRENT_TIMESTAMP, 'PENDIENTE', ?, ?, 'APP')
+        ) VALUES (?, ?, 1, 'M', ?, CURRENT_TIMESTAMP, 'CONFIRMADO', ?, ?, 'APP')
       `;
 
       await conn.query(cabSql, [orderId, year, clientCode, observations, userId]);
@@ -171,7 +149,7 @@ class Db2PedidosRepository extends PedidosRepository {
         ]);
       }
 
-      return { orderId, status: 'PENDIENTE', linesCount: lines.length };
+      return { orderId, status: 'CONFIRMADO', linesCount: lines.length };
     });
   }
 
@@ -202,9 +180,9 @@ class Db2PedidosRepository extends PedidosRepository {
     const sql = `
       SELECT
         COUNT(*) as TOTAL,
-        SUM(CASE WHEN ESTADO = 'PENDIENTE' THEN 1 ELSE 0 END) as PENDIENTES,
+        SUM(CASE WHEN ESTADO = 'BORRADOR' THEN 1 ELSE 0 END) as BORRADORES,
         SUM(CASE WHEN ESTADO = 'CONFIRMADO' THEN 1 ELSE 0 END) as CONFIRMADOS,
-        SUM(CASE WHEN ESTADO = 'FACTURADO' THEN 1 ELSE 0 END) as FACTURADOS,
+        SUM(CASE WHEN ESTADO = 'ENVIADO' THEN 1 ELSE 0 END) as ENVIADOS,
         SUM(CASE WHEN ESTADO = 'ANULADO' THEN 1 ELSE 0 END) as ANULADOS
       FROM JAVIER.PEDIDOS_CAB
       WHERE CODIGOVENDEDOR = ?
@@ -212,6 +190,40 @@ class Db2PedidosRepository extends PedidosRepository {
 
     const result = await this._db.executeParams(sql, [userId]);
     return result[0] || {};
+  }
+
+  // =============================================================================
+  // ADDITIONAL METHODS (needed by DDD adapter endpoints)
+  // =============================================================================
+
+  async getOrderById(orderId) {
+    const pedidosService = require('../../../../services/pedidos.service');
+    return await pedidosService.getOrderDetail(parseInt(orderId));
+  }
+
+  async createOrder({ userId, clientCode, lines, observations = '' }) {
+    const pedidosService = require('../../../../services/pedidos.service');
+    return await pedidosService.createOrder({
+      codigoVendedor: userId,
+      codigoCliente: clientCode,
+      lines: lines,
+      observaciones: observations
+    });
+  }
+
+  async confirmOrderById({ orderId, userId }) {
+    const pedidosService = require('../../../../services/pedidos.service');
+    return await pedidosService.confirmOrder(parseInt(orderId));
+  }
+
+  async updateOrderStatus({ orderId, estado, userId }) {
+    const pedidosService = require('../../../../services/pedidos.service');
+    return await pedidosService.updateOrderStatus(parseInt(orderId), estado);
+  }
+
+  async deleteOrder({ orderId, userId }) {
+    const pedidosService = require('../../../../services/pedidos.service');
+    return await pedidosService.cancelOrder(parseInt(orderId));
   }
 }
 

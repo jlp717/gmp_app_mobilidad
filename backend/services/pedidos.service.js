@@ -1168,6 +1168,36 @@ async function confirmOrder(orderId, saleType, options = {}) {
     const id = parseInt(orderId);
     if (isNaN(id)) throw new Error('Invalid orderId');
 
+    // STATE GUARD: Check current state to prevent double-confirm
+    const currentRows = await queryWithParams(
+        `SELECT ESTADO FROM JAVIER.PEDIDOS_CAB WHERE ID = ?`,
+        [id], false
+    );
+    
+    if (!currentRows || currentRows.length === 0) {
+        throw new Error('Pedido no encontrado');
+    }
+    
+    const currentState = (currentRows[0].ESTADO || '').trim();
+    
+    // Prevent confirming an already confirmed or shipped order
+    if (currentState === 'CONFIRMADO') {
+        throw new Error('El pedido ya está confirmado');
+    }
+    
+    if (currentState === 'ENVIADO') {
+        throw new Error('No se puede confirmar un pedido que ya ha sido enviado');
+    }
+    
+    if (currentState === 'ANULADO') {
+        throw new Error('No se puede confirmar un pedido anulado');
+    }
+    
+    // Only BORRADOR orders can be confirmed
+    if (currentState !== 'BORRADOR') {
+        throw new Error(`Solo se pueden confirmar pedidos en estado BORRADOR (estado actual: ${currentState})`);
+    }
+
     // P0-C: Validate stock BEFORE confirming — block if insufficient
     const lines = await queryWithParams(
         `SELECT CODIGOARTICULO, CANTIDADENVASES, CANTIDADUNIDADES, DESCRIPCION
@@ -1314,6 +1344,33 @@ async function cancelOrder(orderId, options = {}) {
     const id = parseInt(orderId);
     if (isNaN(id)) throw new Error('Invalid orderId');
 
+    // STATE GUARD: Get current state before cancelling
+    const currentRows = await queryWithParams(
+        `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM JAVIER.PEDIDOS_CAB WHERE ID = ?`,
+        [id], false
+    );
+    
+    if (!currentRows || currentRows.length === 0) {
+        throw new Error('Pedido no encontrado');
+    }
+    
+    const currentState = (currentRows[0].ESTADO || '').trim();
+    
+    // Prevent double-cancel
+    if (currentState === 'ANULADO') {
+        throw new Error('El pedido ya está anulado');
+    }
+    
+    // Prevent cancelling shipped orders
+    if (currentState === 'ENVIADO') {
+        throw new Error('No se puede anular un pedido que ya ha sido enviado');
+    }
+    
+    // Only allow cancelling BORRADOR or CONFIRMADO orders
+    if (!['BORRADOR', 'CONFIRMADO'].includes(currentState)) {
+        throw new Error(`No se puede anular un pedido en estado: ${currentState}`);
+    }
+
     // Get order info for audit before cancelling
     let orderBefore;
     try { orderBefore = await getOrderDetail(id); } catch (e) { /* ok */ }
@@ -1323,17 +1380,19 @@ async function cancelOrder(orderId, options = {}) {
         [id], false
     );
 
-    // Release stock reservations
+    // Release stock reservations (only if order was CONFIRMADO)
     const releasedCodes = [];
-    try {
-        const reservations = await queryWithParams(
-            `SELECT CODIGOARTICULO FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id]
-        );
-        releasedCodes.push(...reservations.map(r => (r.CODIGOARTICULO || '').trim()).filter(Boolean));
-        await queryWithParams(`DELETE FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id], false);
-        logger.info(`[PEDIDOS] Stock reservations released for cancelled order #${id}`);
-    } catch (e) {
-        logger.warn(`[PEDIDOS] Stock reservation release error: ${e.message}`);
+    if (currentState === 'CONFIRMADO') {
+        try {
+            const reservations = await queryWithParams(
+                `SELECT CODIGOARTICULO FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id]
+            );
+            releasedCodes.push(...reservations.map(r => (r.CODIGOARTICULO || '').trim()).filter(Boolean));
+            await queryWithParams(`DELETE FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id], false);
+            logger.info(`[PEDIDOS] Stock reservations released for cancelled order #${id}`);
+        } catch (e) {
+            logger.warn(`[PEDIDOS] Stock reservation release error: ${e.message}`);
+        }
     }
 
     // P4-A: Invalidate stock and product cache for released products
@@ -1347,7 +1406,7 @@ async function cancelOrder(orderId, options = {}) {
 
     // AUD: Audit log for cancellation
     try {
-        logger.info(`[AUDIT] ❌ ORDER_CANCELLED #${id} | Client:${orderBefore?.header?.clienteId || '?'} | Total:${orderBefore?.header?.total || 0} | By:${options.userId || 'SYSTEM'}`);
+        logger.info(`[AUDIT] ❌ ORDER_CANCELLED #${id} | Client:${currentRows[0].CODIGOCLIENTE || '?'} | Total:${currentRows[0].IMPORTETOTAL || 0} | From:${currentState} | By:${options.userId || 'SYSTEM'}`);
     } catch (auditErr) { /* silent */ }
 
     return getOrderDetail(id);

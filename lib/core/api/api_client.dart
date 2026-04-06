@@ -514,11 +514,14 @@ class _RetryInterceptor extends Interceptor {
     }
 
     if (shouldRetry && retryCount < _maxRetries) {
-      debugPrint(
-          '[ApiClient] Retrying request (${retryCount + 1}/$_maxRetries)...');
+      // FIX: Use longer backoff for 429 rate limit errors
+      final isRateLimited = err.response?.statusCode == 429;
+      final baseDelay = isRateLimited ? _retryDelay * 2 : _retryDelay;
+      final delay = baseDelay * (retryCount + 1);
+      
+      debugPrint('[ApiClient] Retrying request (${retryCount + 1}/$_maxRetries) in ${delay.inSeconds}s...');
 
       // Exponential backoff
-      final delay = _retryDelay * (retryCount + 1);
       await Future<void>.delayed(delay);
 
       try {
@@ -535,6 +538,11 @@ class _RetryInterceptor extends Interceptor {
   }
 
   bool _shouldRetry(DioException err) {
+    // NEVER retry login requests to avoid triggering rate limiting
+    if (err.requestOptions.path.contains('/auth/login')) {
+      return false;
+    }
+
     // Retry on network errors and 5xx server errors
     if (err.type == DioExceptionType.connectionError ||
         err.type == DioExceptionType.connectionTimeout ||
@@ -543,6 +551,12 @@ class _RetryInterceptor extends Interceptor {
     }
 
     final statusCode = err.response?.statusCode;
+    
+    // FIX: Retry on 429 (Too Many Requests) with longer backoff
+    if (statusCode == 429) {
+      return true;
+    }
+    
     if (statusCode != null && statusCode >= 500 && statusCode < 600) {
       return true;
     }

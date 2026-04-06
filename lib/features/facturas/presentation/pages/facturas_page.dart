@@ -226,7 +226,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           _selectedMonth = null;
           _selectedYear = null;
         });
-        _refreshData();
+        // Debounce date selection to prevent rapid API calls
+        _onSearchChanged();
       }
     } catch (e) {
       debugPrint('[FACTURAS] DatePicker Error: $e');
@@ -506,6 +507,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   Future<void> _refreshData() async {
     if (!mounted) return;
+    // Prevent redundant calls if already loading
+    if (_isLoading) return;
+    
     try {
       final codes = _vendedorCodes;
 
@@ -558,7 +562,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         _dateFrom = null;
         _dateTo = null;
       });
-      _refreshData();
+      // Debounce year change to prevent rapid API calls
+      _onSearchChanged();
     }
   }
 
@@ -570,7 +575,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         _dateFrom = null;
         _dateTo = null;
       });
-      _refreshData();
+      // Debounce month change to prevent rapid API calls
+      _onSearchChanged();
     }
   }
 

@@ -10,6 +10,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'core/api/api_client.dart';
 import 'core/cache/cache_service.dart';
 import 'core/providers/auth_notifier.dart';
+import 'core/services/secure_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/main_shell.dart';
@@ -91,21 +92,59 @@ class GMPSalesAnalyticsApp extends ConsumerStatefulWidget {
       _GMPSalesAnalyticsAppState();
 }
 
-class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp> {
+class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
+    with WidgetsBindingObserver {
   late final GoRouter _router;
   final ValueNotifier<int> _authChangeSignal = ValueNotifier<int>(0);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _router = _createRouter();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _router.dispose();
     _authChangeSignal.dispose();
     super.dispose();
+  }
+
+  /// Handle app lifecycle changes to prevent session loss on app resume
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    if (state == AppLifecycleState.resumed) {
+      // User returned to the app - verify session is still valid
+      _validateSessionOnResume();
+    }
+  }
+
+  /// Validate session when app resumes to prevent unexpected logouts
+  Future<void> _validateSessionOnResume() async {
+    try {
+      final authState = ref.read(authProvider);
+      
+      // If user was authenticated, verify token still exists in storage
+      if (authState.value?.isAuthenticated == true) {
+        final token = await SecureStorage.readSecureData('user_token');
+        
+        if (token == null || token.isEmpty) {
+          // Token was cleared - session is invalid
+          debugPrint('[AppLifecycle] Token missing on resume - triggering logout');
+          ref.read(authProvider.notifier).logout(sessionExpired: true);
+        } else {
+          // Token exists - ensure Dio header is set (might have been lost on reinitialize)
+          ApiClient.setAuthToken(token);
+          debugPrint('[AppLifecycle] Session validated successfully on resume');
+        }
+      }
+    } catch (e) {
+      debugPrint('[AppLifecycle] Session validation error: $e');
+    }
   }
 
   GoRouter _createRouter() {

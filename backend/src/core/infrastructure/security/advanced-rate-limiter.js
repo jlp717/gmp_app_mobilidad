@@ -8,21 +8,21 @@ const rateLimitStore = new Map();
 const ROLE_LIMITS = {
   JEFE_VENTAS: {
     windowMs: 60000,       // 1 minute window
-    maxRequests: 200,       // Higher limit for jefe
-    maxAllQueries: 30,      // Max ALL queries per window
-    maxConcurrent: 5
+    maxRequests: 500,       // Increased from 200 to support multi-vendor queries
+    maxAllQueries: 100,     // Increased from 30 for jefe with many vendors
+    maxConcurrent: 10       // Increased from 5 for parallel loading
   },
   COMERCIAL: {
     windowMs: 60000,
-    maxRequests: 150,
-    maxAllQueries: 10,
-    maxConcurrent: 3
+    maxRequests: 300,       // Increased from 150
+    maxAllQueries: 50,      // Increased from 10
+    maxConcurrent: 5        // Increased from 3
   },
   REPARTIDOR: {
     windowMs: 60000,
-    maxRequests: 100,
-    maxAllQueries: 5,
-    maxConcurrent: 2
+    maxRequests: 200,       // Increased from 100
+    maxAllQueries: 30,      // Increased from 5
+    maxConcurrent: 5        // Increased from 2
   }
 };
 

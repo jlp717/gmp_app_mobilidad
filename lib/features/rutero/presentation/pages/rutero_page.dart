@@ -358,8 +358,17 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       });
 
       // If the backend cache is still warming, auto-retry with loaded clients
+      // IMPROVED: Also retry if we have clients but ALL have zero sales (partial cache data)
       final dayCacheStatus = response['cacheStatus'] as String?;
-      if (dayCacheStatus == 'loading' && _dayClients.isEmpty && _cacheRetryCount < _maxCacheRetries) {
+      final hasAnySales = _dayClients.any((client) {
+        final status = client['status'] as Map<String, dynamic>?;
+        final ytdSales = (status?['ytdSales'] as num?)?.toDouble() ?? 0;
+        return ytdSales > 0.01;
+      });
+      
+      if (dayCacheStatus == 'loading' && 
+          (_dayClients.isEmpty || !hasAnySales) && 
+          _cacheRetryCount < _maxCacheRetries) {
         setState(() => _isCacheLoading = true);
         _cacheRetryCount++;
         Future.delayed(const Duration(seconds: 4), () {

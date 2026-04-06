@@ -30,6 +30,7 @@ class CachePreWarmer {
         _preWarmFacturas(codes, currentYear, currentMonth),
         if (isJefeVentas) _preWarmVendedores(),
         _preWarmCommissions(codes, currentYear),
+        _preWarmRuteroWeek(codes, currentYear, currentMonth),
       ], eagerError: false);
 
       _hasPreWarmed = true;
@@ -42,12 +43,13 @@ class CachePreWarmer {
   static Future<void> _preWarmFacturas(String vendorCodes, int year, int month) async {
     try {
       // Pre-fetch facturas list for current month
+      // FIX: Match exact cache key pattern with facturas_service to avoid wasted requests
       await ApiClient.get(
         '/facturas?vendedorCodes=$vendorCodes&year=$year&month=$month',
-        cacheKey: 'facturas_${vendorCodes}_${year}_${month}__',
+        cacheKey: 'facturas_${vendorCodes}_${year}_${month}_all___',
         cacheTTL: CacheService.shortTTL,
       );
-      
+
       // Pre-fetch available years
       await ApiClient.get(
         '/facturas/years?vendedorCodes=$vendorCodes',
@@ -66,7 +68,7 @@ class CachePreWarmer {
       await ApiClient.get(
         '/commissions/summary',
         queryParameters: {'vendedorCode': vendorCodes, 'year': year.toString()},
-        cacheKey: 'commissions_${vendorCodes}_$year',
+        cacheKey: 'commissions_v2_${vendorCodes}_$year',
         cacheTTL: const Duration(minutes: 15),
       );
       debugPrint('[CachePreWarmer] Commissions pre-warmed');
@@ -85,6 +87,26 @@ class CachePreWarmer {
       debugPrint('[CachePreWarmer] Vendedores pre-warmed');
     } catch (e) {
       debugPrint('[CachePreWarmer] Vendedores pre-warm failed: $e');
+    }
+  }
+
+  static Future<void> _preWarmRuteroWeek(String vendorCodes, int year, int month) async {
+    try {
+      // Pre-fetch rutero week data
+      await ApiClient.get(
+        '/rutero/week',
+        queryParameters: {
+          'vendedorCodes': vendorCodes,
+          'role': 'comercial',
+          'year': year.toString(),
+          'month': month.toString(),
+        },
+        cacheKey: 'rutero:week:$vendorCodes:$year:$month',
+        cacheTTL: CacheService.shortTTL,
+      );
+      debugPrint('[CachePreWarmer] Rutero week pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Rutero week pre-warm failed: $e');
     }
   }
 
@@ -109,6 +131,7 @@ class CachePreWarmer {
       await Future.wait([
         _preWarmFacturas(codes, currentYear, currentMonth),
         _preWarmCommissions(codes, currentYear),
+        _preWarmRuteroWeek(codes, currentYear, currentMonth),
       ], eagerError: false);
 
       _hasPreWarmed = true;

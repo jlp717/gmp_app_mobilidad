@@ -26,7 +26,7 @@ const isProduction = NODE_ENV === 'production';
 
 const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10);
 const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '500', 10);
-const LOGIN_RATE_LIMIT_MAX = parseInt(process.env.LOGIN_RATE_LIMIT || '5', 10);
+const LOGIN_RATE_LIMIT_MAX = parseInt(process.env.LOGIN_RATE_LIMIT || '15', 10);
 const API_RATE_LIMIT_MAX = parseInt(process.env.API_RATE_LIMIT || '1000', 10);
 
 // CORS configuration
@@ -58,11 +58,11 @@ exports.globalLimiter = rateLimit({
 });
 
 exports.loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 5 * 60 * 1000, // 5 minutes (reduced from 15)
     max: LOGIN_RATE_LIMIT_MAX,
-    message: { 
-        error: 'Demasiados intentos de login. Espere 15 minutos antes de intentar de nuevo.',
-        retryAfter: 900
+    message: {
+        error: 'Demasiados intentos. Espera unos minutos antes de intentar de nuevo.',
+        retryAfter: 300
     },
     standardHeaders: true,
     legacyHeaders: false,

@@ -136,7 +136,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     } else {
       setState(() {
         _hasError = true;
-        _errorMessage = ref.read(authProvider).value?.error ?? 'Credenciales incorrectas';
+        final rawError = ref.read(authProvider).value?.error ?? 'Credenciales incorrectas';
+        
+        // Provide user-friendly messages for specific error types
+        if (rawError.contains('Demasiados intentos') || rawError.contains('429')) {
+          _errorMessage = 'Demasiados intentos. Espera unos minutos antes de intentar de nuevo.';
+        } else if (rawError.contains('ROLE_SELECTION')) {
+          _errorMessage = rawError; // Pass through role selection signal
+        } else {
+          _errorMessage = rawError;
+        }
       });
 
       debugPrint(
