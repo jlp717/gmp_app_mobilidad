@@ -286,18 +286,20 @@ router.post('/login',
                 vendedorCodes = Array.from(existingCodes);
             }
 
-            const accessToken = signAccessToken({ 
-                id: `V${vendedorCode}`, 
-                user: vendedorCode, 
-                role: finalRole, 
+            const accessToken = signAccessToken({
+                id: `V${vendedorCode}`,
+                user: vendedorCode,
+                name: vendedorName, // ADD NAME to token for PDF and other services
+                role: finalRole,
                 isJefeVentas,
                 timestamp: Date.now()
             });
-            
-            const refreshToken = signRefreshToken({ 
-                id: `V${vendedorCode}`, 
-                user: vendedorCode, 
-                role: finalRole, 
+
+            const refreshToken = signRefreshToken({
+                id: `V${vendedorCode}`,
+                user: vendedorCode,
+                name: vendedorName,
+                role: finalRole,
                 isJefeVentas
             });
 

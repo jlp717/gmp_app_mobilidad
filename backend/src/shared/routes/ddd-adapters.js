@@ -842,6 +842,104 @@ function createCobrosRoutes() {
     }
   });
 
+  // GET /api/cobros/pending-summary/:vendedorCode
+  // Returns total pending amounts grouped by client for given vendor(s)
+  router.get('/pending-summary/:vendedorCode', async (req, res) => {
+    try {
+      const vendedorCodeParam = req.params.vendedorCode;
+      logger.info(`[COBROS] Pending summary for vendor: ${vendedorCodeParam}`);
+
+      const isAll = vendedorCodeParam.toUpperCase() === 'ALL';
+      const vendorCodes = isAll
+        ? []
+        : vendedorCodeParam.split(',').map(v => v.trim()).filter(v => v.length > 0);
+
+      // For many vendor codes, embed directly in SQL to avoid ODBC parameter limit (CWB0111)
+      const MAX_PARAMS = 50;
+      const useParamBinding = vendorCodes.length <= MAX_PARAMS;
+
+      let vendorFilter = '';
+      let vendorParams = [];
+
+      if (!isAll) {
+        if (useParamBinding) {
+          vendorFilter = `AND TRIM(PC.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`;
+          vendorParams = vendorCodes;
+        } else {
+          const sanitized = vendorCodes.map(v => `'${v.replace(/[^a-zA-Z0-9_-]/g, '')}'`).join(',');
+          vendorFilter = `AND TRIM(PC.CODIGOVENDEDOR) IN (${sanitized})`;
+        }
+      }
+
+      // Check if COBROS table exists
+      let cobrosTableExists = false;
+      try {
+        await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
+        cobrosTableExists = true;
+      } catch(e) { /* table doesn't exist yet */ }
+
+      // Check ORIGEN column using IBM i compatible catalog
+      let origenExists = false;
+      try {
+        const colCheck = await query(`
+          SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
+          WHERE TABLE_SCHEMA = 'JAVIER'
+            AND TABLE_NAME = 'PEDIDOS_CAB'
+            AND COLUMN_NAME = 'ORIGEN'
+          FETCH FIRST 1 ROW ONLY
+        `);
+        origenExists = colCheck && colCheck.length > 0;
+      } catch(e) {
+        origenExists = true;
+      }
+
+      let sql = `
+        SELECT
+          TRIM(PC.CODIGOCLIENTE) AS CLIENTE,
+          SUM(PC.IMPORTETOTAL) AS TOTAL_PENDIENTE,
+          COUNT(*) AS NUM_PEDIDOS
+        FROM JAVIER.PEDIDOS_CAB PC
+        WHERE PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
+          AND PC.IMPORTETOTAL > 0
+          ${vendorFilter}
+          ${origenExists ? "AND PC.ORIGEN = 'A'" : ''}`;
+
+      // Exclude already paid
+      if (cobrosTableExists) {
+        sql += ` AND NOT EXISTS (
+          SELECT 1 FROM JAVIER.COBROS JC
+          WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE)
+            AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
+        )`;
+      }
+
+      sql += ` GROUP BY TRIM(PC.CODIGOCLIENTE) ORDER BY TOTAL_PENDIENTE DESC`;
+
+      const { queryWithParams } = require('../../../config/db');
+      const rows = await queryWithParams(sql, vendorParams);
+
+      const summary = {};
+      let grandTotal = 0;
+      (rows || []).forEach(r => {
+        const code = (r.CLIENTE || '').trim();
+        const total = parseFloat(r.TOTAL_PENDIENTE) || 0;
+        const count = parseInt(r.NUM_PEDIDOS) || 0;
+        summary[code] = { total, count };
+        grandTotal += total;
+      });
+
+      res.json({
+        success: true,
+        summary,
+        grandTotal,
+        clientCount: Object.keys(summary).length,
+      });
+    } catch (error) {
+      logger.error(`[COBROS] Error pending-summary: ${error.message}`);
+      res.status(500).json({ success: false, error: 'Error obteniendo resumen' });
+    }
+  });
+
   router.get('/:codigoCliente/historico', async (req, res) => {
     try {
       const { codigoCliente } = req.params;

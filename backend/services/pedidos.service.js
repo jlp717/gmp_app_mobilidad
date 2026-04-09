@@ -1852,30 +1852,59 @@ async function getActivePromotions(clientCode) {
         }
 
         // --- GIFT promotions from PMRL1 (header) + PMPL1 (product lines) ---
-        // PMRL1 has promo headers per client, PMPL1 has product lines per promo
-        // Strategy: query BOTH global (empty client) AND client-specific promos
+        // Check which columns exist in PMRL1 before querying
+        let pmrl1Columns = {};
+        try {
+            const colCheck = await query(`
+                SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
+                WHERE TABLE_SCHEMA = 'DSEDAC'
+                  AND TABLE_NAME = 'PMRL1'
+                FETCH FIRST 100 ROWS ONLY
+            `);
+            colCheck.forEach(col => {
+                pmrl1Columns[(col.COLUMN_NAME || '').trim()] = true;
+            });
+            logger.info(`[PEDIDOS] PMRL1 columns found: ${Object.keys(pmrl1Columns).join(', ')}`);
+        } catch(e) {
+            logger.warn(`[PEDIDOS] Could not check PMRL1 columns: ${e.message}`);
+            // Assume all columns exist as fallback
+            pmrl1Columns = {
+                CODIGOPROMOCIONREGALO: true,
+                NOMBREPROMOCIONREGALO: true,
+                CODIGOCLIENTE: true,
+                P1INFC: true,
+                P1FNFC: true,
+                CANTIDADMINIMAPROMOCION: true,
+                CANTIDADMAXIMAREGALO: true,
+                PROMOCIONACUMULATIVASN: true,
+                CANTIDADMAXIMAPROMOCION: true,
+                CANTIDADMINIMAREGALO: true
+            };
+        }
+
+        // Build PMRL1 query with only existing columns
         const paramsPmr = [today, today];
         let sqlPmrHeaders = `
-            SELECT TRIM(H.CODIGOPROMOCIONREGALO) AS PROMOCODE,
-                   TRIM(H.NOMBREPROMOCIONREGALO) AS PROMONAME,
-                   TRIM(H.CODIGOCLIENTE) AS CLIENTCODE,
+            SELECT ${pmrl1Columns.CODIGOPROMOCIONREGALO ? 'TRIM(H.CODIGOPROMOCIONREGALO)' : "''"} AS PROMOCODE,
+                   ${pmrl1Columns.NOMBREPROMOCIONREGALO ? 'TRIM(H.NOMBREPROMOCIONREGALO)' : "''"} AS PROMONAME,
+                   ${pmrl1Columns.CODIGOCLIENTE ? 'TRIM(H.CODIGOCLIENTE)' : "''"} AS CLIENTCODE,
                    H.P1INFC AS DATEFROM,
                    H.P1FNFC AS DATETO,
-                   H.CANTIDADMINIMAPROMOCION AS CANTIDADMINIMA,
-                   H.CANTIDADMAXIMAREGALO AS CANTIDADREGALO,
-                   COALESCE(H.PROMOCIONACUMULATIVASN, 'N') AS ACUMULATIVA,
-                   COALESCE(H.CANTIDADMAXIMAPROMOCION, 0) AS CANTIDADMAXPROMO,
-                   COALESCE(H.CANTIDADMINIMAREGALO, 0) AS CANTIDADMINREGALO
+                   ${pmrl1Columns.CANTIDADMINIMAPROMOCION ? 'H.CANTIDADMINIMAPROMOCION' : '0'} AS CANTIDADMINIMA,
+                   ${pmrl1Columns.CANTIDADMAXIMAREGALO ? 'H.CANTIDADMAXIMAREGALO' : '0'} AS CANTIDADREGALO,
+                   ${pmrl1Columns.PROMOCIONACUMULATIVASN ? "COALESCE(H.PROMOCIONACUMULATIVASN, 'N')" : "'N'"} AS ACUMULATIVA,
+                   ${pmrl1Columns.CANTIDADMAXIMAPROMOCION ? 'COALESCE(H.CANTIDADMAXIMAPROMOCION, 0)' : '0'} AS CANTIDADMAXPROMO,
+                   ${pmrl1Columns.CANTIDADMINIMAREGALO ? 'COALESCE(H.CANTIDADMINIMAREGALO, 0)' : '0'} AS CANTIDADMINREGALO
             FROM DSEDAC.PMRL1 H
             WHERE (H.P1INFC <= ? OR H.P1INFC = 0)
               AND (H.P1FNFC >= ? OR H.P1FNFC = 0)`;
-        
+
         // Include BOTH global (empty/whitespace client) AND specific client
         if (trimmedClientCode) {
-            sqlPmrHeaders += ` AND (TRIM(H.CODIGOCLIENTE) = '' OR TRIM(H.CODIGOCLIENTE) = ?)`;
+            sqlPmrHeaders += ` AND (${pmrl1Columns.CODIGOCLIENTE ? "(TRIM(H.CODIGOCLIENTE) = '' OR TRIM(H.CODIGOCLIENTE) = ?)" : '1=1'})`;
             paramsPmr.push(trimmedClientCode);
         } else {
-            sqlPmrHeaders += ` AND TRIM(H.CODIGOCLIENTE) = ''`;
+            sqlPmrHeaders += ` AND ${pmrl1Columns.CODIGOCLIENTE ? "TRIM(H.CODIGOCLIENTE) = ''" : '1=1'}`;
         }
 
         // PMPL1: Get ALL products for all active promos (we'll match in JS)

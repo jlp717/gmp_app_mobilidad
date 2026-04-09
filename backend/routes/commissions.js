@@ -1131,20 +1131,37 @@ router.post('/pay', async (req, res) => {
 router.get('/pdf', async (req, res) => {
     try {
         const { year, months, range } = req.query;
-        const userName = req.user?.name || req.user?.username || '';
+        
+        // FIX: Use user code (req.user.code) instead of name, as name is not in JWT payload
+        // The middleware auth.js sets: req.user = { id, code, role, isJefeVentas }
+        const userCode = req.user?.code || '';
+        const userId = req.user?.id || '';
+        
+        logger.info(`[PDF] Request received from user: code=${userCode}, id=${userId}, ip=${req.ip}`);
 
-        // AUTHORIZATION: Only DIEGO can access
+        // AUTHORIZATION: Only DIEGO (code 98) can access
         const pdfService = require('../services/commissions-pdf.service');
-        if (!pdfService.isAuthorized(userName)) {
-            logger.warn(`[PDF] Unauthorized PDF attempt by ${userName}`);
-            return res.status(403).json({ success: false, error: 'Solo DIEGO puede generar este informe' });
+        
+        // Check both the code (normalized, without leading zeros) and user ID
+        const normalizedCode = userCode.replace(/^0+/, '');
+        const isAuthorized = normalizedCode === '98' || userId === 'V98';
+        
+        if (!isAuthorized) {
+            logger.warn(`[PDF] Unauthorized PDF attempt by user code: ${userCode} (${userId}) from IP: ${req.ip}`);
+            return res.status(403).json({ 
+                success: false, 
+                error: 'Solo DIEGO puede generar este informe',
+                userCode: userCode
+            });
         }
+        
+        logger.info(`[PDF] Authorization granted for DIEGO (code: ${userCode})`);
 
         // Parse date range
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth() + 1;
         const targetYear = year ? parseInt(year) : currentYear;
-        
+
         let startMonth, endMonth;
         if (range === '1') {
             startMonth = currentMonth;
@@ -1158,7 +1175,10 @@ router.get('/pdf', async (req, res) => {
         } else if (months) {
             // Specific months (e.g., "1,2,3")
             const monthList = months.split(',').map(m => parseInt(m.trim())).filter(m => !isNaN(m) && m >= 1 && m <= 12);
-            if (monthList.length === 0) return res.status(400).json({ success: false, error: 'Meses inválidos' });
+            if (monthList.length === 0) {
+                logger.warn(`[PDF] Invalid months parameter: ${months}`);
+                return res.status(400).json({ success: false, error: 'Meses inválidos' });
+            }
             startMonth = Math.min(...monthList);
             endMonth = Math.max(...monthList);
         } else {
@@ -1167,26 +1187,64 @@ router.get('/pdf', async (req, res) => {
             endMonth = currentMonth;
         }
 
-        logger.info(`[PDF] Generating for DIEGO: ${targetYear}, months ${startMonth}-${endMonth}`);
+        logger.info(`[PDF] Generating for DIEGO: year=${targetYear}, months ${startMonth}-${endMonth}`);
 
-        // Fetch data
-        const [vendorData, condorData] = await Promise.all([
-            pdfService.getLacSalesData(targetYear, startMonth, endMonth),
-            pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
-        ]);
+        // Fetch data with error handling
+        let vendorData, condorData;
+        try {
+            [vendorData, condorData] = await Promise.all([
+                pdfService.getLacSalesData(targetYear, startMonth, endMonth),
+                pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
+            ]);
+            
+            logger.info(`[PDF] Data fetched successfully: ${vendorData.length} LAC vendors, ${condorData.length} Condor vendors`);
+        } catch (dataError) {
+            logger.error(`[PDF] Error fetching sales data: ${dataError.message}`);
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Error obteniendo datos de ventas', 
+                details: dataError.message 
+            });
+        }
 
-        // Generate PDF
-        const pdfBuffer = await pdfService.generateCommissionsPdf(vendorData, condorData, targetYear, startMonth, endMonth);
+        // Generate PDF with error handling
+        let pdfBuffer;
+        try {
+            pdfBuffer = await pdfService.generateCommissionsPdf(vendorData, condorData, targetYear, startMonth, endMonth);
+            logger.info(`[PDF] PDF generated successfully (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
+        } catch (pdfError) {
+            logger.error(`[PDF] Error generating PDF: ${pdfError.message}`);
+            logger.error(`[PDF] Stack trace: ${pdfError.stack}`);
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Error generando PDF', 
+                details: pdfError.message 
+            });
+        }
 
-        // Send PDF
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=comisiones_${targetYear}_${startMonth}-${endMonth}.pdf`);
-        res.send(pdfBuffer);
+        // Send PDF with proper headers
+        try {
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=comisiones_${targetYear}_${startMonth}-${endMonth}.pdf`);
+            res.setHeader('Content-Length', pdfBuffer.length);
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.send(pdfBuffer);
 
-        logger.info(`[PDF] PDF generated successfully for DIEGO (${vendorData.length} vendors)`);
+            logger.info(`[PDF] PDF sent successfully for DIEGO (${vendorData.length} vendors)`);
+        } catch (sendError) {
+            logger.error(`[PDF] Error sending PDF: ${sendError.message}`);
+            // Don't throw error here as response may already be partially sent
+        }
     } catch (e) {
-        logger.error(`[PDF] Generation error: ${e.message}`);
-        res.status(500).json({ success: false, error: 'Error generando PDF', details: e.message });
+        logger.error(`[PDF] Unexpected generation error: ${e.message}`);
+        logger.error(`[PDF] Stack trace: ${e.stack}`);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Error generando PDF', 
+            details: e.message,
+            stack: process.env.NODE_ENV === 'development' ? e.stack : undefined
+        });
     }
 });
 

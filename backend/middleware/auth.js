@@ -223,10 +223,11 @@ exports.verifyToken = (req, res, next) => {
         req.user = {
             id: payload.id,
             code: payload.user,
+            name: payload.name, // INCLUDE name from token
             role: payload.role || 'COMERCIAL',
             isJefeVentas: payload.isJefeVentas || false
         };
-        
+
         req.tokenPayload = payload;
         next();
     } catch (error) {
@@ -238,23 +239,24 @@ exports.verifyToken = (req, res, next) => {
 exports.optionalAuth = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return next();
-    
+
     const parts = authHeader.split(' ');
     if (parts.length !== 2 || parts[0] !== 'Bearer') return next();
-    
+
     const token = parts[1];
     const payload = exports.verifyAccessToken(token);
-    
+
     if (payload) {
         req.user = {
             id: payload.id,
             code: payload.user,
+            name: payload.name, // INCLUDE name from token
             role: payload.role || 'COMERCIAL',
             isJefeVentas: payload.isJefeVentas || false
         };
         req.tokenPayload = payload;
     }
-    
+
     next();
 };
 
