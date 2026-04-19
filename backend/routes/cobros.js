@@ -107,9 +107,10 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
             )`;
         }
 
-        sql += ` ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC FETCH FIRST 100 ROWS ONLY`;
+sql += ` ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC FETCH FIRST 100 ROWS ONLY`;
 
-        const resultado = await queryWithParams(sql, [codigoCliente], []);
+        const cacheKey = `cobros:pendientes:${codigoCliente}`;
+        const resultado = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM);
 
         const ahora = new Date();
         const mesActual = ahora.getMonth() + 1;
@@ -340,7 +341,8 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
 
         sql += ` GROUP BY TRIM(PC.CODIGOCLIENTE) ORDER BY TOTAL_PENDIENTE DESC`;
 
-        const rows = await queryWithParams(sql, vendorParams, []);
+        const cacheKeyVendedor = `cobros:pending-summary:${vendedorCodeParam}`;
+        const rows = await cachedQuery(query, sql, cacheKeyVendedor, TTL.SHORT);
 
         const summary = {};
         let grandTotal = 0;

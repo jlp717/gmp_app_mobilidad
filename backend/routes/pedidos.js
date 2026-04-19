@@ -10,7 +10,9 @@ const router = express.Router();
 const pedidosService = require('../services/pedidos.service');
 const logger = require('../middleware/logger');
 const { sanitizeForSQL } = require('../utils/common');
-const { queryWithParams } = require('../config/db');
+const { queryWithParams, query } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 
 // =============================================================================
 // INITIALIZATION (called from server.js startServer after initDb)

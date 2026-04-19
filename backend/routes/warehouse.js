@@ -14,6 +14,14 @@ const { TTL } = require('../services/redis-cache');
 const { sanitizeForSQL } = require('../utils/common');
 const loadPlanner = require('../services/loadPlanner');
 const estimateBoxDimensions = loadPlanner.estimateBoxDimensions;
+const { CircuitBreaker } = require('../services/circuit-breaker');
+
+const warehouseBreaker = new CircuitBreaker({
+    name: 'warehouse',
+    failureThreshold: 3,
+    successThreshold: 2,
+    timeout: 10000
+});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // AUTO-CREATE JAVIER.* WAREHOUSE TABLES (safe, idempotent)
@@ -367,7 +375,10 @@ router.post('/load-plan', async (req, res) => {
         const m = parseInt(month) || (now.getMonth() + 1);
         const d = parseInt(day) || now.getDate();
 
-        const result = await loadPlanner.planLoad(vehicleCode, y, m, d, tolerance);
+        const result = await warehouseBreaker.execute(
+            () => loadPlanner.planLoad(vehicleCode, y, m, d, tolerance),
+            () => ({ status: 'unavailable', error: 'Load planner temporarily unavailable' })
+        );
 
         // Save to history with detailed breakdown
         try {
