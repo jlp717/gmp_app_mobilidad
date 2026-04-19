@@ -5,6 +5,12 @@ const { getPool } = require('../config/db');
 // Structure: { vendedor: { clientCode: { visitDays: [], deliveryDays: [] } } }
 let laclaeCache = {};
 let laclaeCacheReady = false;
+let laclaeCacheLoadAttempted = false; // P2: Singleton - never try to reload after first attempt
+
+// P2: Prevent reload - once attempted, stay in same state
+function isCacheReady() {
+    return laclaeCacheReady;
+}
 
 // Load LACLAE visit/delivery data into memory cache
 // Rutero Configuration Cache (Overrides)
@@ -217,14 +223,24 @@ async function loadLaclaeCache() {
         }
     } catch (error) {
         logger.warn(`⚠️ LACLAE cache failed to load: ${error.message} - using hash fallback`);
-        laclaeCacheReady = false;
+        laclaeCacheLoadAttempted = true; // P2: Mark as attempted, never retry
     }
 }
 
-// Get clients for a day from cache
-// FIXED: Respects blocking entries (ORDEN = -1) from move_clients operations
+// P2: Get clients for a day - NEVER reloads, uses fallback if not ready
 function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverrides = false) {
-    if (!laclaeCacheReady) return null; // Use fallback
+    // P2: If cache not ready and we've attempted load, use fallback (don't retry)
+    if (!laclaeCacheReady && laclaeCacheLoadAttempted) {
+        logger.warn('[LACLAE] Cache not ready, using fallback (no reload)');
+        return null;
+    }
+    
+    if (!laclaeCacheReady) {
+        // First request before cache loaded - trigger async load but return null
+        logger.warn('[LACLAE] Cache not yet loaded, triggering background load');
+        loadLaclaeCache().catch(() => {});
+        return null;
+    }
 
     const dayLower = day.toLowerCase();
     const isDelivery = role === 'repartidor';
@@ -396,45 +412,56 @@ function getVendedoresFromCache() {
     })).sort((a, b) => b.clients - a.clients);
 }
 
-// Get aggregated active VISIT days for a vendor (if they have ANY client with visit on that day)
+// P7: Get aggregated active VISIT days for vendor(s) - handles single or comma-separated
 function getVendorActiveDaysFromCache(vendedorCode) {
     if (!laclaeCacheReady || !vendedorCode) {
         logger.warn(`getVendorActiveDaysFromCache: cache not ready or no vendedorCode`);
         return [];
     }
 
-    const trimmedCode = vendedorCode.trim();
-    const vendorClients = laclaeCache[trimmedCode];
-
-    if (!vendorClients) {
-        logger.warn(`Vendor ${trimmedCode} not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
-        return [];
-    }
-
+    // P7: Split comma-separated codes and process each
+    const codes = String(vendedorCode).split(',').map(c => c.trim()).filter(Boolean);
     const daysSet = new Set();
-    Object.values(vendorClients).forEach(clientData => {
-        if (clientData.visitDays) {
-            clientData.visitDays.forEach(d => daysSet.add(d));
+    let totalClients = 0;
+
+    codes.forEach(code => {
+        const vendorClients = laclaeCache[code];
+        if (vendorClients) {
+            totalClients += Object.keys(vendorClients).length;
+            Object.values(vendorClients).forEach(clientData => {
+                if (clientData.visitDays) {
+                    clientData.visitDays.forEach(d => daysSet.add(d));
+                }
+            });
         }
     });
 
+    if (daysSet.size === 0 && codes.length > 0) {
+        logger.warn(`Vendors [${codes.join(',')}] not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
+        return [];
+    }
+
     const result = Array.from(daysSet);
-    logger.info(`📅 Vendor ${trimmedCode} visit days: ${result.join(', ')} (${Object.keys(vendorClients).length} clients)`);
+    logger.info(`📅 Vendors [${codes.join(',')}] visit days: ${result.join(', ')} (${totalClients} clients)`);
     return result; // Returns ['lunes', 'martes'...]
 }
 
 // Get aggregated active DELIVERY days for a vendor (for repartidores in rutero)
+// P7: Get delivery days for vendor(s) - handles single or comma-separated
 function getVendorDeliveryDaysFromCache(vendedorCode) {
     if (!laclaeCacheReady || !vendedorCode) return [];
 
-    const trimmedCode = vendedorCode.trim();
-    const vendorClients = laclaeCache[trimmedCode] || {};
-
+    // P7: Split comma-separated codes and process each
+    const codes = String(vendedorCode).split(',').map(c => c.trim()).filter(Boolean);
     const daysSet = new Set();
-    Object.values(vendorClients).forEach(clientData => {
-        if (clientData.deliveryDays) {
-            clientData.deliveryDays.forEach(d => daysSet.add(d));
-        }
+
+    codes.forEach(code => {
+        const vendorClients = laclaeCache[code] || {};
+        Object.values(vendorClients).forEach(clientData => {
+            if (clientData.deliveryDays) {
+                clientData.deliveryDays.forEach(d => daysSet.add(d));
+            }
+        });
     });
 
     return Array.from(daysSet);
@@ -556,6 +583,8 @@ function getNaturalOrder(vendorCode, clientCode, day) {
 
 module.exports = {
     loadLaclaeCache,
+    isCacheReady, // P2: Singleton check
+    isCacheLoadAttempted: () => laclaeCacheLoadAttempted, // P2: Check if attempted
     getClientsForDay,
     getWeekCountsFromCache,
     getTotalClientsFromCache,

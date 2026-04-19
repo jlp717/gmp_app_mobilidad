@@ -63,7 +63,7 @@ async function warmUpDashboardQueries() {
             WHERE L.LCAADC = ${year} AND L.LCMMDC = ${month} AND L.LCDDDC = ${today} AND ${LACLAE_SALES_FILTER}
         `;
 
-        // 4. Sales evolution (last 2 years, monthly granularity)
+        // 4. Sales evolution (last 2 years, monthly granularity) - P5: LIMIT to 36 rows
         const evolutionSQL = `
             SELECT L.LCAADC as year, L.LCMMDC as month,
                    SUM(L.LCIMVT) as totalSales,
@@ -72,6 +72,7 @@ async function warmUpDashboardQueries() {
             FROM DSED.LACLAE L
             WHERE ${LACLAE_SALES_FILTER} AND L.LCAADC IN (${year}, ${year - 1})
             GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC, L.LCMMDC
+            FETCH FIRST 36 ROWS ONLY
         `;
 
         // 5. RECENT SALES for ALL vendors (JEFE_VENTAS quick view)

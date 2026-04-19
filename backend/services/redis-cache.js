@@ -99,14 +99,6 @@ class RedisCacheService {
             // Main client for read/write
             this.client = Redis.createClient(optimizedConfig);
 
-            // Subscriber client for pub/sub (separate connection for reliability)
-            this.subscriber = this.client.duplicate();
-
-            // Enable pipelining for batch operations (if available)
-            if (typeof this.client.bufferifyCommands === 'function') {
-                this.client.bufferifyCommands();
-            }
-
             // Event handlers
             this.client.on('connect', () => {
                 logger.info('[RedisCache] ✅ Connected to Redis');
@@ -119,7 +111,10 @@ class RedisCacheService {
             });
 
             this.client.on('error', (err) => {
-                logger.warn(`[RedisCache] ⚠️ Redis error: ${err.message}`);
+                // Only log critical errors, not connection issues
+                if (err.message && !err.message.includes('ECONNREFUSED') && !err.message.includes('ETIMEDOUT')) {
+                    logger.warn(`[RedisCache] ⚠️ Redis error: ${err.message}`);
+                }
                 this.isConnected = false;
             });
 
@@ -127,11 +122,19 @@ class RedisCacheService {
                 logger.warn('[RedisCache] 🔄 Redis reconnecting...');
             });
 
-            // Connect - let the client handle connection automatically
-            await this.client.connect();
+            // Connect with timeout
+            await Promise.race([
+                this.client.connect(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Redis connection timeout')), 5000))
+            ]);
 
-            // Setup cache invalidation channel
-            await this._setupInvalidationChannel();
+            // Setup pub/sub only if connected
+            try {
+                this.subscriber = this.client.duplicate();
+                await this._setupInvalidationChannel();
+            } catch (e) {
+                logger.warn('[RedisCache] ⚠️ Pub/sub unavailable, continuing without');
+            }
 
             logger.info('[RedisCache] ✅ Redis cache service initialized');
             return true;
