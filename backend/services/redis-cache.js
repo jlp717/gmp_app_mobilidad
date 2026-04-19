@@ -8,17 +8,23 @@
 const Redis = require('redis');
 const logger = require('../middleware/logger');
 
-// Configuration from environment
+// Configuration from environment - Redis connection settings
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_PORT = parseInt(process.env.REDIS_PORT) || 6379;
+const REDIS_PASSWORD = process.env.REDIS_PASSWORD;
+
 const REDIS_CONFIG = {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-    password: process.env.REDIS_PASSWORD || undefined,
+    url: process.env.REDIS_URL || `redis://${REDIS_HOST}:${REDIS_PORT}`,
+    password: REDIS_PASSWORD,
     socket: {
+        host: REDIS_HOST,
+        port: REDIS_PORT,
         reconnectStrategy: (retries) => {
-            if (retries > 20) {
-                logger.error('[RedisCache] Max reconnection attempts reached');
-                return new Error('Max reconnection attempts reached');
+            if (retries > 10) {
+                logger.warn('[RedisCache] Max retries reached, continuing without Redis');
+                return false; // Stop reconnecting
             }
-            return Math.min(retries * 100, 5000);
+            return Math.min(retries * 200, 3000);
         },
     },
 };
@@ -96,30 +102,33 @@ class RedisCacheService {
             // Subscriber client for pub/sub (separate connection for reliability)
             this.subscriber = this.client.duplicate();
 
-            // Enable pipelining for batch operations
-            this.client.bufferifyCommands();
+            // Enable pipelining for batch operations (if available)
+            if (typeof this.client.bufferifyCommands === 'function') {
+                this.client.bufferifyCommands();
+            }
 
             // Event handlers
             this.client.on('connect', () => {
-                logger.info('[RedisCache] ✅ Connected to Redis (optimized)');
+                logger.info('[RedisCache] ✅ Connected to Redis');
                 this.isConnected = true;
                 this._flushPendingCommands();
             });
 
+            this.client.on('ready', () => {
+                logger.info('[RedisCache] ✅ Redis ready for operations');
+            });
+
             this.client.on('error', (err) => {
-                logger.error(`[RedisCache] ❌ Error: ${err.message}`);
+                logger.warn(`[RedisCache] ⚠️ Redis error: ${err.message}`);
                 this.isConnected = false;
             });
 
             this.client.on('reconnecting', () => {
-                logger.warn('[RedisCache] 🔄 Reconnecting...');
+                logger.warn('[RedisCache] 🔄 Redis reconnecting...');
             });
 
-            // Connect both clients
-            await Promise.all([
-                this.client.connect(),
-                this.subscriber.connect(),
-            ]);
+            // Connect - let the client handle connection automatically
+            await this.client.connect();
 
             // Setup cache invalidation channel
             await this._setupInvalidationChannel();
@@ -127,9 +136,10 @@ class RedisCacheService {
             logger.info('[RedisCache] ✅ Redis cache service initialized');
             return true;
         } catch (error) {
-            logger.warn(`[RedisCache] ⚠️ Redis unavailable, using L1 only: ${error.message}`);
+            logger.warn(`[RedisCache] ⚠️ Redis unavailable, using L1 cache only: ${error.message}`);
             this.isConnected = false;
-            return false;
+            // Continue without throwing - L1 cache still works
+            return true;
         }
     }
 
