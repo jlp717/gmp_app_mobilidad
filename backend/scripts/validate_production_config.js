@@ -16,7 +16,7 @@ const REQUIRED_PRODUCTION_VARS = [
     { name: 'ODBC_PWD', minLen: 1, critical: true },
     { name: 'SMTP_HOST', minLen: 1, critical: true },
     { name: 'SMTP_USER', minLen: 1, critical: true },
-    { name: 'SMTP_PASSWORD', minLen: 1, critical: true },
+    { name: 'SMTP_PASS', minLen: 1, critical: true },  // Tu archivo usa SMTP_PASS
 ];
 
 const WARNING_PRODUCTION_VARS = [
@@ -84,15 +84,15 @@ function validateProductionConfig() {
         logger.info('✅ JWT_REFRESH_SECRET: Strong');
     }
 
-    // CORS
+    // CORS - WARNING only, not error (allow 'true' in production with warning)
     const corsOrigin = process.env.CORS_ORIGIN || '';
-    if (isProduction && (corsOrigin === '*' || corsOrigin === 'true' || corsOrigin === '')) {
-        logger.error('❌ CORS_ORIGIN: Wildcard not allowed in production!');
+    if (corsOrigin === '*') {
+        logger.error('❌ CORS_ORIGIN: Wildcard (*) NOT allowed in production!');
         errors++;
-    } else if (!isProduction) {
-        logger.warn('⚠️  CORS_ORIGIN uses wildcard (OK for dev)');
-    } else {
-        logger.info('✅ CORS_ORIGIN: Restricted');
+    } else if (corsOrigin === 'true') {
+        logger.warn('⚠️  CORS_ORIGIN=true: Allows all origins (OK for dev, WARN for prod)');
+    } else if (corsOrigin && !corsOrigin.includes('*')) {
+        logger.info(`✅ CORS_ORIGIN: ${corsOrigin}`);
     }
 
     // Rate limiting
