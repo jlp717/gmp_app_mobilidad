@@ -5,6 +5,8 @@
 
 const express = require('express');
 const { query, queryWithParams } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { v4: uuidv4 } = require('uuid');
 
