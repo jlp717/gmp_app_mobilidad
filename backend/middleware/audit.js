@@ -315,6 +315,15 @@ function sanitizeQuery(queryObj) {
 // =============================================================================
 // EXPORTS
 // =============================================================================
+// Cleanup function for memory management
+function cleanup() {
+    // Clear audit ring buffer
+    auditRingBuffer.length = 0;
+    // Clear sessions
+    activeSessions.clear();
+    logger.info('[AUDIT] Cleanup complete');
+}
+
 module.exports = {
     auditMiddleware,
     auditLogin,
@@ -325,5 +334,6 @@ module.exports = {
         activeSessions.forEach((v, k) => { sessions[k] = v; });
         return sessions;
     },
-    getClientIP
+    getClientIP,
+    cleanup
 };

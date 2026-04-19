@@ -85,6 +85,7 @@ class _ProductCardState extends State<ProductCard> {
             ? widget.product.precioCliente
             : widget.product.precioTarifa1)
         : widget.product.precioTarifa1;
+    final minBoxPrice = widget.product.minimumPriceForUnit('CAJAS');
 
     final hasClientePrice = widget.product.precioCliente > 0;
 
@@ -173,15 +174,13 @@ class _ProductCardState extends State<ProductCard> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          widget.product.hasPurchased
-                              ? 'Comprado'
-                              : 'Nuevo',
+                          widget.product.hasPurchased ? 'Comprado' : 'Nuevo',
                           style: TextStyle(
                             color: widget.product.hasPurchased
                                 ? AppTheme.success
                                 : AppTheme.error,
-                            fontSize:
-                                Responsive.fontSize(context, small: 9, large: 10),
+                            fontSize: Responsive.fontSize(context,
+                                small: 9, large: 10),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -396,15 +395,15 @@ class _ProductCardState extends State<ProductCard> {
                   ),
                   // Minimum price reference
                   if (widget.product.precioMinimo > 0 &&
-                      widget.product.precioMinimo != displayPrice)
+                      minBoxPrice != displayPrice)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
-                        'Min: ${_formatPrice(widget.product.precioMinimo, decimals: 2)}\u20AC',
+                        'Min cj: ${_formatPrice(minBoxPrice, decimals: 2)}\u20AC',
                         style: TextStyle(
                           color: Colors.white38,
-                          fontSize: Responsive.fontSize(context,
-                              small: 9, large: 10),
+                          fontSize:
+                              Responsive.fontSize(context, small: 9, large: 10),
                         ),
                       ),
                     ),
@@ -445,25 +444,24 @@ class _ProductCardState extends State<ProductCard> {
                 ],
               ),
               // Quick add button
-              if (widget.onQuickAdd != null && widget.product.stockEnvases > 0)
-                ...[
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    onTap: widget.onQuickAdd,
-                    child: Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: AppTheme.neonBlue.withOpacity(0.4)),
-                      ),
-                      child: const Icon(Icons.add,
-                          color: AppTheme.neonBlue, size: 18),
+              if (widget.onQuickAdd != null && widget.product.hasStock) ...[
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: widget.onQuickAdd,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonBlue.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border:
+                          Border.all(color: AppTheme.neonBlue.withOpacity(0.4)),
                     ),
+                    child: const Icon(Icons.add,
+                        color: AppTheme.neonBlue, size: 18),
                   ),
-                ],
+                ),
+              ],
               if (widget.onToggleFavorite != null) ...[
                 const SizedBox(width: 2),
                 GestureDetector(
@@ -586,7 +584,7 @@ class _ProductCardState extends State<ProductCard> {
               leading: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white),
                 onPressed: () => Navigator.of(ctx).pop(),
-            ),
+              ),
             ),
             body: Center(
               child: InteractiveViewer(

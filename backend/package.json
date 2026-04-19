@@ -65,7 +65,7 @@
     "winston": "^3.11.0",
     "ws": "^8.16.0",
     "xss-clean": "^0.1.4",
-    "zod": "^3.22.4"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

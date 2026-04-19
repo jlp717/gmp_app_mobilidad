@@ -135,9 +135,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   void _onTabChange() {
     if (_tabController.index == 1 && mounted) {
-      ref
-          .read(pedidosProvider)
-          .loadOrderStats(vendedorCodes: _vendedorCodes);
+      ref.read(pedidosProvider).loadOrderStats(vendedorCodes: _vendedorCodes);
       _loadOrdersWithFilters(ref.read(pedidosProvider));
     }
     if (_tabController.index == 0 && mounted) {
@@ -159,9 +157,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   String get _vendedorCodes {
     final vendedorCodes = ProviderScope.containerOf(context)
-        .read(authProvider)
-        .value
-        ?.vendedorCodes ?? [];
+            .read(authProvider)
+            .value
+            ?.vendedorCodes ??
+        [];
     String codes = vendedorCodes.join(',');
     // JEFE_VENTAS: respect global "Ver como" filter
     if (widget.isJefeVentas) {
@@ -477,7 +476,21 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             final uds =
                 isDual ? _parseInputNumber(unidadesController.text) : 0.0;
             final price = _parseInputNumber(priceController.text);
-            final total = isDual ? (qty * price) : (qty * price);
+            double billingQty = qty;
+            if (isDual) {
+              if (qty > 0 && uds > 0) {
+                final expectedUnits = qty * product.unitsPerBox;
+                final unitsAreEquivalent =
+                    (uds - expectedUnits).abs() < 0.0001 ||
+                        uds >= expectedUnits;
+                billingQty = unitsAreEquivalent
+                    ? qty
+                    : qty + (uds / product.unitsPerBox);
+              } else if (uds > 0) {
+                billingQty = uds / product.unitsPerBox;
+              }
+            }
+            final total = billingQty * price;
 
             return Padding(
               padding: EdgeInsets.only(
@@ -1169,9 +1182,12 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       children: [
                         if (product.precioMinimo > 0)
                           Text(
-                            'Min: ${PedidosFormatters.money(product.priceForUnit(selectedUnit), decimals: 3)}',
+                            'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(selectedUnit), decimals: 3)}',
                             style: TextStyle(
-                              color: price > 0 && price < product.precioMinimo
+                              color: price > 0 &&
+                                      price <
+                                          product
+                                              .minimumPriceForUnit(selectedUnit)
                                   ? AppTheme.error
                                   : Colors.white38,
                               fontSize: 11,
@@ -1267,8 +1283,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
                                 if (inputQty <= 0 && inputUds <= 0) return;
 
-                                final provider =
-                                    ref.read(pedidosProvider);
+                                final provider = ref.read(pedidosProvider);
 
                                 double envases = 0.0;
                                 double unidades = 0.0;
@@ -1280,9 +1295,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                                   if (selectedUnit == 'CAJAS') {
                                     envases = inputQty;
                                     unidades = inputQty * product.unitsPerBox;
-                                  } else if (product.isWeightProduct &&
-                                      selectedUnit == 'KILOGRAMOS') {
-                                    envases = inputQty;
+                                  } else if (selectedUnit == 'KILOGRAMOS' ||
+                                      selectedUnit == 'LITROS') {
                                     unidades = inputQty;
                                   } else {
                                     unidades = inputQty;
@@ -1293,12 +1307,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                                 }
 
                                 // Check price warning
-                                if (product.precioMinimo > 0 &&
-                                    price < product.precioMinimo) {
+                                final minPriceForUnit =
+                                    product.minimumPriceForUnit(selectedUnit);
+                                if (minPriceForUnit > 0 &&
+                                    price < minPriceForUnit) {
                                   _showPriceWarning(
                                     context,
                                     price,
-                                    product.precioMinimo,
+                                    minPriceForUnit,
                                   ).then((proceed) {
                                     if (proceed == true) {
                                       final errorFromAdd = provider.addLine(
@@ -1857,16 +1873,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                           ? 'Borrador modificado...'
                           : '\u{1F4BE} ${prov.lastAutoSaved!.hour.toString().padLeft(2, '0')}:${prov.lastAutoSaved!.minute.toString().padLeft(2, '0')}',
                       style: TextStyle(
-                          color: prov.isDirty
-                              ? Colors.orange
-                              : AppTheme.neonGreen,
+                          color:
+                              prov.isDirty ? Colors.orange : AppTheme.neonGreen,
                           fontSize: 10,
                           fontWeight: FontWeight.w600),
                     ),
                   ),
                 IconButton(
-                  icon:
-                      const Icon(Icons.save_outlined, color: Colors.white70),
+                  icon: const Icon(Icons.save_outlined, color: Colors.white70),
                   tooltip: 'Guardar como borrador manual',
                   onPressed: () async {
                     await prov.saveDraft(widget.employeeCode,
@@ -1892,8 +1906,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             return Stack(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.drafts_outlined,
-                      color: Colors.white70),
+                  icon:
+                      const Icon(Icons.drafts_outlined, color: Colors.white70),
                   tooltip: 'Borradores guardados',
                   onPressed: () => _showDraftsDialog(prov),
                 ),
@@ -2294,9 +2308,17 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
     // Mejora 9 â€” Favoritos primero
     final sortedProducts = [...provider.products]..sort((a, b) {
-        final aF = provider.isFavorite(a.code) ? 0 : 1;
-        final bF = provider.isFavorite(b.code) ? 0 : 1;
-        return aF.compareTo(bF);
+        final aSales = a.salesThisYear + a.salesPrevYear;
+        final bSales = b.salesThisYear + b.salesPrevYear;
+        final salesCmp = aSales.compareTo(bSales);
+        if (salesCmp != 0) return salesCmp;
+        final purchasedCmp =
+            (a.hasPurchased ? 1 : 0).compareTo(b.hasPurchased ? 1 : 0);
+        if (purchasedCmp != 0) return purchasedCmp;
+        final favoriteCmp = (provider.isFavorite(b.code) ? 1 : 0)
+            .compareTo(provider.isFavorite(a.code) ? 1 : 0);
+        if (favoriteCmp != 0) return favoriteCmp;
+        return a.name.compareTo(b.name);
       });
 
     return ListView.builder(
@@ -2336,91 +2358,69 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           promo: provider.getPromo(product.code),
           cartQty: cartQty,
           cartQtySuffix: cartQtySuffix,
-          onQuickAdd: (lineInCart != null && lineInCart.cantidadEnvases <= 0)
-              ? null
-              : () async {
-                  HapticFeedback.lightImpact();
-                  final messenger = ScaffoldMessenger.of(context);
-                  messenger.hideCurrentSnackBar();
+          onQuickAdd: () async {
+            HapticFeedback.lightImpact();
+            final messenger = ScaffoldMessenger.of(context);
+            messenger.hideCurrentSnackBar();
 
-                  // Simple product (only CAJAS, not dual) — quick add 1 caja
-                  if (product.availableUnits.length <= 1 &&
-                      !product.isDualFieldProduct) {
-                    final err = provider.addLine(
-                        product, 1.0, 0.0, 'CAJAS', product.bestPrice);
-                    if (err != null) {
-                      messenger.showSnackBar(SnackBar(
-                          content: Text(err,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                          backgroundColor: AppTheme.error,
-                          duration: const Duration(seconds: 2)));
-                    } else {
-                      provider.loadComplementaryProducts();
-                      messenger.showSnackBar(SnackBar(
-                          content: Text('+1 caja de ${product.name}'),
-                          backgroundColor: AppTheme.neonGreen,
-                          duration: const Duration(seconds: 1)));
-                    }
-                    return;
-                  }
+            // Simple product (only CAJAS, not dual) — quick add 1 caja
+            // Multi-unit or dual product — open UnitSelectorModal
+            final initialUnit = lineInCart?.unidadMedida ??
+                provider.lastUnitForProduct(product.code) ??
+                product.availableUnits.first;
+            final result = await UnitSelectorModal.show(
+              context,
+              product: product,
+              initialUnit: product.availableUnits.contains(initialUnit)
+                  ? initialUnit
+                  : product.availableUnits.first,
+              initialQuantity: 1,
+            );
+            if (result == null || result['cleared'] == true) return;
+            final unit = result['unit'] as String;
+            final qty = (result['quantity'] as double?) ?? 0;
+            if (qty <= 0) return;
 
-                  // Multi-unit or dual product — open UnitSelectorModal
-                  final result = await UnitSelectorModal.show(
-                    context,
-                    product: product,
-                    initialUnit: product.availableUnits.first,
-                    initialQuantity: 1,
-                  );
-                  if (result == null || result['cleared'] == true) return;
-                  final unit = result['unit'] as String;
-                  final qty = (result['quantity'] as double?) ?? 0;
-                  if (qty <= 0) return;
-
-                  double envases = 0, unidades = 0;
-                  if (unit == 'CAJAS') {
-                    envases = qty;
-                    unidades = qty * product.unitsPerBox;
-                  } else if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
-                    envases = qty;
-                    unidades = qty;
-                  } else {
-                    unidades = qty;
-                    envases =
-                        product.unitsPerBox > 0 ? qty / product.unitsPerBox : 0;
-                  }
-                  final price = product.priceForUnit(unit);
-                  final err =
-                      provider.addLine(product, envases, unidades, unit, price);
-                  if (err != null) {
-                    if (err.contains('Stock insuficiente')) {
-                      showStockAlternativesSheet(
-                        context: context,
-                        outOfStockProduct: product,
-                        provider: provider,
-                      );
-                    } else {
-                      messenger.showSnackBar(SnackBar(
-                          content: Text(err,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                          backgroundColor: AppTheme.error,
-                          duration: const Duration(seconds: 2)));
-                    }
-                  } else {
-                    provider.loadComplementaryProducts();
-                    final unitLabel = Product.unitLabel(unit);
-                    final fmtQty = qty == qty.truncateToDouble()
-                        ? qty.toStringAsFixed(0)
-                        : qty.toStringAsFixed(2);
-                    messenger.showSnackBar(SnackBar(
-                        content: Text('+$fmtQty $unitLabel de ${product.name}'),
-                        backgroundColor: AppTheme.neonGreen,
-                        duration: const Duration(seconds: 1)));
-                  }
-                },
+            double envases = 0, unidades = 0;
+            if (unit == 'CAJAS') {
+              envases = qty;
+              unidades =
+                  product.isDualFieldProduct ? qty * product.unitsPerBox : 0;
+            } else if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
+              unidades = qty;
+            } else {
+              unidades = qty;
+            }
+            final price = product.priceForUnit(unit);
+            final err =
+                provider.addLine(product, envases, unidades, unit, price);
+            if (err != null) {
+              if (err.contains('Stock insuficiente')) {
+                showStockAlternativesSheet(
+                  context: context,
+                  outOfStockProduct: product,
+                  provider: provider,
+                );
+              } else {
+                messenger.showSnackBar(SnackBar(
+                    content: Text(err,
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                    backgroundColor: AppTheme.error,
+                    duration: const Duration(seconds: 2)));
+              }
+            } else {
+              provider.loadComplementaryProducts();
+              final unitLabel = Product.unitLabel(unit);
+              final fmtQty = qty == qty.truncateToDouble()
+                  ? qty.toStringAsFixed(0)
+                  : qty.toStringAsFixed(2);
+              messenger.showSnackBar(SnackBar(
+                  content: Text('+$fmtQty $unitLabel de ${product.name}'),
+                  backgroundColor: AppTheme.neonGreen,
+                  duration: const Duration(seconds: 1)));
+            }
+          },
           onToggleFavorite: () {
             HapticFeedback.selectionClick();
             provider.toggleFavorite(product.code);

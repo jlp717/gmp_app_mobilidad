@@ -28,11 +28,16 @@ router.get('/metrics', async (req, res) => {
         const now = getCurrentDate();
         const currentYear = parseInt(year) || now.getFullYear();
         const currentMonth = parseInt(month) || (now.getMonth() + 1);
-        const cacheKey = `dashboard:metrics:${currentYear}:${currentMonth || 'all'}:${vendedorCodes}`;
+        const cacheKey = `dashboard:metrics:${currentYear}:${currentMonth || 'all'}:${vendedorCodes || 'ALL'}`;
 
         // -- FETCH FROM REDIS CACHE (L2) --
         // Determine Filter Column based on transition
         const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, [currentYear, currentYear - 1], 'L');
+
+        // OPTIMIZATION v2: Use LONGER TTL for ALL vendors (JEFE_VENTAS needs faster loads)
+        const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
+        const currentTTL = isAllVendors ? TTL.MEDIUM : TTL.SHORT; // 30 min for ALL, 5 min for individual
+        const prevTTL = TTL.LONG; // Prev year is static
 
         const currentDataSql = `
           SELECT 
@@ -43,7 +48,10 @@ router.get('/metrics', async (req, res) => {
           FROM DSED.LACLAE L
           WHERE L.LCAADC = ${currentYear}
             AND L.LCMMDC = ${currentMonth}
-            AND ${LACLAE_SALES_FILTER}
+            AND L.TPDC = 'LAC'
+            AND L.LCTPVT IN ('CC', 'VC')
+            AND L.LCCLLN IN ('AB', 'VT')
+            AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
             ${vendedorFilter}
         `;
 
@@ -59,10 +67,10 @@ router.get('/metrics', async (req, res) => {
             ${vendedorFilter}
         `;
 
-        // Execute in parallel with cache
+        // Execute in parallel with cache - longer TTLs for ALL vendors
         const [currentData, lastData] = await Promise.all([
-            cachedQuery(query, currentDataSql, `${cacheKey}:curr`, TTL.SHORT),
-            cachedQuery(query, lastDataSql, `${cacheKey}:prev`, TTL.LONG) // Prev year usage is static for this month
+            cachedQuery(query, currentDataSql, `${cacheKey}:curr`, currentTTL),
+            cachedQuery(query, lastDataSql, `${cacheKey}:prev`, prevTTL)
         ]);
 
         // Today's metrics (Real-time, short cache)
@@ -269,7 +277,7 @@ router.get('/matrix-data', async (req, res) => {
               ${familyProductFilter}
             GROUP BY ${groupClauses.join(', ')}
             ORDER BY SUM(L.LCIMVT) DESC
-            FETCH FIRST 50000 ROWS ONLY
+            FETCH FIRST 1000 ROWS ONLY
         `;
 
         // Log full SQL for debugging (only first time, not on cache hit)
@@ -404,8 +412,11 @@ router.get('/sales-evolution', async (req, res) => {
             dateFilter = `AND (L.LCAADC < ${now.getFullYear()} OR (L.LCAADC = ${now.getFullYear()} AND L.LCMMDC < ${currentMonth}) OR (L.LCAADC = ${now.getFullYear()} AND L.LCMMDC = ${currentMonth} AND L.LCDDDC <= ${currentDay}))`;
         }
 
-        const cacheKey = `dashboard:evolution:${years}:${granularity}:${upToToday}:${vendedorCodes}`;
+        const cacheKey = `dashboard:evolution:${years || 'default'}:${granularity}:${upToToday}:${vendedorCodes || 'ALL'}`;
         let resultData = [];
+
+        // OPTIMIZATION: Longer cache for ALL vendors (JEFE_VENTAS pattern)
+        const evolutionTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.LONG : TTL.MEDIUM;
 
         if (granularity === 'week') {
             const dailyQuery = `
@@ -418,7 +429,7 @@ router.get('/sales-evolution', async (req, res) => {
         GROUP BY L.LCAADC, L.LCMMDC, L.LCDDDC
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
       `;
-            const dailyData = await cachedQuery(query, dailyQuery, `${cacheKey}:daily`, TTL.LONG);
+            const dailyData = await cachedQuery(query, dailyQuery, `${cacheKey}:daily`, evolutionTTL);
 
             const weeklyMap = {};
             dailyData.forEach(row => {
@@ -448,7 +459,7 @@ router.get('/sales-evolution', async (req, res) => {
         GROUP BY L.LCAADC, L.LCMMDC
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC
       `;
-            const rows = await cachedQuery(query, monthlyQuery, `${cacheKey}:monthly`, TTL.LONG);
+            const rows = await cachedQuery(query, monthlyQuery, `${cacheKey}:monthly`, evolutionTTL);
             resultData = rows.map(r => ({
                 year: r.YEAR, month: r.MONTH,
                 totalSales: parseFloat(r.TOTALSALES) || 0,
@@ -473,7 +484,10 @@ router.get('/recent-sales', async (req, res) => {
     try {
         const { vendedorCodes, limit = 20 } = req.query;
         const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
-        const cacheKey = `dashboard:recent_sales:${vendedorCodes}:${limit}`;
+        const cacheKey = `dashboard:recent_sales:${vendedorCodes || 'ALL'}:${limit}`;
+
+        // OPTIMIZATION: Longer TTL for ALL vendors (JEFE_VENTAS)
+        const recentTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.MEDIUM : TTL.SHORT;
 
         const sql = `
       SELECT 
@@ -494,7 +508,7 @@ router.get('/recent-sales', async (req, res) => {
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
         `;
 
-        const sales = await cachedQuery(query, sql, cacheKey, TTL.SHORT);
+        const sales = await cachedQuery(query, sql, cacheKey, recentTTL);
 
         res.json({
             sales: sales.map(s => ({

@@ -97,6 +97,14 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
               AND PC.IMPORTETOTAL > 0`;
         }
 
+        if (cobrosTableExists) {
+            sql += ` AND NOT EXISTS (
+                SELECT 1 FROM JAVIER.COBROS JC
+                WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE)
+                  AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
+            )`;
+        }
+
         sql += ` ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC FETCH FIRST 100 ROWS ONLY`;
 
         const resultado = await queryWithParams(sql, [codigoCliente], []);
@@ -152,6 +160,48 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
 });
 
 /**
+ * GET /api/cobros/:codigoCliente/estado
+ */
+router.get('/:codigoCliente/estado', async (req, res) => {
+    try {
+        const codigoCliente = sanitizeCode(req.params.codigoCliente);
+        let totalPendiente = 0;
+        let numPedidos = 0;
+
+        try {
+            const rows = await queryWithParams(`
+                SELECT COALESCE(SUM(PC.IMPORTETOTAL), 0) AS TOTAL_PENDIENTE,
+                       COUNT(*) AS NUM_PEDIDOS
+                FROM JAVIER.PEDIDOS_CAB PC
+                WHERE TRIM(PC.CODIGOCLIENTE) = ?
+                  AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
+                  AND PC.IMPORTETOTAL > 0
+            `, [codigoCliente], []);
+            totalPendiente = parseFloat(rows?.[0]?.TOTAL_PENDIENTE) || 0;
+            numPedidos = parseInt(rows?.[0]?.NUM_PEDIDOS) || 0;
+        } catch (e) {
+            logger.warn('[COBROS] Error calculando estado cliente: ' + e.message);
+        }
+
+        res.json({
+            success: true,
+            estadoCliente: {
+                codigo: codigoCliente,
+                nombre: '',
+                limiteCredito: 0,
+                totalPendiente,
+                diasMora: 0,
+                estado: totalPendiente > 0 ? 'EN_ROJO' : 'ACTIVO',
+                motivo: numPedidos > 0 ? `${numPedidos} pedido(s) pendiente(s)` : null
+            }
+        });
+    } catch (error) {
+        logger.error('[COBROS] Error estado: ' + error.message);
+        res.status(500).json({ success: false, error: 'Error obteniendo estado del cliente' });
+    }
+});
+
+/**
  * POST /api/cobros/:codigoCliente/registrar
  */
 router.post('/:codigoCliente/registrar', async (req, res) => {
@@ -186,7 +236,7 @@ router.post('/:codigoCliente/registrar', async (req, res) => {
             logger.info('[COBROS] Tabla JAVIER.COBROS creada correctamente');
         }
 
-        await query(
+        await queryWithParams(
             `INSERT INTO JAVIER.COBROS (
                 ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO,
                 TIPO_VENTA, TIPO_MODO, TIPO_USUARIO, CODIGO_USUARIO,

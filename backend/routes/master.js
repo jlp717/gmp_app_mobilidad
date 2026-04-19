@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const {
     getCurrentDate,
     formatCurrency,
@@ -9,7 +11,7 @@ const {
 } = require('../utils/common');
 
 // =============================================================================
-// PRODUCTS LIST
+// PRODUCTS LIST (OPTIMIZED with caching)
 // =============================================================================
 router.get('/products', async (req, res) => {
     try {
@@ -23,7 +25,11 @@ router.get('/products', async (req, res) => {
                       OR UPPER(CODIGOMARCA) LIKE '%${safeSearch}%')`;
         }
 
-        const products = await query(`
+        // Cache key based on search params
+        const cacheKey = `master:products:${search || 'all'}:${limit}:${offset}`;
+        const cacheTTL = search ? TTL.SHORT : TTL.LONG; // Longer for browse
+
+        const products = await cachedQuery(query, `
       SELECT CODIGOARTICULO as code, DESCRIPCIONARTICULO as name,
   CODIGOMARCA as brand, CODIGOFAMILIA as family,
   UNIDADESCAJA as unitsPerBox, PESO as weight
@@ -32,7 +38,7 @@ router.get('/products', async (req, res) => {
       ORDER BY DESCRIPCIONARTICULO
       OFFSET ${parseInt(offset)} ROWS
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `);
+    `, cacheKey, cacheTTL);
 
         res.json({
             products: products.map(p => ({
@@ -56,15 +62,17 @@ router.get('/products', async (req, res) => {
 // VENDEDORES LIST
 // =============================================================================
 // -----------------------------------------------------------------------------
-// GET /vendedores - Active Salespeople
-// OPTIMIZED: Uses LACLAE but restricted to recent years for speed
+// GET /vendedores - Active Salespeople (OPTIMIZED with caching)
 // -----------------------------------------------------------------------------
 router.get('/vendedores', async (req, res) => {
     try {
         const currentYear = new Date().getFullYear();
         const prevYear = currentYear - 1;
 
-        const vendedores = await query(`
+        // Cache for list of active vendors (changes rarely)
+        const cacheKey = `master:vendedores:${currentYear}:${prevYear}`;
+        
+        const vendedores = await cachedQuery(query, `
             WITH ActiveVendors AS (
                 SELECT DISTINCT TRIM(R1_T8CDVD) as CODE
                 FROM DSED.LACLAE

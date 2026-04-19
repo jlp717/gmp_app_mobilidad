@@ -53,6 +53,13 @@ class Db2CobrosRepository extends CobrosRepository {
       origenExists = colCheck && colCheck.length > 0;
     } catch(e) {}
 
+    const paidFilter = cobrosTableExists ? `
+          AND NOT EXISTS (
+            SELECT 1 FROM JAVIER.COBROS JC
+            WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE)
+              AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
+          )` : '';
+
     // Build query with correct column names
     let sql;
     if (origenExists) {
@@ -66,6 +73,7 @@ class Db2CobrosRepository extends CobrosRepository {
           AND PC.ORIGEN = 'A'
           AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
           AND PC.IMPORTETOTAL > 0
+          ${paidFilter}
         ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC
         FETCH FIRST 100 ROWS ONLY
       `;
@@ -79,6 +87,7 @@ class Db2CobrosRepository extends CobrosRepository {
         WHERE TRIM(PC.CODIGOCLIENTE) = ?
           AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
           AND PC.IMPORTETOTAL > 0
+          ${paidFilter}
         ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC
         FETCH FIRST 100 ROWS ONLY
       `;

@@ -9,6 +9,7 @@ const { query, queryWithParams, getPool } = require('../config/db');
 const logger = require('../middleware/logger');
 const { cachedQuery } = require('./query-optimizer');
 const { redisCache, TTL } = require('./redis-cache');
+const { LACLAE_SALES_FILTER } = require('../utils/common');
 // Audit logging is done through the logger middleware directly
 
 // ============================================================================
@@ -190,35 +191,13 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
     const prevYear = currentYear - 1;
     const clientCodeTrimmed = (clientCode || '').trim();
 
-    // Build purchase history subqueries for ordering (least purchased first)
-    // + year-over-year comparison + hasPurchased flag
-    const salesThisYear = `
-        (SELECT COALESCE(SUM(LC.LCIMVT), 0)
-         FROM DSEDAC.LAC LC
-         WHERE TRIM(LC.CODIGOARTICULO) = A.CODIGOARTICULO
-           AND TRIM(LC.LCCDCL) = ?
-           AND LC.LCAADC = ${currentYear}
-           AND LC.LCTPVT IN ('CC','VC') AND LC.LCCLLN IN ('AB','VT'))
-    `;
-    const salesPrevYear = `
-        (SELECT COALESCE(SUM(LC.LCIMVT), 0)
-         FROM DSEDAC.LAC LC
-         WHERE TRIM(LC.CODIGOARTICULO) = A.CODIGOARTICULO
-           AND TRIM(LC.LCCDCL) = ?
-           AND LC.LCAADC = ${prevYear}
-           AND LC.LCTPVT IN ('CC','VC') AND LC.LCCLLN IN ('AB','VT'))
-    `;
-    const hasPurchased = `
-        CASE WHEN EXISTS (
-            SELECT 1 FROM DSEDAC.LAC LC
-            WHERE TRIM(LC.CODIGOARTICULO) = A.CODIGOARTICULO
-              AND TRIM(LC.LCCDCL) = ?
-              AND LC.LCTPVT IN ('CC','VC') AND LC.LCCLLN IN ('AB','VT')
-        ) THEN 1 ELSE 0 END
-    `;
-
-    // Params for subqueries come before WHERE params
-    const clientCodeForSubqueries = [clientCodeTrimmed, clientCodeTrimmed, clientCodeTrimmed];
+    const historyParams = [
+        currentYear,
+        prevYear,
+        clientCodeTrimmed,
+        currentYear,
+        prevYear,
+    ];
 
     const sql = `
         SELECT
@@ -239,10 +218,22 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
             COALESCE(TC.PRECIOTARIFA, 0) AS precioCliente,
             TRIM(COALESCE(A.FORMATO, '')) AS formato,
             COALESCE(A.PRODUCTOPESADOSN, '') AS productoPesado,
-            ${salesThisYear} AS salesThisYear,
-            ${salesPrevYear} AS salesPrevYear,
-            ${hasPurchased} AS hasPurchased
+            COALESCE(PH.SALES_THIS_YEAR, 0) AS salesThisYear,
+            COALESCE(PH.SALES_PREV_YEAR, 0) AS salesPrevYear,
+            CASE WHEN COALESCE(PH.PURCHASE_COUNT, 0) > 0 THEN 1 ELSE 0 END AS hasPurchased
         FROM DSEDAC.ART A
+        LEFT JOIN (
+            SELECT
+                TRIM(L.LCCDRF) AS CODIGOARTICULO,
+                SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS SALES_THIS_YEAR,
+                SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS SALES_PREV_YEAR,
+                COUNT(*) AS PURCHASE_COUNT
+            FROM DSED.LACLAE L
+            WHERE TRIM(L.LCCDCL) = ?
+              AND L.LCAADC IN (?, ?)
+              AND ${LACLAE_SALES_FILTER}
+            GROUP BY TRIM(L.LCCDRF)
+        ) PH ON TRIM(A.CODIGOARTICULO) = PH.CODIGOARTICULO
         LEFT JOIN (
             SELECT CODIGOARTICULO,
                 SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
@@ -270,14 +261,13 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
             )
         ${where}
         ORDER BY
-            CASE WHEN ${salesThisYear} = 0 AND ${salesPrevYear} = 0 THEN 0 ELSE 1 END,
-            ${salesThisYear} ASC,
-            ${salesPrevYear} ASC,
+            CASE WHEN COALESCE(PH.SALES_THIS_YEAR, 0) = 0 AND COALESCE(PH.SALES_PREV_YEAR, 0) = 0 THEN 0 ELSE 1 END,
+            COALESCE(PH.SALES_THIS_YEAR, 0) ASC,
+            COALESCE(PH.SALES_PREV_YEAR, 0) ASC,
             A.DESCRIPCIONARTICULO
         OFFSET ? ROWS FETCH FIRST ? ROWS ONLY`;
 
-    // Final params: 3 for subqueries + TC subquery + WHERE params + offset + limit
-    const finalParams = [...clientCodeForSubqueries, clientCodeTrimmed, ...params, offset, limit];
+    const finalParams = [...historyParams, clientCodeTrimmed, ...params, offset, limit];
 
     const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${offset}:${limit}`;
 
@@ -721,31 +711,15 @@ async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = '
         let unidadMedida = ln.unidadMedida || 'CAJAS';
         let precio = parseFloat(ln.precio) || parseFloat(ln.precioVenta) || 0;
         
-        // Exact price calculation based on DB unit rules:
-        let importeVenta = 0;
-        
-        // Is it weight based?
-        if (unidadMedida === 'KILOGRAMOS' || unidadMedida === 'LITROS') {
-             importeVenta = cantidadUnidades * precio;
-        } 
-        // Is it dual field (has both envases and unidades, AND U/F condition met or just has both)?
-        else if (cantidadEnvases > 0 && cantidadUnidades > 0 && unidadMedida === 'CAJAS') {
-             // In dual mode, price is always per BOX, and units are a fraction of the box price
-             let decimalFraction = cantidadUnidades / unidadesCaja;
-             importeVenta = (cantidadEnvases + decimalFraction) * precio;
-        }
-        else if (unidadMedida === 'CAJAS') {
-             importeVenta = cantidadEnvases * precio;
-        } 
-        else {
-             // Single field generic units (PIEZAS, BANDEJAS, ESTUCHES, UNIDADES)
-             importeVenta = cantidadUnidades * precio;
-        }
-        
-        // Round to exactly 2 decimals for final line sum to avoid DB floating point drift
-        importeVenta = Math.round(importeVenta * 100) / 100;
-        
-        const importeCosto = parseFloat(ln.importeCosto) || (parseFloat(ln.cantidad || 0) * parseFloat(ln.precioCosto || 0));
+        const importeVenta = calculateLineImporte({
+            unidadMedida,
+            cantidadEnvases,
+            cantidadUnidades,
+            unidadesCaja,
+            precioVenta: precio
+        });
+        const billingQty = unidadMedida === 'CAJAS' ? cantidadEnvases : cantidadUnidades;
+        const importeCosto = parseFloat(ln.importeCosto) || Math.round((billingQty * (parseFloat(ln.precioCosto) || 0)) * 100) / 100;
         const importeMargen = importeVenta - importeCosto;
         const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
 
@@ -1073,9 +1047,12 @@ function calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades,
     if (um === 'KILOGRAMOS' || um === 'LITROS') {
         importe = unidades * precio;
     } else if (envases > 0 && unidades > 0 && um === 'CAJAS') {
-        // Dual-field: price is per box, units are fraction of box
-        const decimalFraction = unidades / uc;
-        importe = (envases + decimalFraction) * precio;
+        const expectedEquivalentUnits = envases * uc;
+        const unitsAreBoxEquivalence = Math.abs(unidades - expectedEquivalentUnits) < 0.0001
+            || unidades >= expectedEquivalentUnits;
+        importe = unitsAreBoxEquivalence
+            ? envases * precio
+            : (envases + (unidades / uc)) * precio;
     } else if (um === 'CAJAS') {
         importe = envases * precio;
     } else {

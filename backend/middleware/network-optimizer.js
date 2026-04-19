@@ -7,23 +7,24 @@
 const logger = require('./logger');
 
 /**
- * Feature flags for gradual rollout
+ * Feature flags for gradual rollout (OPTIMIZED v3)
  */
 const FEATURE_FLAGS = {
     HTTP2_PUSH: process.env.ENABLE_HTTP2_PUSH === 'true',
-    AGGRESSIVE_COMPRESSION: process.env.ENABLE_AGGRESSIVE_COMPRESSION !== 'false',
+    AGGRESSIVE_COMPRESSION: true, // Always on for JSON
     ETAG_CACHING: true,
     RESPONSE_COALESCING: true,
     PREFETCH_HINTS: true,
+    FAST_304: true, // Quick 304 responses
 };
 
 /**
- * Compression thresholds by content type
+ * Compression thresholds by content type (OPTIMIZED)
  */
 const COMPRESSION_CONFIG = {
-    threshold: 1024, // Min bytes to compress
-    level: 6, // zlib compression level (1-9)
-    memLevel: 8,
+    threshold: 256, // Lower threshold for more compression (was 1024)
+    level: 9, // Maximum compression level (was 6)
+    memLevel: 9,
     contentTypes: [
         'application/json',
         'text/plain',

@@ -14,6 +14,17 @@ const logger = require('./logger');
 const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || crypto.randomBytes(32).toString('hex');
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || crypto.randomBytes(32).toString('hex');
 
+// SECURITY: Fail fast if using default/development secrets in production
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const isProduction = NODE_ENV === 'production';
+
+if (isProduction && process.env.JWT_ACCESS_SECRET === undefined) {
+    throw new Error('[SECURITY] JWT_ACCESS_SECRET required in production. Set NODE_ENV=development or provide JWT_ACCESS_SECRET');
+}
+if (isProduction && process.env.JWT_REFRESH_SECRET === undefined) {
+    throw new Error('[SECURITY] JWT_REFRESH_SECRET required in production. Set NODE_ENV=development or provide JWT_REFRESH_SECRET');
+}
+
 if (ACCESS_SECRET.length < 32) {
     logger.warn('[AUTH] WARNING: JWT_ACCESS_SECRET is too short. Use at least 32 characters.');
 }

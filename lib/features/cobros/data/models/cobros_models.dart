@@ -98,10 +98,15 @@ class CobroPendiente {
       id: json['id']?.toString() ?? '',
       referencia: (json['referencia'] as String?) ?? '',
       tipo: _parseTipoCobro((json['tipo'] as String?) ?? 'normal'),
-      fecha: DateTime.tryParse((json['fecha'] as String?) ?? '') ?? DateTime.now(),
-      fechaVencimiento: DateTime.tryParse((json['fechaVencimiento'] as String?) ?? ''),
-      importeTotal: ((json['importeTotal'] ?? json['importe'] ?? 0) as num).toDouble(),
-      importePendiente: ((json['importePendiente'] ?? json['importe'] ?? 0) as num).toDouble(),
+      fecha:
+          DateTime.tryParse((json['fecha'] as String?) ?? '') ?? DateTime.now(),
+      fechaVencimiento:
+          DateTime.tryParse((json['fechaVencimiento'] as String?) ?? ''),
+      importeTotal:
+          ((json['importeTotal'] ?? json['importe'] ?? 0) as num).toDouble(),
+      importePendiente:
+          ((json['importePendiente'] ?? json['importe'] ?? 0) as num)
+              .toDouble(),
       formaPago: json['formaPago'] as String?,
       esCTR: json['esCTR'] == true,
     );
@@ -293,6 +298,7 @@ class ResumenCobros {
   final double totalPendiente;
   final int numFacturas;
   final int numAlbaranes;
+  final int numPedidos;
   final int diasMoraMaximo;
   final List<CobroPendiente> cobros;
 
@@ -300,6 +306,7 @@ class ResumenCobros {
     this.totalPendiente = 0,
     this.numFacturas = 0,
     this.numAlbaranes = 0,
+    this.numPedidos = 0,
     this.diasMoraMaximo = 0,
     this.cobros = const [],
   });
@@ -307,6 +314,7 @@ class ResumenCobros {
   factory ResumenCobros.fromJson(Map<String, dynamic> json) {
     final facturasData = json['facturas'];
     final albaranesData = json['albaranes'];
+    final pedidosData = json['pedidos'];
     return ResumenCobros(
       totalPendiente: ((json['totalPendiente'] ?? 0) as num).toDouble(),
       numFacturas: facturasData is Map
@@ -315,6 +323,9 @@ class ResumenCobros {
       numAlbaranes: albaranesData is Map
           ? ((albaranesData['cantidad'] ?? 0) as num).toInt()
           : (albaranesData as int?) ?? 0,
+      numPedidos: pedidosData is Map
+          ? ((pedidosData['cantidad'] ?? 0) as num).toInt()
+          : (pedidosData as int?) ?? 0,
       diasMoraMaximo: (json['diasMoraMaximo'] as int?) ?? 0,
       cobros: (json['cobros'] as List<dynamic>?)
               ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))

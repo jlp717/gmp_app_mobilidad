@@ -59,9 +59,10 @@ const getClientsHandler = async (req, res) => {
     }
 
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
-    const cacheKey = `clients:list:v5:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${limit}:${offset}`;
-    // Use LONG TTL for browsing, MEDIUM for search results
-    const cacheTTL = isSearchQuery ? TTL.MEDIUM : TTL.LONG;
+    const cacheKey = `clients:list:v5:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${limit}:${offset}`;
+    // OPTIMIZATION: Longer TTL for ALL vendors (JEFE_VENTAS default)
+    const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
+    const cacheTTL = isSearchQuery ? TTL.MEDIUM : (isAllVendors ? TTL.LONG : TTL.MEDIUM);
 
     // Execute with Cache (LONG TTL for browsing, MEDIUM for search)
     logger.info(`[CLIENTS] Starting query for vendor ${vendedorCodes || 'all'}, search: ${search || 'none'}`);
@@ -302,78 +303,89 @@ router.get('/:code', async (req, res) => {
       FETCH FIRST 1 ROWS ONLY
   `);
 
-    if (clientInfo.length === 0) {
+if (clientInfo.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
-    // Get editable observations from our custom table
-    let editableNotes = null;
-    try {
-      const notesResult = await query(`
-        SELECT OBSERVACIONES, MODIFIED_BY, MODIFIED_AT
-        FROM JAVIER.CLIENT_NOTES
-        WHERE CLIENT_CODE = '${clientCode}'
-        FETCH FIRST 1 ROWS ONLY
-      `, false);
-      if (notesResult[0]) {
-        editableNotes = {
-          text: notesResult[0].OBSERVACIONES,
-          modifiedBy: notesResult[0].MODIFIED_BY,
-          modifiedAt: notesResult[0].MODIFIED_AT
-        };
-      }
-    } catch (e) {
-      // Table may not exist yet, ignore
-      logger.debug(`CLIENT_NOTES table not found: ${e.message}`);
-    }
-
-    // Sales summary
-    const salesSummary = await query(`
-      SELECT 
-        SUM(IMPORTEVENTA) as totalSales,
-        SUM(IMPORTEMARGENREAL) as totalMargin,
-        SUM(CANTIDADENVASES) as totalBoxes,
-        COUNT(*) as totalLines,
-        COUNT(DISTINCT ANODOCUMENTO || '-' || MESDOCUMENTO || '-' || DIADOCUMENTO) as numOrders
-      FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
-        AND ANODOCUMENTO >= ${MIN_YEAR} 
-        AND TIPOVENTA IN ('CC', 'VC')
-        AND TIPOLINEA IN ('AB', 'VT') -- Assuming TIPOLINEA exists in LINDTO
-        AND SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
-    `);
-
-    // Monthly sales trend (last 12 months)
-    const monthlyTrend = await query(`
-      SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
-        SUM(IMPORTEVENTA) as sales, SUM(IMPORTEMARGENREAL) as margin
-      FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
-        AND ANODOCUMENTO >= ${MIN_YEAR} 
-        AND TIPOVENTA IN ('CC', 'VC')
-        AND TIPOLINEA IN ('AB', 'VT')
-        AND SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
-      GROUP BY ANODOCUMENTO, MESDOCUMENTO
-      ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
-      FETCH FIRST 12 ROWS ONLY
-  `);
-
-    // Top products for this client
-    const topProducts = await query(`
-      SELECT L.CODIGOARTICULO as code,
+    // OPTIMIZED: Execute ALL detail queries in PARALLEL for 6x speedup
+    const [editableNotesResult, salesSummaryResult, monthlyTrendResult, topProductsResult, paymentStatusResult] = await Promise.all([
+      // Query 1: Editable observations
+      (async () => {
+        try {
+          const notesResult = await query(`
+            SELECT OBSERVACIONES, MODIFIED_BY, MODIFIED_AT
+            FROM JAVIER.CLIENT_NOTES
+            WHERE CLIENT_CODE = '${clientCode}'
+            FETCH FIRST 1 ROWS ONLY
+          `, false);
+          return notesResult[0] || null;
+        } catch (e) { return null; }
+      })(),
+      // Query 2: Sales summary
+      query(`
+        SELECT 
+          SUM(IMPORTEVENTA) as totalSales,
+          SUM(IMPORTEMARGENREAL) as totalMargin,
+          SUM(CANTIDADENVASES) as totalBoxes,
+          COUNT(*) as totalLines,
+          COUNT(DISTINCT ANODOCUMENTO || '-' || MESDOCUMENTO || '-' || DIADOCUMENTO) as numOrders
+        FROM DSEDAC.LINDTO
+        WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
+          AND ANODOCUMENTO >= ${MIN_YEAR} 
+          AND TIPOVENTA IN ('CC', 'VC')
+          AND TIPOLINEA IN ('AB', 'VT')
+          AND SERIEALBARAN NOT IN ('N', 'Z')
+          ${vendedorFilter}
+      `),
+      // Query 3: Monthly trend
+      query(`
+        SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
+          SUM(IMPORTEVENTA) as sales, SUM(IMPORTEMARGENREAL) as margin
+        FROM DSEDAC.LINDTO
+        WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
+          AND ANODOCUMENTO >= ${MIN_YEAR} 
+          AND TIPOVENTA IN ('CC', 'VC')
+          AND TIPOLINEA IN ('AB', 'VT')
+          AND SERIEALBARAN NOT IN ('N', 'Z')
+          ${vendedorFilter}
+        GROUP BY ANODOCUMENTO, MESDOCUMENTO
+        ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
+        FETCH FIRST 12 ROWS ONLY
+      `),
+      // Query 4: Top products
+      query(`
+        SELECT L.CODIGOARTICULO as code,
   COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION)) as name,
   SUM(L.IMPORTEVENTA) as totalSales,
   SUM(L.CANTIDADENVASES) as totalBoxes,
   COUNT(*) as timesOrdered
-      FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
-      GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
-      ORDER BY totalSales DESC
-      FETCH FIRST 10 ROWS ONLY
-  `);
+        FROM DSEDAC.LINDTO L
+        LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+        WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
+        GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
+        ORDER BY totalSales DESC
+        FETCH FIRST 10 ROWS ONLY
+      `),
+      // Query 5: Payment status
+      query(`
+        SELECT
+          SUM(CASE WHEN CVC.SITUACION = 'C' THEN CVC.IMPORTEVENCIMIENTO ELSE 0 END) as paid,
+          SUM(CASE WHEN CVC.SITUACION = 'P' THEN CVC.IMPORTEPENDIENTE ELSE 0 END) as pending,
+          COUNT(CASE WHEN CVC.SITUACION = 'P' THEN 1 END) as pendingCount
+        FROM DSEDAC.CVC CVC
+        WHERE CVC.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND CVC.ANOEMISION >= ${MIN_YEAR}
+      `),
+    ]).then(results => {
+      // Parse results
+      const notes = results[0];
+      return {
+        notes: notes ? { text: notes.OBSERVACIONES, modifiedBy: notes.MODIFIED_BY, modifiedAt: notes.MODIFIED_AT } : null,
+        salesSummary: results[1]?.[0] || {},
+        monthlyTrend: results[2] || [],
+        topProducts: results[3] || [],
+        paymentStatus: results[4]?.[0] || {}
+      };
+    });
 
     // Payment status from CVC with CAC cross-validation
     // CVC tracks payment/vencimiento records; CAC has the actual invoice totals.

@@ -643,7 +643,7 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
             WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
               AND OPP.ANOREPARTO = ${selectedYear}
               ${clientFilter}
-            FETCH FIRST 10000 ROWS ONLY
+            FETCH FIRST 1000 ROWS ONLY
         `;
 
         const clientRows = await cachedQuery(query, clientsSql, `repartidor:objDetail:${cleanIds}:${selectedYear}:${clientId || 'all'}`, TTL.REALTIME);

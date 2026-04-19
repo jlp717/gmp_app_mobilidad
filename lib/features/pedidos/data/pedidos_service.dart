@@ -349,6 +349,16 @@ class Product {
     return base;
   }
 
+  /// Minimum allowed price expressed in the selected sale unit.
+  /// precioMinimo is stored as a box-level value in the backend.
+  double minimumPriceForUnit(String unit) {
+    if (precioMinimo <= 0) return 0;
+    if (unit == 'CAJAS') return precioMinimo;
+    final qtyPerBox = quantityPerBoxForUnit(unit);
+    if (qtyPerBox <= 0) return precioMinimo;
+    return precioMinimo / qtyPerBox;
+  }
+
   /// Stock available expressed in the given unit type
   double stockForUnit(String unit) {
     if (unit == 'CAJAS') return stockEnvases;
@@ -772,10 +782,14 @@ class OrderLine {
   /// - KILOGRAMOS/other: cantidadEnvases = cantidadUnidades / unidadesCaja
   void recalculate() {
     final unit = unidadMedida.trim().toUpperCase();
+    final isDualField = (unit == 'CAJAS' || unit.isEmpty) &&
+        unidadesCaja > 1 &&
+        unidadesFraccion > 0 &&
+        unidadesFraccion < unidadesCaja;
     // Auto-compute complementary field
     if (unit == 'CAJAS' || unit.isEmpty) {
       // Selling by boxes → compute total units
-      if (cantidadEnvases > 0 && unidadesCaja > 0) {
+      if (!isDualField && cantidadEnvases > 0 && unidadesCaja > 0) {
         cantidadUnidades =
             double.parse((cantidadEnvases * unidadesCaja).toStringAsFixed(5));
       }
@@ -787,9 +801,27 @@ class OrderLine {
       }
     }
 
-    // The billing qty is always the primary field for the selected unit
-    final billingQty =
-        (unit == 'CAJAS' || unit.isEmpty) ? cantidadEnvases : cantidadUnidades;
+    double billingQty;
+    if ((unit == 'CAJAS' || unit.isEmpty) &&
+        isDualField &&
+        cantidadEnvases > 0 &&
+        cantidadUnidades > 0) {
+      final expectedEquivalentUnits = cantidadEnvases * unidadesCaja;
+      final unitsAreBoxEquivalence =
+          (cantidadUnidades - expectedEquivalentUnits).abs() < 0.0001 ||
+              cantidadUnidades >= expectedEquivalentUnits;
+      billingQty = unitsAreBoxEquivalence
+          ? cantidadEnvases
+          : cantidadEnvases + (cantidadUnidades / unidadesCaja);
+    } else if ((unit == 'CAJAS' || unit.isEmpty) &&
+        isDualField &&
+        cantidadUnidades > 0) {
+      billingQty = cantidadUnidades / unidadesCaja;
+    } else {
+      billingQty = (unit == 'CAJAS' || unit.isEmpty)
+          ? cantidadEnvases
+          : cantidadUnidades;
+    }
     importeVenta = double.parse((precioVenta * billingQty).toStringAsFixed(2));
     importeCosto = double.parse((precioCosto * billingQty).toStringAsFixed(2));
     importeMargen =
@@ -988,6 +1020,22 @@ class Recommendation {
 class PedidosService {
   static const _base = '/pedidos';
 
+  static Map<String, dynamic> _normalizeOrderResponse(
+      Map<String, dynamic> response) {
+    final normalized = Map<String, dynamic>.from(response);
+    final orderRaw = response['order'];
+    final order = orderRaw is Map ? Map<String, dynamic>.from(orderRaw) : null;
+    final headerRaw = response['header'] ?? order?['header'] ?? order;
+    if (headerRaw is Map) {
+      final header = Map<String, dynamic>.from(headerRaw);
+      normalized['header'] = header;
+      normalized['id'] ??= header['id'];
+    }
+    final linesRaw = response['lines'] ?? order?['lines'];
+    if (linesRaw is List) normalized['lines'] = linesRaw;
+    return normalized;
+  }
+
   // ── Product Catalog ──
 
   static Future<List<Product>> getProducts({
@@ -1131,7 +1179,7 @@ class PedidosService {
       });
       // Invalidate orders cache
       CacheService.invalidateByPrefix('pedidos:orders:');
-      return response;
+      return _normalizeOrderResponse(response);
     } catch (e) {
       debugPrint('[PedidosService] Error createOrder: $e');
       rethrow;
@@ -1282,7 +1330,7 @@ class PedidosService {
           data: {'saleType': saleType});
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
-      return response;
+      return _normalizeOrderResponse(response);
     } on ApiException catch (e) {
       // Capture 409 errors (stock insufficient) and return the data
       if (e.statusCode == 409) {

@@ -60,7 +60,6 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       return;
     }
 
-    final int exitos = 0;
     int fallos = 0;
 
     showDialog(
@@ -74,9 +73,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       final cobro = _provider.cobrosPendientes.firstWhere(
         (e) => e.id == entry.key,
         orElse: () => CobroPendiente(
-          id: entry.key, referencia: entry.key,
-          tipo: TipoCobro.normal, fecha: DateTime.now(),
-          importeTotal: 0, importePendiente: 0, fechaVencimiento: null,
+          id: entry.key,
+          referencia: entry.key,
+          tipo: TipoCobro.normal,
+          fecha: DateTime.now(),
+          importeTotal: 0,
+          importePendiente: 0,
+          fechaVencimiento: null,
         ),
       );
       if (cobro.importePendiente <= 0) continue;
@@ -85,8 +88,11 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           ? (_partialAmounts[entry.key] ?? 0.0)
           : cobro.importePendiente;
 
-      final tipoVenta = _formaPago == 'CONTADO' ? TipoVenta.contado : TipoVenta.credito;
-      final tipoModo = _formaPago == 'CONTADO' ? TipoModoCobro.normal : TipoModoCobro.especial;
+      final tipoVenta =
+          _formaPago == 'CONTADO' ? TipoVenta.contado : TipoVenta.credito;
+      final tipoModo = _formaPago == 'CONTADO'
+          ? TipoModoCobro.normal
+          : TipoModoCobro.especial;
 
       final success = await _provider.registrarCobro(
         codigoCliente: widget.codigoCliente,
@@ -99,14 +105,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       if (!success) fallos++;
     }
 
-    final int exitosCalc = _itemStates.values.where((s) => s != 'NONE').length - fallos;
-
     Navigator.of(context).pop();
 
     if (fallos == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Cobro registrado correctamente: ${_currencyFormat.format(totalACobrar)}'),
+          content: Text(
+              'Cobro registrado correctamente: ${_currencyFormat.format(totalACobrar)}'),
           backgroundColor: AppTheme.success,
         ),
       );
@@ -123,7 +128,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cobros = ref.watch(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
+    final cobros = ref
+        .watch(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
     final pendientes = cobros.cobrosPendientes;
     final totalAbonar = _calcularTotalACobrar();
 
@@ -178,11 +184,14 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Total a cobrar:',
-                            style: TextStyle(color: Colors.white70, fontSize: 16)),
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 16)),
                         Text(
                           _currencyFormat.format(totalAbonar),
                           style: TextStyle(
-                            color: totalAbonar > 0 ? AppTheme.success : AppTheme.textSecondary,
+                            color: totalAbonar > 0
+                                ? AppTheme.success
+                                : AppTheme.textSecondary,
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
@@ -205,8 +214,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                           },
                         ),
                 ),
-                if (pendientes.isNotEmpty)
-                  _buildBottomBar(totalAbonar),
+                if (pendientes.isNotEmpty) _buildBottomBar(totalAbonar),
               ],
             ),
     );
@@ -227,12 +235,17 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       ),
       child: ExpansionTile(
         leading: Icon(
-          state == 'COMPLETO' ? Icons.check_circle : state == 'PARCIAL' ? Icons.indeterminate_check_box : Icons.radio_button_unchecked,
+          state == 'COMPLETO'
+              ? Icons.check_circle
+              : state == 'PARCIAL'
+                  ? Icons.indeterminate_check_box
+                  : Icons.radio_button_unchecked,
           color: state != 'NONE' ? AppTheme.success : AppTheme.textSecondary,
         ),
         title: Text(
-          cobro.referencia ?? cobro.id,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id,
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
           'Vencimiento: ${cobro.fechaVencimiento != null ? DateFormat('dd/MM/yyyy').format(cobro.fechaVencimiento!) : 'N/A'}',
@@ -253,17 +266,21 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               children: [
                 Row(
                   children: [
-                    _buildStateButton('NINGUNO', cobro, Icons.radio_button_unchecked),
+                    _buildStateButton(
+                        'NINGUNO', cobro, Icons.radio_button_unchecked,
+                        value: 'NONE'),
                     const SizedBox(width: 8),
                     _buildStateButton('COMPLETO', cobro, Icons.check_circle),
                     const SizedBox(width: 8),
-                    _buildStateButton('PARCIAL', cobro, Icons.indeterminate_check_box),
+                    _buildStateButton(
+                        'PARCIAL', cobro, Icons.indeterminate_check_box),
                   ],
                 ),
                 if (isPartial) ...[
                   const SizedBox(height: 12),
                   TextField(
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Importe a cobrar',
@@ -272,11 +289,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       fillColor: AppTheme.darkBase,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.neonBlue.withOpacity(0.3)),
+                        borderSide: BorderSide(
+                            color: AppTheme.neonBlue.withOpacity(0.3)),
                       ),
                     ),
                     onChanged: (value) {
-                      final amount = double.tryParse(value.replaceAll(',', '.'));
+                      final amount =
+                          double.tryParse(value.replaceAll(',', '.'));
                       if (amount != null) {
                         _partialAmounts[cobro.id] = amount;
                         setState(() {});
@@ -292,15 +311,17 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     );
   }
 
-  Widget _buildStateButton(String label, CobroPendiente cobro, IconData icon) {
+  Widget _buildStateButton(String label, CobroPendiente cobro, IconData icon,
+      {String? value}) {
+    final stateValue = value ?? label;
     final current = _itemStates[cobro.id] ?? 'NONE';
-    final isSelected = current == label;
+    final isSelected = current == stateValue;
 
     return Expanded(
       child: ElevatedButton.icon(
         onPressed: () => setState(() {
-          _itemStates[cobro.id] = isSelected ? 'NONE' : label;
-          if (!isSelected && label != 'PARCIAL') {
+          _itemStates[cobro.id] = isSelected ? 'NONE' : stateValue;
+          if (!isSelected && stateValue != 'PARCIAL') {
             _partialAmounts.remove(cobro.id);
           }
         }),
@@ -320,7 +341,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
-        border: Border(top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2))),
+        border:
+            Border(top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2))),
       ),
       child: Row(
         children: [
@@ -338,7 +360,9 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   items: ['CONTADO', 'CREDITO'].map((p) {
                     return DropdownMenuItem(value: p, child: Text(p));
                   }).toList(),
-                  onChanged: (v) { if (v != null) setState(() => _formaPago = v); },
+                  onChanged: (v) {
+                    if (v != null) setState(() => _formaPago = v);
+                  },
                 ),
               ],
             ),
@@ -350,7 +374,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               backgroundColor: AppTheme.neonBlue,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
             child: Text(
               'Cobrar ${_currencyFormat.format(total)}',

@@ -64,10 +64,12 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
   void initState() {
     super.initState();
     _units = widget.availableUnits;
-    _selectedUnit = widget.initialUnit ?? (_units.isNotEmpty ? _units.first : 'CAJAS');
+    _selectedUnit =
+        widget.initialUnit ?? (_units.isNotEmpty ? _units.first : 'CAJAS');
     _qtyController.text = widget.initialQuantity?.toStringAsFixed(
-      _selectedUnit == 'KILOGRAMOS' || _selectedUnit == 'LITROS' ? 2 : 0,
-    ) ?? '1';
+          _selectedUnit == 'KILOGRAMOS' || _selectedUnit == 'LITROS' ? 2 : 0,
+        ) ??
+        '1';
   }
 
   @override
@@ -78,27 +80,45 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
 
   String _unitLabel(String unit) {
     switch (unit.toUpperCase()) {
-      case 'CAJAS': return 'Cajas';
-      case 'UNIDADES': return 'Unidades';
-      case 'PIEZAS': return 'Piezas';
-      case 'BANDEJAS': return 'Bandejas';
-      case 'ESTUCHES': case 'ESTUCHE': return 'Estuches';
-      case 'KILOGRAMOS': return 'Kg';
-      case 'LITROS': return 'Litros';
-      default: return unit;
+      case 'CAJAS':
+        return 'Cajas';
+      case 'UNIDADES':
+        return 'Unidades';
+      case 'PIEZAS':
+        return 'Piezas';
+      case 'BANDEJAS':
+        return 'Bandejas';
+      case 'ESTUCHES':
+      case 'ESTUCHE':
+        return 'Estuches';
+      case 'KILOGRAMOS':
+        return 'Kg';
+      case 'LITROS':
+        return 'Litros';
+      default:
+        return unit;
     }
   }
 
   String _unitAbbr(String unit) {
     switch (unit.toUpperCase()) {
-      case 'CAJAS': return 'cj';
-      case 'UNIDADES': return 'uds';
-      case 'PIEZAS': return 'pzs';
-      case 'BANDEJAS': return 'band';
-      case 'ESTUCHES': case 'ESTUCHE': return 'est';
-      case 'KILOGRAMOS': return 'kg';
-      case 'LITROS': return 'L';
-      default: return unit;
+      case 'CAJAS':
+        return 'cj';
+      case 'UNIDADES':
+        return 'uds';
+      case 'PIEZAS':
+        return 'pzs';
+      case 'BANDEJAS':
+        return 'band';
+      case 'ESTUCHES':
+      case 'ESTUCHE':
+        return 'est';
+      case 'KILOGRAMOS':
+        return 'kg';
+      case 'LITROS':
+        return 'L';
+      default:
+        return unit;
     }
   }
 
@@ -109,10 +129,12 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
 
     final parts = <String>[];
     if (p.unitsPerBox > 1) {
-      parts.add('1 cj = ${p.unitsPerBox.toStringAsFixed(p.unitsPerBox == p.unitsPerBox.roundToDouble() ? 0 : 1)} uds');
+      parts.add(
+          '1 cj = ${p.unitsPerBox.toStringAsFixed(p.unitsPerBox == p.unitsPerBox.roundToDouble() ? 0 : 1)} uds');
     }
     if (p.unitsRetractil > 0) {
-      parts.add('U/R: ${p.unitsRetractil.toStringAsFixed(p.unitsRetractil == p.unitsRetractil.roundToDouble() ? 0 : 1)}');
+      parts.add(
+          'U/R: ${p.unitsRetractil.toStringAsFixed(p.unitsRetractil == p.unitsRetractil.roundToDouble() ? 0 : 1)}');
     }
     return parts.isEmpty ? null : parts.join('  ·  ');
   }
@@ -123,16 +145,15 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     if (p == null) return '';
 
     final envases = p.stockEnvases;
-    final unidades = p.stockUnidades;
 
     switch (unit.toUpperCase()) {
       case 'CAJAS':
         return '${_fmtNum(envases)} cj';
       case 'KILOGRAMOS':
       case 'LITROS':
-        return '${_fmtNum(unidades, decimals: 2)} ${_unitAbbr(unit)}';
+        return '${_fmtNum(p.stockForUnit(unit), decimals: 2)} ${_unitAbbr(unit)}';
       default:
-        return '${_fmtNum(unidades)} ${_unitAbbr(unit)}';
+        return '${_fmtNum(p.stockForUnit(unit))} ${_unitAbbr(unit)}';
     }
   }
 
@@ -165,14 +186,16 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     final abbr = _unitAbbr(p.displayUnit);
     if (unit == 'CAJAS') {
       final n = p.unitsPerBox;
-      final nStr = n == n.roundToDouble()
-          ? n.toInt().toString()
-          : n.toStringAsFixed(2);
+      final nStr =
+          n == n.roundToDouble() ? n.toInt().toString() : n.toStringAsFixed(2);
       return '1 cj = $nStr $abbr';
     }
     // Inverse: how many boxes per 1 unit
     final frac = 1.0 / p.unitsPerBox;
-    final fracStr = frac.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+    final fracStr = frac
+        .toStringAsFixed(3)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
     return '1 $abbr = $fracStr cj';
   }
 
@@ -180,7 +203,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
   String? _netoUR() {
     final p = widget.product;
     if (p == null || p.unitsRetractil <= 0) return null;
-    final bestPrice = p.precioTarifa1 > 0 ? p.precioTarifa1 : p.precioMinimo;
+    final bestPrice = p.bestPrice;
     if (bestPrice <= 0) return null;
     final netoUr = bestPrice / p.unitsRetractil;
     return 'Neto U/R: ${netoUr.toStringAsFixed(3)} €';
@@ -209,7 +232,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
             // Header
             Row(
               children: [
-                const Icon(Icons.straighten, color: AppTheme.neonBlue, size: 22),
+                const Icon(Icons.straighten,
+                    color: AppTheme.neonBlue, size: 22),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -217,13 +241,15 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.fontSize(context, small: 15, large: 17),
+                      fontSize:
+                          Responsive.fontSize(context, small: 15, large: 17),
                     ),
                   ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                  icon:
+                      const Icon(Icons.close, color: Colors.white54, size: 20),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -245,7 +271,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
             if (equiv != null || netoUr != null) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppTheme.neonBlue.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(8),
@@ -255,10 +282,18 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                   children: [
                     if (equiv != null)
                       Expanded(
-                        child: Text(equiv, style: const TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.w500)),
+                        child: Text(equiv,
+                            style: const TextStyle(
+                                color: AppTheme.neonBlue,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500)),
                       ),
                     if (netoUr != null)
-                      Text(netoUr, style: const TextStyle(color: AppTheme.neonGreen, fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text(netoUr,
+                          style: const TextStyle(
+                              color: AppTheme.neonGreen,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -301,9 +336,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                             selected
                                 ? Icons.radio_button_checked
                                 : Icons.radio_button_off,
-                            color: selected
-                                ? AppTheme.neonBlue
-                                : Colors.white38,
+                            color:
+                                selected ? AppTheme.neonBlue : Colors.white38,
                             size: 20,
                           ),
                           const SizedBox(width: 10),
@@ -339,8 +373,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: AppTheme.neonGreen
-                                    .withValues(alpha: 0.1),
+                                color:
+                                    AppTheme.neonGreen.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -372,13 +406,18 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
             // Quantity input
             TextField(
               controller: _qtyController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
               autofocus: true,
               decoration: InputDecoration(
                 labelText: 'Cantidad (${_unitLabel(_selectedUnit)})',
-                labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+                labelStyle:
+                    const TextStyle(color: Colors.white54, fontSize: 13),
                 filled: true,
                 fillColor: AppTheme.darkCard,
                 border: OutlineInputBorder(
@@ -391,9 +430,11 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                  borderSide:
+                      const BorderSide(color: AppTheme.neonBlue, width: 1.5),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
               ),
             ),
             const SizedBox(height: 16),
@@ -414,7 +455,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                         });
                       },
                       icon: const Icon(Icons.delete_outline, size: 16),
-                      label: const Text('LIMPIAR', style: TextStyle(fontSize: 13)),
+                      label:
+                          const Text('LIMPIAR', style: TextStyle(fontSize: 13)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.error,
                         side: const BorderSide(color: AppTheme.error),
@@ -433,14 +475,18 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                     height: 46,
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        final qty = double.tryParse(_qtyController.text.replaceAll(',', '.')) ?? 0;
+                        final qty = double.tryParse(
+                                _qtyController.text.replaceAll(',', '.')) ??
+                            0;
                         Navigator.pop(context, {
                           'unit': _selectedUnit,
                           'quantity': qty,
                         });
                       },
                       icon: const Icon(Icons.check, size: 18),
-                      label: const Text('ACEPTAR', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      label: const Text('ACEPTAR',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.neonBlue,
                         foregroundColor: AppTheme.darkBase,

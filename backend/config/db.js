@@ -4,11 +4,30 @@ const logger = require('../middleware/logger');
 
 dotenv.config();
 
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
 // Build connection string from environment variables
-const DB_UID = process.env.ODBC_UID || 'JAVIER';
-const DB_PWD = process.env.ODBC_PWD || 'JAVIER';
+const DB_UID = process.env.ODBC_UID;
+const DB_PWD = process.env.ODBC_PWD;
 const DB_DSN = process.env.ODBC_DSN || 'GMP';
-const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;CCSID=1208;`;
+
+// SECURITY: Require credentials in production
+if (NODE_ENV === 'production') {
+    if (!DB_UID || !DB_PWD) {
+        throw new Error('[SECURITY] ODBC_UID and ODBC_PWD required in production. Set environment variables.');
+    }
+}
+
+const DB_UID_FINAL = DB_UID || 'JAVIER';
+const DB_PWD_FINAL = DB_PWD || (NODE_ENV === 'development' ? 'JAVIER' : '');
+
+// OPTIMIZED: Connection pool settings for better performance
+const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;CCSID=1208;
+    CPOOLMAX=${parseInt(process.env.ODBC_POOL_MAX) || 20};
+    CPOOLMIN=${parseInt(process.env.ODBC_POOL_MIN) || 3};
+    CPTOUT=${parseInt(process.env.ODBC_TIMEOUT) || 60};
+    COMMTIMEOUT=${parseInt(process.env.ODBC_COMM_TIMEOUT) || 90};
+    DBQ=${DB_DSN};`;
 
 let dbPool = null;
 const MAX_RETRIES = 3;

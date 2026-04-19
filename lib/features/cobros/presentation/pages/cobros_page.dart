@@ -75,7 +75,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
   void _onSearchChanged(String query) {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 500), () => _loadClients(query));
+    _debounceTimer =
+        Timer(const Duration(milliseconds: 500), () => _loadClients(query));
   }
 
   void _onVendorChanged() {
@@ -93,7 +94,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   @override
   Widget build(BuildContext context) {
     // Watch provider for reactive state updates
-    final cobros = ref.watch(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
+    final cobros = ref
+        .watch(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
+    final visibleClients = _visibleClients(cobros);
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
@@ -106,19 +109,58 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           ),
           _buildSearchArea(),
           Expanded(
-            child: _foundClients.isEmpty && !_isSearchingClients
+            child: visibleClients.isEmpty && !_isSearchingClients
                 ? _buildNoClientsState(cobros.grandTotal)
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _foundClients.length,
+                    itemCount: visibleClients.length,
                     itemBuilder: (context, index) {
-                      return _buildClientCobroCard(_foundClients[index]);
+                      return _buildClientCobroCard(visibleClients[index]);
                     },
                   ),
           ),
         ],
       ),
     );
+  }
+
+  List<Map<String, dynamic>> _visibleClients(CobrosProvider cobros) {
+    final search = _searchController.text.trim();
+    if (search.isNotEmpty || cobros.pendingSummary.isEmpty) {
+      return _foundClients;
+    }
+
+    final byCode = <String, Map<String, dynamic>>{};
+    for (final client in _foundClients) {
+      final code =
+          (client['code'] ?? client['codigoCliente'] ?? client['codigo'] ?? '')
+              .toString()
+              .trim();
+      if (code.isNotEmpty) byCode[code] = client;
+    }
+
+    final entries = cobros.pendingSummary.entries
+        .where((entry) => ((entry.value['total'] as num?)?.toDouble() ?? 0) > 0)
+        .toList()
+      ..sort((a, b) {
+        final aTotal = (a.value['total'] as num?)?.toDouble() ?? 0;
+        final bTotal = (b.value['total'] as num?)?.toDouble() ?? 0;
+        return bTotal.compareTo(aTotal);
+      });
+
+    return entries.map((entry) {
+      final existing = byCode[entry.key] ?? const <String, dynamic>{};
+      final name = (existing['name'] ??
+              existing['nombre'] ??
+              existing['nombreCliente'] ??
+              'Cliente ${entry.key}')
+          .toString();
+      return {
+        ...existing,
+        'code': entry.key,
+        'name': name,
+      };
+    }).toList();
   }
 
   Widget _buildHeader() {
@@ -132,12 +174,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(
-          bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2), width: 1),
+          bottom:
+              BorderSide(color: AppTheme.neonBlue.withOpacity(0.2), width: 1),
         ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.account_balance_wallet, color: AppTheme.neonBlue, size: 28),
+          const Icon(Icons.account_balance_wallet,
+              color: AppTheme.neonBlue, size: 28),
           const SizedBox(width: 12),
           Text(
             'Gestión de Cobros',
@@ -163,15 +207,19 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, código, NIF...',
-              hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.6)),
-              prefixIcon: Icon(Icons.search, color: AppTheme.neonBlue.withOpacity(0.7)),
+              hintStyle:
+                  TextStyle(color: AppTheme.textSecondary.withOpacity(0.6)),
+              prefixIcon:
+                  Icon(Icons.search, color: AppTheme.neonBlue.withOpacity(0.7)),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppTheme.neonBlue.withOpacity(0.3)),
+                borderSide:
+                    BorderSide(color: AppTheme.neonBlue.withOpacity(0.3)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppTheme.neonBlue.withOpacity(0.3)),
+                borderSide:
+                    BorderSide(color: AppTheme.neonBlue.withOpacity(0.3)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -184,7 +232,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                       width: 48,
                       child: Center(
                         child: SizedBox(
-                          width: 20, height: 20,
+                          width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       ),
@@ -202,7 +251,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.person_search, size: 64, color: AppTheme.textSecondary.withOpacity(0.2)),
+          Icon(Icons.person_search,
+              size: 64, color: AppTheme.textSecondary.withOpacity(0.2)),
           const SizedBox(height: 16),
           const Text('No se han encontrado clientes',
               style: TextStyle(color: AppTheme.textSecondary)),
@@ -224,8 +274,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   }
 
   Widget _buildClientCobroCard(Map<String, dynamic> client) {
-    final String name = (client['name'] ?? 'Cliente').toString();
-    final String code = (client['code'] ?? '').toString();
+    final String name = (client['name'] ??
+            client['nombre'] ??
+            client['nombreCliente'] ??
+            'Cliente')
+        .toString();
+    final String code =
+        (client['code'] ?? client['codigoCliente'] ?? client['codigo'] ?? '')
+            .toString();
     final pending = _provider.pendingForClient(code);
 
     return Card(
@@ -261,7 +317,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   name.isNotEmpty ? name[0].toUpperCase() : '?',
                   style: TextStyle(
                     color: AppTheme.neonBlue,
-                    fontSize: Responsive.fontSize(context, small: 18, large: 24),
+                    fontSize:
+                        Responsive.fontSize(context, small: 18, large: 24),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -274,7 +331,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     Text(
                       name,
                       style: TextStyle(
-                        fontSize: Responsive.fontSize(context, small: 14, large: 16),
+                        fontSize:
+                            Responsive.fontSize(context, small: 14, large: 16),
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
                       ),
@@ -285,7 +343,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     Text(
                       'Código: $code',
                       style: TextStyle(
-                        fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                        fontSize:
+                            Responsive.fontSize(context, small: 11, large: 13),
                         color: AppTheme.textSecondary,
                       ),
                     ),
@@ -294,29 +353,34 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               ),
               if (pending > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppTheme.warning.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.warning.withOpacity(0.4)),
+                    border:
+                        Border.all(color: AppTheme.warning.withOpacity(0.4)),
                   ),
                   child: Text(
                     '${pending.toStringAsFixed(2)} €',
                     style: TextStyle(
                       color: AppTheme.warning,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.fontSize(context, small: 12, large: 14),
+                      fontSize:
+                          Responsive.fontSize(context, small: 12, large: 14),
                     ),
                   ),
                 ),
               if (pending == 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppTheme.success.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Icon(Icons.check_circle, color: AppTheme.success, size: 20),
+                  child: const Icon(Icons.check_circle,
+                      color: AppTheme.success, size: 20),
                 ),
             ],
           ),

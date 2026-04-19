@@ -774,7 +774,7 @@ router.get('/matrix', async (req, res) => {
         ${filterConditions}
       GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
       ORDER BY SALES DESC
-      FETCH FIRST 50000 ROWS ONLY
+      FETCH FIRST 1000 ROWS ONLY
     `);
 
         // Get family names and available filters properly

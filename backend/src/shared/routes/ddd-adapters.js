@@ -88,6 +88,17 @@ async function withCache(cache, key, ttlMs, fetchFn, res, req) {
   return res.json(result);
 }
 
+function normalizeOrderResponse(result) {
+  const order = result || {};
+  const header = order.header || order;
+  return {
+    order,
+    header,
+    lines: Array.isArray(order.lines) ? order.lines : [],
+    id: header && header.id != null ? header.id : order.id,
+  };
+}
+
 // =============================================================================
 // AUTH ROUTES (DDD)
 // =============================================================================
@@ -579,17 +590,27 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { limit, offset, estado, vendedorCodes } = req.query;
-      const cacheKey = `ddd:orders-list:${userId}:${limit || 20}:${offset || 0}:${estado || 'all'}`;
+      const { limit, offset, estado, status, vendedorCodes, dateFrom, dateTo, search, minAmount, maxAmount, sortBy, sortOrder } = req.query;
+      const requestedStatus = status || estado;
+      const cacheKey = `ddd:orders-list:${userId}:${limit || 20}:${offset || 0}:${requestedStatus || 'all'}:${search || ''}:${dateFrom || ''}:${dateTo || ''}`;
       await withCache(cache, cacheKey, TTL_MS.ORDER_HISTORY, async () => {
         const pedidosService = require('../../../services/pedidos.service');
-        const orders = await pedidosService.getOrders({
+        const result = await pedidosService.getOrders({
           vendedorCodes: vendedorCodes || userId,
           limit: parseInt(limit) || 50,
           offset: parseInt(offset) || 0,
-          status: estado ? String(estado).trim() : undefined
+          status: requestedStatus ? String(requestedStatus).trim() : undefined,
+          dateFrom: dateFrom ? String(dateFrom).trim() : undefined,
+          dateTo: dateTo ? String(dateTo).trim() : undefined,
+          search: search ? String(search).trim() : undefined,
+          minAmount: minAmount != null ? parseFloat(minAmount) : undefined,
+          maxAmount: maxAmount != null ? parseFloat(maxAmount) : undefined,
+          sortBy: sortBy ? String(sortBy).trim() : undefined,
+          sortOrder: sortOrder ? String(sortOrder).trim() : undefined,
         });
-        return { success: true, orders };
+        const orders = Array.isArray(result) ? result : (result.orders || []);
+        const count = Array.isArray(result) ? result.length : (result.count || orders.length);
+        return { success: true, orders, count };
       }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /: ${error.message}`);
@@ -616,7 +637,7 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { clientCode, clientName, vendedorCode, lines, observations, tipoventa, almacen, tarifa } = req.body;
+      const { clientCode, clientName, vendedorCode, lines, observations, observaciones, tipoventa, almacen, tarifa } = req.body;
       // Use explicit vendedorCode from body, fallback to userId (the logged-in user)
       const actualVendedor = vendedorCode || userId;
 
@@ -632,7 +653,7 @@ function createPedidosRoutes() {
         tipoventa: tipoventa || 'CC',
         almacen: parseInt(almacen) || 1,
         tarifa: parseInt(tarifa) || 1,
-        observaciones: observations || '',
+        observaciones: observations || observaciones || '',
         lines: lines,
         origen: 'A'
       });
@@ -643,7 +664,8 @@ function createPedidosRoutes() {
       cache.invalidatePattern(`ddd:history:${userId}`);
       cache.invalidatePattern(`ddd:stats:${userId}`);
 
-      res.json({ success: true, order: result });
+      const normalized = normalizeOrderResponse(result);
+      res.status(201).json({ success: true, ...normalized });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /create: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -657,14 +679,21 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const result = await repo.confirmOrderById({ orderId: id, userId });
+      const { saleType, forceConfirm } = req.body || {};
+      const pedidosService = require('../../../services/pedidos.service');
+      const result = await pedidosService.confirmOrder(parseInt(id), saleType, { forceConfirm: !!forceConfirm, userId });
+
+      if (result && result.blocked) {
+        return res.status(409).json({ success: false, ...result });
+      }
 
       // Invalidate related caches
       cache.invalidatePattern(`ddd:orders-list:${userId}`);
       cache.invalidatePattern(`ddd:history:${userId}`);
       cache.invalidatePattern(`ddd:stats:${userId}`);
 
-      res.json({ success: true, order: result });
+      const normalized = normalizeOrderResponse(result);
+      res.json({ success: true, ...normalized });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/confirm: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -714,11 +743,13 @@ function createPedidosRoutes() {
   router.put('/:id/status', async (req, res) => {
     try {
       const { id } = req.params;
-      const { estado, userId } = req.body;
-      if (!estado) return res.status(400).json({ success: false, error: 'estado required' });
+      const { estado, status, userId } = req.body;
+      const nextEstado = estado || status;
+      if (!nextEstado) return res.status(400).json({ success: false, error: 'estado required' });
 
-      const result = await repo.updateOrderStatus({ orderId: id, estado, userId: userId || req.user?.code });
-      res.json({ success: true, order: result });
+      const result = await repo.updateOrderStatus({ orderId: id, estado: nextEstado, userId: userId || req.user?.code });
+      const normalized = normalizeOrderResponse(result);
+      res.json({ success: true, ...normalized });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/status: ${error.message}`);
       res.status(error.message.includes('not found') ? 404 : 500).json({ success: false, error: error.message });
@@ -811,10 +842,70 @@ function createCobrosRoutes() {
       const cacheKey = `ddd:cobros:pendientes:${codigoCliente}`;
       await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
         const pendientes = await repo.getPendientes(String(codigoCliente).trim());
-        return { success: true, pendientes };
+        return {
+          success: true,
+          cobros: pendientes.cobros || [],
+          resumen: pendientes.resumen || { totalPendiente: 0 },
+          pendientes
+        };
       }, res);
     } catch (error) {
       logger.error(`[DDD-COBROS] Error in GET /pendientes: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  router.get('/:codigoCliente/estado', async (req, res) => {
+    try {
+      const { codigoCliente } = req.params;
+      if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
+
+      const pendientes = await repo.getPendientes(String(codigoCliente).trim());
+      const totalPendiente = parseFloat(pendientes?.resumen?.totalPendiente) || 0;
+      res.json({
+        success: true,
+        estadoCliente: {
+          codigo: String(codigoCliente).trim(),
+          nombre: '',
+          limiteCredito: 0,
+          totalPendiente,
+          diasMora: 0,
+          estado: totalPendiente > 0 ? 'EN_ROJO' : 'ACTIVO',
+          motivo: totalPendiente > 0 ? 'Tiene cobros pendientes' : null
+        }
+      });
+    } catch (error) {
+      logger.error(`[DDD-COBROS] Error in GET /estado: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  router.post('/:codigoCliente/registrar', async (req, res) => {
+    try {
+      const { codigoCliente } = req.params;
+      const userId = req.body?.codigoUsuario || req.user?.code || req.user?.id;
+      if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+      const { referencia, importe, formaPago, observaciones } = req.body;
+      if (!codigoCliente || importe == null || !formaPago) {
+        return res.status(400).json({ success: false, error: 'codigoCliente, importe, and formaPago required' });
+      }
+
+      const result = await repo.registerPayment({
+        clientCode: String(codigoCliente).trim(),
+        amount: parseFloat(importe) || 0,
+        paymentMethod: formaPago,
+        reference: referencia || '',
+        observations: observaciones || '',
+        userId
+      });
+
+      cache.invalidatePattern(`ddd:cobros:pendientes:${codigoCliente}`);
+      cache.invalidatePattern(`ddd:cobros:historico:${codigoCliente}`);
+
+      res.json({ success: true, mensaje: 'Cobro registrado correctamente', payment: result });
+    } catch (error) {
+      logger.error(`[DDD-COBROS] Error in POST /:codigoCliente/registrar: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -1056,6 +1147,10 @@ function createEntregasRoutes() {
       res.status(500).json({ success: false, error: error.message });
     }
   });
+
+  // Keep legacy document delivery endpoints available while DDD owns /api/entregas.
+  // This prevents 404s for /receipt/:id, /receipt/:id/email and /receipt/:id/whatsapp.
+  router.use(require('../../../routes/entregas'));
 
   return router;
 }

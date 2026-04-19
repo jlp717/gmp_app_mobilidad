@@ -170,7 +170,20 @@ app.use(detectSuspiciousAgents);
 app.use(validateContentLength);
 app.use(createSecurityHeaders());
 app.use(helmet());
-app.use(compression());
+app.use(compression({
+    threshold: 256, // Compress responses > 256 bytes (lower threshold = more compression)
+    level: 9, // Maximum compression (balance for CPU vs bandwidth)
+    filter: (req, res) => {
+        // Don't compress if client doesn't accept gzip
+        const contentType = res.getHeader('Content-Type') || '';
+        // Skip compression for already compressed formats
+        if (contentType.includes('zip') || contentType.includes('pdf') || contentType.includes('image')) {
+            return false;
+        }
+        // Use compression filter - default is to compress if accept-encoding is set
+        return compression.filter(req, res);
+    }
+}));
 app.use(express.json({ limit: '2mb' }));
 app.use(validateContentType);
 
@@ -250,21 +263,99 @@ if (process.env.USE_DDD_ROUTES === 'true' && dddAuthRoutes) {
   app.use('/api/auth', authRoutes);
 }
 
-// Health check (Public for monitoring)
+// Health check (Public for monitoring) - FULLY ENHANCED v3 with ALL metrics
 app.get('/api/health', async (req, res) => {
+  const start = Date.now();
+  let dbStatus = 'disconnected';
+  let dbQueryTime = 0;
+  
   try {
+    const dbStart = Date.now();
     await query('SELECT 1 as ok FROM SYSIBM.SYSDUMMY1', false);
-    res.json({
-      status: 'ok',
-      database: 'connected',
-      timestamp: new Date().toISOString(),
-      mode: 'modular',
-      security: 'enabled',
-      dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' }
-    });
-  } catch (error) {
-    res.status(500).json({ status: 'error', error: 'Internal server error' });
+    dbQueryTime = Date.now() - dbStart;
+    dbStatus = 'connected';
+  } catch (e) {
+    dbStatus = 'error';
   }
+  
+  // Get Redis status with detailed stats
+  let redisStatus = 'disconnected';
+  let cacheHitRate = 0;
+  let redisStats = {};
+  try {
+    const { redisCache } = require('./services/redis-cache');
+    const stats = redisCache.getStats();
+    redisStats = stats;
+    redisStatus = stats.isConnected ? 'connected' : 'L1_only';
+    cacheHitRate = parseFloat(stats.hitRate || 0);
+  } catch (e) {
+    redisStatus = 'error';
+  }
+  
+  // Get query optimizer stats
+  let queryStats = {};
+  try {
+    const { getQueryStats } = require('./services/query-optimizer');
+    queryStats = getQueryStats ? getQueryStats() : {};
+  } catch (e) {
+    queryStats = {};
+  }
+  
+  // Memory usage with detailed breakdown
+  const mem = process.memoryUsage();
+  const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
+  const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
+  const externalMB = Math.round(mem.external / 1024 / 1024);
+  
+  // GC info (if available)
+  let gcInfo = {};
+  if (global.gc) {
+    gcInfo = { note: 'GC available - call global.gc() manually if needed' };
+  }
+  
+  // Event loop lag (if available)
+  let eventLoopLag = 0;
+  try {
+    const drift = Date.now() - start;
+    eventLoopLag = drift > 5 ? drift - 5 : 0;
+  } catch (e) {
+    eventLoopLag = 0;
+  }
+  
+  res.json({
+    status: dbStatus === 'connected' ? 'ok' : 'degraded',
+    database: { 
+      status: dbStatus, 
+      queryTime: `${dbQueryTime}ms` 
+    },
+    redis: { 
+      status: redisStatus,
+      ...redisStats
+    },
+    cache: { 
+      hitRate: `${cacheHitRate}%`,
+      ...queryStats
+    },
+    memory: { 
+      heapUsed: `${heapUsedMB}MB`,
+      heapTotal: `${heapTotalMB}MB`,
+      heapUsage: `${Math.round(heapUsedMB/heapTotalMB*100)}%`,
+      rss: `${Math.round(mem.rss / 1024 / 1024)}MB`,
+      external: `${externalMB}MB`
+    },
+    gc: gcInfo,
+    eventLoop: { lag: `${eventLoopLag}ms` },
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    responseTime: `${Date.now() - start}ms`,
+    mode: 'modular',
+    security: 'enabled',
+    version: process.env.APP_VERSION || '3.3.1',
+    nodeVersion: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' }
+  });
 });
 
 // Version check (Public for mobile app updates)
@@ -566,11 +657,43 @@ app.get('/api/optimization/active-sessions', verifyToken, (req, res) => {
 });
 
 // ==================== GLOBAL ERROR HANDLERS ====================
-// Global Error Middleware (must be registered BEFORE server starts listening)
+// Enhanced error handler with proper error classification
 app.use((err, req, res, next) => {
-  logger.error(`❌ Global Middleware Error: ${err.message}`);
+  // Log full error with stack in development
+  if (process.env.NODE_ENV !== 'production') {
+    logger.error(`❌ Error: ${err.stack || err.message}`);
+  } else {
+    logger.error(`❌ Error: ${err.message}`);
+  }
+  
+  // Classify error type
+  let statusCode = 500;
+  let errorMessage = 'Internal Server Error';
+  
+  if (err.name === 'ValidationError' || err.name === 'ZodError') {
+    statusCode = 400;
+    errorMessage = 'Validation failed';
+  } else if (err.name === 'UnauthorizedError') {
+    statusCode = 401;
+    errorMessage = 'Unauthorized';
+  } else if (err.name === 'ForbiddenError') {
+    statusCode = 403;
+    errorMessage = 'Forbidden';
+  } else if (err.name === 'NotFoundError') {
+    statusCode = 404;
+    errorMessage = 'Not found';
+  } else if (err.code === 'SQLITE_CANTOPEN' || err.message?.includes('database')) {
+    statusCode = 503;
+    errorMessage = 'Database unavailable';
+  }
+  
+  // Don't leak internal error details in production
   if (!res.headersSent) {
-    res.status(500).json({ error: 'Internal Server Error', id: Date.now() });
+    res.status(statusCode).json({ 
+      error: errorMessage, 
+      id: req.requestId,
+      ...(process.env.NODE_ENV !== 'production' ? { details: err.message } : {})
+    });
   }
 });
 
@@ -586,6 +709,68 @@ process.on('unhandledRejection', (reason, promise) => {
   logger.error(`🔥 UNHANDLED REJECTION: ${reason}`);
   process.exit(1);
 });
+
+// ==================== GRACEFUL SHUTDOWN ====================
+let isShuttingDown = false;
+
+const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  
+  logger.info(`📴 Received ${signal}. Starting graceful shutdown...`);
+  
+  // 1. Stop accepting new connections
+  if (server.close) {
+    server.close(() => {
+      logger.info('📴 HTTP server closed');
+    });
+  }
+  
+  // 2. Close DB pool
+  try {
+    const { getPool } = require('./config/db');
+    const pool = getPool();
+    if (pool) {
+      await pool.close();
+      logger.info('📴 Database pool closed');
+    }
+  } catch (e) {
+    logger.warn(`📴 DB close error: ${e.message}`);
+  }
+  
+  // 3. Close Redis cache
+  try {
+    const { redisCache } = require('./services/redis-cache');
+    await redisCache.close();
+    logger.info('📴 Redis cache closed');
+  } catch (e) {
+    logger.warn(`📴 Redis close error: ${e.message}`);
+  }
+  
+  // 4. Clear LACLAE memory cache
+  try {
+    const { clearLaclaeCache } = require('./services/laclae');
+    clearLaclaeCache();
+    logger.info('📴 LACLAE memory cache cleared');
+  } catch (e) {
+    logger.warn(`📴 LACLAE cache clear error: ${e.message}`);
+  }
+  
+  logger.info('📴 Graceful shutdown complete');
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// ==================== MEMORY MANAGEMENT ====================
+// Log memory usage periodically in development
+if (process.env.NODE_ENV !== 'production') {
+  setInterval(() => {
+    const usage = process.memoryUsage();
+    logger.debug(`[MEMORY] Heap: ${Math.round(usage.heapUsed / 1024 / 1024)}MB, RSS: ${Math.round(usage.rss / 1024 / 1024)}MB`);
+  }, 60000);
+}
 
 startServer().catch((err) => {
   logger.error(`🔥 Failed to start server: ${err.message}`);

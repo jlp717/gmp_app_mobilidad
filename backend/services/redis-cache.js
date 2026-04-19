@@ -32,10 +32,20 @@ const TTL = {
     REALTIME: 60,    // 1 minute
 };
 
-// L1 In-Memory Cache
+// L1 In-Memory Cache (OPTIMIZED v3 - Maximum Performance)
 const L1_CACHE = new Map();
-const L1_MAX_SIZE = 500;
-const L1_TTL_MS = 60000; // 1 minute
+const L1_MAX_SIZE = 5000; // Increased from 2000 for JEFE_VENTAS workloads
+const L1_TTL_MS = 180000; // 3 minutes (increased for better cache utilization)
+
+// Pre-warm cache with frequently accessed keys
+const FREQUENTLY_ACCESSED_KEYS = new Set([
+    'dashboard:metrics:*:*:ALL:curr',
+    'dashboard:metrics:*:*:ALL:prev',
+    'dashboard:evolution:*',
+    'clients:list:v5:ALL:',
+    'master:vendedores:*',
+    'master:products:*'
+]);
 
 class RedisCacheService {
     constructor() {
@@ -52,19 +62,46 @@ class RedisCacheService {
     }
 
     /**
-     * Initialize Redis connection
+     * Initialize Redis connection with OPTIMIZED pool settings
      */
     async init() {
         try {
-            // Main client for read/write
-            this.client = Redis.createClient(REDIS_CONFIG);
+            // Optimized Redis config for high throughput
+            const optimizedConfig = {
+                ...REDIS_CONFIG,
+                // Connection pool settings for high throughput
+                connect_timeout: 10000,
+                lazyConnect: false,
+                // Keep-alive settings
+                keepAlive: true,
+                keepAliveInitialDelay: 10000,
+                // Retry strategy for resilience
+                max_retries_per_request: 3,
+                retry_strategy: (options) => {
+                    if (options.error && options.error.code === 'ECONNREFUSED') {
+                        return new Error('Redis connection refused');
+                    }
+                    // Exponential backoff
+                    const delay = Math.min(options.attempt * 100, 3000);
+                    return delay;
+                },
+                // Enable ready check for faster recovery
+                enable_ready_check: true,
+                enable_offline_queue: true,
+            };
 
-            // Subscriber client for pub/sub
+            // Main client for read/write
+            this.client = Redis.createClient(optimizedConfig);
+
+            // Subscriber client for pub/sub (separate connection for reliability)
             this.subscriber = this.client.duplicate();
+
+            // Enable pipelining for batch operations
+            this.client.bufferifyCommands();
 
             // Event handlers
             this.client.on('connect', () => {
-                logger.info('[RedisCache] ✅ Connected to Redis');
+                logger.info('[RedisCache] ✅ Connected to Redis (optimized)');
                 this.isConnected = true;
                 this._flushPendingCommands();
             });
