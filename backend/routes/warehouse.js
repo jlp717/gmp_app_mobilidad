@@ -277,8 +277,8 @@ router.get('/dashboard', async (req, res) => {
         const month = parseInt(req.query.month) || (now.getMonth() + 1);
         const day = parseInt(req.query.day) || now.getDate();
 
-        // Trucks with orders for the given date
-        const trucks = await query(`
+        const cacheKey = `warehouse:dashboard:${year}:${month}:${day}`;
+        const trucks = await cachedQuery(query, `
       SELECT 
         TRIM(OPP.CODIGOVEHICULO) AS VEHICULO,
         TRIM(V.DESCRIPCIONVEHICULO) AS DESCRIPCION,
@@ -305,7 +305,7 @@ router.get('/dashboard', async (req, res) => {
                COALESCE(V.NUMEROCONTENEDORES, 0),
                COALESCE(C.TOLERANCIA_EXCESO, 5)
       ORDER BY TRIM(OPP.CODIGOVEHICULO)
-    `);
+    `, cacheKey, TTL.MEDIUM);
 
         res.json({
             date: { year, month, day },

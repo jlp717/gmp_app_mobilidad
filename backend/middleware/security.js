@@ -25,9 +25,9 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const isProduction = NODE_ENV === 'production';
 
 const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10);
-const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '2000', 10);
-const LOGIN_RATE_LIMIT_MAX = parseInt(process.env.LOGIN_RATE_LIMIT || '15', 10);
-const API_RATE_LIMIT_MAX = parseInt(process.env.API_RATE_LIMIT || '3000', 10);
+const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '30000', 10); // 30k for production
+const LOGIN_RATE_LIMIT_MAX = parseInt(process.env.LOGIN_RATE_LIMIT || '30', 10);
+const API_RATE_LIMIT_MAX = parseInt(process.env.API_RATE_LIMIT || '30000', 10); // 30k for mobile apps
 
 // CORS configuration
 const parseCorsOrigin = (value) => {
@@ -78,6 +78,7 @@ exports.apiLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => req.path === '/api/health' || req.path === '/health/version-check', // Skip health checks
     keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
 });
 

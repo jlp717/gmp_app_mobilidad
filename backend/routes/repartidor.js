@@ -63,6 +63,8 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
 
         logger.info(`[REPARTIDOR] Getting collections summary for ${cleanIds} (${selectedMonth}/${selectedYear})`);
 
+        const cacheKey = `repartidor:collections:summary:${cleanIds}:${selectedYear}:${selectedMonth}`;
+
         // CORRECTO: Usar OPP → CPC → CAC para repartidores
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con documentos de CAC
         const sql = `
@@ -96,7 +98,7 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
 
         let rows = [];
         try {
-            rows = await query(sql, true, false) || [];
+            rows = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM) || [];
         } catch (queryError) {
             logger.warn(`[REPARTIDOR] Query error in collections/summary: ${queryError.message}`);
             // Devolver respuesta vacía en lugar de error 500
@@ -195,6 +197,7 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
         logger.info(`[REPARTIDOR] Getting daily collections for ${repartidorId}`);
 
         const cleanRepartidorId = repartidorId.toString().trim();
+        const cacheKey = `repartidor:collections:daily:${cleanRepartidorId}:${selectedYear}:${selectedMonth}`;
 
         // CORRECTO: Usar OPP → CPC para repartidores
         const sql = `
@@ -223,7 +226,7 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
 
         let rows = [];
         try {
-            rows = await queryWithParams(sql, [selectedYear, selectedMonth, cleanRepartidorId], false) || [];
+            rows = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, [selectedYear, selectedMonth, cleanRepartidorId]) || [];
         } catch (queryError) {
             logger.warn(`[REPARTIDOR] Query error in collections/daily: ${queryError.message}`);
             return res.json({ success: true, daily: [] });

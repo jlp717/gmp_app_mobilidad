@@ -537,6 +537,20 @@ router.get('/:code/ficha', async (req, res) => {
 
 // =============================================================================
 // POST /api/products/batch-exists — Batch check for multiple product codes
+// IN-MEMORY CACHE for batch results (survives across requests)
+const batchResultsCache = new Map();
+const BATCH_CACHE_TTL = 15 * 60 * 1000; // 15 min cache
+
+function getBatchCache(code) {
+  const entry = batchResultsCache.get(code);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > BATCH_CACHE_TTL) { batchResultsCache.delete(code); return null; }
+  return entry.value;
+}
+function setBatchCache(code, value) {
+  batchResultsCache.set(code, { value, ts: Date.now() });
+}
+
 // =============================================================================
 router.post('/batch-exists', async (req, res) => {
   const { codes } = req.body;
@@ -546,24 +560,48 @@ router.post('/batch-exists', async (req, res) => {
 
   const limitedCodes = codes.slice(0, 200);
   const results = {};
+  const uncached = [];
 
-  // Process in batches of 10
-  const BATCH_SIZE = 10;
-  for (let i = 0; i < limitedCodes.length; i += BATCH_SIZE) {
-    const batch = limitedCodes.slice(i, i + BATCH_SIZE);
-    await Promise.all(batch.map(async (rawCode) => {
-      const code = sanitizeCode(rawCode);
-      if (!code) return;
-      if (accessMode === 'file') {
-        results[code] = {
-          hasImage: !!findLocalImage(code),
-          hasFicha: !!findLocalFicha(code),
-        };
-      } else {
-        results[code] = {
-          hasImage: !!(await findImageHttp(code)),
-          hasFicha: !!(await findFichaHttp(code)),
-        };
+  // Check cache first
+  for (const rawCode of limitedCodes) {
+    const code = sanitizeCode(rawCode);
+    if (!code) continue;
+    const cached = getBatchCache(code);
+    if (cached) {
+      results[code] = cached;
+    } else {
+      uncached.push(code);
+    }
+  }
+
+  // If all cached, return immediately
+  if (uncached.length === 0) {
+    res.set('Cache-Control', 'public, max-age=3600');
+    return res.json(results);
+  }
+
+  // Process uncached in parallel (max 20 concurrent to avoid 429)
+  const CONCURRENT_LIMIT = 20;
+  for (let i = 0; i < uncached.length; i += CONCURRENT_LIMIT) {
+    const batch = uncached.slice(i, i + CONCURRENT_LIMIT);
+    await Promise.all(batch.map(async (code) => {
+      try {
+        let hasImage = false, hasFicha = false;
+        if (accessMode === 'file') {
+          hasImage = !!findLocalImage(code);
+          hasFicha = !!findLocalFicha(code);
+        } else {
+          // Parallel HTTP requests per code (image + ficha simultaneously)
+          [hasImage, hasFicha] = await Promise.all([
+            findImageHttp(code).catch(() => false),
+            findFichaHttp(code).catch(() => false)
+          ]);
+        }
+        const value = { hasImage, hasFicha };
+        results[code] = value;
+        setBatchCache(code, value);
+      } catch (err) {
+        results[code] = { hasImage: false, hasFicha: false };
       }
     }));
   }
