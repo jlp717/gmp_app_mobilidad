@@ -3,9 +3,17 @@
  * ==========================================
  * Valida que la configuración sea segura para producción
  * Run: node scripts/validate_production_config.js
+ * O: node -r dotenv/config scripts/validate_production_config.js
  */
 
 'use strict';
+
+// Auto-load dotenv if available
+try {
+    require('dotenv').config();
+} catch (e) {
+    // dotenv not installed, continue anyway
+}
 
 const logger = console;
 
