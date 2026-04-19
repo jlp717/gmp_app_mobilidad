@@ -11,6 +11,14 @@ const PDFDocument = require('pdfkit');
 const logger = require('../middleware/logger');
 const path = require('path');
 const fs = require('fs');
+const { CircuitBreaker } = require('./circuit-breaker');
+
+const pdfBreaker = new CircuitBreaker({
+    name: 'pdf-generation',
+    failureThreshold: 5,
+    successThreshold: 2,
+    timeout: 30000
+});
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CONFIGURACIÓN Y CONSTANTES

@@ -5,12 +5,12 @@ const nodemailer = require('nodemailer');
 const logger = require('../../middleware/logger');
 
 const SMTP_CONFIG = {
-  host: process.env.SMTP_HOST || 'mail.mari-pepa.com',
+  host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT || '465', 10),
   secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT || '465') === 465,
   auth: {
-    user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
-    pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i',
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASSWORD,
   },
   connectionTimeout: 10000,
   greetingTimeout: 8000,

@@ -41,6 +41,8 @@ class SmartProductImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
+        cacheWidth: (width * 2).toInt(),
+        cacheHeight: (height * 2).toInt(),
         errorBuilder: (context, error, stackTrace) {
           // La imagen ha dado 404 o fetch failed. Reemplazar por contenedor premium.
           return _buildFallback();

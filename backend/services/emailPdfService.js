@@ -34,15 +34,15 @@ const SMTP_CONFIG = {
         user: _smtpUser,
         pass: _smtpPass
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 8000,
-    socketTimeout: 15000,
+    connectionTimeout: parseInt(process.env.SMTP_PDF_CONNECTION_TIMEOUT) || 30000,
+    greetingTimeout: parseInt(process.env.SMTP_PDF_GREETING_TIMEOUT) || 25000,
+    socketTimeout: parseInt(process.env.SMTP_PDF_SOCKET_TIMEOUT) || 45000,
     tls: {
         rejectUnauthorized: false
     },
-    pool: true,
-    maxConnections: 5,
-    maxMessages: 100
+    pool: false,
+    maxConnections: 3,
+    maxMessages: 50
 };
 
 // Fallback ports to try when primary fails (in order)
@@ -204,8 +204,10 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
     // Ports to try: [primaryPort, ...fallbackPorts]
     const portsToTry = [SMTP_CONFIG.port, ...SMTP_FALLBACK_PORTS.filter(p => p !== SMTP_CONFIG.port)];
     let lastError;
+    let lastAttempt = 0; // Captured for use outside loop
 
     for (let attempt = 0; attempt < portsToTry.length; attempt++) {
+        lastAttempt = attempt;
         const currentPort = portsToTry[attempt];
         try {
             const transport = attempt === 0
@@ -309,7 +311,7 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
     // Todos los reintentos fallaron
     const errorCode = lastError?.code || 'UNKNOWN';
     const isTimeoutError = ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'].includes(errorCode);
-    const triedPorts = portsToTry.slice(0, attempt).join(', ');
+    const triedPorts = portsToTry.slice(0, lastAttempt).join(', ');
 
     let userFriendlyMessage = lastError?.message || 'Error desconocido enviando email';
     if (isTimeoutError) {

@@ -1679,3 +1679,4 @@ router.post('/save-load', async (req, res) => {
 
 module.exports = router;
 module.exports.initWarehouseTables = initWarehouseTables;
+module.exports.warehouseBreaker = warehouseBreaker;

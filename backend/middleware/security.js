@@ -32,7 +32,11 @@ const API_RATE_LIMIT_MAX = parseInt(process.env.API_RATE_LIMIT || '30000', 10); 
 // CORS configuration
 const parseCorsOrigin = (value) => {
     if (isProduction) {
-        if (!value || value === 'true' || value === '*') return false;
+        // SECURITY: In production, must specify explicit origins - wildcard NOT allowed
+        if (!value || value === 'true' || value === '*') {
+            logger.error('[SECURITY] CORS_ORIGIN cannot be wildcard (*) in production!');
+            return [];
+        }
         return value.split(',').map(o => o.trim()).filter(Boolean);
     }
     if (value === 'true' || value === '*') return true;

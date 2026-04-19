@@ -7,10 +7,31 @@
 
 const { query } = require('../config/db');
 const logger = require('../middleware/logger');
+const { CircuitBreaker } = require('./circuit-breaker');
+
+const facturasBreaker = new CircuitBreaker({
+    name: 'facturas-db',
+    failureThreshold: 3,
+    successThreshold: 2,
+    timeout: 15000
+});
 
 class FacturasService {
 
     async getFacturas(params) {
+        const cacheKey = `facturas:${JSON.stringify(params)}`;
+        
+        try {
+            return await facturasBreaker.execute(
+                () => this.getFacturasRaw(params),
+                () => ({ facturas: [], error: 'Service temporarily unavailable' })
+            );
+        } catch (e) {
+            return this.getFacturasRaw(params);
+        }
+    }
+    
+    async getFacturasRaw(params) {
         const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
 
         if (!vendedorCodes) {
@@ -353,3 +374,4 @@ class FacturasService {
 }
 
 module.exports = new FacturasService();
+module.exports.facturasBreaker = facturasBreaker;

@@ -3,7 +3,9 @@
  * P3: Opens fast (<200ms) and falls back to cache
  */
 
+'use strict';
 const logger = require('../middleware/logger');
+const CircuitBreakerClass = null;
 
 // Circuit breaker states
 const CLOSED = 'closed';

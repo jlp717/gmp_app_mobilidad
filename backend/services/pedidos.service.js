@@ -10,7 +10,25 @@ const logger = require('../middleware/logger');
 const { cachedQuery } = require('./query-optimizer');
 const { redisCache, TTL } = require('./redis-cache');
 const { LACLAE_SALES_FILTER } = require('../utils/common');
-// Audit logging is done through the logger middleware directly
+const { CircuitBreaker } = require('./circuit-breaker');
+
+if (typeof CircuitBreaker !== 'function') {
+    throw new Error('CircuitBreaker import failed: got ' + typeof CircuitBreaker);
+}
+
+const pedidosBreaker = new CircuitBreaker({
+    name: 'pedidos-db',
+    failureThreshold: 5,
+    successThreshold: 2,
+    timeout: 15000
+});
+
+const productsBreaker = new CircuitBreaker({
+    name: 'products-db', 
+    failureThreshold: 3,
+    successThreshold: 2,
+    timeout: 10000
+});
 
 // ============================================================================
 // TABLE DDL
@@ -326,14 +344,32 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
 }
 
 // ============================================================================
-// PRODUCT DETAIL
+// PRODUCT DETAIL (with Circuit Breaker protection)
 // ============================================================================
 
 async function getProductDetail(code, clientCode) {
     const trimCode = code.trim();
+    const cacheKey = `product:detail:${trimCode}:${clientCode || 'all'}`;
 
+    const cached = await redisCache.get(cacheKey);
+    if (cached) return cached;
+
+    try {
+        const result = await productsBreaker.execute(
+            () => getProductDetailRaw(trimCode, clientCode),
+            () => null
+        );
+        
+        if (result) await redisCache.set(cacheKey, result, TTL.MEDIUM);
+        return result;
+    } catch (error) {
+        logger.error(`[PEDIDOS] getProductDetail CB error: ${error.message}`);
+        return getProductDetailRaw(trimCode, clientCode);
+    }
+}
+
+async function getProductDetailRaw(code, clientCode) {
     // Base product — expanded with ALL useful fields from ART + FAM description
-    // Column names verified against DSEDAC.ART schema (discover_pedidos_output.txt)
     const baseSql = `
         SELECT TRIM(A.CODIGOARTICULO) AS code,
             TRIM(A.DESCRIPCIONARTICULO) AS name,
@@ -3059,4 +3095,5 @@ module.exports = {
     getOrderStats,
     getOrderAlbaran,
     getProductHistory,
+    pedidosBreaker,
 };

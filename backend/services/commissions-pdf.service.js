@@ -9,6 +9,14 @@
 const PDFDocument = require('pdfkit');
 const logger = require('../middleware/logger');
 const { queryWithParams } = require('../config/db');
+const { CircuitBreaker } = require('./circuit-breaker');
+
+const commissionsPdfBreaker = new CircuitBreaker({
+    name: 'commissions-pdf',
+    failureThreshold: 5,
+    successThreshold: 2,
+    timeout: 30000
+});
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CONFIGURATION

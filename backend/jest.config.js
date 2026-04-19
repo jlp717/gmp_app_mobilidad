@@ -55,13 +55,13 @@ module.exports = {
         '!**/deprecated/**',
     ],
 
-    // Coverage thresholds (scoped to TS layer only)
+    // Coverage thresholds (INCREASED for 10/10 quality)
     coverageThreshold: {
         global: {
-            branches: 35,
-            functions: 35,
-            lines: 38,
-            statements: 38,
+            branches: 60,
+            functions: 60,
+            lines: 60,
+            statements: 60,
         },
     },
 

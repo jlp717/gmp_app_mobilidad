@@ -583,8 +583,8 @@ function getNaturalOrder(vendorCode, clientCode, day) {
 
 module.exports = {
     loadLaclaeCache,
-    isCacheReady, // P2: Singleton check
-    isCacheLoadAttempted: () => laclaeCacheLoadAttempted, // P2: Check if attempted
+    isCacheReady,
+    isCacheLoadAttempted: () => laclaeCacheLoadAttempted,
     getClientsForDay,
     getWeekCountsFromCache,
     getTotalClientsFromCache,
@@ -593,8 +593,6 @@ module.exports = {
     getVendorActiveDaysFromCache,
     getVendorDeliveryDaysFromCache,
     getCachedVendorCodes,
-    reloadRuteroConfig,
-    getClientCurrentDay,
     reloadRuteroConfig,
     getClientCurrentDay,
     getClientDays,

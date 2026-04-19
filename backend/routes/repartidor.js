@@ -18,9 +18,9 @@ const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
-const { CircuitBreaker } = require('../services/circuit-breaker');
+const { CircuitBreaker: RepartidorCircuitBreaker } = require('../services/circuit-breaker');
 
-const repartidorBreaker = new CircuitBreaker({
+const repartidorBreaker = new RepartidorCircuitBreaker({
     name: 'repartidor',
     failureThreshold: 3,
     successThreshold: 2,
@@ -2443,3 +2443,4 @@ router.post('/document/share/whatsapp', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.repartidorBreaker = repartidorBreaker;
