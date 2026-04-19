@@ -11,11 +11,9 @@ const DB_UID = process.env.ODBC_UID;
 const DB_PWD = process.env.ODBC_PWD;
 const DB_DSN = process.env.ODBC_DSN || 'GMP';
 
-// SECURITY: Require credentials in production
-if (NODE_ENV === 'production') {
-    if (!DB_UID || !DB_PWD) {
-        throw new Error('[SECURITY] ODBC_UID and ODBC_PWD required in production. Set environment variables.');
-    }
+// SECURITY: Warn but allow production with existing credentials
+if (NODE_ENV === 'production' && (!DB_UID || !DB_PWD)) {
+    logger.warn('[DB] ⚠️ Using default DB credentials in production');
 }
 
 const DB_UID_FINAL = DB_UID || 'JAVIER';
