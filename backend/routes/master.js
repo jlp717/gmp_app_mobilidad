@@ -89,12 +89,16 @@ router.get('/vendedores', async (req, res) => {
         `);
 
         res.json({
-            vendedores: vendedores.map(v => ({
-                code: v.CODE?.trim(),
-                name: (v.NAME?.trim() || `Vendedor ${v.CODE}`).replace(/^(\d+)\s+-\s+\1\s+/, '').replace(/^(\d+)\s+-\s+/, ''),
-                type: 'COMERCIAL',
-                isJefe: false // Simplified for this view
-            }))
+            vendedores: vendedores
+                .map(v => {
+                    const code = (v.CODE ?? v.code ?? '').toString().trim();
+                    const rawName = (v.NAME ?? v.name ?? '').toString().trim();
+                    const name = (rawName || `Vendedor ${code}`)
+                        .replace(/^(\d+)\s+-\s+\1\s+/, '')
+                        .replace(/^(\d+)\s+-\s+/, '');
+                    return { code, name, type: 'COMERCIAL', isJefe: false };
+                })
+                .filter(v => v.code.length > 0)
         });
 
     } catch (error) {
@@ -123,8 +127,8 @@ router.get('/families', async (req, res) => {
             `);
 
         res.json(families.map(f => ({
-            code: f.CODE,
-            name: f.NAME
+            code: (f.CODE ?? f.code ?? '').toString().trim(),
+            name: (f.NAME ?? f.name ?? '').toString().trim()
         })));
     } catch (error) {
         handleRouteError(error, res, 'Error loading families', 500);

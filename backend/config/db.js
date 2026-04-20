@@ -280,6 +280,27 @@ function stopKeepalive() {
     }
 }
 
+// Normalize ODBC result rows so every column is accessible by both UPPERCASE
+// and lowercase keys. DB2/ODBC driver casing varies between environments and
+// many legacy endpoints assume UPPERCASE while newer SQL uses `as lowercase`
+// aliases — this prevents undefined/0/empty responses from casing mismatches.
+function normalizeRowCasing(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return rows;
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || typeof row !== 'object') continue;
+        const keys = Object.keys(row);
+        for (let k = 0; k < keys.length; k++) {
+            const key = keys[k];
+            const upper = key.toUpperCase();
+            const lower = key.toLowerCase();
+            if (upper !== key && !(upper in row)) row[upper] = row[key];
+            if (lower !== key && !(lower in row)) row[lower] = row[key];
+        }
+    }
+    return rows;
+}
+
 async function query(sql, logQuery = true, logError = true) {
     if (!dbPool) {
         await initDb();
@@ -305,7 +326,7 @@ async function query(sql, logQuery = true, logError = true) {
                 logger.info(`📊 Query (${duration}ms): ${preview}... → ${result.length} rows`);
             }
 
-            return result;
+            return normalizeRowCasing(result);
 
         } catch (error) {
             lastError = error;
@@ -384,7 +405,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
                 logger.info(`📊 Param Query (${duration}ms): ${preview}... → ${result.length} rows`);
             }
 
-            return result;
+            return normalizeRowCasing(result);
 
         } catch (error) {
             lastError = error;

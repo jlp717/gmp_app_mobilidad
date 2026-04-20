@@ -125,12 +125,25 @@ router.get('/metrics', verifyToken, async (req, res) => {
             `;
             const todayDataParams = [currentYear, currentMonth, today, ...vendedorResult.params];
             const todayData = await cachedQuery(queryWithParams, todayDataSql, `${cacheKey}:today`, TTL.SHORT, todayDataParams);
-            todaySales = parseFloat(todayData[0]?.SALES) || 0;
-            todayOrders = parseInt(todayData[0]?.ORDERS) || 0;
+            const td = todayData[0] || {};
+            todaySales = parseFloat(td.SALES ?? td.sales) || 0;
+            todayOrders = parseInt(td.ORDERS ?? td.orders) || 0;
         }
 
-        const curr = currentData[0] || {};
-        const last = lastData[0] || {};
+        const rawCurr = currentData[0] || {};
+        const rawLast = lastData[0] || {};
+        const pick = (obj, key) => obj[key.toUpperCase()] ?? obj[key.toLowerCase()] ?? obj[key];
+        const curr = {
+            SALES: pick(rawCurr, 'sales'),
+            MARGIN: pick(rawCurr, 'margin'),
+            BOXES: pick(rawCurr, 'boxes'),
+            ACTIVECLIENTS: pick(rawCurr, 'activeClients') ?? pick(rawCurr, 'activeclients')
+        };
+        const last = {
+            SALES: pick(rawLast, 'sales'),
+            MARGIN: pick(rawLast, 'margin'),
+            BOXES: pick(rawLast, 'boxes')
+        };
 
         let currentSales = parseFloat(curr.SALES) || 0;
         let lastSales = parseFloat(last.SALES) || 0;

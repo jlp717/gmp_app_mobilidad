@@ -1350,7 +1350,27 @@ function createClientsRoutes() {
           OFFSET ${parseInt(offset)} ROWS FETCH FIRST ${parseInt(limit)} ROWS ONLY
         `, cacheKey, RedisTTL.LONG);
 
-        return { success: true, clients, count: clients.length, isAllQuery };
+        const normalized = clients.map(c => ({
+          code: (c.code ?? c.CODE ?? '').toString().trim(),
+          name: (c.name ?? c.NAME ?? '').toString().trim(),
+          nif: (c.nif ?? c.NIF ?? '').toString().trim(),
+          address: (c.address ?? c.ADDRESS ?? '').toString().trim(),
+          city: (c.city ?? c.CITY ?? '').toString().trim(),
+          province: (c.province ?? c.PROVINCE ?? '').toString().trim(),
+          postalCode: (c.postalCode ?? c.POSTALCODE ?? '').toString().trim(),
+          phone: (c.phone ?? c.PHONE ?? '').toString().trim(),
+          phone2: (c.phone2 ?? c.PHONE2 ?? '').toString().trim(),
+          route: (c.route ?? c.ROUTE ?? '').toString().trim(),
+          contactPerson: (c.contactPerson ?? c.CONTACTPERSON ?? '').toString().trim(),
+          totalPurchases: Number(c.totalPurchases ?? c.TOTALPURCHASES ?? 0) || 0,
+          numOrders: Number(c.numOrders ?? c.NUMORDERS ?? 0) || 0,
+          lastDateInt: Number(c.lastDateInt ?? c.LASTDATEINT ?? 0) || 0,
+          totalMargin: Number(c.totalMargin ?? c.TOTALMARGIN ?? 0) || 0,
+          yearInactive: Number(c.yearInactive ?? c.YEARINACTIVE ?? 0) || 0,
+          vendorName: (c.vendorName ?? c.VENDORNAME ?? '').toString().trim(),
+          vendorCode: (c.vendorCode ?? c.VENDORCODE ?? '').toString().trim(),
+        }));
+        return { success: true, clients: normalized, count: normalized.length, isAllQuery };
       }, ttlSec);
 
       res.set('X-Cache-Source', result.source);

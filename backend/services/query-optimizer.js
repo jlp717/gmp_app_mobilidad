@@ -20,6 +20,26 @@ const { redisCache, TTL } = require('./redis-cache');
 const queryStats = new Map();
 const STATS_RETENTION_MS = 3600000; // 1 hour
 
+// Defensive: cached results may have been serialized before the DB-layer
+// casing normalizer existed. Re-normalize on cache retrieval so every row
+// exposes columns in both UPPERCASE and lowercase keys.
+function normalizeCachedRowCasing(cached) {
+    if (!Array.isArray(cached) || cached.length === 0) return cached;
+    for (let i = 0; i < cached.length; i++) {
+        const row = cached[i];
+        if (!row || typeof row !== 'object') continue;
+        const keys = Object.keys(row);
+        for (let k = 0; k < keys.length; k++) {
+            const key = keys[k];
+            const upper = key.toUpperCase();
+            const lower = key.toLowerCase();
+            if (upper !== key && !(upper in row)) row[upper] = row[key];
+            if (lower !== key && !(lower in row)) row[lower] = row[key];
+        }
+    }
+    return cached;
+}
+
 // Cache TTL categories (in seconds)
 const CACHE_TTL = {
     SHORT: 60,        // 60s: Real-time metrics, pending orders
@@ -576,7 +596,7 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
     if (cached !== null) {
         logger.debug(`[QueryOptimizer] Cache HIT: ${fullCacheKey}`);
         cacheMetrics.recordHit('redis', queryType);
-        return cached;
+        return normalizeCachedRowCasing(cached);
     }
 
     // Check if another process is building this cache (stampede prevention)
