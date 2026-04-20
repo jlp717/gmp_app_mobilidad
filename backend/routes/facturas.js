@@ -64,6 +64,10 @@ router.get('/years', async (req, res, next) => {
 
         const years = await facturasService.getAvailableYears(vendedorCodes);
 
+        if (years.length > 0) {
+            logger.info(`[facturas/years] OK - ${years.length} years for vendors ${vendedorCodes.substring(0, 20)}`);
+        }
+
         res.json({ success: true, years });
     } catch (error) {
         logger.warn(`[facturas/years] Returning empty years due to: ${error.message.substring(0, 100)}`);
@@ -89,6 +93,8 @@ router.get('/summary', async (req, res, next) => {
         }
 
         const summary = await facturasService.getSummary(params);
+
+        logger.info(`[facturas/summary] OK - ${summary.totalFacturas} facturas, ${summary.totalImporte}€ total`);
 
         res.json({ success: true, summary });
     } catch (error) {
