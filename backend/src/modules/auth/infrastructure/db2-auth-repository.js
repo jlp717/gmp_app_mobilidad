@@ -31,7 +31,7 @@ class Db2AuthRepository extends AuthRepository {
     const sql = `
       SELECT TRIM(V.CODIGOVENDEDOR) AS USUARIO, TRIM(V.NOMBREVENDEDOR) AS NOMBRE,
         CASE WHEN VX.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
-        '' AS EMAIL, PL.CODIGOPIN AS PASSWORD_HASH, 1 AS ACTIVO
+        '' AS EMAIL, TRIM(PL.CODIGOPIN) AS PASSWORD_HASH, 1 AS ACTIVO
       FROM DSEDAC.VDD V
       LEFT JOIN DSEDAC.VDDX VX ON V.CODIGOVENDEDOR = VX.CODIGOVENDEDOR
       LEFT JOIN DSEDAC.VDPL1 PL ON V.CODIGOVENDEDOR = PL.CODIGOVENDEDOR
@@ -40,8 +40,8 @@ class Db2AuthRepository extends AuthRepository {
     const result = await this._db.executeParams(sql, [username.trim()]);
     if (!result || result.length === 0) return null;
     const user = User.fromDbRow(result[0]);
-    // PIN-based auth: compare plain text PIN
-    if (user._passwordHash === password) {
+    // PIN-based auth: compare trimmed plain text PIN (CODIGOPIN is CHAR in DB2)
+    if ((user._passwordHash || '').trim() === password.trim()) {
       return user;
     }
     return null;
