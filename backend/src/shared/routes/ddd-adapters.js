@@ -123,7 +123,16 @@ function createAuthRoutes() {
         logger.warn(`[DDD-AUTH] User ${username} has no password hash - login denied`);
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
       }
-      const passwordValid = await verifyPassword(password, user._passwordHash);
+
+      // PIN auth: DB2 CODIGOPIN is plaintext (bcrypt migration pending DB schema change)
+      // If hash starts with $2b$ it's bcrypt, otherwise compare as plaintext
+      const dbPin = user._passwordHash.trim();
+      let passwordValid = false;
+      if (dbPin.startsWith('$2b$')) {
+        passwordValid = await verifyPassword(password, dbPin);
+      } else {
+        passwordValid = (dbPin === password.trim());
+      }
 
       if (!passwordValid) {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
