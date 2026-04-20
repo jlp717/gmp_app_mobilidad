@@ -12,30 +12,32 @@ class Db2AuthRepository extends AuthRepository {
   }
 
   async findByCode(code) {
+    // TRIM() on both sides avoids ODBC 22001/CWB0111 when binding VARCHAR to CHAR
     const sql = `
-      SELECT V.CODIGOVENDEDOR AS USUARIO, V.NOMBREVENDEDOR AS NOMBRE,
+      SELECT TRIM(V.CODIGOVENDEDOR) AS USUARIO, TRIM(V.NOMBREVENDEDOR) AS NOMBRE,
         CASE WHEN VX.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
         '' AS EMAIL, '' AS PASSWORD_HASH, 1 AS ACTIVO
       FROM DSEDAC.VDD V
-      LEFT JOIN DSEDAC.VDDX VX ON VX.CODIGOVENDEDOR = V.CODIGOVENDEDOR
-      WHERE V.CODIGOVENDEDOR = ?
+      LEFT JOIN DSEDAC.VDDX VX ON TRIM(VX.CODIGOVENDEDOR) = TRIM(V.CODIGOVENDEDOR)
+      WHERE TRIM(V.CODIGOVENDEDOR) = TRIM(?)
     `;
-    const result = await this._db.executeParams(sql, [code]);
+    const result = await this._db.executeParams(sql, [code.trim()]);
     if (!result || result.length === 0) return null;
     return User.fromDbRow(result[0]);
   }
 
   async findByCredentials(username, password) {
+    // TRIM() on both sides avoids ODBC 22001/CWB0111 when binding VARCHAR to CHAR
     const sql = `
-      SELECT V.CODIGOVENDEDOR AS USUARIO, V.NOMBREVENDEDOR AS NOMBRE,
+      SELECT TRIM(V.CODIGOVENDEDOR) AS USUARIO, TRIM(V.NOMBREVENDEDOR) AS NOMBRE,
         CASE WHEN VX.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
         '' AS EMAIL, PL.CODIGOPIN AS PASSWORD_HASH, 1 AS ACTIVO
       FROM DSEDAC.VDD V
-      LEFT JOIN DSEDAC.VDDX VX ON VX.CODIGOVENDEDOR = V.CODIGOVENDEDOR
-      LEFT JOIN DSEDAC.VDPL1 PL ON PL.CODIGOVENDEDOR = V.CODIGOVENDEDOR
-      WHERE V.CODIGOVENDEDOR = ?
+      LEFT JOIN DSEDAC.VDDX VX ON TRIM(VX.CODIGOVENDEDOR) = TRIM(V.CODIGOVENDEDOR)
+      LEFT JOIN DSEDAC.VDPL1 PL ON TRIM(PL.CODIGOVENDEDOR) = TRIM(V.CODIGOVENDEDOR)
+      WHERE TRIM(V.CODIGOVENDEDOR) = TRIM(?)
     `;
-    const result = await this._db.executeParams(sql, [username]);
+    const result = await this._db.executeParams(sql, [username.trim()]);
     if (!result || result.length === 0) return null;
     const user = User.fromDbRow(result[0]);
     // PIN-based auth: compare plain text PIN
