@@ -348,6 +348,7 @@ class EntregasState {
 
 class EntregasNotifier extends Notifier<EntregasState> {
   Timer? _debounceTimer;
+  bool _initialLoadDone = false;
 
   @override
   EntregasState build() => EntregasState();
@@ -357,6 +358,12 @@ class EntregasNotifier extends Notifier<EntregasState> {
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
       cargarAlbaranesPendientes();
     });
+  }
+
+  void _immediateLoad() {
+    _debounceTimer?.cancel();
+    _initialLoadDone = true;
+    cargarAlbaranesPendientes();
   }
 
   void _cancelDebouncedLoad() {
@@ -371,7 +378,11 @@ class EntregasNotifier extends Notifier<EntregasState> {
     final wasChanged = state.repartidorId != repartidorId;
     if (autoReload && (wasChanged || forceReload)) {
       state = state.copyWith(repartidorId: repartidorId);
-      cargarAlbaranesPendientes();
+      if (_initialLoadDone) {
+        _debouncedLoad();
+      } else {
+        _immediateLoad();
+      }
     } else {
       state = state.copyWith(repartidorId: repartidorId);
     }
@@ -379,7 +390,11 @@ class EntregasNotifier extends Notifier<EntregasState> {
 
   void seleccionarFecha(DateTime fecha) {
     state = state.copyWith(fechaSeleccionada: fecha);
-    _debouncedLoad();
+    if (_initialLoadDone) {
+      _debouncedLoad();
+    } else {
+      _immediateLoad();
+    }
   }
 
   void setSearchQuery(String query) {
