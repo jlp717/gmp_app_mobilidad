@@ -23,6 +23,7 @@ class Db2AuthRepository extends AuthRepository {
       WHERE TRIM(V.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
     `;
     const result = await this._db.executeParams(sql, [code.trim()]);
+    console.log(`[DDD-AUTH-DEBUG] findByCode('${code}') → rows:`, JSON.stringify(result));
     if (!result || result.length === 0) return null;
     return User.fromDbRow(result[0]);
   }
