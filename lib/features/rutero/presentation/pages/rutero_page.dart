@@ -44,7 +44,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   bool _isLoadingClients = false;
   bool _isCacheLoading = false; // true while backend cache is still warming up
   int _cacheRetryCount = 0;
-  static const int _maxCacheRetries = 4;
+  static const int _maxCacheRetries =
+      8; // Increased from 4 to ensure cache warming
   String? _error;
   String _searchQuery = '';
   String _sortMode = 'custom'; // 'sales_desc', 'sales_asc', 'route', 'custom'
@@ -363,8 +364,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         _isLoadingClients = false;
       });
 
-      // If the backend cache is still warming, auto-retry with loaded clients
-      // IMPROVED: Also retry if we have clients but ALL have zero sales (partial cache data)
+      // If the backend cache is still warming OR data is empty, retry
       final dayCacheStatus = response['cacheStatus'] as String?;
       final hasAnySales = _dayClients.any((client) {
         final status = client['status'] as Map<String, dynamic>?;
@@ -372,21 +372,22 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         return ytdSales > 0.01;
       });
 
-      if (dayCacheStatus == 'loading' &&
-          (_dayClients.isEmpty || !hasAnySales) &&
-          _cacheRetryCount < _maxCacheRetries) {
+      // Always retry if data is empty or has no sales, up to max retries
+      final needsRetry = _dayClients.isEmpty || !hasAnySales;
+      if (needsRetry && _cacheRetryCount < _maxCacheRetries) {
         setState(() => _isCacheLoading = true);
         _cacheRetryCount++;
-        Future.delayed(const Duration(seconds: 4), () {
+        Future.delayed(const Duration(seconds: 6), () {
+          // Increased from 4 to 6 seconds
           if (mounted) _loadDayClients(useDirectEndpoint: useDirectEndpoint);
         });
-      } else if (dayCacheStatus != 'loading') {
+      } else {
         setState(() {
           _isCacheLoading = false;
           _cacheRetryCount = 0;
         });
 
-        // CRITICAL FIX: If day-direct returned clients but NO sales data,
+        // If day-direct returned clients but NO sales data,
         // fetch the normal endpoint to get sales data and merge it
         if (useDirectEndpoint &&
             _dayClients.isNotEmpty &&
