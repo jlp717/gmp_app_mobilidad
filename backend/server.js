@@ -283,7 +283,10 @@ app.get('/api/admin/cache-stats', verifyToken, (req, res) => {
 // =============================================================================
 if (process.env.USE_DDD_ROUTES === 'true' && dddAuthRoutes) {
   app.use('/api/auth', dddAuthRoutes);
-  logger.info('✅ DDD auth routes mounted (public)');
+  // Fall-through to legacy for routes DDD doesn't implement yet
+  // (/repartidores, /refresh, /logout, /switch-role, etc.)
+  app.use('/api/auth', authRoutes);
+  logger.info('✅ DDD auth routes mounted (public) + legacy fallback');
 } else {
   app.use('/api/auth', authRoutes);
 }

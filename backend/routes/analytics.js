@@ -98,7 +98,7 @@ router.get('/top-clients', verifyToken, async (req, res) => {
         if (month) dateFilter += ` AND L.LCMMDC = ${parseInt(month) || 0}`;
 
         const sql = `
-      SELECT 
+      SELECT
         L.LCCDCL as code,
         SUM(L.LCIMVT) as totalSales,
         COUNT(*) as transactions
@@ -109,32 +109,42 @@ router.get('/top-clients', verifyToken, async (req, res) => {
       FETCH FIRST ${parseInt(limit) || 10} ROWS ONLY
     `;
 
-        const cacheKey = `analytics:top_clients:${year || 'current'}:${month || 'all'}:${vendedorCodes}:${limit}`;
+        const cacheKey = `analytics:top_clients:${year || 'current'}:${month || 'all'}:${vendedorCodes || 'ALL'}:${limit}`;
         const topClients = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM);
 
-        // Get client names from CLI table (cached separately usually, but here we specific queries)
-        // We can cache individual client details or the whole enriched list
-        // Let's enrich and leverage CLI table efficiency
+        if (!Array.isArray(topClients) || topClients.length === 0) {
+            return res.json({ clients: [] });
+        }
 
-        if (topClients.length === 0) return res.json({ clients: [] });
+        // Normalize: DB2/ODBC may return columns as CODE or code depending on driver config
+        const normalized = topClients
+            .map(c => ({
+                code: (c.CODE ?? c.code ?? '').toString().trim(),
+                totalSales: c.TOTALSALES ?? c.totalSales ?? c.TOTALSALES ?? 0
+            }))
+            .filter(c => c.code.length > 0);
 
-        const clientCodes = topClients.map(c => `'${sanitizeForSQL(c.CODE)}'`).join(',');
-        const namesMsg = `
-            SELECT CODIGOCLIENTE as C, NOMBRECLIENTE as N, POBLACION as P 
+        if (normalized.length === 0) return res.json({ clients: [] });
+
+        const clientCodes = normalized.map(c => `'${sanitizeForSQL(c.code)}'`).join(',');
+        const namesSql = `
+            SELECT CODIGOCLIENTE as C, NOMBRECLIENTE as N, POBLACION as P
             FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${clientCodes})
         `;
-        // Cache detailed names lookup for a long time
-        const clientDetails = await cachedQuery(query, namesMsg, `clients:details:${topClients.length}:${topClients[0].CODE}`, TTL.LONG);
+        const clientDetails = await cachedQuery(query, namesSql, `clients:details:${normalized.length}:${normalized[0].code}`, TTL.LONG);
         const detailsMap = {};
-        clientDetails.forEach(d => detailsMap[d.C.trim()] = { name: d.N, city: d.P });
+        (clientDetails || []).forEach(d => {
+            const key = (d.C ?? d.c ?? '').toString().trim();
+            if (key) detailsMap[key] = { name: d.N ?? d.n, city: d.P ?? d.p };
+        });
 
-        const enhancedClients = topClients.map(c => {
-            const info = detailsMap[c.CODE.trim()] || {};
+        const enhancedClients = normalized.map(c => {
+            const info = detailsMap[c.code] || {};
             return {
-                code: c.CODE?.trim(),
-                name: info.name?.trim() || `Cliente ${c.CODE}`,
-                city: info.city?.trim() || '',
-                totalSales: formatCurrency(c.TOTALSALES),
+                code: c.code,
+                name: (info.name || '').toString().trim() || `Cliente ${c.code}`,
+                city: (info.city || '').toString().trim(),
+                totalSales: formatCurrency(c.totalSales),
                 year: year || new Date().getFullYear()
             };
         });
@@ -142,7 +152,7 @@ router.get('/top-clients', verifyToken, async (req, res) => {
         res.json({ clients: enhancedClients });
 
     } catch (error) {
-        logger.error(`Top clients error: ${error.message}`);
+        logger.error(`Top clients error: ${error.message} | stack: ${error.stack?.substring(0, 300)}`);
         handleRouteError(error, res, 'Error top clients', 500);
     }
 });

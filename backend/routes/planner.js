@@ -871,30 +871,41 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query;
-        
+
         // SECURITY: Validate day parameter
         const normalizedDay = day ? day.toLowerCase() : '';
         if (!DAY_NAMES.includes(normalizedDay)) {
             return res.status(400).json({ error: 'Día inválido', day });
         }
-        
+
+        // Require vendedorCodes (otherwise config query below fails with null param)
+        if (!vendedorCodes || !vendedorCodes.trim()) {
+            return res.status(400).json({ error: 'vendedorCodes es obligatorio' });
+        }
+
         // SECURITY: Validate vendedorCodes is not injection attempt
-        if (vendedorCodes && !/^[a-zA-Z0-9,_\s]+$/.test(vendedorCodes)) {
+        if (!/^[a-zA-Z0-9,_\s]+$/.test(vendedorCodes)) {
             return res.status(400).json({ error: 'Código de vendedor inválido' });
         }
-        
+
         logger.info(`[RUTERO DAY DIRECT] Query without cache for ${vendedorCodes} on ${normalizedDay}`);
-        
-        // FIX: Only reload if cache is stale (>5 min old), otherwise use cached data
-        // The cache reload was causing 15-20 second delays on EVERY request
-        const shouldReload = !laclaeCacheLastLoadTime || (Date.now() - laclaeCacheLastLoadTime > 5 * 60 * 1000);
-        
+
+        // laclaeCacheLastLoadTime is exported as a getter function from services/laclae.js
+        const lastLoadTime = typeof laclaeCacheLastLoadTime === 'function'
+            ? laclaeCacheLastLoadTime()
+            : laclaeCacheLastLoadTime;
+        const shouldReload = !lastLoadTime || (Date.now() - lastLoadTime > 5 * 60 * 1000);
+
         if (shouldReload) {
             logger.info('[RUTERO DAY DIRECT] Cache stale, reloading...');
-            await loadLaclaeCache();
-            await reloadRuteroConfig();
+            try {
+                await loadLaclaeCache();
+                await reloadRuteroConfig();
+            } catch (cacheErr) {
+                logger.warn(`[RUTERO DAY DIRECT] Cache reload failed (continuing): ${cacheErr.message}`);
+            }
         }
-        
+
         // Now use the fresh cache
         const shouldIgnoreOverrides = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
         let dayClientCodes = getClientsForDayService(vendedorCodes, day, role || 'comercial', shouldIgnoreOverrides);
@@ -909,7 +920,7 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
         // SECURITY: Use parameterized query to prevent SQL injection
         const placeholders = clientBatch.map(() => '?').join(',');
         const clientDetailsSql = `
-            SELECT 
+            SELECT
                 CODIGOCLIENTE as CODE,
                 COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
                 DIRECCION as ADDRESS,
@@ -923,13 +934,14 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
         const clientDetails = await queryWithParams(clientDetailsSql, clientBatch, false, false);
 
         // Get RUTERO_CONFIG order for sorting
-        // SECURITY: Use parameterized query to prevent SQL injection
+        // For multi-vendor (comma-separated), only query first vendor's order (most common use case)
+        const firstVendor = vendedorCodes.split(',')[0].trim();
         const configSql = `
             SELECT TRIM(CLIENTE) as CLIENTE, ORDEN
             FROM JAVIER.RUTERO_CONFIG
             WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
         `;
-        const configRows = await queryWithParams(configSql, [vendedorCodes, normalizedDay], false, false);
+        const configRows = await queryWithParams(configSql, [firstVendor, normalizedDay], false, false);
         
         const configOrder = {};
         configRows.forEach(r => { configOrder[r.CLIENTE?.trim()] = r.ORDEN; });
@@ -960,6 +972,7 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
         });
 
     } catch (error) {
+        logger.error(`[RUTERO DAY DIRECT] Error: ${error.message}\n${error.stack?.substring(0, 400)}`);
         handleRouteError(error, res, 'Error obteniendo rutero', 500);
     }
 });
