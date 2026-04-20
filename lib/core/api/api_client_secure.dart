@@ -118,6 +118,21 @@ class ApiClient {
     // Add retry interceptor
     dio.interceptors.add(_RetryInterceptor(dio, _maxRetries, _retryDelay));
 
+    // Add 401 global logout interceptor (covers ALL methods: GET, POST, PUT, DELETE)
+    dio.interceptors.add(InterceptorsWrapper(
+      onError: (DioException err, ErrorInterceptorHandler handler) {
+        if (err.response?.statusCode == 401) {
+          final path = err.requestOptions.path;
+          // Don't logout on login attempts
+          if (!path.contains('/auth/login')) {
+            debugPrint('[ApiClient] 401 on ${err.requestOptions.method} $path — triggering logout');
+            onUnauthorized?.call();
+          }
+        }
+        handler.next(err);
+      },
+    ));
+
     // Add security logging interceptor
     dio.interceptors.add(_SecurityInterceptor());
 
