@@ -12,9 +12,9 @@ import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobro_detai
 import 'package:gmp_app_mobilidad/features/cobros/providers/cobros_provider.dart';
 
 class CobrosPage extends ConsumerStatefulWidget {
-
   const CobrosPage({
-    required this.employeeCode, super.key,
+    required this.employeeCode,
+    super.key,
     this.isJefeVentas = false,
   });
   final String employeeCode;
@@ -40,6 +40,13 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadClients();
       _loadPendingSummary();
+    });
+
+    ref.listen(selectedVendorProvider, (previous, next) {
+      if (previous != next) {
+        _loadClients();
+        _loadPendingSummary();
+      }
     });
   }
 
@@ -179,14 +186,16 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(
-          bottom:
-              BorderSide(color: AppTheme.neonBlue.withOpacity(0.2)),
+          bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2)),
         ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.account_balance_wallet,
-              color: AppTheme.neonBlue, size: 28,),
+          const Icon(
+            Icons.account_balance_wallet,
+            color: AppTheme.neonBlue,
+            size: 28,
+          ),
           const SizedBox(width: 12),
           Text(
             'Gestión de Cobros',
@@ -228,7 +237,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.neonBlue, width: 2),
+                borderSide:
+                    const BorderSide(color: AppTheme.neonBlue, width: 2),
               ),
               filled: true,
               fillColor: AppTheme.surfaceColor,
@@ -256,11 +266,16 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.person_search,
-              size: 64, color: AppTheme.textSecondary.withOpacity(0.2),),
+          Icon(
+            Icons.person_search,
+            size: 64,
+            color: AppTheme.textSecondary.withOpacity(0.2),
+          ),
           const SizedBox(height: 16),
-          const Text('No se han encontrado clientes',
-              style: TextStyle(color: AppTheme.textSecondary),),
+          const Text(
+            'No se han encontrado clientes',
+            style: TextStyle(color: AppTheme.textSecondary),
+          ),
           if (grandTotal > 0)
             Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -384,8 +399,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     color: AppTheme.success.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Icon(Icons.check_circle,
-                      color: AppTheme.success, size: 20,),
+                  child: const Icon(
+                    Icons.check_circle,
+                    color: AppTheme.success,
+                    size: 20,
+                  ),
                 ),
             ],
           ),

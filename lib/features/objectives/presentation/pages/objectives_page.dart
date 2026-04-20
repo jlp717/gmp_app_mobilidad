@@ -112,10 +112,14 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    // Si es jefe de ventas, cargar lista de vendedores
-    _loadPopulations();
     _loadPopulations();
     _loadData();
+
+    ref.listen(selectedVendorProvider, (previous, next) {
+      if (previous != next) {
+        _loadData();
+      }
+    });
   }
 
   Future<void> _loadPopulations() async {

@@ -131,8 +131,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _initToday();
-    // Si es jefe de ventas, cargar lista de vendedores
     _refreshData();
+
+    ref.listen(selectedVendorProvider, (previous, next) {
+      if (previous != next) {
+        _refreshData();
+      }
+    });
   }
 
   Future<void> _refreshData() async {

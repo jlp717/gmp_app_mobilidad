@@ -69,6 +69,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
     });
+
+    ref.listen(selectedVendorProvider, (previous, next) {
+      if (previous != next) {
+        _loadInitialData();
+      }
+    });
   }
 
   @override
@@ -96,9 +102,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         setState(() => _isLoading = true);
       }
 
-      final authState = ProviderScope.containerOf(context)
-          .read(authProvider)
-          .value;
+      final authState =
+          ProviderScope.containerOf(context).read(authProvider).value;
       final user = authState?.user;
 
       if (user == null) throw Exception('No user logged in');
@@ -128,7 +133,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       });
 
       debugPrint(
-          '[FACTURAS] Loading data. Codes: $codes. Year: $_selectedYear. DateFrom: $_dateFrom. DateTo: $_dateTo',);
+        '[FACTURAS] Loading data. Codes: $codes. Year: $_selectedYear. DateFrom: $_dateFrom. DateTo: $_dateTo',
+      );
 
       final results = await Future.wait([
         FacturasService.getAvailableYears(codes),
@@ -226,8 +232,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       debugPrint('[FACTURAS] DatePicker Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Error abriendo calendario: $e'),
-            backgroundColor: Colors.red,),
+          content: Text('Error abriendo calendario: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -273,7 +280,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 ),
                 boxShadow: [
                   BoxShadow(
-                      color: AppTheme.neonBlue.withOpacity(0.5), blurRadius: 4,),
+                    color: AppTheme.neonBlue.withOpacity(0.5),
+                    blurRadius: 4,
+                  ),
                 ],
               ),
             ),
@@ -324,7 +333,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                   color: isDark
                                       ? const Color(0xFF90CAF9)
                                       : const Color(
-                                          0xFF0D47A1,), // Lighter blue in dark mode, Deep blue in light
+                                          0xFF0D47A1,
+                                        ), // Lighter blue in dark mode, Deep blue in light
                                   letterSpacing: 0.3,
                                 ),
                                 maxLines: 2, // Allow 2 lines for long names
@@ -335,16 +345,19 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 4,),
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: isDark
                                           ? Colors.white.withOpacity(0.12)
                                           : Colors.grey.shade200,
                                       borderRadius: BorderRadius.circular(6),
                                       border: Border.all(
-                                          color: isDark
-                                              ? Colors.white24
-                                              : Colors.grey.shade400,),
+                                        color: isDark
+                                            ? Colors.white24
+                                            : Colors.grey.shade400,
+                                      ),
                                     ),
                                     child: Text(
                                       factura.numeroFormateado, // ALBARAN
@@ -408,8 +421,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
                     const SizedBox(height: 16),
                     Divider(
-                        height: 1,
-                        color: isDark ? Colors.white10 : Colors.grey.shade100,),
+                      height: 1,
+                      color: isDark ? Colors.white10 : Colors.grey.shade100,
+                    ),
                     const SizedBox(height: 12),
 
                     // Actions
@@ -476,11 +490,13 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         ),
         child: Row(
           children: [
-            Icon(icon,
-                size: 16,
-                color: isPrimary
-                    ? (isDark ? AppTheme.neonBlue : const Color(0xFF2D5A87))
-                    : (isDark ? Colors.white70 : Colors.grey.shade700),),
+            Icon(
+              icon,
+              size: 16,
+              color: isPrimary
+                  ? (isDark ? AppTheme.neonBlue : const Color(0xFF2D5A87))
+                  : (isDark ? Colors.white70 : Colors.grey.shade700),
+            ),
             const SizedBox(width: 6),
             Text(
               label,
@@ -502,12 +518,13 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     if (!mounted) return;
     // Prevent redundant calls if already loading
     if (_isLoading) return;
-    
+
     try {
       final codes = _vendedorCodes;
 
       debugPrint(
-          '[FACTURAS] Refreshing. Codes: $codes. Year: $_selectedYear. Month: $_selectedMonth. Range: ${_formatDateParam(_dateFrom)} - ${_formatDateParam(_dateTo)}',);
+        '[FACTURAS] Refreshing. Codes: $codes. Year: $_selectedYear. Month: $_selectedMonth. Range: ${_formatDateParam(_dateFrom)} - ${_formatDateParam(_dateTo)}',
+      );
 
       final results = await Future.wait([
         FacturasService.getFacturas(
@@ -531,7 +548,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       ]);
 
       debugPrint(
-          '[FACTURAS] Refresh complete. Found ${(results[0]! as List).length} facturas.',);
+        '[FACTURAS] Refresh complete. Found ${(results[0]! as List).length} facturas.',
+      );
 
       if (!mounted) return;
 
@@ -595,9 +613,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  'Error: PDF vacío o corrupto (${bytes.length} bytes). Intenta de nuevo.',),
-              backgroundColor: Colors.red,),
+            content: Text(
+              'Error: PDF vacío o corrupto (${bytes.length} bytes). Intenta de nuevo.',
+            ),
+            backgroundColor: Colors.red,
+          ),
         );
         return;
       }
@@ -628,8 +648,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         ),
       );
     } catch (e) {
-      modal.error('Error al previsualizar: $e',
-          onRetry: () => _previewFactura(factura),);
+      modal.error(
+        'Error al previsualizar: $e',
+        onRetry: () => _previewFactura(factura),
+      );
     }
   }
 
@@ -657,8 +679,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       }
     } catch (e) {
       if (mounted) {
-        modal.error('Error al descargar: $e',
-            onRetry: () => _downloadFactura(factura),);
+        modal.error(
+          'Error al descargar: $e',
+          onRetry: () => _downloadFactura(factura),
+        );
       }
     }
   }
@@ -693,8 +717,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         sharePositionOrigin: origin,
       );
     } catch (e) {
-      modal.error('Error al compartir: $e',
-          onRetry: () => _shareFacturaPdf(factura),);
+      modal.error(
+        'Error al compartir: $e',
+        onRetry: () => _shareFacturaPdf(factura),
+      );
     }
   }
 
@@ -740,8 +766,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   backgroundColor: Color(0xFF25D366),
                   child: Icon(Icons.chat, color: Colors.white, size: 20),
                 ),
-                title: const Text('WhatsApp',
-                    style: TextStyle(color: Colors.white),),
+                title: const Text(
+                  'WhatsApp',
+                  style: TextStyle(color: Colors.white),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _whatsAppFactura(factura);
@@ -766,8 +794,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   child:
                       Icon(Icons.share_outlined, color: Colors.white, size: 20),
                 ),
-                title: const Text('Sistema',
-                    style: TextStyle(color: Colors.white),),
+                title: const Text(
+                  'Sistema',
+                  style: TextStyle(color: Colors.white),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _shareFacturaPdf(factura);
@@ -809,8 +839,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       );
       modal.success('✓ Email enviado a ${result.email}');
     } catch (e) {
-      modal.error('Error enviando email: $e',
-          onRetry: () => _emailFactura(factura),);
+      modal.error(
+        'Error enviando email: $e',
+        onRetry: () => _emailFactura(factura),
+      );
     }
   }
 
@@ -824,8 +856,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
     if (result == null || !mounted) return;
 
-    final modal = AsyncOperationModal.show(context,
-        text: 'Preparando documento...',);
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Preparando documento...',
+    );
     try {
       // Download PDF
       final file = await FacturasService.downloadFacturaPdf(
@@ -850,7 +884,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
-              center: Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
               width: 1,
               height: 1,
             )
@@ -896,100 +931,115 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         final authState = ref.watch(authProvider).value;
         return Column(
           children: [
-        // Header (AppBar replacement)
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-              color: AppTheme.surfaceColor,
-              border: Border(
-                  bottom: BorderSide(color: Colors.white.withOpacity(0.05)),),
-              boxShadow: const [
-                BoxShadow(
+            // Header (AppBar replacement)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor,
+                border: Border(
+                  bottom: BorderSide(color: Colors.white.withOpacity(0.05)),
+                ),
+                boxShadow: const [
+                  BoxShadow(
                     color: Colors.black12,
                     blurRadius: 4,
-                    offset: Offset(0, 2),),
-              ],),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                          color: Colors.teal.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),),
-                      child: const Icon(Icons.receipt_long_outlined,
-                          color: Colors.teal,),
-                    ),
-                    const SizedBox(width: 12),
-                    Text('Mis Facturas',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),),
-                  ],),
-                  // Explicit Refresh Button
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: _refreshData,
-                    tooltip: 'Recargar datos',
+                    offset: Offset(0, 2),
                   ),
                 ],
               ),
-              if (authState?.user?.isJefeVentas ?? false) ...[
-                const SizedBox(height: 12),
-                Container(
-                  constraints: const BoxConstraints(minHeight: 50),
-                  width: double.infinity,
-                  child: GlobalVendorSelector(
-                    isJefeVentas: true,
-                    onChanged: _onVendorChanged,
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.receipt_long_outlined,
+                              color: Colors.teal,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Mis Facturas',
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      // Explicit Refresh Button
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: _refreshData,
+                        tooltip: 'Recargar datos',
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ],
-          ),
-        ),
-
-        // Content
-        Expanded(
-          child: Column(
-            children: [
-              // Summary Cards
-              if (!Responsive.isLandscapeCompact(context)) _buildSummaryCards(),
-
-              // Inputs & Filters
-              _buildFilters(context),
-
-              Expanded(
-                child: _isLoading
-                    // OPTIMIZATION: Use SkeletonList for perceived performance
-                    ? const SkeletonList(itemCount: 8, itemHeight: 100)
-                    : _error != null
-                        ? Center(
-                            child: Text(_error!,
-                                style: const TextStyle(color: Colors.red),),)
-                        : _facturas.isEmpty
-                            ? _buildEmptyState()
-                            : RefreshIndicator(
-                                onRefresh: _refreshData,
-                                // OPTIMIZATION: Use OptimizedListView for smooth scrolling
-                                child: OptimizedListView(
-                                  padding: const EdgeInsets.only(bottom: 80),
-                                  itemCount: _facturas.length,
-                                  itemBuilder: (context, index) {
-                                    final factura = _facturas[index];
-                                    return _buildFacturaCard(factura);
-                                  },
-                                ),
-                              ),
+                  if (authState?.user?.isJefeVentas ?? false) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      constraints: const BoxConstraints(minHeight: 50),
+                      width: double.infinity,
+                      child: GlobalVendorSelector(
+                        isJefeVentas: true,
+                        onChanged: _onVendorChanged,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ),
-        ),
-      ],
+            ),
+
+            // Content
+            Expanded(
+              child: Column(
+                children: [
+                  // Summary Cards
+                  if (!Responsive.isLandscapeCompact(context))
+                    _buildSummaryCards(),
+
+                  // Inputs & Filters
+                  _buildFilters(context),
+
+                  Expanded(
+                    child: _isLoading
+                        // OPTIMIZATION: Use SkeletonList for perceived performance
+                        ? const SkeletonList(itemCount: 8, itemHeight: 100)
+                        : _error != null
+                            ? Center(
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(color: Colors.red),
+                                ),
+                              )
+                            : _facturas.isEmpty
+                                ? _buildEmptyState()
+                                : RefreshIndicator(
+                                    onRefresh: _refreshData,
+                                    // OPTIMIZATION: Use OptimizedListView for smooth scrolling
+                                    child: OptimizedListView(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 80),
+                                      itemCount: _facturas.length,
+                                      itemBuilder: (context, index) {
+                                        final factura = _facturas[index];
+                                        return _buildFacturaCard(factura);
+                                      },
+                                    ),
+                                  ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );
@@ -1319,9 +1369,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             children: [
               Icon(icon, size: 18, color: Colors.grey),
               const SizedBox(width: 8),
-              Text(hint,
-                  style:
-                      TextStyle(color: isDark ? Colors.white38 : Colors.grey),),
+              Text(
+                hint,
+                style: TextStyle(color: isDark ? Colors.white38 : Colors.grey),
+              ),
             ],
           ),
           icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
@@ -1392,7 +1443,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   foregroundColor: Colors.white54,
                   side: const BorderSide(color: Colors.white24),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ],
