@@ -81,6 +81,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   // State for Cascading Selection
   List<MatrixNode> _selectionPath =
       []; // Path of selected nodes (e.g. [VendorNode, ClientNode])
+  bool _isInitialized = false;
 
   static const List<String> _monthNamesShort = [
     'Ene',
@@ -102,11 +103,12 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     super.initState();
     _pendingYears = Set.from(_selectedYears);
     _pendingMonths = Set.from(_selectedMonths);
+    _isInitialized = true;
     _loadVendedores();
     _fetchAllData();
 
     ref.listen(selectedVendorProvider, (previous, next) {
-      if (previous != next) {
+      if (_isInitialized && previous != next) {
         _fetchAllData();
       }
     });

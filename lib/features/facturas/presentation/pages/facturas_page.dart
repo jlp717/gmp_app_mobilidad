@@ -57,6 +57,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   // Animation
   late AnimationController _fadeController;
+  bool _isInitialized = false;
 
   @override
   void initState() {
@@ -67,11 +68,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _isInitialized = true;
       _loadInitialData();
     });
 
     ref.listen(selectedVendorProvider, (previous, next) {
-      if (previous != next) {
+      if (_isInitialized && previous != next) {
         _loadInitialData();
       }
     });
@@ -990,7 +992,6 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                       width: double.infinity,
                       child: GlobalVendorSelector(
                         isJefeVentas: true,
-                        onChanged: _onVendorChanged,
                       ),
                     ),
                   ],

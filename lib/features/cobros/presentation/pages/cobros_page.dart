@@ -29,6 +29,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   bool _isSearchingClients = false;
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounceTimer;
+  bool _isInitialized = false;
 
   // Single source of truth: Riverpod provider
   CobrosProvider get _provider =>
@@ -38,12 +39,13 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _isInitialized = true;
       _loadClients();
       _loadPendingSummary();
     });
 
     ref.listen(selectedVendorProvider, (previous, next) {
-      if (previous != next) {
+      if (_isInitialized && previous != next) {
         _loadClients();
         _loadPendingSummary();
       }
@@ -117,7 +119,6 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           _buildHeader(),
           GlobalVendorSelector(
             isJefeVentas: widget.isJefeVentas,
-            onChanged: _onVendorChanged,
           ),
           _buildSearchArea(),
           Expanded(

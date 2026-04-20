@@ -26,6 +26,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   String? _error;
   Map<String, dynamic>? _data;
   DateTime? _lastFetchTime;
+  bool _isInitialized = false;
 
   // Jefe View
 
@@ -33,10 +34,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   void initState() {
     super.initState();
 
+    _isInitialized = true;
     _loadData();
 
     ref.listen(selectedVendorProvider, (previous, next) {
-      if (previous != next) {
+      if (_isInitialized && previous != next) {
         _loadData();
       }
     });
@@ -1342,7 +1344,6 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       if (widget.isJefeVentas) ...[
                         GlobalVendorSelector(
                           isJefeVentas: true,
-                          onChanged: _loadData,
                         ),
                       ] else
                         const Text('Comisiones 2026',

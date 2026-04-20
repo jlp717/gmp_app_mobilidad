@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -51,6 +53,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   String _sortMode = 'custom'; // 'sales_desc', 'sales_asc', 'route', 'custom'
   DateTime? _lastFetchTime; // Track last sync
   final TextEditingController _searchController = TextEditingController();
+
+  // Guards to prevent redundant/cascading refreshes
+  bool _isInitialized = false;
+  bool _isLoadingInProgress = false;
+  Timer? _retryTimer; // Cancelable retry timer
 
   String _selectedAlertType = 'ALL';
   bool _onlyWithAlerts = false;
@@ -131,29 +138,37 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _initToday();
+    _isInitialized = true;
     _refreshData();
 
+    // Listen for vendor changes from OTHER pages (cross-page sync)
+    // Do NOT use onChanged in GlobalVendorSelector - that would cause double refresh
     ref.listen(selectedVendorProvider, (previous, next) {
-      if (previous != next) {
+      if (_isInitialized && previous != next) {
         _refreshData();
       }
     });
   }
 
   Future<void> _refreshData() async {
-    // Reset retry counters so a manual refresh always starts fresh
+    if (_isLoadingInProgress) return;
+    _isLoadingInProgress = true;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+
     _cacheRetryCount = 0;
     await _loadWeekData(useDirectEndpoint: true);
-    // _loadWeekData calls _loadDayClients internally, so we assume completion updates
     if (mounted) {
       setState(() => _lastFetchTime = DateTime.now());
     }
+    _isLoadingInProgress = false;
   }
 
   // ... (dispose, initToday, formatters etc. same)
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -301,7 +316,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       if (weekCacheStatus == 'loading' && _cacheRetryCount < _maxCacheRetries) {
         setState(() => _isCacheLoading = true);
         _cacheRetryCount++;
-        Future.delayed(const Duration(seconds: 4), () {
+        _retryTimer?.cancel();
+        _retryTimer = Timer(const Duration(seconds: 6), () {
           if (mounted) _loadWeekData(useDirectEndpoint: useDirectEndpoint);
         });
         return;
@@ -382,8 +398,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       if (needsRetry && _cacheRetryCount < _maxCacheRetries) {
         setState(() => _isCacheLoading = true);
         _cacheRetryCount++;
-        Future.delayed(const Duration(seconds: 6), () {
-          // Increased from 4 to 6 seconds
+        _retryTimer?.cancel();
+        _retryTimer = Timer(const Duration(seconds: 6), () {
           if (mounted) _loadDayClients(useDirectEndpoint: useDirectEndpoint);
         });
       } else {
@@ -658,10 +674,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           ),
 
           // 2. Vendor Selector for Manager
+          // Note: Do NOT pass onChanged - ref.listen handles vendor sync across pages
           if (widget.isJefeVentas)
             GlobalVendorSelector(
               isJefeVentas: true,
-              onChanged: _refreshData,
             ),
 
           // 3. Compact Week/Month Navigator
