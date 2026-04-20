@@ -18,6 +18,28 @@ const facturasBreaker = new CircuitBreaker({
     timeout: 15000
 });
 
+const BATCH_SIZE = 15;
+
+async function batchedVendorQuery(baseSql, vendorColumn, vendors, queryFn) {
+    if (!vendors || vendors.length === 0) {
+        return [];
+    }
+
+    const batches = [];
+    for (let i = 0; i < vendors.length; i += BATCH_SIZE) {
+        batches.push(vendors.slice(i, i + BATCH_SIZE));
+    }
+
+    const results = [];
+    for (const batch of batches) {
+        const placeholders = batch.map(() => '?').join(',');
+        const sql = baseSql.replace('@VENDOR_IN@', `TRIM(${vendorColumn}) IN (${placeholders})`);
+        const rows = await queryFn(sql, batch);
+        results.push(...rows);
+    }
+    return results;
+}
+
 class FacturasService {
 
     async getFacturas(params) {
@@ -192,25 +214,36 @@ class FacturasService {
 
         const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
         
-        let sql = `
+        if (isAll) {
+            const sql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
       FROM DSEDAC.CAC
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
+      ORDER BY YEAR DESC
     `;
-        
-        const queryParams = [];
-        
-        if (!isAll) {
-            const vendors = vendedorCodes.split(',').map(v => v.trim());
-            const placeholders = vendors.map(() => '?').join(',');
-            sql += ` AND TRIM(CODIGOVENDEDOR) IN (${placeholders})`;
-            queryParams.push(...vendors);
+            try {
+                const rows = await query(sql);
+                return rows.map(r => r.YEAR);
+            } catch (error) {
+                logger.error(`Error fetching available years: ${error.message}`);
+                throw error;
+            }
         }
-        sql += ` ORDER BY YEAR DESC`;
+
+        const vendors = vendedorCodes.split(',').map(v => v.trim()).filter(v => v);
+
+        const baseSql = `
+      SELECT DISTINCT EJERCICIOFACTURA as YEAR
+      FROM DSEDAC.CAC
+      WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
+        AND @VENDOR_IN@
+      ORDER BY YEAR DESC
+    `;
 
         try {
-            const rows = await queryWithParams(sql, queryParams);
-            return rows.map(r => r.YEAR);
+            const rows = await batchedVendorQuery(baseSql, 'CODIGOVENDEDOR', vendors, queryWithParams);
+            const years = [...new Set(rows.map(r => r.YEAR))].sort((a, b) => b - a);
+            return years;
         } catch (error) {
             logger.error(`Error fetching available years: ${error.message}`);
             throw error;
@@ -225,8 +258,16 @@ class FacturasService {
         }
 
         const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
-        
-        let sql = `
+        const vendors = isAll ? [] : vendedorCodes.split(',').map(v => v.trim()).filter(v => v);
+
+        const dateFilterApplied = dateFrom && dateTo;
+        const dateFromInt = dateFilterApplied ? parseInt(dateFrom.replace(/-/g, '')) : null;
+        const dateToInt = dateFilterApplied ? parseInt(dateTo.replace(/-/g, '')) : null;
+        const useYearFilter = !dateFilterApplied && (year || month);
+        const currentYear = year || new Date().getFullYear();
+
+        async function runSummaryBatch(batchVendors) {
+            let sql = `
       SELECT
         COUNT(DISTINCT TRIM(SERIEFACTURA) || '-' || NUMEROFACTURA) as NUM_FACTURAS,
         SUM(IMPORTETOTAL) as TOTAL,
@@ -235,48 +276,54 @@ class FacturasService {
       FROM DSEDAC.CAC
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
     `;
+            const queryParams = [];
 
-        const queryParams = [];
+            if (batchVendors.length > 0) {
+                const placeholders = batchVendors.map(() => '?').join(',');
+                sql += ` AND TRIM(CODIGOVENDEDOR) IN (${placeholders})`;
+                queryParams.push(...batchVendors);
+            }
 
-        if (!isAll) {
-            const vendors = vendedorCodes.split(',').map(v => v.trim());
-            const placeholders = vendors.map(() => '?').join(',');
-            sql += ` AND TRIM(CODIGOVENDEDOR) IN (${placeholders})`;
-            queryParams.push(...vendors);
-        }
-
-        // FIX #2: Support dateFrom/dateTo in summary (was missing - caused wrong totals)
-        let dateFilterApplied = false;
-        if (dateFrom && dateTo) {
-            const fromInt = parseInt(dateFrom.replace(/-/g, ''));
-            const toInt = parseInt(dateTo.replace(/-/g, ''));
-            if (!isNaN(fromInt) && !isNaN(toInt)) {
+            if (dateFilterApplied && dateFromInt && dateToInt) {
                 sql += ` AND (ANOFACTURA * 10000 + MESFACTURA * 100 + DIAFACTURA) BETWEEN ? AND ?`;
-                queryParams.push(fromInt, toInt);
-                dateFilterApplied = true;
+                queryParams.push(dateFromInt, dateToInt);
+            } else {
+                sql += ` AND EJERCICIOFACTURA = ?`;
+                queryParams.push(currentYear);
+                if (month) {
+                    sql += ` AND MESFACTURA = ?`;
+                    queryParams.push(month);
+                }
             }
-        }
 
-        if (!dateFilterApplied) {
-            const currentYear = year || new Date().getFullYear();
-            sql += ` AND EJERCICIOFACTURA = ?`;
-            queryParams.push(currentYear);
-
-            if (month) {
-                sql += ` AND MESFACTURA = ?`;
-                queryParams.push(month);
-            }
+            return queryWithParams(sql, queryParams);
         }
 
         try {
-            const rows = await queryWithParams(sql, queryParams);
-            const stats = rows[0] || {};
+            let rows;
+            if (isAll || vendors.length === 0) {
+                rows = await runSummaryBatch([]);
+            } else {
+                const batches = [];
+                for (let i = 0; i < vendors.length; i += BATCH_SIZE) {
+                    batches.push(vendors.slice(i, i + BATCH_SIZE));
+                }
+                const batchResults = await Promise.all(batches.map(runSummaryBatch));
+                rows = batchResults.flat();
+            }
+
+            const stats = rows.reduce((acc, r) => ({
+                NUM_FACTURAS: (acc.NUM_FACTURAS || 0) + (parseInt(r.NUM_FACTURAS) || 0),
+                TOTAL: (acc.TOTAL || 0) + (parseFloat(r.TOTAL) || 0),
+                BASE: (acc.BASE || 0) + (parseFloat(r.BASE) || 0),
+                IVA: (acc.IVA || 0) + (parseFloat(r.IVA) || 0)
+            }), { NUM_FACTURAS: 0, TOTAL: 0, BASE: 0, IVA: 0 });
 
             return {
-                totalFacturas: parseInt(stats.NUM_FACTURAS) || 0,
-                totalImporte: parseFloat(stats.TOTAL) || 0,
-                totalBase: parseFloat(stats.BASE) || 0,
-                totalIva: parseFloat(stats.IVA) || 0
+                totalFacturas: stats.NUM_FACTURAS,
+                totalImporte: stats.TOTAL,
+                totalBase: stats.BASE,
+                totalIva: stats.IVA
             };
         } catch (error) {
             logger.error(`Error fetching summary: ${error.message}`);
