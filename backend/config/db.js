@@ -401,7 +401,9 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
             }
 
             if (isSqlSyntaxError(error)) {
-                logger.error(`🚫 SQL syntax/schema error (no retry): ${(error.odbcErrors || []).map(e => e.state).join(',')}`);
+                if (logError) {
+                    logger.error(`🚫 SQL syntax/schema error (no retry): ${(error.odbcErrors || []).map(e => e.state).join(',')}`);
+                }
                 break;
             }
 
