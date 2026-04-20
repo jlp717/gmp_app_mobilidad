@@ -32,8 +32,9 @@ module.exports = {
                 VENDOR_COLUMN: 'R1_T8CDVD',
                 // JWT secrets loaded from .env — do NOT hardcode here
                 // (wrong secrets here cause "Invalid or expired token" errors)
-                JWT_ACCESS_EXPIRES: '15m',
-                JWT_REFRESH_EXPIRES: '7d',
+                // JWT_ACCESS_EXPIRES and JWT_REFRESH_EXPIRES intentionally omitted:
+                // auth.js uses parseInt() which breaks string values like '15m' or '7d'
+                // Default: ACCESS=3600000ms (1h), REFRESH=604800000ms (7d)
             },
             env_ts: {
                 NODE_ENV: 'production',
