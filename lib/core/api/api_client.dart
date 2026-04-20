@@ -513,7 +513,17 @@ class ApiClient {
 
       if (statusCode == 401) {
         final isLoginRequest = e.requestOptions.path.contains('/auth/login');
-        if (!isLoginRequest && !_isLoggingOut && !_isLoggingIn) {
+        // Compare the token used in THIS request vs the currently stored token.
+        // If they differ, this 401 is from a STALE request (previous session)
+        // and must NOT trigger a logout that would wipe the fresh new token.
+        final requestAuth =
+            e.requestOptions.headers['Authorization']?.toString();
+        final currentAuth =
+            _savedAuthToken != null ? 'Bearer $_savedAuthToken' : null;
+        final isStaleRequest =
+            requestAuth != null && requestAuth != currentAuth;
+        if (!isLoginRequest && !_isLoggingOut && !_isLoggingIn &&
+            !isStaleRequest) {
           _isLoggingOut = true;
           debugPrint('[ApiClient] 401 detected - triggering logout');
           onUnauthorized?.call();

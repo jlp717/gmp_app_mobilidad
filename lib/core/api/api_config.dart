@@ -112,6 +112,7 @@ class ApiConfig {
   
   // Auth Endpoints
   static const String login = '/auth/login';
+  static const String validate = '/auth/validate';
   static const String refresh = '/auth/refresh';
   static const String logout = '/auth/logout';
 

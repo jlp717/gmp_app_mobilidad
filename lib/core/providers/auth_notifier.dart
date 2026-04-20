@@ -171,7 +171,31 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           await prefs.remove('vendedor_codes');
           return const AuthState(isInitialized: true);
         }
+        // Validate token with server before restoring session.
+        // The server uses ephemeral JWT secrets — a server restart invalidates
+        // all stored tokens even if they haven't expired by time.
+        // If the server is unreachable (offline), we proceed optimistically.
         ApiClient.setAuthToken(token);
+        ApiClient.startLogin(); // suppress onUnauthorized during validation
+        try {
+          await ApiClient.get(ApiConfig.validate);
+        } on ApiException catch (e) {
+          if (e.statusCode == 401 || e.statusCode == 403) {
+            debugPrint(
+              '[AuthNotifier] Server rejected stored token — clearing session',
+            );
+            ApiClient.clearAuthToken();
+            await SecureStorage.deleteSecureData('user_token');
+            await SecureStorage.deleteSecureData('user_data');
+            await prefs.remove('vendedor_codes');
+            return const AuthState(isInitialized: true);
+          }
+        } catch (_) {
+          // Network error — proceed with stored session (offline-tolerant)
+          debugPrint('[AuthNotifier] Could not reach server, proceeding offline');
+        } finally {
+          ApiClient.endLogin();
+        }
         final user = UserModel.fromJson(
           jsonDecode(userDataStr) as Map<String, dynamic>,
         );

@@ -190,6 +190,14 @@ function createAuthRoutes() {
     }
   });
 
+  // Lightweight token validation — JWT check only, no DB query.
+  // Used by Flutter on startup to verify stored tokens are still valid
+  // (guards against ephemeral JWT secrets being regenerated on server restart).
+  const { verifyToken: _verifyToken } = require('../../../middleware/auth');
+  router.get('/validate', _verifyToken, (req, res) => {
+    res.json({ valid: true, usuario: req.user.code });
+  });
+
   return router;
 }
 
