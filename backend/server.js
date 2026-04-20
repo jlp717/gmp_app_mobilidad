@@ -4,6 +4,10 @@
  * Enhanced with: Multi-layer caching (Redis), Network optimization,
  * Query optimization, and Performance monitoring
  */
+
+// Load environment variables FIRST, before any other module
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
